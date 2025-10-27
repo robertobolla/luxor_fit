@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,13 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser, useAuth } from '@clerk/clerk-expo';
 import Svg, { Circle } from 'react-native-svg';
 import { supabase } from '@/services/supabase';
 import { getHealthDataForDate, requestHealthPermissions } from '@/services/healthService';
+import { getExerciseDaysThisWeek } from '@/services/exerciseService';
 import DashboardCustomizationModal from '@/components/DashboardCustomizationModal';
 import { DashboardConfig, MetricType, AVAILABLE_METRICS, PRESET_PRIORITIES } from '@/types/dashboard';
 import { loadDashboardConfig } from '@/services/dashboardPreferences';
@@ -180,10 +181,24 @@ export default function DashboardScreen() {
     loadHealthData();
   }, [selectedDate, isCheckingOnboarding]);
 
+  // Recargar datos cuando la pantalla recibe foco
+  useFocusEffect(
+    useCallback(() => {
+      if (!isCheckingOnboarding && user?.id) {
+        loadHealthData();
+      }
+    }, [isCheckingOnboarding, user])
+  );
+
   const loadHealthData = async () => {
     try {
+      if (!user?.id) return;
+      
       // Obtener datos de Apple Health o Google Fit
       const healthData = await getHealthDataForDate(selectedDate);
+      
+      // Obtener días de ejercicio de la semana actual
+      const exerciseDays = await getExerciseDaysThisWeek(user.id);
       
       // Actualizar estados con los datos obtenidos
       setStats({
@@ -194,7 +209,7 @@ export default function DashboardScreen() {
         calories: Math.round(healthData.calories),
         caloriesGoal: 2000,
         sleep: healthData.sleep,
-        exerciseDays: 3, // Esto se puede calcular de otra forma
+        exerciseDays: exerciseDays, // Días de ejercicio reales (incluye entrenamientos completados)
         exerciseDaysGoal: 5,
         weight: healthData.weight || 78,
         glucose: healthData.glucose || 0,

@@ -13,8 +13,7 @@ CREATE TABLE IF NOT EXISTS public.workout_completions (
   exercises_completed JSONB, -- Array de ejercicios completados con sets/reps reales
   duration_minutes INT, -- Duración del entrenamiento en minutos
   difficulty_rating INT CHECK (difficulty_rating >= 1 AND difficulty_rating <= 5), -- 1=Muy fácil, 5=Muy difícil
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, workout_plan_id, day_name, DATE(completed_at))
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Índices para búsquedas rápidas
@@ -25,25 +24,33 @@ CREATE INDEX IF NOT EXISTS idx_workout_completions_completed_at ON public.workou
 -- Row Level Security (RLS)
 ALTER TABLE public.workout_completions ENABLE ROW LEVEL SECURITY;
 
--- Policy: Los usuarios solo pueden ver sus propios entrenamientos completados
+-- Eliminar políticas existentes si existen
+DROP POLICY IF EXISTS workout_completions_select_policy ON public.workout_completions;
+DROP POLICY IF EXISTS workout_completions_insert_policy ON public.workout_completions;
+DROP POLICY IF EXISTS workout_completions_update_policy ON public.workout_completions;
+DROP POLICY IF EXISTS workout_completions_delete_policy ON public.workout_completions;
+
+-- Policy: Los usuarios pueden ver todos los entrenamientos completados
+-- (se filtra por user_id en el cliente)
 CREATE POLICY workout_completions_select_policy ON public.workout_completions
   FOR SELECT
-  USING (user_id = current_setting('request.jwt.claims', true)::json->>'sub');
+  USING (true);
 
--- Policy: Los usuarios solo pueden insertar sus propios entrenamientos
+-- Policy: Los usuarios pueden insertar entrenamientos completados
+-- (se valida user_id en el cliente)
 CREATE POLICY workout_completions_insert_policy ON public.workout_completions
   FOR INSERT
-  WITH CHECK (true); -- Se filtra por user_id en el cliente
+  WITH CHECK (true);
 
--- Policy: Los usuarios solo pueden actualizar sus propios entrenamientos
+-- Policy: Los usuarios pueden actualizar todos los entrenamientos
 CREATE POLICY workout_completions_update_policy ON public.workout_completions
   FOR UPDATE
-  USING (true); -- Se filtra por user_id en el cliente
+  USING (true);
 
--- Policy: Los usuarios solo pueden eliminar sus propios entrenamientos
+-- Policy: Los usuarios pueden eliminar todos los entrenamientos
 CREATE POLICY workout_completions_delete_policy ON public.workout_completions
   FOR DELETE
-  USING (true); -- Se filtra por user_id en el cliente
+  USING (true);
 
 -- ============================================================================
 -- COMENTARIOS

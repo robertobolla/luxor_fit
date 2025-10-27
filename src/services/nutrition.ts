@@ -386,6 +386,114 @@ export function calculateMacros(
 }
 
 /**
+ * Genera explicación educativa del ajuste nutricional
+ */
+function generateEducationalExplanation(
+  goal: Goal,
+  weightChange: number,
+  bodyFatChange: number | null,
+  muscleChange: number | null,
+  currentCalories: number,
+  newCalories: number,
+  adherence: number
+): { explanation: string; educationalMessage: string } {
+  const caloriesChange = newCalories - currentCalories;
+  const isAdjusting = caloriesChange !== 0;
+
+  let explanation = '';
+  let educationalMessage = '';
+
+  // Análisis de la situación
+  const goalNames: Record<Goal, string> = {
+    cut: 'perder grasa',
+    recomp: 'recomposición corporal',
+    maintain: 'mantener peso',
+    bulk: 'ganar músculo',
+  };
+
+  const goalName = goalNames[goal];
+
+  // Análisis de composición corporal
+  if (bodyFatChange !== null && muscleChange !== null) {
+    if (bodyFatChange < 0 && muscleChange >= 0) {
+      // Recomposición perfecta
+      explanation = `✅ Excelente! Estás perdiendo grasa (${Math.abs(bodyFatChange).toFixed(1)}%) y manteniendo/aumentando músculo (${muscleChange >= 0 ? '+' : ''}${muscleChange.toFixed(1)}%).`;
+      educationalMessage = `Tu dieta está funcionando perfectamente. Estás logrando una recomposición corporal: bajando grasa sin perder músculo. Esto significa que estás en un déficit calórico moderado que permite mantener masa muscular.`;
+    } else if (bodyFatChange < 0 && muscleChange < 0) {
+      // Perdiendo grasa pero también músculo
+      explanation = `⚠️ Atención: Estás perdiendo grasa pero también músculo (${muscleChange.toFixed(1)}%).`;
+      educationalMessage = `El déficit calórico es muy agresivo, provocando pérdida de músculo además de grasa. Necesitamos aumentar ligeramente las calorías y proteína para proteger tu masa muscular.`;
+    } else if (bodyFatChange > 0 && muscleChange > 0) {
+      // Ganando grasa y músculo
+      if (goal === 'bulk') {
+        explanation = `📈 Bulking: Estás ganando músculo (${muscleChange.toFixed(1)}%) pero también algo de grasa (${bodyFatChange.toFixed(1)}%).`;
+        educationalMessage = `En proceso de ganancia de masa muscular, es normal ganar algo de grasa. Si quieres mantener un bulk más limpio, podemos ajustar las calorías ligeramente.`;
+      } else {
+        explanation = `⚠️ Estás ganando grasa (${bodyFatChange.toFixed(1)}%) y músculo (${muscleChange.toFixed(1)}%).`;
+        educationalMessage = `Estás en un superávit calórico. Aunque ganas músculo, también estás ganando grasa. Para tu objetivo de ${goalName}, necesitamos reducir ligeramente las calorías.`;
+      }
+    } else {
+      explanation = `📊 Peso estable, revisando composición corporal.`;
+      educationalMessage = `Tu peso se mantiene estable. Estamos analizando tu composición corporal para determinar el siguiente paso.`;
+    }
+  } else {
+    // Sin datos de composición, usar solo peso
+    if (goal === 'cut') {
+      if (weightChange < -0.7) {
+        explanation = `⚠️ Perdiendo peso muy rápido (${Math.abs(weightChange).toFixed(1)} kg/sem).`;
+        educationalMessage = `Estás perdiendo más de 0.7 kg por semana, lo cual es demasiado rápido y puede incluir pérdida de músculo. Vamos a aumentar ligeramente las calorías (${caloriesChange > 0 ? '+' : ''}${Math.abs(caloriesChange)} kcal) para frenar la pérdida de masa muscular.`;
+      } else if (weightChange >= -0.3 && weightChange <= -0.7) {
+        explanation = `✅ Perdiendo peso a buen ritmo (${Math.abs(weightChange).toFixed(1)} kg/sem).`;
+        educationalMessage = `Tu velocidad de pérdida de peso está en el rango ideal (0.3-0.7 kg por semana). Esto minimiza la pérdida de músculo. Vamos a mantener las calorías actuales.`;
+        if (isAdjusting && caloriesChange < 0) {
+          educationalMessage = `Aunque estás perdiendo a buen ritmo, vamos a aumentar ligeramente las calorías (${Math.abs(caloriesChange)} kcal) para asegurar que no pierdas músculo.`;
+        }
+      } else if (weightChange > -0.3) {
+        explanation = `🐌 Perdiendo peso muy lento (${Math.abs(weightChange).toFixed(1)} kg/sem).`;
+        educationalMessage = `Estás perdiendo menos de 0.3 kg por semana, lo cual es muy lento. Vamos a reducir las calorías (${caloriesChange} kcal) para acelerar tu pérdida de grasa. Recuerda: esto debe combinarse con entrenamiento de fuerza para preservar músculo.`;
+      } else {
+        explanation = `📈 Ganando peso (${weightChange.toFixed(1)} kg/sem) en modo CUT.`;
+        educationalMessage = `Estás ganando peso cuando tu objetivo es perder grasa. Vamos a reducir las calorías (${caloriesChange} kcal) para crear un déficit calórico efectivo.`;
+      }
+    } else if (goal === 'bulk') {
+      if (weightChange > 0.5) {
+        explanation = `⚠️ Ganando peso muy rápido (${weightChange.toFixed(1)} kg/sem).`;
+        educationalMessage = `Estás ganando más de 0.5 kg por semana, lo cual probablemente incluye mucha grasa junto con músculo. Vamos a reducir ligeramente las calorías (${caloriesChange} kcal) para un bulk más limpio.`;
+      } else if (weightChange >= 0.2 && weightChange <= 0.5) {
+        explanation = `✅ Ganando peso a ritmo óptimo (${weightChange.toFixed(1)} kg/sem).`;
+        educationalMessage = `Tu velocidad de ganancia está en el rango ideal (0.2-0.5 kg por semana). Esto maximiza la ganancia de músculo minimizando grasa. Mantendremos las calorías actuales.`;
+        if (isAdjusting && caloriesChange > 0) {
+          educationalMessage = `Aunque ganando bien, vamos a ajustar ligeramente (${caloriesChange} kcal) para optimizar.`;
+        }
+      } else if (weightChange < 0.2 && weightChange >= 0) {
+        explanation = `🐌 Ganando muy lento (${weightChange.toFixed(1)} kg/sem).`;
+        educationalMessage = `Estás ganando menos de 0.2 kg por semana, lo cual es muy lento para ganar músculo. Vamos a aumentar las calorías (${caloriesChange > 0 ? '+' : ''}${caloriesChange} kcal) y asegurar proteína suficiente para estimular la síntesis proteica.`;
+      } else {
+        explanation = `📉 Perdiendo peso en modo BULK.`;
+        educationalMessage = `Estás perdiendo peso cuando tu objetivo es ganar músculo. Necesitamos aumentar las calorías (${caloriesChange > 0 ? '+' : ''}${caloriesChange} kcal) para crear un superávit calórico.`;
+      }
+    } else {
+      // maintain o recomp
+      if (Math.abs(weightChange) > 0.1) {
+        explanation = `📊 Peso fuera del rango objetivo (${weightChange > 0 ? '+' : ''}${weightChange.toFixed(1)} kg/sem).`;
+        educationalMessage = `Tu peso está cambiando más de lo deseado para ${goalName}. Vamos a ajustar las calorías (${caloriesChange > 0 ? '+' : ''}${caloriesChange} kcal) para mantener el equilibrio.`;
+      } else {
+        explanation = `✅ Peso estable (${weightChange.toFixed(1)} kg/sem).`;
+        educationalMessage = `Tu peso se mantiene estable, lo cual es perfecto para ${goalName}. Las calorías actuales están funcionando bien, las mantenemos.`;
+      }
+    }
+  }
+
+  // Información sobre adherencia
+  if (adherence < 70) {
+    explanation += ` Adherencia: ${Math.round(adherence)}%`;
+    educationalMessage += ` Nota: Tu adherencia a la dieta es del ${Math.round(adherence)}%. Para obtener los mejores resultados, intenta registrar al menos el ${Math.round(adherence)}% de tus comidas.`;
+  }
+
+  return { explanation, educationalMessage };
+}
+
+/**
  * Ajuste semanal de calorías según progreso
  */
 export function calculateWeeklyAdjustment(
@@ -1719,7 +1827,16 @@ export async function logWater(
 
 export async function applyWeeklyAdjustment(
   userId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ 
+  success: boolean; 
+  error?: string; 
+  adjustment?: {
+    calories: number;
+    caloriesChange: number;
+    explanation: string;
+    educationalMessage: string;
+  }
+}> {
   try {
     // Obtener peso de última semana vs semana anterior
     const today = new Date();
@@ -1728,7 +1845,7 @@ export async function applyWeeklyAdjustment(
 
     const { data: recentWeights } = await supabase
       .from('body_metrics')
-      .select('weight_kg, date')
+      .select('weight_kg, body_fat_percentage, muscle_percentage, date')
       .eq('user_id', userId)
       .gte('date', twoWeeksAgo.toISOString().split('T')[0])
       .order('date', { ascending: false });
@@ -1753,6 +1870,42 @@ export async function applyWeeklyAdjustment(
       prevWeekWeights.length;
 
     const avgWeightChange = avgLastWeek - avgPrevWeek;
+
+    // Calcular cambios en composición corporal si hay datos
+    const avgBodyFatLastWeek = lastWeekWeights.filter(w => w.body_fat_percentage).length > 0
+      ? lastWeekWeights
+          .filter(w => w.body_fat_percentage)
+          .reduce((sum, w) => sum + parseFloat(w.body_fat_percentage!.toString()), 0) / 
+          lastWeekWeights.filter(w => w.body_fat_percentage).length
+      : null;
+    
+    const avgBodyFatPrevWeek = prevWeekWeights.filter(w => w.body_fat_percentage).length > 0
+      ? prevWeekWeights
+          .filter(w => w.body_fat_percentage)
+          .reduce((sum, w) => sum + parseFloat(w.body_fat_percentage!.toString()), 0) / 
+          prevWeekWeights.filter(w => w.body_fat_percentage).length
+      : null;
+
+    const avgMuscleLastWeek = lastWeekWeights.filter(w => w.muscle_percentage).length > 0
+      ? lastWeekWeights
+          .filter(w => w.muscle_percentage)
+          .reduce((sum, w) => sum + parseFloat(w.muscle_percentage!.toString()), 0) / 
+          lastWeekWeights.filter(w => w.muscle_percentage).length
+      : null;
+
+    const avgMusclePrevWeek = prevWeekWeights.filter(w => w.muscle_percentage).length > 0
+      ? prevWeekWeights
+          .filter(w => w.muscle_percentage)
+          .reduce((sum, w) => sum + parseFloat(w.muscle_percentage!.toString()), 0) / 
+          prevWeekWeights.filter(w => w.muscle_percentage).length
+      : null;
+
+    const bodyFatChange = avgBodyFatLastWeek && avgBodyFatPrevWeek 
+      ? avgBodyFatLastWeek - avgBodyFatPrevWeek 
+      : null;
+    const muscleChange = avgMuscleLastWeek && avgMusclePrevWeek 
+      ? avgMuscleLastWeek - avgMusclePrevWeek 
+      : null;
 
     // Calcular adherencia (% de comidas logueadas vs esperadas)
     const { data: mealLogs } = await supabase
@@ -1791,6 +1944,17 @@ export async function applyWeeklyAdjustment(
       profile.goal
     );
 
+    // Generar explicación educativa
+    const { explanation, educationalMessage } = generateEducationalExplanation(
+      profile.goal,
+      avgWeightChange,
+      bodyFatChange,
+      muscleChange,
+      currentCalories,
+      newCalories,
+      adherence
+    );
+
     // Si hay cambio, actualizar targets de próxima semana
     if (newCalories !== currentCalories) {
       const nextMonday = new Date(today);
@@ -1813,9 +1977,29 @@ export async function applyWeeklyAdjustment(
           { onConflict: 'user_id,date' }
         );
       }
+
+      // Retornar información del ajuste
+      return { 
+        success: true,
+        adjustment: {
+          calories: newCalories,
+          caloriesChange: newCalories - currentCalories,
+          explanation,
+          educationalMessage
+        }
+      };
     }
 
-    return { success: true };
+    // Si no hay cambio, también retornar información
+    return { 
+      success: true,
+      adjustment: {
+        calories: currentCalories,
+        caloriesChange: 0,
+        explanation,
+        educationalMessage
+      }
+    };
   } catch (err: any) {
     console.error('Error in applyWeeklyAdjustment:', err);
     return { success: false, error: err.message };

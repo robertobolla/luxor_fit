@@ -30,6 +30,8 @@ En el mismo SQL Editor de Supabase:
 
 Este script crea la tabla que faltaba para registrar los entrenamientos completados.
 
+**IMPORTANTE:** Este archivo ha sido actualizado para corregir las políticas de RLS. Si ya ejecutaste este script anteriormente, vuelve a ejecutarlo para actualizar las políticas.
+
 ---
 
 ## 📋 Resumen de Cambios

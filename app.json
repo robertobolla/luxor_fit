@@ -3,6 +3,12 @@
     "name": "FitMind",
     "slug": "fitmind",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/39f4fe90-c5cc-4c8a-baeb-7424da1c4f10"
+    },
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "splash": {

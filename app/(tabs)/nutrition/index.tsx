@@ -25,6 +25,7 @@ import {
   getNutritionProfile,
   applyWeeklyAdjustment,
 } from '../../../src/services/nutrition';
+import NutritionAdjustmentModal from '../../../src/components/NutritionAdjustmentModal';
 import { useNutritionStore } from '../../../src/store/nutritionStore';
 import { NutritionTarget, MealLog } from '../../../src/types/nutrition';
 
@@ -37,6 +38,8 @@ export default function NutritionHomeScreen() {
   const [todayWater, setTodayWater] = useState(0);
   const [isInitializing, setIsInitializing] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
+  const [adjustmentData, setAdjustmentData] = useState<any>(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -457,7 +460,11 @@ export default function NutritionHomeScreen() {
 
       // Aplicar ajuste semanal si corresponde (si es lunes)
       if (dayOfWeek === 1) {
-        await applyWeeklyAdjustment(user.id);
+        const adjustmentResult = await applyWeeklyAdjustment(user.id);
+        if (adjustmentResult.success && adjustmentResult.adjustment) {
+          setAdjustmentData(adjustmentResult.adjustment);
+          setShowAdjustmentModal(true);
+        }
       }
 
       Alert.alert('¡Listo!', 'Tu plan nutricional ha sido generado.');
@@ -820,6 +827,13 @@ export default function NutritionHomeScreen() {
 
         <View style={{ height: 50 }} />
       </ScrollView>
+
+      {/* Modal de ajuste nutricional */}
+      <NutritionAdjustmentModal
+        visible={showAdjustmentModal}
+        onClose={() => setShowAdjustmentModal(false)}
+        adjustment={adjustmentData}
+      />
     </SafeAreaView>
   );
 }

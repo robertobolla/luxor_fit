@@ -1,0 +1,31 @@
+══════════════════════════════════════════
+  FitMind - PUBLICAR EN EL CELULAR
+══════════════════════════════════════════
+
+PASO 1: Ejecuta estos comandos en tu terminal:
+
+  npm install -g eas-cli@latest
+  eas credentials
+  (Selecciona: Android → Auto generate)
+
+PASO 2: Crea el build:
+
+  eas build --profile preview --platform android
+
+PASO 3: Espera 15-30 minutos
+
+PASO 4: Escanea el QR que aparecerá
+  
+══════════════════════════════════════════
+
+Alternativa Rápida (Expo Go):
+
+  npx expo start --tunnel
+  (Escanea QR con Expo Go desde tu celular)
+
+══════════════════════════════════════════
+
+Ver progreso: https://expo.dev/accounts/robertobolla9/projects/fitmind/builds
+
+══════════════════════════════════════════
+

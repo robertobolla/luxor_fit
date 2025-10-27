@@ -92,6 +92,8 @@ export interface BodyMetric {
   user_id: string;
   date: string;
   weight_kg: number;
+  body_fat_percentage?: number;
+  muscle_percentage?: number;
   waist_cm?: number;
   hips_cm?: number;
   notes?: string;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useLocalSearchParams, router, Stack } from 'expo-router';
+import { useLocalSearchParams, router, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
@@ -19,10 +19,7 @@ export default function WorkoutPlanDetailScreen() {
   const [plan, setPlan] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    loadPlanDetails();
-  }, [planId]);
+  const [completedDays, setCompletedDays] = useState<Set<string>>(new Set());
 
   const loadPlanDetails = async () => {
     if (!user || !planId) return;
@@ -111,6 +108,48 @@ export default function WorkoutPlanDetailScreen() {
     );
   };
 
+  const loadCompletedDays = useCallback(async () => {
+    if (!user?.id || !planId) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('workout_completions')
+        .select('day_name')
+        .eq('user_id', user.id)
+        .eq('workout_plan_id', planId);
+
+      if (error) {
+        console.error('Error al cargar días completados:', error);
+        return;
+      }
+
+      const completedSet = new Set(data.map((completion: any) => completion.day_name));
+      setCompletedDays(completedSet);
+      console.log('✅ Días completados cargados:', Array.from(completedSet));
+    } catch (err) {
+      console.error('Error inesperado al cargar días completados:', err);
+    }
+  }, [user?.id, planId]);
+
+  useEffect(() => {
+    loadPlanDetails();
+  }, [planId]);
+
+  useEffect(() => {
+    if (plan && user?.id) {
+      loadCompletedDays();
+    }
+  }, [plan, user, loadCompletedDays]);
+
+  // Recargar los días completados cuando se enfoca la pantalla
+  useFocusEffect(
+    useCallback(() => {
+      if (plan && user?.id) {
+        loadCompletedDays();
+      }
+    }, [plan, user, loadCompletedDays])
+  );
+
   if (isLoading) {
     return (
       <>
@@ -192,58 +231,72 @@ export default function WorkoutPlanDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📅 Estructura Semanal</Text>
           <Text style={styles.sectionSubtitle}>Toca cada día para ver detalles y tips</Text>
-          {planData.weekly_structure?.map((day: any, index: number) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.dayCard}
-              onPress={() => {
-                router.push({
-                  pathname: '/(tabs)/workout-day-detail',
-                  params: {
-                    dayData: JSON.stringify(day),
-                    planName: plan.plan_name,
-                    planId: plan.id,
-                    dayName: day.day || `day_${index + 1}`,
-                  },
-                } as any);
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={styles.dayHeader}>
-                <Text style={styles.dayTitle}>{day.day}</Text>
-                <View style={styles.dayDuration}>
-                  <Ionicons name="time-outline" size={14} color="#00D4AA" />
-                  <Text style={styles.dayDurationText}>{day.duration} min</Text>
-                </View>
-              </View>
-              <Text style={styles.dayFocus}>{day.focus}</Text>
-              <View style={styles.exercisesContainer}>
-                <Text style={styles.exercisesTitle}>Ejercicios ({day.exercises?.length || 0}):</Text>
-                <View style={styles.exercisesList}>
-                  {day.exercises?.slice(0, 3).map((exercise: any, idx: number) => {
-                    const isOldFormat = typeof exercise === 'string';
-                    const exerciseName = isOldFormat ? exercise : exercise.name;
-
-                    return (
-                      <View key={idx} style={styles.exercisePreviewItem}>
-                        <Ionicons name="checkmark-circle" size={14} color="#00D4AA" />
-                        <Text style={styles.exercisePreviewText}>{exerciseName}</Text>
+          {planData.weekly_structure?.map((day: any, index: number) => {
+            const dayKey = day.day || `day_${index + 1}`;
+            const isCompleted = completedDays.has(dayKey);
+            
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[styles.dayCard, isCompleted && styles.dayCardCompleted]}
+                onPress={() => {
+                  router.push({
+                    pathname: '/(tabs)/workout-day-detail',
+                    params: {
+                      dayData: JSON.stringify(day),
+                      planName: plan.plan_name,
+                      planId: plan.id,
+                      dayName: dayKey,
+                    },
+                  } as any);
+                }}
+                activeOpacity={0.7}
+              >
+                {isCompleted && <View style={styles.completedSideBar} />}
+                <View style={styles.dayHeader}>
+                  <View style={styles.dayTitleContainer}>
+                    <Text style={styles.dayTitle}>{day.day}</Text>
+                    {isCompleted && (
+                      <View style={styles.completedBadge}>
+                        <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+                        <Text style={styles.completedBadgeText}>Completado</Text>
                       </View>
-                    );
-                  })}
-                  {day.exercises?.length > 3 && (
-                    <Text style={styles.moreExercisesText}>
-                      +{day.exercises.length - 3} más
-                    </Text>
-                  )}
+                    )}
+                  </View>
+                  <View style={styles.dayDuration}>
+                    <Ionicons name="time-outline" size={14} color="#00D4AA" />
+                    <Text style={styles.dayDurationText}>{day.duration} min</Text>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.viewDetailsButton}>
-                <Text style={styles.viewDetailsText}>Ver detalles completos</Text>
-                <Ionicons name="chevron-forward" size={16} color="#00D4AA" />
-              </View>
-            </TouchableOpacity>
-          ))}
+                <Text style={styles.dayFocus}>{day.focus}</Text>
+                <View style={styles.exercisesContainer}>
+                  <Text style={styles.exercisesTitle}>Ejercicios ({day.exercises?.length || 0}):</Text>
+                  <View style={styles.exercisesList}>
+                    {day.exercises?.slice(0, 3).map((exercise: any, idx: number) => {
+                      const isOldFormat = typeof exercise === 'string';
+                      const exerciseName = isOldFormat ? exercise : exercise.name;
+
+                      return (
+                        <View key={idx} style={styles.exercisePreviewItem}>
+                          <Ionicons name="checkmark-circle" size={14} color="#00D4AA" />
+                          <Text style={styles.exercisePreviewText}>{exerciseName}</Text>
+                        </View>
+                      );
+                    })}
+                    {day.exercises?.length > 3 && (
+                      <Text style={styles.moreExercisesText}>
+                        +{day.exercises.length - 3} más
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                <View style={styles.viewDetailsButton}>
+                  <Text style={styles.viewDetailsText}>Ver detalles completos</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#00D4AA" />
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         {/* Key Principles */}
@@ -447,17 +500,55 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#00D4AA',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  dayCardCompleted: {
+    backgroundColor: 'rgba(76, 175, 80, 0.08)', // Verde muy tenue
+    borderColor: '#4CAF50',
+  },
+  completedSideBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    backgroundColor: '#4CAF50',
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
   },
   dayHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 8,
+  },
+  dayTitleContainer: {
+    flex: 1,
+    marginRight: 12,
   },
   dayTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#ffffff',
+    marginBottom: 4,
+  },
+  completedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  completedBadgeText: {
+    fontSize: 11,
+    color: '#4CAF50',
+    fontWeight: '600',
+    marginLeft: 4,
   },
   dayDuration: {
     flexDirection: 'row',

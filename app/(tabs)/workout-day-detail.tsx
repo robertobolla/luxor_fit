@@ -7,6 +7,10 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +31,10 @@ export default function WorkoutDayDetailScreen() {
   const [isCompleted, setIsCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [duration, setDuration] = useState('');
+  const [difficulty, setDifficulty] = useState(3);
+  const [notes, setNotes] = useState('');
   
   useEffect(() => {
     checkIfCompleted();
@@ -37,7 +45,7 @@ export default function WorkoutDayDetailScreen() {
     
     setIsLoading(true);
     try {
-      const today = new Date().toISOString().split('T')[0];
+      console.log('🔍 Verificando completado para:', { planId, dayName, user_id: user.id });
       
       const { data, error } = await supabase
         .from('workout_completions')
@@ -45,15 +53,19 @@ export default function WorkoutDayDetailScreen() {
         .eq('user_id', user.id)
         .eq('workout_plan_id', planId)
         .eq('day_name', dayName)
-        .gte('completed_at', `${today}T00:00:00`)
-        .lte('completed_at', `${today}T23:59:59`)
-        .single();
+        .order('completed_at', { ascending: false })
+        .limit(1);
       
-      if (data && !error) {
+      console.log('📊 Resultado verificación:', { data, error, isCompleted: data && data.length > 0 });
+      
+      if (data && data.length > 0 && !error) {
         setIsCompleted(true);
+      } else {
+        setIsCompleted(false);
       }
     } catch (err) {
       console.error('Error checking completion:', err);
+      setIsCompleted(false);
     } finally {
       setIsLoading(false);
     }
@@ -67,44 +79,52 @@ export default function WorkoutDayDetailScreen() {
       return;
     }
     
-    Alert.alert(
-      'Completar entrenamiento',
-      '¿Has completado este entrenamiento?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sí, completado',
-          onPress: async () => {
-            setIsSaving(true);
-            try {
-              const completion = {
-                user_id: user.id,
-                workout_plan_id: planId,
-                day_name: dayName,
-                completed_at: new Date().toISOString(),
-                exercises_completed: dayData.exercises || [],
-              };
-              
-              const { error } = await supabase
-                .from('workout_completions')
-                .insert(completion);
-              
-              if (error) {
-                throw error;
-              }
-              
-              setIsCompleted(true);
-              Alert.alert('¡Felicitaciones! 🎉', 'Entrenamiento completado. ¡Sigue así!');
-            } catch (err: any) {
-              console.error('Error saving completion:', err);
-              Alert.alert('Error', 'No se pudo guardar el entrenamiento.');
-            } finally {
-              setIsSaving(false);
-            }
-          },
-        },
-      ]
-    );
+    // Abrir modal para ingresar datos adicionales
+    setShowCompletionModal(true);
+  };
+
+  const handleSaveCompletion = async () => {
+    if (!user?.id || !planId || !dayName) return;
+    
+    setIsSaving(true);
+    try {
+      const completion = {
+        user_id: user.id,
+        workout_plan_id: planId,
+        day_name: dayName,
+        completed_at: new Date().toISOString(),
+        exercises_completed: dayData.exercises || [],
+        duration_minutes: duration ? parseInt(duration) : null,
+        difficulty_rating: difficulty,
+        notes: notes || null,
+      };
+      
+      console.log('💾 Guardando entrenamiento completado:', { planId, dayName, user_id: user.id });
+      
+      const { error, data } = await supabase
+        .from('workout_completions')
+        .insert(completion)
+        .select();
+      
+      if (error) {
+        throw error;
+      }
+      
+      console.log('✅ Entrenamiento guardado correctamente:', data);
+      
+      setIsCompleted(true);
+      setShowCompletionModal(false);
+      // Resetear campos
+      setDuration('');
+      setDifficulty(3);
+      setNotes('');
+      Alert.alert('¡Felicitaciones! 🎉', 'Entrenamiento completado. ¡Sigue así!');
+    } catch (err: any) {
+      console.error('❌ Error saving completion:', err);
+      Alert.alert('Error', 'No se pudo guardar el entrenamiento.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!dayData) {
@@ -407,11 +427,227 @@ export default function WorkoutDayDetailScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Modal de completar entrenamiento */}
+      <Modal
+        visible={showCompletionModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCompletionModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <KeyboardAvoidingView 
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.keyboardView}
+          >
+            <ScrollView 
+              style={styles.modalContent}
+              showsVerticalScrollIndicator={true}
+              keyboardShouldPersistTaps="handled"
+            >
+            <Text style={styles.modalTitle}>Completar Entrenamiento</Text>
+            <Text style={styles.modalSubtitle}>Registra los detalles de tu sesión</Text>
+
+            {/* Duración */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>⏱️ Duración (minutos)</Text>
+              <TextInput
+                style={styles.input}
+                value={duration}
+                onChangeText={setDuration}
+                placeholder="45"
+                placeholderTextColor="#666"
+                keyboardType="numeric"
+              />
+              <Text style={styles.inputHint}>Opcional - Ayuda a mejorar el plan</Text>
+            </View>
+
+            {/* Dificultad */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>💪 Dificultad percibida</Text>
+              <View style={styles.difficultyContainer}>
+                {[1, 2, 3, 4, 5].map((level) => (
+                  <TouchableOpacity
+                    key={level}
+                    style={[
+                      styles.difficultyButton,
+                      difficulty === level && styles.difficultyButtonActive
+                    ]}
+                    onPress={() => setDifficulty(level)}
+                  >
+                    <Text style={[
+                      styles.difficultyText,
+                      difficulty === level && styles.difficultyTextActive
+                    ]}>
+                      {level}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.inputHint}>
+                1=Muy fácil, 5=Muy difícil
+              </Text>
+            </View>
+
+            {/* Notas */}
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>📝 Notas (opcional)</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={notes}
+                onChangeText={setNotes}
+                placeholder="¿Cómo te sentiste? ¿Qué notaste?"
+                placeholderTextColor="#666"
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+
+            {/* Botones */}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => {
+                  setShowCompletionModal(false);
+                  setDuration('');
+                  setDifficulty(3);
+                  setNotes('');
+                }}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonConfirm]}
+                onPress={handleSaveCompletion}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <ActivityIndicator color="#1a1a1a" />
+                ) : (
+                  <Text style={styles.modalButtonTextConfirm}>Guardar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  modalContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  keyboardView: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+    maxHeight: '90%',
+  },
+  modalScrollContent: {
+    paddingBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#999',
+    marginBottom: 24,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  inputHint: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  input: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  textArea: {
+    minHeight: 80,
+  },
+  difficultyContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  difficultyButton: {
+    flex: 1,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#333',
+  },
+  difficultyButtonActive: {
+    backgroundColor: '#00D4AA',
+    borderColor: '#00D4AA',
+  },
+  difficultyText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#999',
+  },
+  difficultyTextActive: {
+    color: '#1a1a1a',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 24,
+  },
+  modalButton: {
+    flex: 1,
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: '#2a2a2a',
+  },
+  modalButtonConfirm: {
+    backgroundColor: '#00D4AA',
+  },
+  modalButtonTextCancel: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalButtonTextConfirm: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: '700',
+  },
   container: {
     flex: 1,
     backgroundColor: '#1a1a1a',
