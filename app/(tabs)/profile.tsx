@@ -91,7 +91,7 @@ export default function ProfileScreen() {
     {
       title: 'Notificaciones',
       icon: 'notifications-outline',
-      onPress: () => router.push('/notifications'),
+      onPress: () => router.push('/notification-settings'),
     },
     {
       title: 'Ayuda y soporte',

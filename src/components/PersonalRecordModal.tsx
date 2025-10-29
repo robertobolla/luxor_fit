@@ -21,6 +21,7 @@ import {
   type PersonalRecord,
   type PRHistoryItem
 } from '@/services/personalRecords';
+import { smartNotificationService } from '@/services/smartNotifications';
 
 interface PersonalRecordModalProps {
   visible: boolean;
@@ -103,6 +104,15 @@ export default function PersonalRecordModal({
       });
 
       if (result.success) {
+        // Enviar notificación si es un nuevo PR
+        if (result.data?.is_pr) {
+          await smartNotificationService.sendImmediateNotification(
+            user.id,
+            'pr_achieved',
+            { exercise: exerciseName }
+          );
+        }
+        
         Alert.alert(
           '¡Record Guardado!',
           result.data?.is_pr 

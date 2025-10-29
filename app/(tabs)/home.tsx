@@ -17,6 +17,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
+import { useSmartNotifications } from '@/hooks/useSmartNotifications';
 
 export default function HomeScreen() {
   const { user } = useUser();
@@ -25,6 +26,9 @@ export default function HomeScreen() {
   const [todayNutrition, setTodayNutrition] = useState<any>(null);
   const [userName, setUserName] = useState('');
   const [debugInfo, setDebugInfo] = useState<string>('');
+
+  // Inicializar notificaciones inteligentes
+  useSmartNotifications();
 
   useEffect(() => {
     if (user?.id) {

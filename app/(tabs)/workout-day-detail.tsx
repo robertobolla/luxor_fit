@@ -18,6 +18,7 @@ import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../src/services/supabase';
 import { WorkoutCompletion } from '../../src/types';
 import PersonalRecordModal from '../../src/components/PersonalRecordModal';
+import { smartNotificationService } from '../../src/services/smartNotifications';
 
 export default function WorkoutDayDetailScreen() {
   const params = useLocalSearchParams();
@@ -116,6 +117,12 @@ export default function WorkoutDayDetailScreen() {
       }
       
       console.log('✅ Entrenamiento guardado correctamente:', data);
+      
+      // Enviar notificación inmediata de entrenamiento completado
+      await smartNotificationService.sendImmediateNotification(
+        user.id,
+        'workout_completed'
+      );
       
       setIsCompleted(true);
       setShowCompletionModal(false);
