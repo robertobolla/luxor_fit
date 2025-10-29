@@ -147,3 +147,101 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 });
+
+// Componentes de animación
+interface FadeInViewProps {
+  children: React.ReactNode;
+  delay?: number;
+  duration?: number;
+}
+
+export const FadeInView: React.FC<FadeInViewProps> = ({ 
+  children, 
+  delay = 0, 
+  duration = 300 
+}) => {
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration,
+        useNativeDriver: true,
+      }).start();
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [fadeAnim, delay, duration]);
+
+  return (
+    <Animated.View style={{ opacity: fadeAnim }}>
+      {children}
+    </Animated.View>
+  );
+};
+
+interface SlideInViewProps {
+  children: React.ReactNode;
+  direction?: 'up' | 'down' | 'left' | 'right';
+  delay?: number;
+  duration?: number;
+}
+
+export const SlideInView: React.FC<SlideInViewProps> = ({ 
+  children, 
+  direction = 'up', 
+  delay = 0, 
+  duration = 300 
+}) => {
+  const slideAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Animated.timing(slideAnim, {
+        toValue: 1,
+        duration,
+        useNativeDriver: true,
+      }).start();
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [slideAnim, delay, duration]);
+
+  const getTransform = () => {
+    const distance = 50;
+    switch (direction) {
+      case 'up':
+        return { translateY: slideAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [distance, 0],
+        }) };
+      case 'down':
+        return { translateY: slideAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-distance, 0],
+        }) };
+      case 'left':
+        return { translateX: slideAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [distance, 0],
+        }) };
+      case 'right':
+        return { translateX: slideAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [-distance, 0],
+        }) };
+      default:
+        return { translateY: slideAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [distance, 0],
+        }) };
+    }
+  };
+
+  return (
+    <Animated.View style={{ transform: [getTransform()] }}>
+      {children}
+    </Animated.View>
+  );
+};
