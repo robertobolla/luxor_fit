@@ -227,9 +227,18 @@ export default function WorkoutPlanDetailScreen() {
           <TouchableOpacity 
             style={styles.aiButton}
             onPress={() => setShowAIModal(true)}
+            activeOpacity={0.8}
           >
-            <Ionicons name="sparkles" size={20} color="#00D4AA" />
-            <Text style={styles.aiButtonText}>Adaptar con IA</Text>
+            <View style={styles.aiButtonContent}>
+              <View style={styles.aiIconContainer}>
+                <Ionicons name="sparkles" size={18} color="#ffffff" />
+              </View>
+              <View style={styles.aiTextContainer}>
+                <Text style={styles.aiButtonTitle}>Adaptar con IA</Text>
+                <Text style={styles.aiButtonSubtitle}>Personaliza tu entrenamiento</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#00D4AA" />
+            </View>
           </TouchableOpacity>
           
           <Text style={styles.planDescription}>{plan.description}</Text>
@@ -492,22 +501,47 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   aiButton: {
+    backgroundColor: 'linear-gradient(135deg, #00D4AA 0%, #00B894 100%)',
+    backgroundColor: '#00D4AA',
+    borderRadius: 16,
+    marginBottom: 20,
+    shadowColor: '#00D4AA',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  aiButtonContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#00D4AA',
-    marginBottom: 16,
-    alignSelf: 'flex-start',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
-  aiButtonText: {
-    color: '#00D4AA',
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
+  aiIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  aiTextContainer: {
+    flex: 1,
+  },
+  aiButtonTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  aiButtonSubtitle: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+    fontWeight: '500',
   },
   statsContainer: {
     flexDirection: 'row',
