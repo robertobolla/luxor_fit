@@ -38,10 +38,17 @@ export async function generatePlanIntroduction(userData: UserProfile): Promise<A
       };
     }
 
+    console.log('🤖 Generando introducción con IA...');
+    console.log('📋 Datos del usuario:', userData);
+
     // Construir el prompt para ChatGPT
     const prompt = buildPrompt(userData);
+    console.log('📝 Prompt construido:', prompt.substring(0, 200) + '...');
 
-    // Llamar a la API de OpenAI
+    // Llamar a la API de OpenAI con timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 segundos timeout
+
     const response = await fetch(OPENAI_API_URL, {
       method: 'POST',
       headers: {
@@ -63,11 +70,18 @@ export async function generatePlanIntroduction(userData: UserProfile): Promise<A
         max_tokens: 400,
         temperature: 0.7,
       }),
+      signal: controller.signal,
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      const errorData = await response.json();
-      console.error('Error de OpenAI API:', errorData);
+      const errorData = await response.json().catch(() => ({ error: 'Error desconocido' }));
+      console.error('❌ Error de OpenAI API:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorData
+      });
       
       // Fallback a texto por defecto si hay error
       return {
@@ -80,20 +94,34 @@ export async function generatePlanIntroduction(userData: UserProfile): Promise<A
     const introduction = data.choices[0]?.message?.content?.trim();
 
     if (!introduction) {
+      console.warn('⚠️ Respuesta vacía de OpenAI, usando texto por defecto');
       return {
-        success: false,
-        error: 'No se pudo generar la introducción',
+        success: true,
+        introduction: generateDefaultIntroduction(userData),
       };
     }
 
+    console.log('✅ Introducción generada exitosamente');
     return {
       success: true,
       introduction,
     };
   } catch (error) {
-    console.error('Error al generar introducción con IA:', error);
+    console.error('❌ Error al generar introducción con IA:', error);
+    
+    // Determinar el tipo de error
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        console.error('⏰ Timeout en la llamada a OpenAI');
+      } else if (error.message.includes('Network request failed')) {
+        console.error('🌐 Error de red - verificar conexión a internet');
+      } else {
+        console.error('🔧 Error técnico:', error.message);
+      }
+    }
     
     // Fallback a texto por defecto en caso de error
+    console.log('🔄 Usando introducción por defecto');
     return {
       success: true,
       introduction: generateDefaultIntroduction(userData),
