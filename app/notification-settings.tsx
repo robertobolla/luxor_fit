@@ -78,8 +78,16 @@ export default function NotificationSettingsScreen() {
       // Guardar en AsyncStorage o Supabase
       console.log('💾 Guardando configuración:', settings);
       
-      // Reprogramar notificaciones si están habilitadas
-      if (settings.enabled && user?.id) {
+      // Si las notificaciones están deshabilitadas, cancelar todas
+      if (!settings.enabled && user?.id) {
+        const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
+        for (const notification of scheduledNotifications) {
+          await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+        }
+        console.log('🗑️ Todas las notificaciones canceladas (notificaciones deshabilitadas)');
+      }
+      // Si están habilitadas, reprogramar notificaciones inteligentes
+      else if (settings.enabled && user?.id) {
         await smartNotificationService.scheduleSmartNotifications(user.id);
       }
       
@@ -105,10 +113,28 @@ export default function NotificationSettingsScreen() {
   };
 
   const updateSetting = (key: keyof NotificationSettings, value: any) => {
-    setSettings(prev => ({
-      ...prev,
-      [key]: value
-    }));
+    setSettings(prev => {
+      const newSettings = { ...prev, [key]: value };
+      
+      // Si se desactiva "enabled", desactivar todas las demás opciones
+      if (key === 'enabled' && value === false) {
+        newSettings.workoutReminders = false;
+        newSettings.streakCelebrations = false;
+        newSettings.weeklyGoals = false;
+        newSettings.optimalTiming = false;
+        newSettings.prReminders = false;
+      }
+      
+      // Si se activa "enabled", activar las opciones más importantes por defecto
+      if (key === 'enabled' && value === true) {
+        newSettings.workoutReminders = true;
+        newSettings.streakCelebrations = true;
+        newSettings.prReminders = true;
+        // weeklyGoals y optimalTiming se mantienen como estaban
+      }
+      
+      return newSettings;
+    });
   };
 
   const updateQuietHours = (key: 'enabled' | 'start' | 'end', value: any) => {
