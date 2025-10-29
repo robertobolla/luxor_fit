@@ -12,6 +12,7 @@ import { useLocalSearchParams, router, Stack, useFocusEffect } from 'expo-router
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
+import { AIWorkoutAdaptationModal } from '../../src/components/AIWorkoutAdaptationModal';
 
 export default function WorkoutPlanDetailScreen() {
   const { planId } = useLocalSearchParams();
@@ -20,6 +21,7 @@ export default function WorkoutPlanDetailScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [completedDays, setCompletedDays] = useState<Set<string>>(new Set());
+  const [showAIModal, setShowAIModal] = useState(false);
 
   const loadPlanDetails = async () => {
     if (!user || !planId) return;
@@ -220,6 +222,16 @@ export default function WorkoutPlanDetailScreen() {
               )}
             </View>
           </View>
+          
+          {/* Botón de IA */}
+          <TouchableOpacity 
+            style={styles.aiButton}
+            onPress={() => setShowAIModal(true)}
+          >
+            <Ionicons name="sparkles" size={20} color="#00D4AA" />
+            <Text style={styles.aiButtonText}>Adaptar con IA</Text>
+          </TouchableOpacity>
+          
           <Text style={styles.planDescription}>{plan.description}</Text>
         </View>
 
@@ -379,6 +391,18 @@ export default function WorkoutPlanDetailScreen() {
           })}
         </Text>
       </ScrollView>
+
+      {/* Modal de Adaptación con IA */}
+      <AIWorkoutAdaptationModal
+        visible={showAIModal}
+        onClose={() => setShowAIModal(false)}
+        onSuccess={(adaptedPlan) => {
+          // Navegar al plan adaptado
+          router.push(`/workout-plan-detail/${adaptedPlan.id}`);
+        }}
+        workoutPlan={plan}
+        userId={user?.id || ''}
+      />
     </>
   );
 }
@@ -466,6 +490,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#ccc',
     lineHeight: 22,
+  },
+  aiButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#00D4AA',
+    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  aiButtonText: {
+    color: '#00D4AA',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   statsContainer: {
     flexDirection: 'row',
