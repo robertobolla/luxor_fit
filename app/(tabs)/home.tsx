@@ -20,7 +20,8 @@ import { supabase } from '@/services/supabase';
 import { useSmartNotifications } from '@/hooks/useSmartNotifications';
 import { SkeletonProfile, FadeInView, SlideInView } from '../../src/components/SkeletonLoaders';
 import { EmptyWorkouts } from '../../src/components/EmptyStates';
-import { CustomRefreshControl, useRefresh } from '../../src/hooks/useRefresh';
+import { CustomRefreshControl } from '../../src/components/CustomRefreshControl';
+import { useRefresh } from '../../src/hooks/useRefresh';
 
 export default function HomeScreen() {
   const { user } = useUser();
@@ -356,8 +357,9 @@ export default function HomeScreen() {
         </SlideInView>
 
         {/* Sección: Accesos Rápidos */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Accesos Rápidos</Text>
+        <FadeInView delay={1000}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Accesos Rápidos</Text>
           
           <View style={styles.quickAccessGrid}>
             <TouchableOpacity 
@@ -393,6 +395,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        </FadeInView>
 
         <View style={{ height: 30 }} />
       </ScrollView>
