@@ -62,31 +62,19 @@ export default function WorkoutScreen() {
 
     try {
       console.log('🔄 Activando plan de entrenamiento:', planId);
-      
-      // Primero desactivar todos los planes existentes del usuario
-      const { error: deactivateError } = await supabase
-        .from('workout_plans')
-        .update({ is_active: false })
-        .eq('user_id', user.id);
 
-      if (deactivateError) {
-        console.error('❌ Error al desactivar planes existentes:', deactivateError);
+      // Activación atómica vía RPC (desactiva otros y activa este)
+      const { error: rpcError } = await supabase.rpc('activate_workout_plan', {
+        p_user_id: user.id,
+        p_plan_id: planId,
+      });
+
+      if (rpcError) {
+        console.error('❌ Error al activar plan (RPC):', rpcError);
         return;
       }
 
-      // Luego activar el plan seleccionado
-      const { error: activateError } = await supabase
-        .from('workout_plans')
-        .update({ is_active: true })
-        .eq('id', planId)
-        .eq('user_id', user.id);
-
-      if (activateError) {
-        console.error('❌ Error al activar plan:', activateError);
-        return;
-      }
-
-      console.log('✅ Plan activado exitosamente');
+      console.log('✅ Plan activado exitosamente (RPC)');
       
       // Recargar la lista de planes para mostrar el estado actualizado
       await loadWorkoutPlans();
