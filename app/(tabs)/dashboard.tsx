@@ -16,7 +16,7 @@ import { useUser, useAuth } from '@clerk/clerk-expo';
 import Svg, { Circle } from 'react-native-svg';
 import { supabase } from '@/services/supabase';
 import { getHealthDataForDate, requestHealthPermissions } from '@/services/healthService';
-import { getExerciseDaysThisWeek } from '@/services/exerciseService';
+import { getExerciseDaysThisWeek, getGymDaysThisWeek } from '@/services/exerciseService';
 import DashboardCustomizationModal from '@/components/DashboardCustomizationModal';
 import { DashboardConfig, MetricType, AVAILABLE_METRICS, PRESET_PRIORITIES } from '@/types/dashboard';
 import { loadDashboardConfig } from '@/services/dashboardPreferences';
@@ -96,6 +96,8 @@ export default function DashboardScreen() {
     sleep: 0,
     exerciseDays: 0,
     exerciseDaysGoal: 5,
+    gymDays: 0,
+    gymDaysGoal: 3,
     weight: 78,
     glucose: 0,
     mindfulnessDays: 0,
@@ -197,8 +199,11 @@ export default function DashboardScreen() {
       // Obtener datos de Apple Health o Google Fit
       const healthData = await getHealthDataForDate(selectedDate);
       
-      // Obtener días de ejercicio de la semana actual
+      // Obtener días de ejercicio de la semana actual (incluye ejercicios libres y entrenamientos)
       const exerciseDays = await getExerciseDaysThisWeek(user.id);
+      
+      // Obtener días de gimnasio de la semana actual (solo entrenamientos completados)
+      const gymData = await getGymDaysThisWeek(user.id);
       
       // Actualizar estados con los datos obtenidos
       setStats({
@@ -211,6 +216,8 @@ export default function DashboardScreen() {
         sleep: healthData.sleep,
         exerciseDays: exerciseDays, // Días de ejercicio reales (incluye entrenamientos completados)
         exerciseDaysGoal: 5,
+        gymDays: gymData.days, // Días de gimnasio (solo entrenamientos completados)
+        gymDaysGoal: gymData.goal, // Meta basada en el plan de entrenamiento activo
         weight: healthData.weight || 78,
         glucose: healthData.glucose || 0,
         mindfulnessDays: 2, // Esto requiere tracking manual
@@ -345,6 +352,13 @@ export default function DashboardScreen() {
           value: stats.exerciseDays,
           goal: stats.exerciseDaysGoal,
           displayValue: stats.exerciseDays.toString(),
+          unit: 'días',
+        };
+      case 'gym':
+        return {
+          value: stats.gymDays,
+          goal: stats.gymDaysGoal,
+          displayValue: stats.gymDays.toString(),
           unit: 'días',
         };
       case 'weight':
@@ -534,6 +548,32 @@ export default function DashboardScreen() {
               <View style={styles.exerciseDaysLeft}>
                 <Text style={styles.exerciseDaysNumber}>
                   {stats.exerciseDays} <Text style={styles.exerciseDaysGoal}>de {stats.exerciseDaysGoal}</Text>
+                </Text>
+                <Text style={styles.exerciseDaysLabel}>Esta semana</Text>
+              </View>
+              <View style={styles.weekDaysContainer}>
+                {weekDays.map((day, index) => (
+                  <View key={index} style={styles.dayColumn}>
+                    <View style={[
+                      styles.dayBar,
+                      completedDays[index] && styles.dayBarCompleted
+                    ]} />
+                    <Text style={styles.dayLabel}>{day}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.card}
+            onPress={() => router.push('/(tabs)/gym-detail')}
+          >
+            <Text style={styles.cardTitle}>Gimnasio</Text>
+            <View style={styles.exerciseDaysContainer}>
+              <View style={styles.exerciseDaysLeft}>
+                <Text style={styles.exerciseDaysNumber}>
+                  {stats.gymDays} <Text style={styles.exerciseDaysGoal}>de {stats.gymDaysGoal}</Text>
                 </Text>
                 <Text style={styles.exerciseDaysLabel}>Esta semana</Text>
               </View>
