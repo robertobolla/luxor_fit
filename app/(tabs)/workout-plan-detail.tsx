@@ -194,7 +194,17 @@ export default function WorkoutPlanDetailScreen() {
     );
   }
 
-  const planData = plan.plan_data;
+  const planData = plan.plan_data || {};
+  
+  // Asegurar que tenemos todos los campos necesarios
+  const safePlanData = {
+    duration_weeks: planData.duration_weeks || plan.duration_weeks || 4,
+    days_per_week: planData.days_per_week || 3,
+    weekly_structure: planData.weekly_structure || [],
+    key_principles: planData.key_principles || [],
+    progression: planData.progression || 'Progresión gradual basada en tu nivel actual',
+    recommendations: planData.recommendations || [],
+  };
 
   return (
     <>
@@ -248,17 +258,17 @@ export default function WorkoutPlanDetailScreen() {
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <Ionicons name="calendar" size={24} color="#00D4AA" />
-            <Text style={styles.statValue}>{planData.duration_weeks}</Text>
+            <Text style={styles.statValue}>{safePlanData.duration_weeks}</Text>
             <Text style={styles.statLabel}>Semanas</Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="fitness-outline" size={24} color="#00D4AA" />
-            <Text style={styles.statValue}>{planData.days_per_week}</Text>
+            <Text style={styles.statValue}>{safePlanData.days_per_week}</Text>
             <Text style={styles.statLabel}>Días/Semana</Text>
           </View>
           <View style={styles.statCard}>
             <Ionicons name="time-outline" size={24} color="#00D4AA" />
-            <Text style={styles.statValue}>{planData.weekly_structure?.[0]?.duration || 45}</Text>
+            <Text style={styles.statValue}>{safePlanData.weekly_structure?.[0]?.duration || 45}</Text>
             <Text style={styles.statLabel}>Min/Sesión</Text>
           </View>
         </View>
@@ -267,7 +277,7 @@ export default function WorkoutPlanDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📅 Estructura Semanal</Text>
           <Text style={styles.sectionSubtitle}>Toca cada día para ver detalles y tips</Text>
-          {planData.weekly_structure?.map((day: any, index: number) => {
+          {safePlanData.weekly_structure?.map((day: any, index: number) => {
             const dayKey = day.day || `day_${index + 1}`;
             const isCompleted = completedDays.has(dayKey);
             
@@ -339,12 +349,15 @@ export default function WorkoutPlanDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🎯 Principios Clave</Text>
           <View style={styles.principlesContainer}>
-            {planData.key_principles?.map((principle: string, index: number) => (
+            {safePlanData.key_principles?.map((principle: string, index: number) => (
               <View key={index} style={styles.principleItem}>
                 <Ionicons name="bulb" size={16} color="#FFD700" />
                 <Text style={styles.principleText}>{principle}</Text>
               </View>
             ))}
+            {safePlanData.key_principles?.length === 0 && (
+              <Text style={styles.emptyText}>No hay principios específicos definidos para este plan.</Text>
+            )}
           </View>
         </View>
 
@@ -352,7 +365,7 @@ export default function WorkoutPlanDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📈 Progresión</Text>
           <View style={styles.infoCard}>
-            <Text style={styles.infoText}>{planData.progression}</Text>
+            <Text style={styles.infoText}>{safePlanData.progression}</Text>
           </View>
         </View>
 
@@ -360,12 +373,15 @@ export default function WorkoutPlanDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>💡 Recomendaciones</Text>
           <View style={styles.recommendationsContainer}>
-            {planData.recommendations?.map((rec: string, index: number) => (
+            {safePlanData.recommendations?.map((rec: string, index: number) => (
               <View key={index} style={styles.recommendationItem}>
                 <Ionicons name="star" size={16} color="#00D4AA" />
                 <Text style={styles.recommendationText}>{rec}</Text>
               </View>
             ))}
+            {safePlanData.recommendations?.length === 0 && (
+              <Text style={styles.emptyText}>No hay recomendaciones específicas para este plan.</Text>
+            )}
           </View>
         </View>
 
@@ -826,6 +842,13 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     marginBottom: 40,
+  },
+  emptyText: {
+    color: '#888888',
+    fontSize: 14,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 20,
   },
 });
 
