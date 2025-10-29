@@ -41,7 +41,6 @@ export default function PersonalRecordModal({
   const [activeTab, setActiveTab] = useState<'add' | 'history'>('add');
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
-  const [sets, setSets] = useState('1');
   const [notes, setNotes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [history, setHistory] = useState<PRHistoryItem[]>([]);
@@ -83,10 +82,9 @@ export default function PersonalRecordModal({
 
     const weightNum = parseFloat(weight);
     const repsNum = parseInt(reps);
-    const setsNum = parseInt(sets);
 
-    if (isNaN(weightNum) || isNaN(repsNum) || isNaN(setsNum) || weightNum <= 0 || repsNum <= 0 || setsNum <= 0) {
-      Alert.alert('Error', 'Por favor ingresa valores válidos para peso, repeticiones y series');
+    if (isNaN(weightNum) || isNaN(repsNum) || weightNum <= 0 || repsNum <= 0) {
+      Alert.alert('Error', 'Por favor ingresa valores válidos para peso y repeticiones');
       return;
     }
 
@@ -100,7 +98,7 @@ export default function PersonalRecordModal({
         date: new Date().toISOString().split('T')[0],
         weight_kg: weightNum,
         reps: repsNum,
-        sets: setsNum,
+        sets: 1, // Siempre 1 serie (la mejor del día)
         notes: notes.trim() || undefined,
       });
 
@@ -113,7 +111,6 @@ export default function PersonalRecordModal({
           [{ text: 'OK', onPress: () => {
             setWeight('');
             setReps('');
-            setSets('1');
             setNotes('');
             loadHistory();
           }}]
@@ -131,7 +128,7 @@ export default function PersonalRecordModal({
 
   const renderAddTab = () => (
     <View style={styles.tabContent}>
-      <Text style={styles.sectionTitle}>Agregar Mejor Serie</Text>
+      <Text style={styles.sectionTitle}>Agregar Mejor Serie del Día</Text>
       
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Peso (kg)</Text>
@@ -152,18 +149,6 @@ export default function PersonalRecordModal({
           value={reps}
           onChangeText={setReps}
           placeholder="Ej: 8"
-          keyboardType="numeric"
-          returnKeyType="next"
-        />
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Series</Text>
-        <TextInput
-          style={styles.input}
-          value={sets}
-          onChangeText={setSets}
-          placeholder="Ej: 3"
           keyboardType="numeric"
           returnKeyType="done"
         />
@@ -192,7 +177,7 @@ export default function PersonalRecordModal({
         ) : (
           <>
             <Ionicons name="trophy" size={20} color="#ffffff" />
-            <Text style={styles.saveButtonText}>Guardar Record</Text>
+            <Text style={styles.saveButtonText}>Guardar Mejor Serie</Text>
           </>
         )}
       </TouchableOpacity>
