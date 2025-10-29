@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
@@ -151,13 +152,14 @@ export default function NotificationSettingsScreen() {
   );
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Notificaciones Inteligentes</Text>
-        <Text style={styles.subtitle}>
-          Recibe recordatorios personalizados basados en tu adherencia y progreso
-        </Text>
-      </View>
+    <SafeAreaView style={styles.container}>
+      <ScrollView style={styles.scrollView}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Notificaciones Inteligentes</Text>
+          <Text style={styles.subtitle}>
+            Recibe recordatorios personalizados basados en tu adherencia y progreso
+          </Text>
+        </View>
 
       {/* Configuración General */}
       <View style={styles.section}>
@@ -276,7 +278,8 @@ export default function NotificationSettingsScreen() {
           • Evitamos el spam con cooldowns inteligentes
         </Text>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -285,8 +288,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8F9FA',
   },
+  scrollView: {
+    flex: 1,
+  },
   header: {
-    padding: 20,
+    paddingTop: 20, // Reducido porque SafeAreaView ya maneja el área segura
+    paddingHorizontal: 20,
+    paddingBottom: 20,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
