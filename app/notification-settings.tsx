@@ -11,7 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
-import { smartNotificationService } from '../services/smartNotifications';
+import { smartNotificationService } from '../src/services/smartNotifications';
 import * as Notifications from 'expo-notifications';
 
 interface NotificationSettings {
