@@ -287,20 +287,17 @@ export async function generateWorkoutPlan(userData: UserProfile): Promise<any> {
       };
     }
 
-    // Parsear el plan (asumiendo que viene en formato JSON)
+    // Parseo robusto del plan
     try {
-      const plan = JSON.parse(planText);
-      return {
-        success: true,
-        plan,
-      };
+      const plan = parsePlanSafely(planText);
+      if (plan) {
+        return { success: true, plan };
+      }
+      console.warn('⚠️ Plan inválido tras intentos de limpieza. Usando plan por defecto.');
+      return { success: true, plan: generateDefaultWorkoutPlan(userData) };
     } catch (parseError) {
       console.error('Error al parsear plan:', parseError);
-      // Si no se puede parsear, usar el plan por defecto
-      return {
-        success: true,
-        plan: generateDefaultWorkoutPlan(userData),
-      };
+      return { success: true, plan: generateDefaultWorkoutPlan(userData) };
     }
   } catch (error) {
     console.error('Error al generar plan de entrenamiento:', error);
@@ -311,6 +308,67 @@ export async function generateWorkoutPlan(userData: UserProfile): Promise<any> {
       plan: generateDefaultWorkoutPlan(userData),
     };
   }
+}
+
+/**
+ * Intenta extraer y parsear JSON aunque venga con fences, texto extra o comas colgantes.
+ */
+function parsePlanSafely(raw: string): any | null {
+  if (!raw) return null;
+
+  const text = raw.trim();
+  // 1) Extraer bloque dentro de ``` ``` si existe
+  let candidate = extractCodeFenceJson(text);
+  if (!candidate) candidate = text;
+
+  // 2) Extraer primer objeto JSON balanceado { ... }
+  const balanced = extractBalancedJsonObject(candidate);
+  const jsonStr = cleanJsonString(balanced || candidate);
+
+  try {
+    return JSON.parse(jsonStr);
+  } catch {
+    // 3) Segundo intento: quitar comas colgantes y normalizar quotes
+    const repaired = jsonStr
+      .replace(/,\s*(\}|\])/g, '$1')
+      .replace(/[\u201C\u201D]/g, '"')
+      .replace(/[\u2018\u2019]/g, '"');
+    try {
+      return JSON.parse(repaired);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function extractCodeFenceJson(text: string): string | null {
+  const fenceMatch = text.match(/```(?:json)?\n([\s\S]*?)```/i);
+  if (fenceMatch && fenceMatch[1]) return fenceMatch[1].trim();
+  return null;
+}
+
+function extractBalancedJsonObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') depth--;
+    if (depth === 0) {
+      return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+function cleanJsonString(s: string): string {
+  return s
+    .replace(/^\s*```json\s*/i, '')
+    .replace(/^\s*```\s*/i, '')
+    .replace(/```\s*$/i, '')
+    .replace(/[\u00A0\u200B\u200C\u200D]/g, '') // espacios invisibles
+    .trim();
 }
 
 /**
