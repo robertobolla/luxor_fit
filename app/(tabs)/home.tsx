@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
 import { useSmartNotifications } from '@/hooks/useSmartNotifications';
-import { SkeletonProfile, SkeletonCard, FadeInView, SlideInView } from '../../src/components/SkeletonLoaders';
+import { SkeletonProfile, SkeletonCard } from '../../src/components/SkeletonLoaders';
 import { EmptyWorkouts } from '../../src/components/EmptyStates';
 import { CustomRefreshControl } from '../../src/components/CustomRefreshControl';
 import { useRefresh } from '../../src/hooks/useRefresh';
@@ -185,15 +185,9 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          <FadeInView delay={0}>
-            <SkeletonProfile />
-          </FadeInView>
-          <FadeInView delay={200}>
-            <SkeletonCard />
-          </FadeInView>
-          <FadeInView delay={400}>
-            <SkeletonCard />
-          </FadeInView>
+          <SkeletonProfile />
+          <SkeletonCard />
+          <SkeletonCard />
         </ScrollView>
       </SafeAreaView>
     );
@@ -213,31 +207,27 @@ export default function HomeScreen() {
         }
       >
         {/* Header con saludo */}
-        <SlideInView direction="down" delay={0}>
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.greeting}>{getGreeting()}</Text>
-              <Text style={styles.userName}>{userName || 'Usuario'}</Text>
-            </View>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
-              <Ionicons name="person-circle" size={48} color="#00D4AA" />
-            </TouchableOpacity>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.greeting}>{getGreeting()}</Text>
+            <Text style={styles.userName}>{userName || 'Usuario'}</Text>
           </View>
-        </SlideInView>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
+            <Ionicons name="person-circle" size={48} color="#00D4AA" />
+          </TouchableOpacity>
+        </View>
 
         {/* Fecha de hoy */}
-        <FadeInView delay={200}>
-          <View style={styles.dateCard}>
-            <Ionicons name="calendar" size={24} color="#00D4AA" />
-            <Text style={styles.dateText}>
-              {new Date().toLocaleDateString('es-ES', { 
-                weekday: 'long', 
-                day: 'numeric', 
-                month: 'long' 
-              })}
-            </Text>
-          </View>
-        </FadeInView>
+        <View style={styles.dateCard}>
+          <Ionicons name="calendar" size={24} color="#00D4AA" />
+          <Text style={styles.dateText}>
+            {new Date().toLocaleDateString('es-ES', { 
+              weekday: 'long', 
+              day: 'numeric', 
+              month: 'long' 
+            })}
+          </Text>
+        </View>
 
         {/* Debug Info - Temporal */}
         {debugInfo && (
@@ -247,17 +237,14 @@ export default function HomeScreen() {
         )}
 
         {/* Sección: Tus Actividades de Hoy */}
-        <FadeInView delay={400}>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Tus Actividades de Hoy</Text>
-          </View>
-        </FadeInView>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Tus Actividades de Hoy</Text>
+        </View>
 
         {/* Tarjeta: Entrenamiento de Hoy */}
-        <SlideInView direction="right" delay={600}>
-          <TouchableOpacity 
-            style={styles.activityCard}
-            onPress={async () => {
+        <TouchableOpacity 
+          style={styles.activityCard}
+          onPress={async () => {
               // Si no hay workout cargado, intentar cargarlo ahora
               if (!todayWorkout) {
                 // Buscar el plan activo y navegar al primer día
@@ -333,13 +320,11 @@ export default function HomeScreen() {
             </View>
             <Ionicons name="chevron-forward" size={24} color="#888888" />
           </TouchableOpacity>
-        </SlideInView>
 
         {/* Tarjeta: Dieta de Hoy */}
-        <SlideInView direction="left" delay={800}>
-          <TouchableOpacity 
-            style={styles.activityCard}
-            onPress={() => router.push('/(tabs)/nutrition/today-detail' as any)}
+        <TouchableOpacity 
+          style={styles.activityCard}
+          onPress={() => router.push('/(tabs)/nutrition/today-detail' as any)}
           >
             <View style={[styles.activityIcon, { backgroundColor: '#00D4AA20' }]}>
               <Ionicons name="restaurant" size={32} color="#00D4AA" />
@@ -354,12 +339,10 @@ export default function HomeScreen() {
             </View>
             <Ionicons name="chevron-forward" size={24} color="#888888" />
           </TouchableOpacity>
-        </SlideInView>
 
         {/* Sección: Accesos Rápidos */}
-        <FadeInView delay={1000}>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Accesos Rápidos</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Accesos Rápidos</Text>
           
           <View style={styles.quickAccessGrid}>
             <TouchableOpacity 
@@ -395,7 +378,6 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
         </View>
-        </FadeInView>
 
         <View style={{ height: 30 }} />
       </ScrollView>
