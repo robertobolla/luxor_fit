@@ -57,39 +57,42 @@ export interface Database {
       exercises: {
         Row: {
           id: string
-          name: string
-          description: string
-          muscle_groups: string[]
-          equipment_required: string[]
-          instructions: string[]
-          video_url: string | null
-          image_url: string | null
+          user_id: string
+          activity_type: string
+          activity_name: string
+          date: string
+          duration_minutes: number
+          distance_km: number | null
+          calories: number | null
+          notes: string | null
+          average_speed_kmh: number | null
           created_at: string
-          updated_at: string
         }
         Insert: {
           id?: string
-          name: string
-          description: string
-          muscle_groups: string[]
-          equipment_required: string[]
-          instructions: string[]
-          video_url?: string | null
-          image_url?: string | null
+          user_id: string
+          activity_type: string
+          activity_name: string
+          date: string
+          duration_minutes: number
+          distance_km?: number | null
+          calories?: number | null
+          notes?: string | null
+          average_speed_kmh?: number | null
           created_at?: string
-          updated_at?: string
         }
         Update: {
           id?: string
-          name?: string
-          description?: string
-          muscle_groups?: string[]
-          equipment_required?: string[]
-          instructions?: string[]
-          video_url?: string | null
-          image_url?: string | null
+          user_id?: string
+          activity_type?: string
+          activity_name?: string
+          date?: string
+          duration_minutes?: number
+          distance_km?: number | null
+          calories?: number | null
+          notes?: string | null
+          average_speed_kmh?: number | null
           created_at?: string
-          updated_at?: string
         }
       }
       workouts: {
@@ -316,6 +319,432 @@ export interface Database {
           recommended_value?: number
           reason?: string
           confidence?: number
+          created_at?: string
+        }
+      }
+      workout_plans: {
+        Row: {
+          id: string
+          user_id: string
+          plan_name: string
+          description: string
+          duration_weeks: number
+          plan_data: Json
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          plan_name: string
+          description: string
+          duration_weeks: number
+          plan_data: Json
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          plan_name?: string
+          description?: string
+          duration_weeks?: number
+          plan_data?: Json
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      workout_completions: {
+        Row: {
+          id: string
+          user_id: string
+          workout_plan_id: string
+          day_name: string
+          completed_at: string
+          exercises_completed: Json
+          duration_minutes: number | null
+          difficulty_rating: number
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          workout_plan_id: string
+          day_name: string
+          completed_at: string
+          exercises_completed: Json
+          duration_minutes?: number | null
+          difficulty_rating: number
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          workout_plan_id?: string
+          day_name?: string
+          completed_at?: string
+          exercises_completed?: Json
+          duration_minutes?: number | null
+          difficulty_rating?: number
+          notes?: string | null
+          created_at?: string
+        }
+      }
+      user_profiles: {
+        Row: {
+          id: string
+          user_id: string
+          email: string | null
+          name: string | null
+          age: number | null
+          gender: string | null
+          height: number | null
+          weight: number | null
+          body_fat_percentage: number | null
+          muscle_percentage: number | null
+          fitness_level: string | null
+          goals: string[] | null
+          activity_types: string[] | null
+          available_days: number | null
+          session_duration: number | null
+          equipment: string[] | null
+          birthdate: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          email?: string | null
+          name?: string | null
+          age?: number | null
+          gender?: string | null
+          height?: number | null
+          weight?: number | null
+          body_fat_percentage?: number | null
+          muscle_percentage?: number | null
+          fitness_level?: string | null
+          goals?: string[] | null
+          activity_types?: string[] | null
+          available_days?: number | null
+          session_duration?: number | null
+          equipment?: string[] | null
+          birthdate?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          email?: string | null
+          name?: string | null
+          age?: number | null
+          gender?: string | null
+          height?: number | null
+          weight?: number | null
+          body_fat_percentage?: number | null
+          muscle_percentage?: number | null
+          fitness_level?: string | null
+          goals?: string[] | null
+          activity_types?: string[] | null
+          available_days?: number | null
+          session_duration?: number | null
+          equipment?: string[] | null
+          birthdate?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      nutrition_profiles: {
+        Row: {
+          id: string
+          user_id: string
+          meals_per_day: number
+          fasting_window: string | null
+          custom_prompts: string[] | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          meals_per_day?: number
+          fasting_window?: string | null
+          custom_prompts?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          meals_per_day?: number
+          fasting_window?: string | null
+          custom_prompts?: string[] | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      nutrition_targets: {
+        Row: {
+          id: string
+          user_id: string
+          date: string
+          calories: number
+          protein_g: number
+          carbs_g: number
+          fats_g: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          date: string
+          calories: number
+          protein_g: number
+          carbs_g: number
+          fats_g: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          date?: string
+          calories?: number
+          protein_g?: number
+          carbs_g?: number
+          fats_g?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      meal_plans: {
+        Row: {
+          id: string
+          user_id: string
+          week_start: string
+          plan_json: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          week_start: string
+          plan_json: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          week_start?: string
+          plan_json?: Json
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      meal_logs: {
+        Row: {
+          id: string
+          user_id: string
+          datetime: string
+          meal_type: string
+          item_json: Json
+          calories: number
+          protein_g: number
+          carbs_g: number
+          fats_g: number
+          photo_url: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          datetime: string
+          meal_type: string
+          item_json: Json
+          calories: number
+          protein_g: number
+          carbs_g: number
+          fats_g: number
+          photo_url?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          datetime?: string
+          meal_type?: string
+          item_json?: Json
+          calories?: number
+          protein_g?: number
+          carbs_g?: number
+          fats_g?: number
+          photo_url?: string | null
+          created_at?: string
+        }
+      }
+      hydration_logs: {
+        Row: {
+          id: string
+          user_id: string
+          date: string
+          water_ml: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          date: string
+          water_ml: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          date?: string
+          water_ml?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      body_metrics: {
+        Row: {
+          id: string
+          user_id: string
+          date: string
+          weight_kg: number
+          body_fat_percentage: number | null
+          muscle_percentage: number | null
+          waist_cm: number | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          date: string
+          weight_kg: number
+          body_fat_percentage?: number | null
+          muscle_percentage?: number | null
+          waist_cm?: number | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          date?: string
+          weight_kg?: number
+          body_fat_percentage?: number | null
+          muscle_percentage?: number | null
+          waist_cm?: number | null
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      progress_photos: {
+        Row: {
+          id: string
+          user_id: string
+          photo_url: string
+          photo_date: string
+          photo_type: string
+          weight_kg: number | null
+          notes: string | null
+          ai_analysis: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          photo_url: string
+          photo_date: string
+          photo_type: string
+          weight_kg?: number | null
+          notes?: string | null
+          ai_analysis?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          photo_url?: string
+          photo_date?: string
+          photo_type?: string
+          weight_kg?: number | null
+          notes?: string | null
+          ai_analysis?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      nutrition_lessons: {
+        Row: {
+          id: number
+          title: string
+          content: string
+          lesson_type: string
+          order_index: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          title: string
+          content: string
+          lesson_type: string
+          order_index: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          title?: string
+          content?: string
+          lesson_type?: string
+          order_index?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      lesson_completions: {
+        Row: {
+          id: string
+          user_id: string
+          lesson_id: number
+          completed_at: string
+          score: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          lesson_id: number
+          completed_at: string
+          score: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          lesson_id?: number
+          completed_at?: string
+          score?: number
           created_at?: string
         }
       }
