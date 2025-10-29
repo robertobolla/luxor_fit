@@ -406,8 +406,15 @@ export default function WorkoutPlanDetailScreen() {
         visible={showAIModal}
         onClose={() => setShowAIModal(false)}
         onSuccess={(adaptedPlan) => {
-          // Navegar al plan adaptado
-          router.push(`/workout-plan-detail/${adaptedPlan.id}`);
+          // Recargar el plan actual para mostrar el adaptado
+          setPlan(adaptedPlan);
+          setShowAIModal(false);
+          // Opcional: mostrar mensaje de éxito
+          Alert.alert(
+            '¡Plan Adaptado!',
+            'Tu entrenamiento ha sido personalizado según tus especificaciones.',
+            [{ text: 'Perfecto', style: 'default' }]
+          );
         }}
         workoutPlan={plan}
         userId={user?.id || ''}

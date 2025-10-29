@@ -160,7 +160,17 @@ export default function WorkoutDayDetailScreen() {
   }
 
   // Tips generales basados en el enfoque del día
-  const getTipsForFocus = (focus: string): string[] => {
+  const getTipsForFocus = (focus: string | undefined): string[] => {
+    if (!focus) {
+      return [
+        '🔥 Calienta bien antes de empezar (5-10 min)',
+        '💪 Prioriza la técnica sobre el peso',
+        '⏱️ Respeta los tiempos de descanso',
+        '🎯 Mantén el core activado durante todos los ejercicios',
+        '📈 Escucha a tu cuerpo y ajusta la intensidad según sea necesario',
+      ];
+    }
+    
     const lowerFocus = focus.toLowerCase();
     
     if (lowerFocus.includes('fuerza') || lowerFocus.includes('push') || lowerFocus.includes('pull')) {
