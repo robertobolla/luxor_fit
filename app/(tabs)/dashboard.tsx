@@ -567,7 +567,7 @@ export default function DashboardScreen() {
 
           <TouchableOpacity 
             style={styles.card}
-            onPress={() => router.push('/(tabs)/gym-detail')}
+            onPress={() => router.push('/gym-detail')}
           >
             <Text style={styles.cardTitle}>Gimnasio</Text>
             <View style={styles.exerciseDaysContainer}>
