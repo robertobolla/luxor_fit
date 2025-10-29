@@ -49,25 +49,40 @@ export default function WorkoutPlanDetailScreen() {
   };
 
   const handleToggleActive = async () => {
-    if (!plan) return;
+    if (!plan || !user) return;
 
     try {
-      const { error } = await supabase
-        .from('workout_plans')
-        .update({ is_active: !plan.is_active })
-        .eq('id', plan.id);
+      if (plan.is_active) {
+        // Desactivar plan: UPDATE directo (no viola constraint único)
+        const { error } = await supabase
+          .from('workout_plans')
+          .update({ is_active: false })
+          .eq('id', plan.id);
 
-      if (error) {
-        console.error('Error al actualizar plan:', error);
-        Alert.alert('Error', 'No se pudo actualizar el plan');
-        return;
+        if (error) {
+          console.error('Error al desactivar plan:', error);
+          Alert.alert('Error', 'No se pudo desactivar el plan');
+          return;
+        }
+
+        setPlan({ ...plan, is_active: false });
+        Alert.alert('Éxito', 'Plan desactivado');
+      } else {
+        // Activar plan: usar RPC para garantizar único activo
+        const { error } = await supabase.rpc('activate_workout_plan', {
+          p_user_id: user.id,
+          p_plan_id: plan.id,
+        });
+
+        if (error) {
+          console.error('Error al activar plan:', error);
+          Alert.alert('Error', 'No se pudo activar el plan');
+          return;
+        }
+
+        setPlan({ ...plan, is_active: true });
+        Alert.alert('Éxito', 'Plan activado');
       }
-
-      setPlan({ ...plan, is_active: !plan.is_active });
-      Alert.alert(
-        'Éxito',
-        plan.is_active ? 'Plan desactivado' : 'Plan activado'
-      );
     } catch (err) {
       console.error('Error inesperado:', err);
       Alert.alert('Error', 'Ocurrió un error inesperado');
