@@ -245,11 +245,62 @@ export async function getExerciseDaysThisWeek(userId: string): Promise<number> {
 }
 
 /**
+ * Limpiar planes activos duplicados - mantener solo el más reciente
+ */
+export async function cleanupActivePlans(userId: string): Promise<void> {
+  try {
+    console.log('🧹 Limpiando planes activos duplicados...');
+    
+    // Obtener todos los planes activos ordenados por fecha de creación
+    const { data: activePlans, error: fetchError } = await supabase
+      .from('workout_plans')
+      .select('id, created_at')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+
+    if (fetchError) {
+      console.error('❌ Error al obtener planes activos:', fetchError);
+      return;
+    }
+
+    if (!activePlans || activePlans.length <= 1) {
+      console.log('✅ Solo hay un plan activo o ninguno, no se necesita limpieza');
+      return;
+    }
+
+    console.log(`🔍 Encontrados ${activePlans.length} planes activos, manteniendo solo el más reciente`);
+
+    // Mantener solo el primer plan (más reciente) y desactivar el resto
+    const plansToDeactivate = activePlans.slice(1);
+    const planIdsToDeactivate = plansToDeactivate.map(plan => plan.id);
+
+    if (planIdsToDeactivate.length > 0) {
+      const { error: updateError } = await supabase
+        .from('workout_plans')
+        .update({ is_active: false })
+        .in('id', planIdsToDeactivate);
+
+      if (updateError) {
+        console.error('❌ Error al desactivar planes duplicados:', updateError);
+      } else {
+        console.log(`✅ Desactivados ${planIdsToDeactivate.length} planes duplicados`);
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error inesperado al limpiar planes activos:', error);
+  }
+}
+
+/**
  * Obtener días de gimnasio (solo entrenamientos completados) en la semana actual
  * Retorna tanto el número de días como la meta del plan de entrenamiento activo
  */
 export async function getGymDaysThisWeek(userId: string): Promise<{ days: number; goal: number }> {
   try {
+    // Limpiar planes activos duplicados antes de continuar
+    await cleanupActivePlans(userId);
+    
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay()); // Domingo
@@ -302,14 +353,16 @@ export async function getGymDaysThisWeek(userId: string): Promise<{ days: number
     
     try {
       // Buscar el plan de entrenamiento activo del usuario
-      const { data: activePlan, error: planError } = await supabase
+      const { data: activePlans, error: planError } = await supabase
         .from('workout_plans')
         .select('plan_data')
         .eq('user_id', userId)
         .eq('is_active', true)
-        .single();
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-      if (!planError && activePlan?.plan_data) {
+      if (!planError && activePlans && activePlans.length > 0) {
+        const activePlan = activePlans[0];
         // Contar cuántos días de entrenamiento tiene el plan
         const planData = activePlan.plan_data;
         console.log('📋 Plan data encontrado:', planData);
