@@ -197,7 +197,7 @@ export default function ProfileScreen() {
           style={styles.editProfileButton}
           onPress={() => router.push('/onboarding')}
         >
-          <Text style={styles.editProfileText}>Completar perfil</Text>
+          <Text style={styles.editProfileText}>Editar perfil</Text>
           <Ionicons name="arrow-forward" size={20} color="#00D4AA" />
         </TouchableOpacity>
       </View>
