@@ -18,6 +18,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
 import { useSmartNotifications } from '@/hooks/useSmartNotifications';
+import { SkeletonProfile, FadeInView, SlideInView } from '../../src/components/SkeletonLoaders';
+import { EmptyWorkouts } from '../../src/components/EmptyStates';
+import { CustomRefreshControl, useRefresh } from '../../src/hooks/useRefresh';
 
 export default function HomeScreen() {
   const { user } = useUser();
@@ -29,6 +32,9 @@ export default function HomeScreen() {
 
   // Inicializar notificaciones inteligentes
   useSmartNotifications();
+
+  // Hook para manejar refresh
+  const { refreshing, onRefresh } = useRefresh(loadData);
 
   useEffect(() => {
     if (user?.id) {
@@ -175,9 +181,19 @@ export default function HomeScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="#00D4AA" />
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <FadeInView delay={0}>
+            <SkeletonProfile />
+          </FadeInView>
+          <FadeInView delay={200}>
+            <SkeletonCard />
+          </FadeInView>
+          <FadeInView delay={400}>
+            <SkeletonCard />
+          </FadeInView>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -185,29 +201,42 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <CustomRefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            title="Actualizando datos..."
+          />
+        }
+      >
         {/* Header con saludo */}
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.greeting}>{getGreeting()}</Text>
-            <Text style={styles.userName}>{userName || 'Usuario'}</Text>
+        <SlideInView direction="down" delay={0}>
+          <View style={styles.header}>
+            <View>
+              <Text style={styles.greeting}>{getGreeting()}</Text>
+              <Text style={styles.userName}>{userName || 'Usuario'}</Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
+              <Ionicons name="person-circle" size={48} color="#00D4AA" />
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
-            <Ionicons name="person-circle" size={48} color="#00D4AA" />
-          </TouchableOpacity>
-        </View>
+        </SlideInView>
 
         {/* Fecha de hoy */}
-        <View style={styles.dateCard}>
-          <Ionicons name="calendar" size={24} color="#00D4AA" />
-          <Text style={styles.dateText}>
-            {new Date().toLocaleDateString('es-ES', { 
-              weekday: 'long', 
-              day: 'numeric', 
-              month: 'long' 
-            })}
-          </Text>
-        </View>
+        <FadeInView delay={200}>
+          <View style={styles.dateCard}>
+            <Ionicons name="calendar" size={24} color="#00D4AA" />
+            <Text style={styles.dateText}>
+              {new Date().toLocaleDateString('es-ES', { 
+                weekday: 'long', 
+                day: 'numeric', 
+                month: 'long' 
+              })}
+            </Text>
+          </View>
+        </FadeInView>
 
         {/* Debug Info - Temporal */}
         {debugInfo && (
@@ -217,10 +246,14 @@ export default function HomeScreen() {
         )}
 
         {/* Sección: Tus Actividades de Hoy */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tus Actividades de Hoy</Text>
+        <FadeInView delay={400}>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Tus Actividades de Hoy</Text>
+          </View>
+        </FadeInView>
 
-          {/* Tarjeta: Entrenamiento de Hoy */}
+        {/* Tarjeta: Entrenamiento de Hoy */}
+        <SlideInView direction="right" delay={600}>
           <TouchableOpacity 
             style={styles.activityCard}
             onPress={async () => {
@@ -299,8 +332,10 @@ export default function HomeScreen() {
             </View>
             <Ionicons name="chevron-forward" size={24} color="#888888" />
           </TouchableOpacity>
+        </SlideInView>
 
-          {/* Tarjeta: Dieta de Hoy */}
+        {/* Tarjeta: Dieta de Hoy */}
+        <SlideInView direction="left" delay={800}>
           <TouchableOpacity 
             style={styles.activityCard}
             onPress={() => router.push('/(tabs)/nutrition/today-detail' as any)}
@@ -318,7 +353,7 @@ export default function HomeScreen() {
             </View>
             <Ionicons name="chevron-forward" size={24} color="#888888" />
           </TouchableOpacity>
-        </View>
+        </SlideInView>
 
         {/* Sección: Accesos Rápidos */}
         <View style={styles.section}>
