@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
 import { useSmartNotifications } from '@/hooks/useSmartNotifications';
-import { SkeletonProfile, FadeInView, SlideInView } from '../../src/components/SkeletonLoaders';
+import { SkeletonProfile, SkeletonCard, FadeInView, SlideInView } from '../../src/components/SkeletonLoaders';
 import { EmptyWorkouts } from '../../src/components/EmptyStates';
 import { CustomRefreshControl } from '../../src/components/CustomRefreshControl';
 import { useRefresh } from '../../src/hooks/useRefresh';
