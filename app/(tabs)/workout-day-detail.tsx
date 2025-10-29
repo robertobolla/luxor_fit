@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../src/services/supabase';
 import { WorkoutCompletion } from '../../src/types';
+import PersonalRecordModal from '../../src/components/PersonalRecordModal';
 
 export default function WorkoutDayDetailScreen() {
   const params = useLocalSearchParams();
@@ -35,6 +36,10 @@ export default function WorkoutDayDetailScreen() {
   const [duration, setDuration] = useState('');
   const [difficulty, setDifficulty] = useState(3);
   const [notes, setNotes] = useState('');
+  
+  // Estados para el modal de records personales
+  const [showPRModal, setShowPRModal] = useState(false);
+  const [selectedExercise, setSelectedExercise] = useState('');
   
   useEffect(() => {
     checkIfCompleted();
@@ -125,6 +130,11 @@ export default function WorkoutDayDetailScreen() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleOpenPRModal = (exerciseName: string) => {
+    setSelectedExercise(exerciseName);
+    setShowPRModal(true);
   };
 
   if (!dayData) {
@@ -371,15 +381,23 @@ export default function WorkoutDayDetailScreen() {
                   <View style={styles.exerciseTitleContainer}>
                     <Text style={styles.exerciseName}>{exerciseName}</Text>
                   </View>
-                  <TouchableOpacity 
-                    style={styles.videoButton}
-                    onPress={() => {
-                      // TODO: Abrir video del ejercicio
-                      console.log('Ver video:', exerciseName);
-                    }}
-                  >
-                    <Ionicons name="play-circle" size={20} color="#00D4AA" />
-                  </TouchableOpacity>
+                  <View style={styles.exerciseActions}>
+                    <TouchableOpacity 
+                      style={styles.prButton}
+                      onPress={() => handleOpenPRModal(exerciseName)}
+                    >
+                      <Ionicons name="trophy" size={18} color="#FFD700" />
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={styles.videoButton}
+                      onPress={() => {
+                        // TODO: Abrir video del ejercicio
+                        console.log('Ver video:', exerciseName);
+                      }}
+                    >
+                      <Ionicons name="play-circle" size={20} color="#00D4AA" />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 {!isOldFormat && sets && reps && (
@@ -533,6 +551,15 @@ export default function WorkoutDayDetailScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
+
+      {/* Modal de Records Personales */}
+      <PersonalRecordModal
+        visible={showPRModal}
+        onClose={() => setShowPRModal(false)}
+        exerciseName={selectedExercise}
+        workoutPlanId={planId}
+        dayName={dayName}
+      />
     </>
   );
 }
@@ -794,6 +821,23 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#ffffff',
+  },
+  exerciseActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  prButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#FFD70020',
+    borderWidth: 1,
+    borderColor: '#FFD700',
+  },
+  videoButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#00D4AA20',
   },
   exerciseStats: {
     flexDirection: 'row',
