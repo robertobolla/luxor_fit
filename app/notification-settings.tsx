@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { smartNotificationService } from '../src/services/smartNotifications';
 import * as Notifications from 'expo-notifications';
 
@@ -152,14 +152,24 @@ export default function NotificationSettingsScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Notificaciones Inteligentes</Text>
-          <Text style={styles.subtitle}>
-            Recibe recordatorios personalizados basados en tu adherencia y progreso
-          </Text>
-        </View>
+    <>
+      <Stack.Screen 
+        options={{ 
+          headerShown: true,
+          title: 'Notificaciones',
+          headerStyle: { backgroundColor: '#1a1a1a' },
+          headerTintColor: '#ffffff',
+          headerTitleStyle: { color: '#ffffff' }
+        }} 
+      />
+      <SafeAreaView style={styles.container}>
+        <ScrollView style={styles.scrollView}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Notificaciones Inteligentes</Text>
+            <Text style={styles.subtitle}>
+              Recibe recordatorios personalizados basados en tu adherencia y progreso
+            </Text>
+          </View>
 
       {/* Configuración General */}
       <View style={styles.section}>
@@ -280,38 +290,39 @@ export default function NotificationSettingsScreen() {
       </View>
       </ScrollView>
     </SafeAreaView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#1a1a1a',
   },
   scrollView: {
     flex: 1,
   },
   header: {
-    paddingTop: 20, // Reducido porque SafeAreaView ya maneja el área segura
+    paddingTop: 20,
     paddingHorizontal: 20,
     paddingBottom: 20,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#1a1a1a',
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: '#333',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#1A1A1A',
+    color: '#ffffff',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#cccccc',
     lineHeight: 22,
   },
   section: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2a2a2a',
     marginTop: 12,
     paddingHorizontal: 20,
     paddingVertical: 16,
@@ -319,7 +330,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#ffffff',
     marginBottom: 16,
   },
   settingRow: {
@@ -328,7 +339,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: '#333',
   },
   settingLeft: {
     flexDirection: 'row',
@@ -342,11 +353,11 @@ const styles = StyleSheet.create({
   settingTitle: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1A1A1A',
+    color: '#ffffff',
   },
   settingSubtitle: {
     fontSize: 14,
-    color: '#666',
+    color: '#cccccc',
     marginTop: 2,
   },
   timeSettings: {
@@ -355,11 +366,11 @@ const styles = StyleSheet.create({
   },
   timeLabel: {
     fontSize: 14,
-    color: '#666',
+    color: '#cccccc',
     marginBottom: 8,
   },
   timeButton: {
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#333',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
@@ -367,13 +378,13 @@ const styles = StyleSheet.create({
   },
   timeText: {
     fontSize: 16,
-    color: '#1A1A1A',
+    color: '#ffffff',
   },
   testButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#333',
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
@@ -392,15 +403,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveButtonDisabled: {
-    backgroundColor: '#CCCCCC',
+    backgroundColor: '#666',
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#ffffff',
   },
   infoSection: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#2a2a2a',
     marginTop: 12,
     marginBottom: 20,
     padding: 20,
@@ -408,12 +419,12 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1A1A1A',
+    color: '#ffffff',
     marginBottom: 12,
   },
   infoText: {
     fontSize: 14,
-    color: '#666',
+    color: '#cccccc',
     lineHeight: 20,
   },
 });
