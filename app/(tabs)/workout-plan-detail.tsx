@@ -281,6 +281,14 @@ export default function WorkoutPlanDetailScreen() {
             const dayKey = day.day || `day_${index + 1}`;
             const isCompleted = completedDays.has(dayKey);
             
+            // Asegurar que tenemos todos los campos necesarios para el día
+            const safeDay = {
+              day: day.day || `Día ${index + 1}`,
+              duration: day.duration || 45,
+              focus: day.focus || 'Entrenamiento general',
+              exercises: day.exercises || [],
+            };
+            
             return (
               <TouchableOpacity
                 key={index}
@@ -289,7 +297,7 @@ export default function WorkoutPlanDetailScreen() {
                   router.push({
                     pathname: '/(tabs)/workout-day-detail',
                     params: {
-                      dayData: JSON.stringify(day),
+                      dayData: JSON.stringify(safeDay),
                       planName: plan.plan_name,
                       planId: plan.id,
                       dayName: dayKey,
@@ -301,7 +309,7 @@ export default function WorkoutPlanDetailScreen() {
                 {isCompleted && <View style={styles.completedSideBar} />}
                 <View style={styles.dayHeader}>
                   <View style={styles.dayTitleContainer}>
-                    <Text style={styles.dayTitle}>{day.day}</Text>
+                    <Text style={styles.dayTitle}>{safeDay.day}</Text>
                     {isCompleted && (
                       <View style={styles.completedBadge}>
                         <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
@@ -311,14 +319,14 @@ export default function WorkoutPlanDetailScreen() {
                   </View>
                   <View style={styles.dayDuration}>
                     <Ionicons name="time-outline" size={14} color="#00D4AA" />
-                    <Text style={styles.dayDurationText}>{day.duration} min</Text>
+                    <Text style={styles.dayDurationText}>{safeDay.duration} min</Text>
                   </View>
                 </View>
-                <Text style={styles.dayFocus}>{day.focus}</Text>
+                <Text style={styles.dayFocus}>{safeDay.focus}</Text>
                 <View style={styles.exercisesContainer}>
-                  <Text style={styles.exercisesTitle}>Ejercicios ({day.exercises?.length || 0}):</Text>
+                  <Text style={styles.exercisesTitle}>Ejercicios ({safeDay.exercises?.length || 0}):</Text>
                   <View style={styles.exercisesList}>
-                    {day.exercises?.slice(0, 3).map((exercise: any, idx: number) => {
+                    {safeDay.exercises?.slice(0, 3).map((exercise: any, idx: number) => {
                       const isOldFormat = typeof exercise === 'string';
                       const exerciseName = isOldFormat ? exercise : exercise.name;
 
@@ -329,9 +337,9 @@ export default function WorkoutPlanDetailScreen() {
                         </View>
                       );
                     })}
-                    {day.exercises?.length > 3 && (
+                    {safeDay.exercises?.length > 3 && (
                       <Text style={styles.moreExercisesText}>
-                        +{day.exercises.length - 3} más
+                        +{safeDay.exercises.length - 3} más
                       </Text>
                     )}
                   </View>
