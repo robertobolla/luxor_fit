@@ -304,21 +304,51 @@ export async function getGymDaysThisWeek(userId: string): Promise<{ days: number
       // Buscar el plan de entrenamiento activo del usuario
       const { data: activePlan, error: planError } = await supabase
         .from('workout_plans')
-        .select('weekly_structure')
+        .select('plan_data')
         .eq('user_id', userId)
         .eq('is_active', true)
         .single();
 
-      if (!planError && activePlan?.weekly_structure) {
+      if (!planError && activePlan?.plan_data) {
         // Contar cuántos días de entrenamiento tiene el plan
-        const weeklyStructure = activePlan.weekly_structure;
-        const trainingDays = Object.keys(weeklyStructure).filter(day => 
-          weeklyStructure[day] && weeklyStructure[day].exercises && weeklyStructure[day].exercises.length > 0
-        );
-        goal = trainingDays.length;
-        console.log(`🎯 Meta de gimnasio basada en plan activo: ${goal} días`);
+        const planData = activePlan.plan_data;
+        console.log('📋 Plan data encontrado:', planData);
+        
+        // El plan_data puede tener diferentes estructuras, vamos a buscar weekly_structure
+        let weeklyStructure = null;
+        
+        if (planData.weekly_structure) {
+          weeklyStructure = planData.weekly_structure;
+        } else if (planData.weekly_plan) {
+          weeklyStructure = planData.weekly_plan;
+        } else if (planData.structure) {
+          weeklyStructure = planData.structure;
+        }
+        
+        if (weeklyStructure) {
+          // weekly_structure es un array de objetos con estructura { day, focus, exercises }
+          if (Array.isArray(weeklyStructure)) {
+            const trainingDays = weeklyStructure.filter(day => 
+              day && day.exercises && day.exercises.length > 0
+            );
+            goal = trainingDays.length;
+            console.log(`🎯 Meta de gimnasio basada en plan activo: ${goal} días (días: ${trainingDays.map(d => d.day).join(', ')})`);
+          } else {
+            // Si es un objeto con días como claves
+            const trainingDays = Object.keys(weeklyStructure).filter(day => 
+              weeklyStructure[day] && weeklyStructure[day].exercises && weeklyStructure[day].exercises.length > 0
+            );
+            goal = trainingDays.length;
+            console.log(`🎯 Meta de gimnasio basada en plan activo: ${goal} días (días: ${trainingDays.join(', ')})`);
+          }
+        } else {
+          console.log('⚠️ No se encontró weekly_structure en plan_data, usando meta por defecto: 3 días');
+        }
       } else {
         console.log('⚠️ No se encontró plan activo, usando meta por defecto: 3 días');
+        if (planError) {
+          console.error('❌ Error al buscar plan:', planError);
+        }
       }
     } catch (error) {
       console.error('❌ Error al obtener meta del plan:', error);
