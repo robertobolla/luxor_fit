@@ -1,5 +1,9 @@
 import { supabase } from './supabase';
-import { scheduleNotificationAsync, cancelScheduledNotificationAsync } from 'expo-notifications';
+import { 
+  scheduleNotificationAsync, 
+  cancelScheduledNotificationAsync,
+  getAllScheduledNotificationsAsync 
+} from 'expo-notifications';
 
 export interface NotificationConfig {
   id: string;
@@ -368,9 +372,15 @@ class SmartNotificationService {
   private async cancelExistingNotifications(userId: string): Promise<void> {
     try {
       // En una implementación real, guardarías los IDs de notificaciones programadas
-      // Por ahora, cancelamos todas las notificaciones pendientes
-      const scheduledNotifications = await scheduleNotificationAsync([]);
-      // Nota: Esta es una simplificación. En producción necesitarías un sistema más robusto
+      // Por ahora, obtenemos todas las notificaciones programadas y las cancelamos
+      const scheduledNotifications = await getAllScheduledNotificationsAsync();
+      
+      // Cancelar todas las notificaciones programadas
+      for (const notification of scheduledNotifications) {
+        await cancelScheduledNotificationAsync(notification.identifier);
+      }
+      
+      console.log(`🗑️ Canceladas ${scheduledNotifications.length} notificaciones existentes`);
     } catch (error) {
       console.error('Error cancelando notificaciones:', error);
     }
