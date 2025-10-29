@@ -57,6 +57,45 @@ export default function WorkoutScreen() {
     }
   };
 
+  const activateWorkoutPlan = async (planId: string) => {
+    if (!user) return;
+
+    try {
+      console.log('🔄 Activando plan de entrenamiento:', planId);
+      
+      // Primero desactivar todos los planes existentes del usuario
+      const { error: deactivateError } = await supabase
+        .from('workout_plans')
+        .update({ is_active: false })
+        .eq('user_id', user.id);
+
+      if (deactivateError) {
+        console.error('❌ Error al desactivar planes existentes:', deactivateError);
+        return;
+      }
+
+      // Luego activar el plan seleccionado
+      const { error: activateError } = await supabase
+        .from('workout_plans')
+        .update({ is_active: true })
+        .eq('id', planId)
+        .eq('user_id', user.id);
+
+      if (activateError) {
+        console.error('❌ Error al activar plan:', activateError);
+        return;
+      }
+
+      console.log('✅ Plan activado exitosamente');
+      
+      // Recargar la lista de planes para mostrar el estado actualizado
+      await loadWorkoutPlans();
+      
+    } catch (err) {
+      console.error('❌ Error inesperado al activar plan:', err);
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
     await Promise.all([loadWorkouts(), loadSessions(), loadWorkoutPlans()]);
@@ -195,11 +234,29 @@ export default function WorkoutScreen() {
 
                 <View style={styles.workoutActions}>
                   <TouchableOpacity
-                    style={styles.startButton}
-                    onPress={() => router.push(`/workout-active/${workout.id}`)}
+                    style={[
+                      styles.startButton,
+                      workout.is_active && styles.activePlanButton
+                    ]}
+                    onPress={() => {
+                      if (workout.is_active) {
+                        router.push(`/workout-active/${workout.id}`);
+                      } else {
+                        activateWorkoutPlan(workout.id);
+                      }
+                    }}
                   >
-                    <Ionicons name="play" size={16} color="#1a1a1a" />
-                    <Text style={styles.startButtonText}>Comenzar</Text>
+                    <Ionicons 
+                      name={workout.is_active ? "checkmark" : "play"} 
+                      size={16} 
+                      color={workout.is_active ? "#ffffff" : "#1a1a1a"} 
+                    />
+                    <Text style={[
+                      styles.startButtonText,
+                      workout.is_active && styles.activePlanButtonText
+                    ]}>
+                      {workout.is_active ? "Activo" : "Activar"}
+                    </Text>
                   </TouchableOpacity>
                   
                   <TouchableOpacity
@@ -368,6 +425,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 4,
+  },
+  activePlanButton: {
+    backgroundColor: '#4CAF50',
+  },
+  activePlanButtonText: {
+    color: '#ffffff',
   },
   detailsButton: {
     backgroundColor: 'transparent',

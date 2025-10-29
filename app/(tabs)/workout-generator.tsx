@@ -110,6 +110,21 @@ export default function WorkoutGeneratorScreen() {
     if (!user) return;
 
     try {
+      console.log('💾 Guardando nuevo plan de entrenamiento...');
+      
+      // Primero desactivar todos los planes existentes del usuario
+      const { error: deactivateError } = await supabase
+        .from('workout_plans')
+        .update({ is_active: false })
+        .eq('user_id', user.id);
+
+      if (deactivateError) {
+        console.error('❌ Error al desactivar planes existentes:', deactivateError);
+      } else {
+        console.log('✅ Planes existentes desactivados');
+      }
+
+      // Luego insertar el nuevo plan como activo
       const { error } = await supabase
         .from('workout_plans')
         .insert({
@@ -118,14 +133,19 @@ export default function WorkoutGeneratorScreen() {
           description: plan.description,
           duration_weeks: plan.duration_weeks,
           plan_data: plan,
+          is_active: true, // Nuevo plan siempre activo
           created_at: new Date().toISOString(),
         });
 
       if (error) {
-        console.error('Error al guardar plan:', error);
+        console.error('❌ Error al guardar plan:', error);
+        throw error;
+      } else {
+        console.log('✅ Nuevo plan guardado y activado');
       }
     } catch (err) {
-      console.error('Error inesperado al guardar:', err);
+      console.error('❌ Error inesperado al guardar:', err);
+      throw err;
     }
   };
 
