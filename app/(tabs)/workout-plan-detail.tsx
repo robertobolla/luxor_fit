@@ -24,16 +24,18 @@ export default function WorkoutPlanDetailScreen() {
   const [showAIModal, setShowAIModal] = useState(false);
 
   const loadPlanDetails = async () => {
-    if (!user || !planId) return;
+    if (!planId) return;
 
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      // Usamos maybeSingle para evitar errores cuando no hay filas
+      // y evitamos filtrar por user_id aquí (RLS ya debe proteger acceso)
+      const { data, error, status } = await supabase
         .from('workout_plans')
         .select('*')
         .eq('id', planId)
-        .eq('user_id', user.id)
-        .single();
+        .limit(1)
+        .maybeSingle();
 
       if (error) {
         console.error('Error al cargar plan:', error);
@@ -41,7 +43,32 @@ export default function WorkoutPlanDetailScreen() {
         return;
       }
 
-      setPlan(data);
+      if (!data) {
+        console.warn('Plan no encontrado para id:', planId, 'status:', status);
+        setError('Plan no encontrado');
+        return;
+      }
+
+      // Normalizar plan_data: puede venir como string o como objeto
+      let normalized = { ...data } as any;
+      try {
+        if (typeof normalized.plan_data === 'string') {
+          normalized.plan_data = JSON.parse(normalized.plan_data);
+        }
+      } catch (e) {
+        console.error('Error parseando plan_data; usando objeto vacío. Causa:', e);
+        normalized.plan_data = {};
+      }
+
+      // Logs útiles de diagnóstico (no romperán UI)
+      try {
+        const keys = normalized?.plan_data ? Object.keys(normalized.plan_data) : [];
+        console.log('📦 Plan data keys:', JSON.stringify(keys));
+        const w = normalized?.plan_data?.weekly_structure;
+        console.log('📅 Schedule es array:', Array.isArray(w), 'Longitud:', Array.isArray(w) ? w.length : 0);
+      } catch {}
+
+      setPlan(normalized);
     } catch (err) {
       console.error('Error inesperado:', err);
       setError('Ocurrió un error inesperado');

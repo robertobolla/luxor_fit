@@ -216,33 +216,31 @@ Responde SOLO con el JSON del plan adaptado, sin texto adicional.`;
    * Guarda el plan adaptado en la base de datos
    */
   private static async saveAdaptedPlan(
-    workoutPlanId: string, 
-    userId: string, 
-    adaptedPlan: any, 
+    workoutPlanId: string,
+    userId: string,
+    adaptedPlan: any,
     adaptationPrompt: string
   ): Promise<any | null> {
     try {
-      // Crear un nuevo plan basado en el adaptado
+      // Actualizar el plan existente en lugar de crear uno nuevo
       const { data, error } = await supabase
         .from('workout_plans')
-        .insert({
-          user_id: userId,
+        .update({
           plan_name: adaptedPlan.plan_name || 'Plan Adaptado',
           plan_data: adaptedPlan,
-          is_active: false, // No activar automáticamente
           adaptation_prompt: adaptationPrompt,
-          parent_plan_id: workoutPlanId,
-          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
+        .eq('id', workoutPlanId)
         .select()
         .single();
 
       if (error) {
-        console.error('❌ Error guardando plan adaptado:', error);
+        console.error('❌ Error actualizando plan adaptado:', error);
         return null;
       }
 
-      console.log('✅ Plan adaptado guardado exitosamente');
+      console.log('✅ Plan actualizado con adaptación IA');
       return data;
     } catch (error) {
       console.error('❌ Error en saveAdaptedPlan:', error);

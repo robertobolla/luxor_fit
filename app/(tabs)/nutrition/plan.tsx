@@ -22,6 +22,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { getMealPlan, FOOD_DATABASE } from '../../../src/services/nutrition';
+import { supabase } from '../../../src/services/supabase';
 import { WeekPlan, DayPlan, MealOption } from '../../../src/types/nutrition';
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -35,12 +36,70 @@ export default function MealPlanScreen() {
   const [selectedMealOptions, setSelectedMealOptions] = useState<Record<string, number>>({});
   const [showAIModal, setShowAIModal] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
+  const [dailyTarget, setDailyTarget] = useState<{ calories: number; protein_g: number; carbs_g: number; fats_g: number } | null>(null);
 
   useEffect(() => {
     if (user?.id) {
       loadWeekPlan();
     }
   }, [user]);
+
+  // Cargar objetivo del día al cambiar de día
+  useEffect(() => {
+    const loadTargetForSelectedDay = async () => {
+      if (!user?.id) return;
+
+      // Calcular fecha del día seleccionado basado en el lunes
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(today);
+      monday.setDate(today.getDate() + diff);
+      const selectedDate = new Date(monday);
+      selectedDate.setDate(monday.getDate() + selectedDay);
+      const selectedStr = selectedDate.toISOString().split('T')[0];
+
+      try {
+        // 1) Intentar leer directamente de nutrition_targets
+        const { data: targetRow, error } = await supabase
+          .from('nutrition_targets')
+          .select('calories, protein_g, carbs_g, fats_g')
+          .eq('user_id', user.id)
+          .eq('date', selectedStr)
+          .maybeSingle();
+
+        if (error) {
+          console.warn('No target found, will compute:', error?.message);
+        }
+
+        if (targetRow) {
+          setDailyTarget({
+            calories: targetRow.calories,
+            protein_g: targetRow.protein_g,
+            carbs_g: targetRow.carbs_g,
+            fats_g: targetRow.fats_g,
+          });
+          return;
+        }
+
+        // 2) Si no existe, calcular y guardar, luego leer
+        const { computeAndSaveTargets } = await import('../../../src/services/nutrition');
+        const res = await computeAndSaveTargets(user.id, selectedStr);
+        if (res.success && res.target) {
+          setDailyTarget({
+            calories: res.target.calories,
+            protein_g: res.target.protein_g,
+            carbs_g: res.target.carbs_g,
+            fats_g: res.target.fats_g,
+          });
+        }
+      } catch (e) {
+        console.error('Error loading daily target:', e);
+      }
+    };
+
+    loadTargetForSelectedDay();
+  }, [selectedDay, user?.id]);
 
   const loadWeekPlan = async () => {
     if (!user?.id) return;
@@ -55,7 +114,40 @@ export default function MealPlanScreen() {
       monday.setDate(today.getDate() + diff);
       const mondayStr = monday.toISOString().split('T')[0];
 
-      const plan = await getMealPlan(user.id, mondayStr);
+      let plan = await getMealPlan(user.id, mondayStr);
+
+      // Si no existe plan o tiene menos de 7 días, regenerarlo automáticamente
+      if (!plan || Object.keys(plan).length < 7) {
+        try {
+          const { computeAndSaveTargets, createOrUpdateMealPlan, clearNutritionCache } = await import('../../../src/services/nutrition');
+          const { supabase } = await import('../../../src/services/supabase');
+          
+          // Limpiar caché para forzar regeneración completa
+          clearNutritionCache(user.id);
+          
+          // Borrar plan existente si tiene menos de 7 días
+          if (plan && Object.keys(plan).length < 7) {
+            await supabase
+              .from('meal_plans')
+              .delete()
+              .eq('user_id', user.id)
+              .eq('week_start', mondayStr);
+            console.log('🗑️ Plan incompleto eliminado, regenerando...');
+          }
+          
+          // Asegurar target del lunes (mínimo requerido por el generador)
+          await computeAndSaveTargets(user.id, mondayStr);
+          // Generar plan de la semana completo (7 días)
+          const result = await createOrUpdateMealPlan(user.id, mondayStr);
+          if (result.success) {
+            plan = await getMealPlan(user.id, mondayStr);
+            console.log('✅ Plan regenerado con 7 días completos');
+          }
+        } catch (regenErr) {
+          console.error('Error regenerating meal plan automatically:', regenErr);
+        }
+      }
+
       setWeekPlan(plan);
     } catch (err) {
       console.error('Error loading meal plan:', err);
@@ -329,6 +421,67 @@ export default function MealPlanScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.selectedDayTitle}>{DAY_NAMES[selectedDay]}</Text>
+        
+        {/* Objetivo diario: eliminado el cuadro visual duplicado. El Resumen usa este valor internamente. */}
+
+        {/* Resumen del día = mismo dato que Objetivo del día (fuente: nutrition_targets). */}
+        {(() => {
+          const dayKey = DAYS[selectedDay] as keyof WeekPlan;
+          const currentDayPlan = weekPlan[dayKey];
+          
+          if (!currentDayPlan) return null;
+          
+          // Calcular totales del día
+          const totals = {
+            calories: 0,
+            protein_g: 0,
+            carbs_g: 0,
+            fats_g: 0
+          };
+          
+          const mealTypes = ['breakfast', 'lunch', 'dinner', 'snacks'] as const;
+          mealTypes.forEach(mealType => {
+            const meals = currentDayPlan[mealType];
+            if (meals && meals.length > 0) {
+              const key = `${dayKey}-${mealType}`;
+              const selectedIndex = selectedMealOptions[key] || 0;
+              const meal = meals[selectedIndex];
+              if (meal) {
+                totals.calories += meal.calories || 0;
+                totals.protein_g += meal.protein_g || 0;
+                totals.carbs_g += meal.carbs_g || 0;
+                totals.fats_g += meal.fats_g || 0;
+              }
+            }
+          });
+          
+          // Si existe dailyTarget, usarlo para el resumen (misma fuente que "Hoy").
+          const summary = dailyTarget || totals;
+
+          return (
+            <View style={styles.dailySummaryCard}>
+              <Text style={styles.dailySummaryTitle}>Resumen del día</Text>
+              <View style={styles.dailySummaryGrid}>
+                <View style={styles.dailySummaryItem}>
+                  <Text style={styles.dailySummaryValue}>{summary.calories}</Text>
+                  <Text style={styles.dailySummaryLabel}>kcal</Text>
+                </View>
+                <View style={styles.dailySummaryItem}>
+                  <Text style={styles.dailySummaryValue}>{summary.protein_g}g</Text>
+                  <Text style={styles.dailySummaryLabel}>proteína</Text>
+                </View>
+                <View style={styles.dailySummaryItem}>
+                  <Text style={styles.dailySummaryValue}>{summary.carbs_g}g</Text>
+                  <Text style={styles.dailySummaryLabel}>carbos</Text>
+                </View>
+                <View style={styles.dailySummaryItem}>
+                  <Text style={styles.dailySummaryValue}>{summary.fats_g}g</Text>
+                  <Text style={styles.dailySummaryLabel}>grasas</Text>
+                </View>
+              </View>
+            </View>
+          );
+        })()}
         
         {renderMeal('breakfast', dayPlan.breakfast)}
         {renderMeal('lunch', dayPlan.lunch)}
@@ -674,6 +827,38 @@ const styles = StyleSheet.create({
     color: '#F44336',
     marginTop: 8,
     fontStyle: 'italic',
+  },
+  dailySummaryCard: {
+    backgroundColor: '#0a0a0a',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: '#00D4AA',
+  },
+  dailySummaryTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#00D4AA',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  dailySummaryGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  dailySummaryItem: {
+    alignItems: 'center',
+  },
+  dailySummaryValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  dailySummaryLabel: {
+    fontSize: 12,
+    color: '#888888',
+    marginTop: 4,
   },
 });
 

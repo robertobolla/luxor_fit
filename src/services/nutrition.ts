@@ -1191,6 +1191,20 @@ IMPORTANTE: Responde SOLO con JSON válido. Cada item debe tener food_id (númer
       return generateWeekPlanFallback(targets, mealsPerDay, customPrompts, fastingWindow);
     }
 
+    // Asegurar SIEMPRE 7 días: si la IA omitió fines de semana, completamos copiando patrones
+    const orderedDays = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+    const presentDays = orderedDays.filter(d => !!weekPlan[d]);
+    if (presentDays.length < 7 && presentDays.length > 0) {
+      console.warn(`⚠️ IA devolvió ${presentDays.length}/7 días. Completando los faltantes...`);
+      orderedDays.forEach((d, idx) => {
+        if (!weekPlan[d]) {
+          const source = presentDays[idx % presentDays.length];
+          // Clonar superficialmente para evitar referencias compartidas
+          weekPlan[d] = JSON.parse(JSON.stringify(weekPlan[source]));
+        }
+      });
+    }
+
     console.log('✅ Plan generado con IA exitosamente');
     return weekPlan as WeekPlan;
   } catch (error: any) {

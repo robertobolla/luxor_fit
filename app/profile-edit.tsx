@@ -28,6 +28,7 @@ export default function ProfileEditScreen() {
   const [age, setAge] = useState('');
   const [selectedGoal, setSelectedGoal] = useState('');
   const [selectedActivity, setSelectedActivity] = useState('');
+  const [availableDays, setAvailableDays] = useState<number>(3);
   
   // Datos originales para detectar cambios
   const [originalData, setOriginalData] = useState<any>(null);
@@ -55,6 +56,11 @@ export default function ProfileEditScreen() {
         setAge(data.age?.toString() || '');
         setSelectedGoal(data.goals?.[0] || 'general_health');
         setSelectedActivity(data.activity_types?.[0] || 'mixed');
+        if (typeof (data as any).available_days === 'number') {
+          setAvailableDays((data as any).available_days);
+        } else {
+          setAvailableDays(3);
+        }
         setOriginalData(data);
       }
     } catch (err) {
@@ -72,7 +78,8 @@ export default function ProfileEditScreen() {
       height !== (originalData.height?.toString() || '') ||
       age !== (originalData.age?.toString() || '') ||
       selectedGoal !== (originalData.goals?.[0] || 'general_health') ||
-      selectedActivity !== (originalData.activity_types?.[0] || 'mixed')
+      selectedActivity !== (originalData.activity_types?.[0] || 'mixed') ||
+      availableDays !== ((originalData as any).available_days ?? 3)
     );
   };
 
@@ -167,6 +174,7 @@ export default function ProfileEditScreen() {
           age: ageNum,
           goals: [selectedGoal],
           activity_types: [selectedActivity],
+          available_days: availableDays,
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', user.id);
@@ -197,6 +205,7 @@ export default function ProfileEditScreen() {
           age: ageNum,
           goals: [selectedGoal],
           activity_types: [selectedActivity],
+          available_days: availableDays,
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', user.id);
@@ -390,6 +399,22 @@ export default function ProfileEditScreen() {
           </View>
         </View>
 
+        {/* Días de entrenamiento por semana */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📅 Días de entrenamiento por semana</Text>
+          <View style={styles.daysGrid}>
+            {Array.from({ length: 7 }, (_, i) => i + 1).map((d) => (
+              <TouchableOpacity
+                key={d}
+                style={[styles.dayChip, availableDays === d && styles.dayChipActive]}
+                onPress={() => setAvailableDays(d)}
+              >
+                <Text style={[styles.dayChipText, availableDays === d && styles.dayChipTextActive]}>{d}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* Botón Guardar */}
         <TouchableOpacity
           style={[styles.saveButton, (isSaving || !hasChanges()) && styles.saveButtonDisabled]}
@@ -503,6 +528,32 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   optionLabelActive: {
+    color: '#00D4AA',
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  dayChip: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: '#2a2a2a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a1a',
+  },
+  dayChipActive: {
+    borderColor: '#00D4AA',
+    backgroundColor: '#0f2a25',
+  },
+  dayChipText: {
+    color: '#888888',
+    fontWeight: '700',
+  },
+  dayChipTextActive: {
     color: '#00D4AA',
   },
   saveButton: {
