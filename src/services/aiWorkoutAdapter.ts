@@ -46,17 +46,39 @@ export class AIWorkoutAdapterService {
       }
 
       // Parsear la respuesta
-      const adaptedPlan = this.parseAIResponse(response);
+      const adaptedRaw = this.parseAIResponse(response);
       
-      if (!adaptedPlan) {
+      if (!adaptedRaw) {
         return {
           success: false,
           message: 'La respuesta de la IA no es válida. Intenta con un prompt más específico.'
         };
       }
 
+      // Normalizar y completar campos faltantes para evitar que falten secciones en la UI
+      const normalizedPlan = {
+        // Mantener metadatos previos si existen
+        plan_name: adaptedRaw.plan_name || currentPlan?.plan_name || 'Plan Adaptado',
+        description: adaptedRaw.description || currentPlan?.description || '',
+        duration_weeks: adaptedRaw.duration_weeks ?? currentPlan?.duration_weeks ?? 4,
+        days_per_week: adaptedRaw.days_per_week ?? currentPlan?.days_per_week ?? (currentPlan?.weekly_structure?.length || 3),
+        weekly_structure: adaptedRaw.weekly_structure ?? currentPlan?.weekly_structure ?? [],
+        // Secciones que suelen faltar en respuestas de IA
+        key_principles: Array.isArray(adaptedRaw.key_principles)
+          ? adaptedRaw.key_principles
+          : Array.isArray(currentPlan?.key_principles) ? currentPlan.key_principles : [],
+        progression: typeof adaptedRaw.progression === 'string'
+          ? adaptedRaw.progression
+          : (currentPlan?.progression || 'Progresión gradual basada en tu nivel actual'),
+        recommendations: Array.isArray(adaptedRaw.recommendations)
+          ? adaptedRaw.recommendations
+          : Array.isArray(currentPlan?.recommendations) ? currentPlan.recommendations : [],
+        // Cambios informativos si vienen
+        changes_made: Array.isArray(adaptedRaw.changes_made) ? adaptedRaw.changes_made : undefined,
+      } as any;
+
       // Guardar el plan adaptado
-      const savedPlan = await this.saveAdaptedPlan(workoutPlanId, userId, adaptedPlan, adaptationPrompt);
+      const savedPlan = await this.saveAdaptedPlan(workoutPlanId, userId, normalizedPlan, adaptationPrompt);
       
       if (!savedPlan) {
         return {
@@ -69,7 +91,7 @@ export class AIWorkoutAdapterService {
         success: true,
         adaptedPlan: savedPlan,
         message: '¡Entrenamiento adaptado exitosamente!',
-        changes: this.extractChanges(currentPlan, adaptedPlan)
+        changes: this.extractChanges(currentPlan, normalizedPlan)
       };
 
     } catch (error) {

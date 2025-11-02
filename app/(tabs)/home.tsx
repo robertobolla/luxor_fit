@@ -76,16 +76,12 @@ export default function HomeScreen() {
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       console.log('📋 Plan activo:', JSON.stringify(activePlan, null, 2));
-      console.log('❌ Error al cargar plan:', planError);
-
-      let debugMsg = '';
-      if (!activePlan) {
-        debugMsg = planError ? `Error: ${planError.message}` : 'No hay plan activo';
-        setDebugInfo(debugMsg);
-      }
+      
+      // Nunca mostrar mensaje de error en UI (solo logs)
+      setDebugInfo('');
 
       if (activePlan && activePlan.plan_data) {
         const planData = activePlan.plan_data;
@@ -148,11 +144,11 @@ export default function HomeScreen() {
             console.log('🔄 Todos completados, mostrando día 1');
           }
         } else {
-          setDebugInfo('⚠️ Schedule no es un array o está vacío');
+          // Schedule no válido - solo log, no mostrar en UI
           console.log('⚠️ Schedule no es un array válido');
         }
       } else {
-        setDebugInfo('⚠️ No hay plan activo o plan_data está vacío');
+        // No hay plan activo o plan_data vacío - solo log, no mostrar en UI
         console.log('⚠️ No hay plan activo o plan_data está vacío');
       }
 
@@ -229,12 +225,7 @@ export default function HomeScreen() {
           </Text>
         </View>
 
-        {/* Debug Info - Temporal */}
-        {debugInfo && (
-          <View style={{ backgroundColor: '#FF6B6B20', padding: 12, borderRadius: 8, marginBottom: 16 }}>
-            <Text style={{ color: '#FF6B6B', fontSize: 12 }}>{debugInfo}</Text>
-          </View>
-        )}
+        {/* Debug Info - Removido completamente */}
 
         {/* Sección: Tus Actividades de Hoy */}
         <View style={styles.section}>

@@ -1,0 +1,279 @@
+.page-container {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  color: #fff;
+  margin: 0;
+  flex: 1;
+}
+
+.page-loading {
+  text-align: center;
+  padding: 48px;
+  color: #999;
+}
+
+.empresario-info-card {
+  background: #141414;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.empresario-info-card p {
+  color: #ccc;
+  font-size: 14px;
+  margin: 8px 0;
+}
+
+.empresario-info-card strong {
+  color: #fff;
+  margin-right: 8px;
+}
+
+.users-table-container {
+  background: #141414;
+  padding: 24px;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+  overflow-x: auto;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.users-table th {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #2a2a2a;
+  color: #999;
+  font-size: 12px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.users-table td {
+  padding: 12px;
+  border-bottom: 1px solid #1a1a1a;
+  color: #ccc;
+}
+
+.users-table tbody tr:hover {
+  background: #1a1a1a;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-success {
+  background: #4caf50;
+  color: #fff;
+}
+
+.badge-default {
+  background: #666;
+  color: #fff;
+}
+
+.badge-danger {
+  background: #f44336;
+  color: #fff;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 14px;
+  transition: color 0.2s;
+}
+
+.btn-link:hover {
+  color: #F7931E;
+}
+
+.btn-link.btn-danger:hover {
+  color: #ff4444;
+}
+
+.btn-primary {
+  background: #F7931E;
+  color: #fff;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  background: #e6851a;
+}
+
+.btn-primary.btn-sm {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.btn-secondary {
+  background: #2a2a2a;
+  color: #fff;
+  border: 1px solid #3a3a3a;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: #3a3a3a;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: #999;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.modal-content {
+  background: #141414;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-content h2 {
+  color: #fff;
+  margin-bottom: 24px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  color: #ccc;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.search-input-group {
+  display: flex;
+  gap: 8px;
+}
+
+.search-input-group input {
+  flex: 1;
+  padding: 10px;
+  background: #0a0a0a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 14px;
+}
+
+.search-input-group input:focus {
+  outline: none;
+  border-color: #F7931E;
+}
+
+.search-results {
+  margin-top: 20px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.search-results h3 {
+  color: #fff;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.search-result-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #0a0a0a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.search-result-item strong {
+  color: #fff;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.search-result-item p {
+  color: #999;
+  font-size: 14px;
+  margin: 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.btn-danger {
+  background: #f44336;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #d32f2f;
+}
+
+.btn-danger:disabled {
+  background: #666;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+

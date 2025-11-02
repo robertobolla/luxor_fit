@@ -1,0 +1,144 @@
+.settings-page {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  font-size: 2rem;
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.subtitle {
+  color: #888;
+  font-size: 0.9375rem;
+}
+
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.info-card {
+  background: #141414;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.info-card h2 {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+  color: #ffd54a;
+}
+
+.instructions {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #1a1a1a;
+  border-radius: 6px;
+}
+
+.instructions h3 {
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+  color: #fff;
+}
+
+.instructions ol {
+  margin-left: 1.5rem;
+  color: #ccc;
+  line-height: 1.8;
+}
+
+.instructions ul {
+  margin-left: 1.5rem;
+  margin-top: 0.5rem;
+  color: #aaa;
+}
+
+.instructions code {
+  background: #0a0a0a;
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-size: 0.875rem;
+  color: #ffd54a;
+}
+
+.sql-example {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #0a0a0a;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.sql-example h3 {
+  font-size: 0.9375rem;
+  margin-bottom: 0.75rem;
+  color: #888;
+}
+
+.sql-example pre {
+  color: #ccc;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.role-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.role-item {
+  padding: 1rem;
+  background: #1a1a1a;
+  border-radius: 6px;
+  border-left: 3px solid #ffd54a;
+}
+
+.role-item h3 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.role-item p {
+  color: #888;
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.settings-section {
+  background: #141414;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 1.5rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.section-header h2 {
+  font-size: 1.25rem;
+  margin: 0;
+  color: #fff;
+}
+
+.page-loading {
+  text-align: center;
+  padding: 48px;
+  color: #999;
+}
+

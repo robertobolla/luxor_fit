@@ -1,15 +1,38 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert, ActivityIndicator, TextInput } from 'react-native';
 import { paymentsService } from '../src/services/payments';
+import { useUser } from '@clerk/clerk-expo';
+import { useRouter } from 'expo-router';
+import { useSubscription } from '../src/hooks/useSubscription';
 
 export default function PaywallScreen() {
   const [loading, setLoading] = useState(false);
   const [promoCode, setPromoCode] = useState('');
+  const { user, isSignedIn } = useUser();
+  const router = useRouter();
+  const { isActive, loading: subLoading, refresh } = useSubscription();
+
+  // El manejo de deep links está en _layout.tsx (global)
+  // Aquí solo mantenemos la redirección si ya tiene suscripción activa
+
+  // Redirigir si ya tiene suscripción activa (con timeout para evitar loops)
+  useEffect(() => {
+    if (!subLoading && isActive) {
+      console.log('✅ Paywall: Usuario tiene suscripción activa, redirigiendo al home');
+      const timer = setTimeout(() => {
+        router.replace('/(tabs)/home');
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isActive, subLoading]); // Removido 'router' de dependencias
 
   const startTrial = useCallback(async () => {
     try {
       setLoading(true);
-      const url = await paymentsService.createCheckoutSession(promoCode?.trim() || undefined);
+      const url = await paymentsService.createCheckoutSession(
+        promoCode?.trim() || undefined,
+        user?.id
+      );
       const supported = await Linking.canOpenURL(url);
       if (supported) {
         await Linking.openURL(url);
@@ -21,7 +44,7 @@ export default function PaywallScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [promoCode, user?.id]);
 
   return (
     <View style={styles.container}>
@@ -51,6 +74,25 @@ export default function PaywallScreen() {
         ) : (
           <Text style={styles.ctaText}>Comenzar prueba gratis de 7 días</Text>
         )}
+      </TouchableOpacity>
+
+      {/* Botón temporal para refrescar suscripción (debug) */}
+      <TouchableOpacity 
+        style={[styles.cta, { backgroundColor: '#333', marginTop: 12 }]} 
+        onPress={async () => {
+          try {
+            console.log('🔄 Refrescando suscripción manualmente...');
+            await refresh();
+            // Esperar un momento antes de verificar para evitar loops
+            setTimeout(() => {
+              console.log('✅ Refresh completado. Verificando estado...');
+            }, 500);
+          } catch (e) {
+            console.error('❌ Error al refrescar:', e);
+          }
+        }}
+      >
+        <Text style={[styles.ctaText, { color: '#fff' }]}>🔄 Refrescar Suscripción (Debug)</Text>
       </TouchableOpacity>
 
       <Text style={styles.legal}>Se requiere tarjeta. Cancela cuando quieras antes de que termine la prueba.</Text>

@@ -15,10 +15,12 @@ import {
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { Linking } from 'react-native';
 import { supabase } from '../../src/services/supabase';
 import { WorkoutCompletion } from '../../src/types';
 import PersonalRecordModal from '../../src/components/PersonalRecordModal';
 import { smartNotificationService } from '../../src/services/smartNotifications';
+import { openExerciseVideo } from '../../src/services/exerciseVideoService';
 
 export default function WorkoutDayDetailScreen() {
   const params = useLocalSearchParams();
@@ -407,9 +409,30 @@ export default function WorkoutDayDetailScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={styles.videoButton}
-                      onPress={() => {
-                        // TODO: Abrir video del ejercicio
-                        console.log('Ver video:', exerciseName);
+                      onPress={async () => {
+                        try {
+                          const opened = await openExerciseVideo(exerciseName, async (url) => {
+                            const supported = await Linking.canOpenURL(url);
+                            if (supported) {
+                              await Linking.openURL(url);
+                            } else {
+                              Alert.alert(
+                                'Error',
+                                `No se pudo abrir el video. URL: ${url}`
+                              );
+                            }
+                          });
+                          if (!opened) {
+                            Alert.alert(
+                              'Video no disponible',
+                              `No hay video asignado para "${exerciseName}". Puedes agregar uno desde la configuración de ejercicios.`,
+                              [{ text: 'OK' }]
+                            );
+                          }
+                        } catch (error) {
+                          console.error('❌ Error al abrir video:', error);
+                          Alert.alert('Error', 'No se pudo abrir el video del ejercicio');
+                        }
                       }}
                     >
                       <Ionicons name="play-circle" size={20} color="#00D4AA" />

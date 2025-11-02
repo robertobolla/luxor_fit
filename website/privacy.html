@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Política de Privacidad - Luxor Fitness</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .legal-page {
+            padding: 120px 0 80px;
+            background: var(--bg-dark);
+        }
+        .legal-content {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 48px;
+        }
+        .legal-content h1 {
+            font-size: 36px;
+            margin-bottom: 24px;
+        }
+        .legal-content h2 {
+            font-size: 24px;
+            margin-top: 32px;
+            margin-bottom: 16px;
+            color: var(--primary-color);
+        }
+        .legal-content p {
+            margin-bottom: 16px;
+            line-height: 1.8;
+            color: var(--text-secondary);
+        }
+        .legal-content ul {
+            margin-left: 24px;
+            margin-bottom: 16px;
+        }
+        .legal-content li {
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--primary-color);
+            text-decoration: none;
+            margin-bottom: 32px;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 640px) {
+            .legal-content {
+                padding: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container">
+            <div class="nav-content">
+                <a href="index.html" class="logo">
+                    <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <!-- Triángulo principal naranja -->
+                        <path d="M20 8L32 32H8L20 8Z" fill="#F7931E"/>
+                        <!-- Texto LUXOR (negativo dentro del triángulo) -->
+                        <text x="20" y="22" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#1A1A1A" text-anchor="middle" letter-spacing="1">LUXOR</text>
+                        <!-- Barra base con FITNESS -->
+                        <rect x="6" y="32" width="28" height="6" fill="#F7931E" rx="1"/>
+                        <text x="20" y="36.5" font-family="Arial, sans-serif" font-size="7" font-weight="bold" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">FITNESS</text>
+                    </svg>
+                    <span class="logo-text">Luxor Fitness</span>
+                </a>
+                <ul class="nav-links">
+                    <li><a href="index.html#features">Características</a></li>
+                    <li><a href="index.html#benefits">Beneficios</a></li>
+                    <li><a href="index.html#pricing">Precios</a></li>
+                    <li><a href="index.html#contact">Contacto</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <section class="legal-page">
+        <div class="container">
+            <div class="legal-content">
+                <a href="index.html" class="back-link">← Volver al inicio</a>
+                
+                <h1>Política de Privacidad</h1>
+                <p><strong>Última actualización:</strong> [Fecha]</p>
+
+                <p>En Luxor Fitness, nos comprometemos a proteger tu privacidad. Esta Política de Privacidad describe cómo recopilamos, usamos y protegemos tu información personal cuando usas nuestra aplicación móvil y servicios relacionados.</p>
+
+                <h2>1. Información que Recopilamos</h2>
+                <p>Recopilamos los siguientes tipos de información:</p>
+                <ul>
+                    <li><strong>Información de Cuenta:</strong> Nombre, dirección de correo electrónico, fecha de nacimiento, género y otros datos proporcionados durante el registro.</li>
+                    <li><strong>Datos de Salud:</strong> Información relacionada con tu salud y condición física, incluyendo pero no limitado a pasos, calorías, distancia, frecuencia cardíaca, peso, y otras métricas de salud obtenidas de Apple Health y Google Fit (solo con tu consentimiento explícito).</li>
+                    <li><strong>Fotos de Progreso:</strong> Imágenes que subas para documentar tu progreso físico.</li>
+                    <li><strong>Datos de Uso:</strong> Información sobre cómo usas nuestra aplicación, incluyendo planes de entrenamiento completados, preferencias de nutrición, y otras interacciones con la app.</li>
+                    <li><strong>Información de Pago:</strong> Información de facturación procesada de forma segura a través de Stripe. No almacenamos información de tarjetas de crédito directamente.</li>
+                </ul>
+
+                <h2>2. Cómo Usamos tu Información</h2>
+                <p>Utilizamos la información recopilada para:</p>
+                <ul>
+                    <li>Proporcionar y mejorar nuestros servicios de entrenamiento personalizado con IA.</li>
+                    <li>Crear planes de entrenamiento y nutrición adaptados a tus objetivos y condición física.</li>
+                    <li>Procesar pagos y gestionar suscripciones.</li>
+                    <li>Enviarte notificaciones sobre tu progreso y recordatorios de entrenamiento.</li>
+                    <li>Analizar el uso de la aplicación para mejorar nuestros servicios.</li>
+                    <li>Cumplir con obligaciones legales y proteger nuestros derechos.</li>
+                </ul>
+
+                <h2>3. Compartir tu Información</h2>
+                <p>No vendemos tu información personal. Compartimos tu información solo en las siguientes circunstancias:</p>
+                <ul>
+                    <li><strong>Proveedores de Servicios:</strong> Con terceros que nos ayudan a operar nuestra aplicación (Clerk para autenticación, Supabase para almacenamiento de datos, Stripe para pagos, OpenAI para servicios de IA).</li>
+                    <li><strong>Cumplimiento Legal:</strong> Cuando sea requerido por ley o para proteger nuestros derechos legales.</li>
+                    <li><strong>Con tu Consentimiento:</strong> En cualquier otra situación con tu consentimiento explícito.</li>
+                </ul>
+
+                <h2>4. Seguridad de Datos</h2>
+                <p>Implementamos medidas de seguridad técnicas y organizativas apropiadas para proteger tu información personal contra acceso no autorizado, alteración, divulgación o destrucción. Esto incluye:</p>
+                <ul>
+                    <li>Encriptación de datos en tránsito y en reposo.</li>
+                    <li>Autenticación segura a través de Clerk.</li>
+                    <li>Almacenamiento seguro en Supabase con políticas de seguridad de nivel de fila (RLS).</li>
+                    <li>Procesamiento de pagos seguro a través de Stripe.</li>
+                </ul>
+
+                <h2>5. Tus Derechos</h2>
+                <p>Tienes derecho a:</p>
+                <ul>
+                    <li><strong>Acceso:</strong> Solicitar una copia de tus datos personales.</li>
+                    <li><strong>Rectificación:</strong> Corregir información inexacta o incompleta.</li>
+                    <li><strong>Eliminación:</strong> Solicitar la eliminación de tus datos personales.</li>
+                    <li><strong>Portabilidad:</strong> Recibir tus datos en un formato estructurado y comúnmente usado.</li>
+                    <li><strong>Oposición:</strong> Oponerte al procesamiento de tus datos personales en ciertas circunstancias.</li>
+                    <li><strong>Retirar Consentimiento:</strong> Retirar tu consentimiento en cualquier momento cuando el procesamiento se base en consentimiento.</li>
+                </ul>
+                <p>Para ejercer estos derechos, contáctanos en: soporte@luxorfitness.app</p>
+
+                <h2>6. Datos de Salud</h2>
+                <p>Los datos de salud se manejan con especial cuidado:</p>
+                <ul>
+                    <li>Solo accedemos a datos de salud con tu consentimiento explícito.</li>
+                    <li>No compartimos datos de salud con terceros para publicidad o marketing.</li>
+                    <li>Puedes revocar el acceso a datos de salud en cualquier momento desde la configuración de tu dispositivo.</li>
+                    <li>Cumplimos con todas las leyes aplicables de privacidad de datos de salud.</li>
+                </ul>
+
+                <h2>7. Cookies y Tecnologías Similares</h2>
+                <p>Nuestra aplicación móvil puede usar tecnologías similares a cookies para mejorar la experiencia del usuario y analizar el uso de la aplicación.</p>
+
+                <h2>8. Retención de Datos</h2>
+                <p>Conservamos tu información personal durante el tiempo necesario para cumplir con los propósitos descritos en esta política, a menos que la ley requiera o permita un período de retención más largo.</p>
+
+                <h2>9. Menores de Edad</h2>
+                <p>Nuestros servicios están dirigidos a personas mayores de 13 años. No recopilamos intencionalmente información personal de menores de 13 años. Si descubrimos que hemos recopilado información de un menor sin el consentimiento de los padres, tomaremos medidas para eliminar esa información.</p>
+
+                <h2>10. Cambios a esta Política</h2>
+                <p>Podemos actualizar esta Política de Privacidad ocasionalmente. Te notificaremos sobre cambios significativos publicando la nueva política en esta página y actualizando la fecha de "Última actualización". Te recomendamos revisar esta política periódicamente.</p>
+
+                <h2>11. Contacto</h2>
+                <p>Si tienes preguntas sobre esta Política de Privacidad, puedes contactarnos en:</p>
+                <p><strong>Email:</strong> soporte@luxorfitness.app</p>
+                <p><strong>Sitio web:</strong> www.luxorfitness.app</p>
+
+                <p style="margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+                    Al usar Luxor Fitness, aceptas esta Política de Privacidad. Si no estás de acuerdo con esta política, por favor no uses nuestros servicios.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <div class="logo">
+                        <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <!-- Triángulo principal naranja -->
+                            <path d="M20 8L32 32H8L20 8Z" fill="#F7931E"/>
+                            <!-- Texto LUXOR (negativo dentro del triángulo) -->
+                            <text x="20" y="22" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#1A1A1A" text-anchor="middle" letter-spacing="1">LUXOR</text>
+                            <!-- Barra base con FITNESS -->
+                            <rect x="6" y="32" width="28" height="6" fill="#F7931E" rx="1"/>
+                            <text x="20" y="36.5" font-family="Arial, sans-serif" font-size="7" font-weight="bold" fill="#FFFFFF" text-anchor="middle" letter-spacing="0.5">FITNESS</text>
+                        </svg>
+                        <span class="logo-text">Luxor Fitness</span>
+                    </div>
+                    <p class="footer-description">
+                        Tu entrenador personal con IA para alcanzar tus objetivos fitness.
+                    </p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-column">
+                        <h4>Legal</h4>
+                        <ul>
+                            <li><a href="privacy.html">Privacidad</a></li>
+                            <li><a href="terms.html">Términos</a></li>
+                            <li><a href="index.html#contact">Contacto</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 Luxor Fitness. Todos los derechos reservados.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

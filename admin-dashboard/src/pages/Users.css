@@ -1,0 +1,257 @@
+.users-page {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.page-header h1 {
+  font-size: 2rem;
+  font-weight: bold;
+}
+
+.search-input {
+  padding: 0.75rem 1rem;
+  background: #141414;
+  border: 1px solid #222;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9375rem;
+  width: 300px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #ffd54a;
+}
+
+.loading,
+.empty-state {
+  text-align: center;
+  padding: 3rem;
+  color: #888;
+}
+
+.users-table-container {
+  background: #141414;
+  border: 1px solid #222;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.users-table thead {
+  background: #1a1a1a;
+}
+
+.users-table th {
+  padding: 1rem;
+  text-align: left;
+  font-size: 0.875rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+  border-bottom: 1px solid #222;
+}
+
+.users-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #222;
+  font-size: 0.9375rem;
+}
+
+.users-table tbody tr:hover {
+  background: #1a1a1a;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.badge-beginner {
+  background: rgba(76, 175, 80, 0.2);
+  color: #4CAF50;
+}
+
+.badge-intermediate {
+  background: rgba(255, 213, 74, 0.2);
+  color: #FFD54A;
+}
+
+.badge-advanced {
+  background: rgba(255, 87, 34, 0.2);
+  color: #FF5722;
+}
+
+.badge-unknown {
+  background: rgba(136, 136, 136, 0.2);
+  color: #888;
+}
+
+.badge-danger {
+  background: rgba(244, 67, 54, 0.2);
+  color: #f44336;
+}
+
+.badge-success {
+  background: rgba(76, 175, 80, 0.2);
+  color: #4CAF50;
+}
+
+.goals-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag {
+  padding: 0.25rem 0.5rem;
+  background: #1a1a1a;
+  border: 1px solid #222;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #ccc;
+}
+
+.btn-link {
+  color: #ffd54a;
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  display: inline-block;
+}
+
+.btn-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.btn-pagination {
+  padding: 0.5rem 1rem;
+  background: #141414;
+  border: 1px solid #222;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-pagination:hover:not(:disabled) {
+  background: #1a1a1a;
+  border-color: #ffd54a;
+}
+
+.btn-pagination:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-info {
+  color: #888;
+  font-size: 0.875rem;
+}
+
+/* Modal styles */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #141414;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-content h2 {
+  color: #fff;
+  margin-bottom: 24px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.btn-secondary {
+  padding: 10px 20px;
+  background: #2a2a2a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #3a3a3a;
+  border-color: #4a4a4a;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  padding: 10px 20px;
+  background: #FF9800;
+  border: none;
+  border-radius: 6px;
+  color: #000;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #FFB74D;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+

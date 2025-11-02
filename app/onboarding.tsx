@@ -78,11 +78,12 @@ export default function OnboardingScreen() {
         if (data) {
           console.log('✅ Perfil existente encontrado, pre-cargando datos...');
           setIsEditing(true);
+          const allowedGenders = [Gender.MALE, Gender.FEMALE];
           setFormData({
             name: data.name || '',
             email: data.email || '',
             age: data.age?.toString() || '',
-            gender: data.gender || Gender.MALE,
+            gender: allowedGenders.includes(data.gender as Gender) ? (data.gender as Gender) : Gender.MALE,
             height: data.height?.toString() || '',
             weight: data.weight?.toString() || '',
             body_fat_percentage: data.body_fat_percentage?.toString() || '',
@@ -216,6 +217,7 @@ export default function OnboardingScreen() {
           onConflict: 'user_id', // Usar user_id para determinar si actualizar o insertar
         });
 
+      // Si hubo error, manejar el caso de columnas faltantes
       if (error) {
         console.error('❌ Error al guardar perfil:', error);
         
@@ -247,6 +249,84 @@ export default function OnboardingScreen() {
       }
 
       console.log('✅ Perfil guardado exitosamente');
+      
+      // Verificar si este email corresponde a un empresario o socio pendiente y actualizar su user_id
+      if (userEmail) {
+        try {
+          // Actualizar empresario si aplica
+          const { data: empresarioData } = await supabase
+            .from('admin_roles')
+            .select('user_id')
+            .eq('email', userEmail)
+            .eq('role_type', 'empresario')
+            .maybeSingle();
+
+          if (empresarioData && empresarioData.user_id?.startsWith('temp_')) {
+            // Actualizar el user_id del empresario con el user_id real de Clerk
+            await supabase
+              .from('admin_roles')
+              .update({ user_id: user.id })
+              .eq('email', userEmail)
+              .eq('role_type', 'empresario');
+            
+            console.log('✅ User ID del empresario actualizado automáticamente');
+          }
+
+          // Actualizar socio si aplica
+          const { data: socioData } = await supabase
+            .from('admin_roles')
+            .select('user_id')
+            .eq('email', userEmail)
+            .eq('role_type', 'socio')
+            .maybeSingle();
+
+          if (socioData && socioData.user_id?.startsWith('temp_')) {
+            // Actualizar el user_id del socio con el user_id real de Clerk
+            await supabase
+              .from('admin_roles')
+              .update({ user_id: user.id })
+              .eq('email', userEmail)
+              .eq('role_type', 'socio');
+            
+            console.log('✅ User ID del socio actualizado automáticamente');
+          }
+
+          // Actualizar miembro de gimnasio si aplica
+          // Buscar si este usuario está en gym_members pero con user_id diferente
+          // Esto pasa cuando se crea el usuario desde el dashboard antes de que se registre
+          const { data: gymMemberData } = await supabase
+            .from('gym_members')
+            .select('user_id, empresario_id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          // Si no está en gym_members pero hay un registro pendiente para este email
+          // buscamos por el email en user_profiles y luego en gym_members
+          if (!gymMemberData) {
+            // Verificar si hay un registro en gym_members que necesite actualización
+            // Esto se hace buscando si el email del usuario coincide con algún user_profile
+            // que tenga un registro en gym_members pendiente
+            // Como no tenemos email directamente en gym_members, verificamos desde user_profiles
+            const { data: profileWithEmail } = await supabase
+              .from('user_profiles')
+              .select('user_id, email')
+              .eq('email', userEmail)
+              .eq('user_id', user.id)
+              .maybeSingle();
+
+            if (profileWithEmail) {
+              // Verificar si hay un registro en gym_members que necesite ser actualizado
+              // Buscar si hay algún registro con user_id que no coincida pero el email del perfil coincida
+              // Nota: Esto requiere que el email esté en user_profiles primero
+              // Por ahora, el flujo es: se crea usuario en Clerk → se crea en gym_members con user_id real
+              // Entonces esto no debería ser necesario, pero lo dejamos por si acaso
+            }
+          }
+        } catch (err) {
+          console.error('⚠️ Error actualizando user_id de admin_roles:', err);
+          // No bloquea el flujo si falla
+        }
+      }
 
       // Éxito - redirigir a la pantalla de introducción del plan
       router.replace({
@@ -410,7 +490,7 @@ export default function OnboardingScreen() {
           <View style={styles.stepContainer}>
             <Text style={styles.stepTitle}>¿Cuál es tu género?</Text>
             <Text style={styles.stepSubtitle}>Esto nos ayuda a personalizar mejor tu plan</Text>
-            {Object.values(Gender).map((gender) => (
+            {[Gender.MALE, Gender.FEMALE].map((gender) => (
               <TouchableOpacity
                 key={gender}
                 style={[
@@ -423,9 +503,8 @@ export default function OnboardingScreen() {
                   styles.optionText,
                   formData.gender === gender && styles.selectedOptionText
                 ]}>
-                  {gender === Gender.MALE && '👨 Masculino'}
-                  {gender === Gender.FEMALE && '👩 Femenino'}
-                  {gender === Gender.OTHER && '⚧️ Otro/Prefiero no decir'}
+                  {gender === Gender.MALE && '👨 Hombre'}
+                  {gender === Gender.FEMALE && '👩 Mujer'}
                 </Text>
               </TouchableOpacity>
             ))}

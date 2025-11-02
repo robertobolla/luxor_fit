@@ -8,7 +8,9 @@
             "developmentClient": true,
             "distribution": "internal",
             "ios": {
-                "resourceClass": "default"
+                "resourceClass": "default",
+                "simulator": false,
+                "buildConfiguration": "Debug"
             },
             "android": {
                 "gradleCommand": ":app:assembleDebug",
@@ -25,8 +27,10 @@
             }
         },
         "production": {
+            "distribution": "store",
             "ios": {
-                "resourceClass": "medium"
+                "resourceClass": "medium",
+                "simulator": false
             },
             "android": {
                 "buildType": "apk"

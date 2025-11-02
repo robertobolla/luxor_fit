@@ -18,7 +18,7 @@ import {
   analyzePhotoWithAI,
   saveAIAnalysis,
 } from '@/services/progressPhotos';
-import { ProgressPhoto, AIAnalysis } from '@/types/progressPhotos';
+import { ProgressPhoto, AIAnalysis, PhotoType } from '@/types/progressPhotos';
 
 const { width } = Dimensions.get('window');
 const photoWidth = (width - 48) / 2;
@@ -31,6 +31,7 @@ export default function ComparePhotosScreen() {
   const [analysis, setAnalysis] = useState<AIAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [currentType, setCurrentType] = useState<PhotoType>('front');
 
   useEffect(() => {
     loadPhotos();
@@ -61,6 +62,10 @@ export default function ComparePhotosScreen() {
     setSelectedAfter(photo);
     setAnalysis(null);
   };
+
+  const typeLabel = (t: PhotoType) => (t === 'front' ? 'Frente' : t === 'back' ? 'Espalda' : t === 'side' ? 'Costado' : 'Otra');
+
+  const photosByType = photos.filter((p) => p.photo_type === currentType);
 
   const handleAnalyze = async () => {
     if (!selectedBefore || !selectedAfter) {
@@ -152,6 +157,24 @@ export default function ComparePhotosScreen() {
       </View>
 
       <ScrollView style={styles.scrollView}>
+        {/* Selector de vista */}
+        <View style={styles.typeTabs}>
+          {(['front','side','back'] as PhotoType[]).map((t) => (
+            <TouchableOpacity
+              key={t}
+              style={[styles.typeTab, currentType === t && styles.typeTabActive]}
+              onPress={() => {
+                setCurrentType(t);
+                setSelectedBefore(null);
+                setSelectedAfter(null);
+                setAnalysis(null);
+              }}
+            >
+              <Text style={[styles.typeTabText, currentType === t && styles.typeTabTextActive]}>{typeLabel(t)}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {/* Fotos seleccionadas */}
         <View style={styles.comparisonContainer}>
           <View style={styles.photoColumn}>
@@ -343,11 +366,11 @@ export default function ComparePhotosScreen() {
           </View>
         )}
 
-        {/* Galería de fotos para seleccionar */}
+        {/* Galería de fotos para seleccionar (filtrada por vista) */}
         <View style={styles.gallerySection}>
-          <Text style={styles.galleryTitle}>Selecciona fotos para comparar:</Text>
+          <Text style={styles.galleryTitle}>Selecciona fotos para comparar ({typeLabel(currentType)}):</Text>
           <View style={styles.photosGrid}>
-            {photos.map((photo) => (
+            {photosByType.map((photo) => (
               <TouchableOpacity
                 key={photo.id}
                 style={[
@@ -515,6 +538,33 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#00D4AA',
+  },
+  typeTabs: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  typeTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#333',
+    alignItems: 'center',
+    backgroundColor: '#1f1f1f',
+  },
+  typeTabActive: {
+    backgroundColor: '#00D4AA',
+    borderColor: '#00D4AA',
+  },
+  typeTabText: {
+    fontSize: 14,
+    color: '#ccc',
+    fontWeight: '600',
+  },
+  typeTabTextActive: {
+    color: '#1a1a1a',
   },
   analysisHeader: {
     flexDirection: 'row',

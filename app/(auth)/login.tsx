@@ -61,7 +61,66 @@ export default function LoginScreen() {
         Alert.alert('Error', 'Error al iniciar sesión');
       }
     } catch (err: any) {
-      Alert.alert('Error', err.errors?.[0]?.message || 'Error al iniciar sesión');
+      const errorMessage = err.errors?.[0]?.message || 'Error al iniciar sesión';
+      Alert.alert('Error', errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!email) {
+      Alert.alert('Error', 'Por favor ingresa tu email');
+      return;
+    }
+
+    if (!isLoaded || !signIn) return;
+
+    setIsLoading(true);
+    try {
+      // Intentar crear sign-in sin contraseña para verificar si el usuario existe
+      // y poder preparar el restablecimiento de contraseña
+      const result = await signIn.create({
+        identifier: email,
+      });
+
+      // Buscar el factor de restablecimiento de contraseña
+      const resetFactor = result.supportedFirstFactors?.find(
+        (f: any) => f.strategy === 'reset_password_email_code'
+      );
+
+      if (resetFactor) {
+        // Preparar el restablecimiento de contraseña
+        await signIn.prepareFirstFactor({
+          strategy: 'reset_password_email_code',
+          emailAddressId: resetFactor.emailAddressId,
+        });
+
+        Alert.alert(
+          'Email enviado',
+          'Se ha enviado un email a tu correo con instrucciones para restablecer tu contraseña. Revisa tu bandeja de entrada.'
+        );
+        setShowResetPassword(false);
+        setPassword(''); // Limpiar el campo de contraseña
+      } else {
+        Alert.alert(
+          'Error',
+          'No se pudo iniciar el proceso de restablecimiento. Por favor, intenta iniciar sesión con Google OAuth o contacta al soporte.'
+        );
+      }
+    } catch (err: any) {
+      const errorMessage = err.errors?.[0]?.message || 'Error al solicitar restablecimiento de contraseña';
+      const errorCode = err.errors?.[0]?.code;
+      
+      // Si el usuario no existe o hay otro error
+      if (errorCode === 'form_identifier_not_found' || errorMessage.includes('not found')) {
+        Alert.alert(
+          'Usuario no encontrado',
+          'No existe una cuenta con ese email. Puedes crear una cuenta nueva o intentar iniciar sesión con Google OAuth.'
+        );
+      } else {
+        Alert.alert('Error', errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -129,6 +188,18 @@ export default function LoginScreen() {
               secureTextEntry
             />
           </View>
+
+          {email && (
+            <TouchableOpacity
+              style={styles.resetPasswordButton}
+              onPress={handleResetPassword}
+              disabled={isLoading}
+            >
+              <Text style={styles.resetPasswordText}>
+                Crear/Reestablecer contraseña
+              </Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={[styles.button, styles.primaryButton]}
@@ -277,5 +348,15 @@ const styles = StyleSheet.create({
     color: '#666',
     paddingHorizontal: 16,
     fontSize: 14,
+  },
+  resetPasswordButton: {
+    marginBottom: 16,
+    alignItems: 'center',
+    paddingVertical: 12,
+  },
+  resetPasswordText: {
+    color: '#00D4AA',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
 });

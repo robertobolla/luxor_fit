@@ -1,0 +1,32 @@
+═══════════════════════════════════════════════
+REGISTRO DE UDIDs PARA DEVELOPMENT BUILD
+═══════════════════════════════════════════════
+
+Instrucciones para agregar UDIDs:
+
+1. Ve a: https://developer.apple.com/account/resources/devices/list
+2. Haz clic en "+" (Agregar dispositivo)
+3. Completa:
+   - Nombre: Nombre del tester
+   - UDID: El identificador del iPhone
+   - Tipo: iPhone
+4. Guarda
+
+═══════════════════════════════════════════════
+LISTA DE UDIDs REGISTRADOS
+═══════════════════════════════════════════════
+
+FECHA      | NOMBRE              | UDID                                    | EMAIL
+-----------|---------------------|-----------------------------------------|------------------
+           |                     |                                         |
+
+═══════════════════════════════════════════════
+NOTAS
+═══════════════════════════════════════════════
+
+- Límite: 100 dispositivos por cuenta Apple Developer por año
+- Los UDIDs se pueden eliminar y reutilizar el slot si el dispositivo ya no se usa
+- Puede tomar unos minutos para que los cambios se propaguen
+
+═══════════════════════════════════════════════
+

@@ -1,6 +1,6 @@
 // Colores de la aplicación
 export const COLORS = {
-  primary: '#00D4AA',
+  primary: '#F7931E', // Naranja Luxor
   secondary: '#1a1a1a',
   background: '#1a1a1a',
   surface: '#2a2a2a',
@@ -113,11 +113,11 @@ export const NOTIFICATION_TYPES = {
 
 // Configuración de la app
 export const APP_CONFIG = {
-  name: 'FitMind',
+  name: 'Luxor Fitness',
   version: '1.0.0',
   description: 'Tu entrenador personal con IA',
-  supportEmail: 'soporte@fitmind.app',
-  website: 'https://fitmind.app',
+  supportEmail: 'soporte@luxorfitness.app',
+  website: 'https://luxorfitness.app',
 } as const;
 
 // Límites y validaciones

@@ -1,0 +1,146 @@
+.partner-referrals-page {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 32px;
+}
+
+.page-header h1 {
+  color: #fff;
+  margin-bottom: 16px;
+}
+
+.partner-code-info {
+  background: #141414;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+}
+
+.partner-code-info p {
+  margin: 0;
+  color: #ccc;
+}
+
+.partner-code-info code {
+  background: #0a0a0a;
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: #ffd54a;
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.stat-card {
+  background: #141414;
+  padding: 24px;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: bold;
+  color: #ffd54a;
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  color: #999;
+  font-size: 14px;
+}
+
+.referrals-table-container {
+  background: #141414;
+  padding: 24px;
+  border-radius: 8px;
+  border: 1px solid #2a2a2a;
+}
+
+.referrals-table-container h2 {
+  color: #fff;
+  margin-bottom: 16px;
+}
+
+.referrals-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.referrals-table th {
+  text-align: left;
+  padding: 12px;
+  border-bottom: 1px solid #2a2a2a;
+  color: #999;
+  font-size: 12px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.referrals-table td {
+  padding: 12px;
+  border-bottom: 1px solid #1a1a1a;
+  color: #ccc;
+}
+
+.referrals-table tbody tr:hover {
+  background: #1a1a1a;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.badge-free {
+  background: #00d4aa;
+  color: #0a0a0a;
+}
+
+.badge-paid {
+  background: #ffd54a;
+  color: #0a0a0a;
+}
+
+.badge-active {
+  background: #00d4aa;
+  color: #0a0a0a;
+}
+
+.badge-trialing {
+  background: #4a90e2;
+  color: #fff;
+}
+
+.badge-canceled {
+  background: #ff4444;
+  color: #fff;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: #999;
+}
+
+.loading {
+  text-align: center;
+  padding: 48px;
+  color: #999;
+}
+

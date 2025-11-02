@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "FitMind",
+    "name": "Luxor Fitness",
     "slug": "fitmind",
     "version": "1.0.0",
     "runtimeVersion": {
@@ -17,15 +17,15 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fitmind.app",
+      "bundleIdentifier": "com.luxorfitness.app",
       "infoPlist": {
-        "NSHealthShareUsageDescription": "FitMind necesita acceso a tus datos de salud para mostrarte estadísticas personalizadas de pasos, calorías, distancia y sueño.",
-        "NSHealthUpdateUsageDescription": "FitMind puede actualizar tus datos de salud cuando registres entrenamientos.",
-        "NSHealthClinicalHealthRecordsShareUsageDescription": "FitMind necesita acceso a tus registros clínicos para un mejor seguimiento de tu salud.",
-        "NSLocationWhenInUseUsageDescription": "FitMind necesita acceso a tu ubicación para rastrear tus actividades físicas con GPS.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "FitMind necesita acceso a tu ubicación para rastrear tus actividades físicas en segundo plano.",
-        "NSCameraUsageDescription": "FitMind necesita acceso a tu cámara para tomar fotos de progreso y documentar tus cambios físicos.",
-        "NSPhotoLibraryUsageDescription": "FitMind necesita acceso a tu galería para guardar y seleccionar fotos de progreso."
+        "NSHealthShareUsageDescription": "Luxor Fitness necesita acceso a tus datos de salud para mostrarte estadísticas personalizadas de pasos, calorías, distancia y sueño.",
+        "NSHealthUpdateUsageDescription": "Luxor Fitness puede actualizar tus datos de salud cuando registres entrenamientos.",
+        "NSHealthClinicalHealthRecordsShareUsageDescription": "Luxor Fitness necesita acceso a tus registros clínicos para un mejor seguimiento de tu salud.",
+        "NSLocationWhenInUseUsageDescription": "Luxor Fitness necesita acceso a tu ubicación para rastrear tus actividades físicas con GPS.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Luxor Fitness necesita acceso a tu ubicación para rastrear tus actividades físicas en segundo plano.",
+        "NSCameraUsageDescription": "Luxor Fitness necesita acceso a tu cámara para tomar fotos de progreso y documentar tus cambios físicos.",
+        "NSPhotoLibraryUsageDescription": "Luxor Fitness necesita acceso a tu galería para guardar y seleccionar fotos de progreso."
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
@@ -36,7 +36,7 @@
       "adaptiveIcon": {
         "backgroundColor": "#1a1a1a"
       },
-      "package": "com.fitmind.app",
+      "package": "com.luxorfitness.app",
       "permissions": [
         "ACTIVITY_RECOGNITION",
         "android.permission.ACTIVITY_RECOGNITION",
@@ -67,14 +67,14 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#00D4AA",
+          "color": "#F7931E",
           "sounds": [
             "./assets/notification-sound.wav"
           ]
         }
       ]
     ],
-    "scheme": "fitmind",
+    "scheme": "luxorfitness",
     "extra": {
       "router": {},
       "eas": {

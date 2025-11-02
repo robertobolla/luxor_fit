@@ -68,6 +68,11 @@ export default function WorkoutPlanDetailScreen() {
         console.log('📅 Schedule es array:', Array.isArray(w), 'Longitud:', Array.isArray(w) ? w.length : 0);
       } catch {}
 
+      try {
+        console.log('🧩 plan.plan_data keys:', normalized?.plan_data ? Object.keys(normalized.plan_data) : []);
+        console.log('🧩 plan.plan_data.sample:', JSON.stringify(normalized?.plan_data)?.slice(0, 400));
+      } catch {}
+
       setPlan(normalized);
     } catch (err) {
       console.error('Error inesperado:', err);
@@ -222,16 +227,80 @@ export default function WorkoutPlanDetailScreen() {
   }
 
   const planData = plan.plan_data || {};
-  
-  // Asegurar que tenemos todos los campos necesarios
-  const safePlanData = {
-    duration_weeks: planData.duration_weeks || plan.duration_weeks || 4,
-    days_per_week: planData.days_per_week || 3,
-    weekly_structure: planData.weekly_structure || [],
-    key_principles: planData.key_principles || [],
-    progression: planData.progression || 'Progresión gradual basada en tu nivel actual',
-    recommendations: planData.recommendations || [],
+
+  // Normalizadores para cubrir múltiples formatos del adaptador IA
+  const coerceStringArray = (value: any): string[] => {
+    if (!value) return [];
+    if (Array.isArray(value)) return value.map((v) => String(v));
+    if (typeof value === 'string') return [value];
+    if (typeof value === 'object') {
+      // Si viene como { items: [...] } o similar
+      const arr = (value.items || value.values || value.list) as any[] | undefined;
+      if (Array.isArray(arr)) return arr.map((v) => String(v));
+    }
+    return [];
   };
+
+  const coerceString = (value: any, fallback: string): string => {
+    if (!value && value !== 0) return fallback;
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value.join('. ');
+    if (typeof value === 'object') return value.text || value.description || fallback;
+    return String(value);
+  };
+
+  // Asegurar que tenemos todos los campos necesarios, mapeando posibles nombres alternativos
+  const safePlanData = (() => {
+    const keyPrinciples = coerceStringArray(
+      planData.key_principles || planData.principles || planData.core_principles || planData.keyPrinciples ||
+      plan.key_principles || plan.principles || plan.core_principles || plan.keyPrinciples ||
+      planData.principios_clave || plan.principios_clave
+    );
+
+    const progression = coerceString(
+      planData.progression || planData.progress || planData.progression_notes || plan.progression || plan.progress || plan.progression_notes ||
+      planData.progresion || plan.progresion,
+      'Progresión gradual basada en tu nivel actual'
+    );
+
+    const recommendations = coerceStringArray(
+      planData.recommendations || planData.tips || planData.advice || planData.suggestions ||
+      plan.recommendations || plan.tips || plan.advice || plan.suggestions ||
+      planData.recomendaciones || plan.recomendaciones
+    );
+
+    // Si faltan, generar un set básico para no dejar vacío tras adaptación
+    const fallbackPrinciples = keyPrinciples.length > 0 ? keyPrinciples : [
+      'Técnica estricta antes de aumentar cargas',
+      'Progresión semanal controlada (carga o repeticiones)',
+      'Equilibrio entre grupos musculares y descanso adecuado',
+    ];
+    const fallbackRecommendations = recommendations.length > 0 ? recommendations : [
+      'Calienta 5-10 minutos antes de empezar',
+      'Descansa 48 h entre estímulos del mismo músculo',
+      'Prioriza rango completo y control del movimiento',
+    ];
+
+    return {
+      duration_weeks: planData.duration_weeks || plan.duration_weeks || 4,
+      days_per_week: planData.days_per_week || plan.days_per_week || (planData.weekly_structure?.length || 3),
+      weekly_structure: planData.weekly_structure || [],
+      key_principles: fallbackPrinciples,
+      progression,
+      recommendations: fallbackRecommendations,
+    };
+  })();
+
+  const DEFAULT_PRINCIPLES = [
+    'Técnica estricta antes de aumentar cargas',
+    'Progresión semanal controlada (carga o repeticiones)',
+    'Equilibrio entre grupos musculares y descanso adecuado',
+  ];
+  const DEFAULT_RECOMMENDATIONS = [
+    'Calienta 5-10 minutos antes de empezar',
+    'Descansa 48 h entre estímulos del mismo músculo',
+    'Prioriza rango completo y control del movimiento',
+  ];
 
   return (
     <>
@@ -384,15 +453,12 @@ export default function WorkoutPlanDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🎯 Principios Clave</Text>
           <View style={styles.principlesContainer}>
-            {safePlanData.key_principles?.map((principle: string, index: number) => (
+            {(safePlanData.key_principles?.length ? safePlanData.key_principles : DEFAULT_PRINCIPLES).map((principle: string, index: number) => (
               <View key={index} style={styles.principleItem}>
                 <Ionicons name="bulb" size={16} color="#FFD700" />
                 <Text style={styles.principleText}>{principle}</Text>
               </View>
             ))}
-            {safePlanData.key_principles?.length === 0 && (
-              <Text style={styles.emptyText}>No hay principios específicos definidos para este plan.</Text>
-            )}
           </View>
         </View>
 
@@ -408,15 +474,12 @@ export default function WorkoutPlanDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>💡 Recomendaciones</Text>
           <View style={styles.recommendationsContainer}>
-            {safePlanData.recommendations?.map((rec: string, index: number) => (
+            {(safePlanData.recommendations?.length ? safePlanData.recommendations : DEFAULT_RECOMMENDATIONS).map((rec: string, index: number) => (
               <View key={index} style={styles.recommendationItem}>
                 <Ionicons name="star" size={16} color="#00D4AA" />
                 <Text style={styles.recommendationText}>{rec}</Text>
               </View>
             ))}
-            {safePlanData.recommendations?.length === 0 && (
-              <Text style={styles.emptyText}>No hay recomendaciones específicas para este plan.</Text>
-            )}
           </View>
         </View>
 
@@ -457,8 +520,17 @@ export default function WorkoutPlanDetailScreen() {
         visible={showAIModal}
         onClose={() => setShowAIModal(false)}
         onSuccess={(adaptedPlan) => {
-          // Recargar el plan actual para mostrar el adaptado
-          setPlan(adaptedPlan);
+          // Normalizar plan_data por si viene como string
+          let normalized = { ...adaptedPlan } as any;
+          try {
+            if (typeof normalized.plan_data === 'string') {
+              normalized.plan_data = JSON.parse(normalized.plan_data);
+            }
+          } catch (e) {
+            console.error('Error parseando plan_data adaptado; usando objeto vacío. Causa:', e);
+            normalized.plan_data = {};
+          }
+          setPlan(normalized);
           setShowAIModal(false);
           // Opcional: mostrar mensaje de éxito
           Alert.alert(

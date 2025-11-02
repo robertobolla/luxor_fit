@@ -1,0 +1,162 @@
+.admin-layout {
+  display: flex;
+  min-height: 100vh;
+  background: #0a0a0a;
+}
+
+.sidebar {
+  width: 260px;
+  background: #141414;
+  border-right: 1px solid #222;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.sidebar-header {
+  padding: 2rem 1.5rem;
+  border-bottom: 1px solid #222;
+}
+
+.sidebar-header h1 {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #F7931E;
+  margin-bottom: 0.5rem;
+}
+
+.admin-label {
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 1rem 0;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.5rem;
+  color: #ccc;
+  text-decoration: none;
+  transition: all 0.2s;
+  border-left: 3px solid transparent;
+}
+
+.nav-item:hover {
+  background: #1a1a1a;
+  color: #fff;
+}
+
+.nav-item.active {
+  background: #1a1a1a;
+  color: #F7931E;
+  border-left-color: #F7931E;
+}
+
+.nav-icon {
+  font-size: 1.25rem;
+}
+
+.nav-label {
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.sub-nav {
+  margin-top: 0.25rem;
+}
+
+.sub-nav-item {
+  display: block;
+  padding: 0.5rem 1.5rem 0.5rem 3rem;
+  color: #888;
+  text-decoration: none;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  border-radius: 4px;
+  margin: 0 0.5rem;
+}
+
+.sub-nav-item:hover {
+  color: #ccc;
+  background: #1a1a1a;
+}
+
+.sub-nav-item.active {
+  color: #F7931E;
+}
+
+.sidebar-footer {
+  padding: 1.5rem;
+  border-top: 1px solid #222;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #F7931E;
+  color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.user-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #fff;
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-email {
+  font-size: 0.75rem;
+  color: #888;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.main-content {
+  flex: 1;
+  margin-left: 260px;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    width: 200px;
+  }
+  
+  .main-content {
+    margin-left: 200px;
+    padding: 1rem;
+  }
+}
+
