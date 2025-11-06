@@ -119,7 +119,7 @@ export default function DashboardScreen() {
           .from('user_profiles')
           .select('id, name, fitness_level')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (error && error.code !== 'PGRST116') {
           console.error('Error al verificar onboarding:', error);

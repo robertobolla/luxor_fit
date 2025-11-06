@@ -20,6 +20,16 @@ import { getExerciseDaysThisWeek, getGymDaysThisWeek } from '@/services/exercise
 import DashboardCustomizationModal from '@/components/DashboardCustomizationModal';
 import { DashboardConfig, MetricType, AVAILABLE_METRICS, PRESET_PRIORITIES } from '@/types/dashboard';
 import { loadDashboardConfig } from '@/services/dashboardPreferences';
+import {
+  getBodyMetricsHistory,
+  getProgressComparison,
+  getProgressToGoals,
+} from '@/services/progressService';
+import {
+  BodyMetricsChart,
+  ProgressComparisonCard,
+  ProgressIndicator,
+} from '@/components/ProgressCharts';
 
 const { width } = Dimensions.get('window');
 
@@ -84,6 +94,10 @@ export default function ProgressScreen() {
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig | null>(null);
   const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
+  const [progressData, setProgressData] = useState<any>(null);
+  const [comparison, setComparison] = useState<any>(null);
+  const [progressGoals, setProgressGoals] = useState<any>(null);
+  const [comparisonPeriod, setComparisonPeriod] = useState<'week' | 'month'>('week');
 
   // Datos de ejemplo
   const [stats, setStats] = useState({
@@ -119,7 +133,7 @@ export default function ProgressScreen() {
           .from('user_profiles')
           .select('id, name, fitness_level')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (error && error.code !== 'PGRST116') {
           console.error('Error al verificar onboarding:', error);
@@ -181,7 +195,14 @@ export default function ProgressScreen() {
   useEffect(() => {
     if (isCheckingOnboarding) return; // Esperar a verificar onboarding
     loadHealthData();
+    loadProgressData();
   }, [selectedDate, isCheckingOnboarding]);
+
+  // Cargar datos de progreso
+  useEffect(() => {
+    if (isCheckingOnboarding || !user?.id) return;
+    loadProgressData();
+  }, [isCheckingOnboarding, user, comparisonPeriod]);
 
   // Recargar datos cuando la pantalla recibe foco
   useFocusEffect(
@@ -234,9 +255,28 @@ export default function ProgressScreen() {
     }
   };
 
+  const loadProgressData = async () => {
+    if (!user?.id) return;
+
+          try {
+            // Cargar datos históricos
+            const [bodyMetrics, comparisonData, goals] = await Promise.all([
+              getBodyMetricsHistory(user.id, 30),
+              getProgressComparison(user.id, comparisonPeriod),
+              getProgressToGoals(user.id),
+            ]);
+
+            setProgressData(bodyMetrics);
+            setComparison(comparisonData);
+            setProgressGoals(goals);
+          } catch (error) {
+            console.error('Error loading progress data:', error);
+          }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadHealthData();
+    await Promise.all([loadHealthData(), loadProgressData()]);
     setRefreshing(false);
   };
 
@@ -513,6 +553,69 @@ export default function ProgressScreen() {
           </View>
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
+
+        {/* Sección de Gráficos de Progreso */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>📊 Análisis de Progreso</Text>
+            <TouchableOpacity
+              onPress={() => setComparisonPeriod(comparisonPeriod === 'week' ? 'month' : 'week')}
+              style={styles.periodToggle}
+            >
+              <Text style={styles.periodToggleText}>
+                {comparisonPeriod === 'week' ? '📅 Semanal' : '📆 Mensual'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Gráfico de Peso y Composición */}
+          {progressData && progressData.length > 0 && (
+            <BodyMetricsChart data={progressData} title="Peso y Composición Corporal" />
+          )}
+
+          {/* Comparación Semanal/Mensual */}
+          {comparison && (
+            <ProgressComparisonCard comparison={comparison} />
+          )}
+
+          {/* Indicadores de Progreso hacia Objetivos */}
+          {progressGoals && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>🎯 Progreso hacia Objetivos</Text>
+              
+              {progressGoals.weightProgress && (
+                <ProgressIndicator
+                  title="Peso"
+                  current={progressGoals.weightProgress.current}
+                  target={progressGoals.weightProgress.target}
+                  progress={progressGoals.weightProgress.progress}
+                  unit=" kg"
+                  direction={progressGoals.weightProgress.direction}
+                />
+              )}
+
+              {progressGoals.bodyFatProgress && (
+                <ProgressIndicator
+                  title="Grasa Corporal"
+                  current={progressGoals.bodyFatProgress.current}
+                  target={progressGoals.bodyFatProgress.target}
+                  progress={progressGoals.bodyFatProgress.progress}
+                  unit="%"
+                />
+              )}
+
+              {progressGoals.muscleProgress && (
+                <ProgressIndicator
+                  title="Masa Muscular"
+                  current={progressGoals.muscleProgress.current}
+                  target={progressGoals.muscleProgress.target}
+                  progress={progressGoals.muscleProgress.progress}
+                  unit="%"
+                />
+              )}
+            </View>
+          )}
+        </View>
 
         {/* Sección de Recuperación */}
         <View style={styles.section}>
@@ -892,6 +995,24 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginBottom: 12,
     marginTop: 4,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    marginTop: 4,
+  },
+  periodToggle: {
+    backgroundColor: '#3a3a3a',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  periodToggleText: {
+    fontSize: 14,
+    color: '#00D4AA',
+    fontWeight: '600',
   },
   card: {
     backgroundColor: '#2a2a2a',

@@ -13,6 +13,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
 import { useWorkoutStore } from '@/store/workoutStore';
+import { LoadingOverlay } from '@/components/LoadingOverlay';
+import { useLoadingState } from '@/hooks/useLoadingState';
 
 export default function WorkoutScreen() {
   const { user } = useUser();
@@ -21,11 +23,11 @@ export default function WorkoutScreen() {
     sessions, 
     loadWorkouts, 
     loadSessions, 
-    isLoading 
+    isLoading: isLoadingStore 
   } = useWorkoutStore();
+  const { isLoading: isLoadingPlans, setLoading: setLoadingPlans } = useLoadingState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [workoutPlans, setWorkoutPlans] = useState<any[]>([]);
-  const [isLoadingPlans, setIsLoadingPlans] = useState(true);
 
   useEffect(() => {
     loadWorkouts();
@@ -36,8 +38,8 @@ export default function WorkoutScreen() {
   const loadWorkoutPlans = async () => {
     if (!user) return;
 
+    setLoadingPlans(true);
     try {
-      setIsLoadingPlans(true);
       const { data, error } = await supabase
         .from('workout_plans')
         .select('*')
@@ -45,7 +47,7 @@ export default function WorkoutScreen() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error al cargar planes:', error);
+        console.error('Error loading workout plans:', error);
         return;
       }
 
@@ -53,7 +55,7 @@ export default function WorkoutScreen() {
     } catch (err) {
       console.error('Error inesperado:', err);
     } finally {
-      setIsLoadingPlans(false);
+      setLoadingPlans(false);
     }
   };
 
@@ -61,8 +63,6 @@ export default function WorkoutScreen() {
     if (!user) return;
 
     try {
-      console.log('🔄 Activando plan de entrenamiento:', planId);
-
       // Activación atómica vía RPC (desactiva otros y activa este)
       const { error: rpcError } = await supabase.rpc('activate_workout_plan', {
         p_user_id: user.id,
@@ -70,17 +70,15 @@ export default function WorkoutScreen() {
       });
 
       if (rpcError) {
-        console.error('❌ Error al activar plan (RPC):', rpcError);
+        console.error('Error activating workout plan:', rpcError);
         return;
       }
-
-      console.log('✅ Plan activado exitosamente (RPC)');
       
       // Recargar la lista de planes para mostrar el estado actualizado
       await loadWorkoutPlans();
       
     } catch (err) {
-      console.error('❌ Error inesperado al activar plan:', err);
+      console.error('Error activating workout plan:', err);
     }
   };
 
@@ -122,12 +120,10 @@ export default function WorkoutScreen() {
       </View>
 
       {/* Planes de Entrenamiento Generados */}
-      {isLoadingPlans ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00D4AA" />
-          <Text style={styles.loadingText}>Cargando planes...</Text>
-        </View>
-      ) : workoutPlans.length > 0 ? (
+      {isLoadingPlans && (
+        <LoadingOverlay visible={true} message="Cargando planes..." />
+      )}
+      {!isLoadingPlans && workoutPlans.length > 0 && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📋 Mis Planes de Entrenamiento</Text>
           {workoutPlans.map((plan) => {

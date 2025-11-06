@@ -16,6 +16,7 @@ import { supabase } from '../src/services/supabase';
 import { FitnessLevel, FitnessGoal, Equipment, ActivityType, Gender } from '../src/types';
 import { getClerkUserEmail } from '../src/utils/clerkHelpers';
 import ClearClerkSessionButton from '../src/components/ClearClerkSessionButton';
+import { validateEmail, validateAge, validateWeight, validateHeight, validateRequired, validateMinLength } from '../src/utils/formValidation';
 
 const STEPS = [
   'welcome',
@@ -36,6 +37,7 @@ export default function OnboardingScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -67,7 +69,7 @@ export default function OnboardingScreen() {
           .from('user_profiles')
           .select('*')
           .eq('user_id', user.id)
-          .single();
+          .maybeSingle();
 
         if (error && error.code !== 'PGRST116') {
           console.error('❌ Error al cargar perfil:', error);
@@ -136,10 +138,55 @@ export default function OnboardingScreen() {
     );
   };
 
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    // Validar nombre
+    const nameValidation = validateMinLength(formData.name, 2, 'El nombre');
+    if (!nameValidation.isValid) {
+      errors.name = nameValidation.error || '';
+    }
+
+    // Validar edad
+    const ageValidation = validateAge(formData.age);
+    if (!ageValidation.isValid) {
+      errors.age = ageValidation.error || '';
+    }
+
+    // Validar altura
+    const heightValidation = validateHeight(formData.height);
+    if (!heightValidation.isValid) {
+      errors.height = heightValidation.error || '';
+    }
+
+    // Validar peso
+    const weightValidation = validateWeight(formData.weight);
+    if (!weightValidation.isValid) {
+      errors.weight = weightValidation.error || '';
+    }
+
+    // Validar email si está presente
+    if (formData.email && formData.email.trim().length > 0) {
+      const emailValidation = validateEmail(formData.email);
+      if (!emailValidation.isValid) {
+        errors.email = emailValidation.error || '';
+      }
+    }
+
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleComplete = async () => {
     if (!user) {
       Alert.alert('Error', 'No se pudo identificar al usuario. Por favor, inicia sesión nuevamente.');
       router.replace('/(auth)/login');
+      return;
+    }
+
+    // Validar formulario antes de enviar
+    if (!validateForm()) {
+      Alert.alert('Campos inválidos', 'Por favor, corrige los errores en el formulario antes de continuar.');
       return;
     }
 
@@ -405,58 +452,173 @@ export default function OnboardingScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Email</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, fieldErrors.email && styles.inputError]}
                 value={formData.email}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, email: text }))}
+                onChangeText={(text) => {
+                  setFormData(prev => ({ ...prev, email: text }));
+                  if (text.trim().length > 0) {
+                    const validation = validateEmail(text);
+                    if (!validation.isValid) {
+                      setFieldErrors(prev => ({ ...prev, email: validation.error || '' }));
+                    } else {
+                      setFieldErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.email;
+                        return newErrors;
+                      });
+                    }
+                  } else {
+                    setFieldErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.email;
+                      return newErrors;
+                    });
+                  }
+                }}
                 placeholder="tu@email.com"
                 placeholderTextColor="#666"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
               />
+              {fieldErrors.email && (
+                <Text style={styles.errorText}>{fieldErrors.email}</Text>
+              )}
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nombre</Text>
+              <Text style={styles.label}>Nombre *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, fieldErrors.name && styles.inputError]}
                 value={formData.name}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, name: text }))}
+                onChangeText={(text) => {
+                  setFormData(prev => ({ ...prev, name: text }));
+                  if (text.trim().length > 0) {
+                    const validation = validateMinLength(text, 2, 'El nombre');
+                    if (!validation.isValid) {
+                      setFieldErrors(prev => ({ ...prev, name: validation.error || '' }));
+                    } else {
+                      setFieldErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.name;
+                        return newErrors;
+                      });
+                    }
+                  } else {
+                    setFieldErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.name;
+                      return newErrors;
+                    });
+                  }
+                }}
                 placeholder="Tu nombre"
                 placeholderTextColor="#666"
               />
+              {fieldErrors.name && (
+                <Text style={styles.errorText}>{fieldErrors.name}</Text>
+              )}
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Edad</Text>
+              <Text style={styles.label}>Edad *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, fieldErrors.age && styles.inputError]}
                 value={formData.age}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, age: text }))}
+                onChangeText={(text) => {
+                  setFormData(prev => ({ ...prev, age: text }));
+                  if (text.trim().length > 0) {
+                    const validation = validateAge(text);
+                    if (!validation.isValid) {
+                      setFieldErrors(prev => ({ ...prev, age: validation.error || '' }));
+                    } else {
+                      setFieldErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.age;
+                        return newErrors;
+                      });
+                    }
+                  } else {
+                    setFieldErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.age;
+                      return newErrors;
+                    });
+                  }
+                }}
                 placeholder="25"
                 placeholderTextColor="#666"
                 keyboardType="numeric"
               />
+              {fieldErrors.age && (
+                <Text style={styles.errorText}>{fieldErrors.age}</Text>
+              )}
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Altura (cm)</Text>
+              <Text style={styles.label}>Altura (cm) *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, fieldErrors.height && styles.inputError]}
                 value={formData.height}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, height: text }))}
+                onChangeText={(text) => {
+                  setFormData(prev => ({ ...prev, height: text }));
+                  if (text.trim().length > 0) {
+                    const validation = validateHeight(text);
+                    if (!validation.isValid) {
+                      setFieldErrors(prev => ({ ...prev, height: validation.error || '' }));
+                    } else {
+                      setFieldErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.height;
+                        return newErrors;
+                      });
+                    }
+                  } else {
+                    setFieldErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.height;
+                      return newErrors;
+                    });
+                  }
+                }}
                 placeholder="175"
                 placeholderTextColor="#666"
                 keyboardType="numeric"
               />
+              {fieldErrors.height && (
+                <Text style={styles.errorText}>{fieldErrors.height}</Text>
+              )}
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Peso (kg)</Text>
+              <Text style={styles.label}>Peso (kg) *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, fieldErrors.weight && styles.inputError]}
                 value={formData.weight}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, weight: text }))}
+                onChangeText={(text) => {
+                  setFormData(prev => ({ ...prev, weight: text }));
+                  if (text.trim().length > 0) {
+                    const validation = validateWeight(text);
+                    if (!validation.isValid) {
+                      setFieldErrors(prev => ({ ...prev, weight: validation.error || '' }));
+                    } else {
+                      setFieldErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.weight;
+                        return newErrors;
+                      });
+                    }
+                  } else {
+                    setFieldErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.weight;
+                      return newErrors;
+                    });
+                  }
+                }}
                 placeholder="70"
                 placeholderTextColor="#666"
                 keyboardType="numeric"
               />
+              {fieldErrors.weight && (
+                <Text style={styles.errorText}>{fieldErrors.weight}</Text>
+              )}
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Grasa corporal (%) - Opcional</Text>
@@ -886,6 +1048,15 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     borderWidth: 1,
     borderColor: '#333',
+  },
+  inputError: {
+    borderColor: '#FF6B6B',
+    borderWidth: 2,
+  },
+  errorText: {
+    color: '#FF6B6B',
+    fontSize: 12,
+    marginTop: 4,
   },
   optionButton: {
     backgroundColor: '#2a2a2a',

@@ -2,7 +2,7 @@
 // NUTRITION HOME SCREEN
 // ============================================================================
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -19,19 +19,241 @@ import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../../src/services/supabase';
+import { LoadingOverlay } from '../../../src/components/LoadingOverlay';
+import { useLoadingState } from '../../../src/hooks/useLoadingState';
 import {
   computeAndSaveTargets,
   createOrUpdateMealPlan,
   getNutritionProfile,
   applyWeeklyAdjustment,
+  getWeeklyHistory,
+  getNextWeekStart,
+  WeekSummary,
 } from '../../../src/services/nutrition';
 import NutritionAdjustmentModal from '../../../src/components/NutritionAdjustmentModal';
 import { useNutritionStore } from '../../../src/store/nutritionStore';
 import { NutritionTarget, MealLog } from '../../../src/types/nutrition';
 
+// Componente memoizado para las tarjetas de semana
+const WeekCard = React.memo(({ 
+  week, 
+  isCurrent = false, 
+  onPress 
+}: { 
+  week: WeekSummary; 
+  isCurrent?: boolean; 
+  onPress: () => void;
+}) => {
+  const weekStartDate = useMemo(() => {
+    // Parsear como fecha local para evitar problemas de UTC
+    const [year, month, day] = week.weekStart.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }, [week.weekStart]);
+  
+  const weekEndDate = useMemo(() => {
+    // Parsear como fecha local para evitar problemas de UTC
+    const [year, month, day] = week.weekEnd.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }, [week.weekEnd]);
+  
+  const dateRange = useMemo(() => {
+    const start = weekStartDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    const end = weekEndDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+    return `${start} - ${end}`;
+  }, [weekStartDate, weekEndDate]);
+
+  const adherenceColor = useMemo(() => {
+    return week.adherence >= 70 ? '#00D4AA' : week.adherence >= 50 ? '#FFD93D' : '#FF6B6B';
+  }, [week.adherence]);
+
+  return (
+    <TouchableOpacity
+      style={[styles.weekCard, isCurrent && styles.currentWeekCard]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.weekCardHeader}>
+        <Text style={styles.weekCardTitle}>
+          {isCurrent ? 'Esta Semana' : dateRange}
+        </Text>
+        {isCurrent ? (
+          <View style={styles.currentBadge}>
+            <Text style={styles.currentBadgeText}>Actual</Text>
+          </View>
+        ) : null}
+      </View>
+      {isCurrent && (
+        <Text style={styles.weekCardDate}>{dateRange}</Text>
+      )}
+      {!isCurrent && (
+        <Text style={styles.weekCardSubtitle}>Semana pasada</Text>
+      )}
+      
+      {/* Adherencia */}
+      <View style={styles.adherenceContainer}>
+        <Text style={styles.adherenceLabel}>Adherencia</Text>
+        <View style={styles.adherenceBar}>
+          <View
+            style={[
+              styles.adherenceFill,
+              {
+                width: `${week.adherence}%`,
+                backgroundColor: adherenceColor,
+              },
+            ]}
+          />
+        </View>
+        <Text style={styles.adherenceText}>{week.adherence}%</Text>
+      </View>
+
+      {/* Resumen */}
+      <View style={styles.weekSummary}>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Calorías:</Text>
+          <Text style={styles.summaryValue}>
+            {week.avgCalories} / {week.targetCalories}
+          </Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Comidas:</Text>
+          <Text style={styles.summaryValue}>
+            {week.loggedMeals} / {week.expectedMeals}
+          </Text>
+        </View>
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Días:</Text>
+          <Text style={styles.summaryValue}>{week.daysLogged} / 7</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
+// Componente para la semana futura
+const NextWeekCard = React.memo(({ onPress }: { onPress: () => void }) => {
+  const nextWeekStart = useMemo(() => getNextWeekStart(), []);
+  const nextWeekEnd = useMemo(() => {
+    const end = new Date(nextWeekStart);
+    end.setDate(nextWeekStart.getDate() + 6);
+    return end;
+  }, [nextWeekStart]);
+
+  const dateRange = useMemo(() => {
+    return `${nextWeekStart.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} - ${nextWeekEnd.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}`;
+  }, [nextWeekStart, nextWeekEnd]);
+
+  return (
+    <TouchableOpacity
+      style={[styles.weekCard, styles.nextWeekCard]}
+      onPress={onPress}
+      activeOpacity={0.7}
+    >
+      <View style={styles.weekCardHeader}>
+        <Text style={styles.weekCardTitle}>Próxima Semana</Text>
+        <Ionicons name="lock-closed" size={16} color="#888888" />
+      </View>
+      <Text style={styles.weekCardDate}>{dateRange}</Text>
+      <Text style={styles.weekCardSubtext}>Disponible el lunes</Text>
+    </TouchableOpacity>
+  );
+});
+
+// Componente para el scroll de historial
+const WeeklyHistoryScrollView = React.memo(({
+  weeklyHistory,
+  onSelectDate,
+  onPressNextWeek,
+}: {
+  weeklyHistory: WeekSummary[];
+  onSelectDate: (date: string) => void;
+  onPressNextWeek: () => void;
+}) => {
+  const scrollViewRef = useRef<ScrollView>(null);
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+
+  const pastWeeks = useMemo(() => {
+    return weeklyHistory
+      .filter((week) => todayStr > week.weekEnd)
+      .reverse();
+  }, [weeklyHistory, todayStr]);
+
+  const currentWeek = useMemo(() => {
+    return weeklyHistory.find(
+      (week) => todayStr >= week.weekStart && todayStr <= week.weekEnd
+    );
+  }, [weeklyHistory, todayStr]);
+
+  // Scroll automático a la semana actual cuando se carga
+  const handleContentSizeChange = () => {
+    if (scrollViewRef.current && pastWeeks.length > 0) {
+      // Calcular la posición X: cada tarjeta tiene ~292px de ancho (280px + 12px margin)
+      const cardWidth = 292;
+      const scrollPosition = pastWeeks.length * cardWidth;
+      
+      scrollViewRef.current.scrollTo({
+        x: scrollPosition,
+        animated: false, // Sin animación para que sea instantáneo
+      });
+    }
+  };
+
+  // También intentar scroll cuando cambian las semanas pasadas
+  useEffect(() => {
+    if (scrollViewRef.current && pastWeeks.length > 0) {
+      // Usar requestAnimationFrame para asegurar que el layout esté completo
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const cardWidth = 292;
+          const scrollPosition = pastWeeks.length * cardWidth;
+          
+          scrollViewRef.current?.scrollTo({
+            x: scrollPosition,
+            animated: false,
+          });
+        }, 50);
+      });
+    }
+  }, [pastWeeks.length, weeklyHistory.length]);
+
+  return (
+    <ScrollView 
+      ref={scrollViewRef}
+      horizontal 
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.weeksContainer}
+      removeClippedSubviews={false}
+      scrollEventThrottle={16}
+      onContentSizeChange={handleContentSizeChange}
+    >
+      {/* Semanas pasadas (izquierda) */}
+      {pastWeeks.map((week) => (
+        <WeekCard
+          key={week.weekStart}
+          week={week}
+          isCurrent={false}
+          onPress={() => router.push(`/(tabs)/nutrition/plan?weekStart=${week.weekStart}` as any)}
+        />
+      ))}
+
+      {/* Semana actual (centro) */}
+      {currentWeek && (
+        <WeekCard
+          key={currentWeek.weekStart}
+          week={currentWeek}
+          isCurrent={true}
+          onPress={() => router.push(`/(tabs)/nutrition/plan?weekStart=${currentWeek.weekStart}` as any)}
+        />
+      )}
+
+      {/* Semana siguiente (futura - derecha) */}
+      <NextWeekCard onPress={onPressNextWeek} />
+    </ScrollView>
+  );
+});
+
 export default function NutritionHomeScreen() {
   const { user } = useUser();
-  const [isLoading, setIsLoading] = useState(true);
+  const { isLoading, setLoading, executeAsync } = useLoadingState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [todayTarget, setTodayTarget] = useState<NutritionTarget | null>(null);
   const [todayLogs, setTodayLogs] = useState<MealLog[]>([]);
@@ -40,11 +262,15 @@ export default function NutritionHomeScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   const [adjustmentData, setAdjustmentData] = useState<any>(null);
+  const [weeklyHistory, setWeeklyHistory] = useState<WeekSummary[]>([]);
+  const [showNextWeekModal, setShowNextWeekModal] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
       loadNutritionData();
       checkProfileChanges();
+      loadWeeklyHistory();
     }
   }, [user]);
 
@@ -76,22 +302,30 @@ export default function NutritionHomeScreen() {
       setTodayLogs((logsData || []) as MealLog[]);
 
       // Cargar agua del día
-      const { data: waterData } = await supabase
+      const { data: waterData, error: waterError } = await supabase
         .from('hydration_logs')
         .select('water_ml')
         .eq('user_id', user.id)
         .eq('date', targetDate)
-        .single();
+        .maybeSingle();
+
+      if (waterError && waterError.code !== 'PGRST116') {
+        console.error('Error loading water:', waterError);
+      }
 
       setTodayWater(waterData?.water_ml || 0);
 
       // Cargar target del día seleccionado
-      const { data: targetData } = await supabase
+      const { data: targetData, error: targetError } = await supabase
         .from('nutrition_targets')
         .select('*')
         .eq('user_id', user.id)
         .eq('date', targetDate)
-        .single();
+        .maybeSingle();
+
+      if (targetError && targetError.code !== 'PGRST116') {
+        console.error('Error loading target:', targetError);
+      }
 
       setTodayTarget((targetData as NutritionTarget) || null);
     } catch (err) {
@@ -141,13 +375,18 @@ export default function NutritionHomeScreen() {
 
     try {
       // Obtener el perfil actual del usuario
-      const { data: profileData, error } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
-        .select('weight, height, goals, activity_types, birthdate, gender')
+        .select('weight, height, goals, activity_types, age, gender')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (error || !profileData) return;
+      if (profileError) {
+        console.error('Error loading profile:', profileError);
+        return;
+      }
+
+      if (!profileData) return;
 
       // Crear un hash del perfil relevante para nutrición
       const currentProfileHash = JSON.stringify({
@@ -155,16 +394,20 @@ export default function NutritionHomeScreen() {
         height: profileData.height,
         goals: profileData.goals,
         activity_types: profileData.activity_types,
-        age: profileData.birthdate,
+        age: profileData.age,
         gender: profileData.gender,
       });
 
       // Obtener el hash anterior (guardado en localStorage/AsyncStorage)
-      const { data: nutritionProfile } = await supabase
+      const { data: nutritionProfile, error: nutritionError } = await supabase
         .from('nutrition_profiles')
         .select('custom_prompts')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
+
+      if (nutritionError && nutritionError.code !== 'PGRST116') {
+        console.error('Error loading nutrition profile:', nutritionError);
+      }
 
       // Buscar el hash anterior en custom_prompts (lo guardaremos como metadata)
       const storedHash = nutritionProfile?.custom_prompts?.find((p: string) => 
@@ -338,6 +581,20 @@ export default function NutritionHomeScreen() {
     }
   };
 
+  const loadWeeklyHistory = async () => {
+    if (!user?.id) return;
+
+    setLoadingHistory(true);
+    try {
+      const history = await getWeeklyHistory(user.id, 8); // Últimas 8 semanas
+      setWeeklyHistory(history);
+    } catch (err) {
+      console.error('Error loading weekly history:', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
   const loadNutritionData = async () => {
     if (!user?.id) return;
 
@@ -359,17 +616,21 @@ export default function NutritionHomeScreen() {
             },
           ]
         );
-        setIsLoading(false);
+        setLoading(false);
         return;
       }
 
       // Cargar target del día
-      const { data: targetData } = await supabase
+      const { data: targetData, error: targetError } = await supabase
         .from('nutrition_targets')
         .select('*')
         .eq('user_id', user.id)
         .eq('date', today)
-        .single();
+        .maybeSingle();
+
+      if (targetError && targetError.code !== 'PGRST116') {
+        console.error('Error loading target:', targetError);
+      }
 
       if (!targetData) {
         // No hay target, inicializar
@@ -378,18 +639,23 @@ export default function NutritionHomeScreen() {
         setTodayTarget(targetData as NutritionTarget);
         
         // Verificar si existe plan de comidas para esta semana
-        const dayOfWeek = new Date().getDay();
+        const today = new Date();
+        const dayOfWeek = today.getDay();
         const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        const monday = new Date();
-        monday.setDate(new Date().getDate() + diff);
+        const monday = new Date(today);
+        monday.setDate(today.getDate() + diff);
         const mondayStr = monday.toISOString().split('T')[0];
         
-        const { data: planData } = await supabase
+        const { data: planData, error: planError } = await supabase
           .from('meal_plans')
           .select('id')
           .eq('user_id', user.id)
           .eq('week_start', mondayStr)
-          .single();
+          .maybeSingle();
+
+        if (planError && planError.code !== 'PGRST116') {
+          console.error('Error loading meal plan:', planError);
+        }
         
         if (!planData) {
           // No hay plan, generarlo
@@ -410,18 +676,22 @@ export default function NutritionHomeScreen() {
       setTodayLogs((logsData || []) as MealLog[]);
 
       // Cargar agua del día
-      const { data: waterData } = await supabase
+      const { data: waterData, error: waterError } = await supabase
         .from('hydration_logs')
         .select('water_ml')
         .eq('user_id', user.id)
         .eq('date', today)
-        .single();
+        .maybeSingle();
+
+      if (waterError && waterError.code !== 'PGRST116') {
+        console.error('Error loading water:', waterError);
+      }
 
       setTodayWater(waterData?.water_ml || 0);
     } catch (err) {
       console.error('Error loading nutrition data:', err);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
@@ -493,12 +763,13 @@ export default function NutritionHomeScreen() {
 
   if (isLoading || isInitializing) {
     return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="#00D4AA" />
-        <Text style={styles.loadingText}>
-          {isInitializing ? 'Generando tu plan nutricional...' : 'Cargando...'}
-        </Text>
+        <LoadingOverlay 
+          visible={true} 
+          message={isInitializing ? 'Generando tu plan nutricional...' : 'Cargando...'} 
+          fullScreen 
+        />
       </SafeAreaView>
     );
   }
@@ -560,11 +831,17 @@ export default function NutritionHomeScreen() {
                           console.log('🔄 Recalculando targets para la semana...');
 
                           // Primero, actualizar el hash del perfil para forzar sincronización
-                          const { data: profileData } = await supabase
+                          const { data: profileData, error: profileError } = await supabase
                             .from('user_profiles')
-                            .select('weight, height, goals, activity_types, birthdate, gender')
+                            .select('weight, height, goals, activity_types, age, gender')
                             .eq('user_id', user.id)
-                            .single();
+                            .maybeSingle();
+
+                          if (profileError) {
+                            console.error('Error loading profile:', profileError);
+                            Alert.alert('Error', 'No se pudo cargar el perfil.');
+                            return;
+                          }
 
                           if (profileData) {
                             const currentProfileHash = JSON.stringify({
@@ -572,7 +849,7 @@ export default function NutritionHomeScreen() {
                               height: profileData.height,
                               goals: profileData.goals,
                               activity_types: profileData.activity_types,
-                              age: profileData.birthdate,
+                              age: profileData.age,
                               gender: profileData.gender,
                             });
                             
@@ -608,12 +885,13 @@ export default function NutritionHomeScreen() {
                             
                             if (deleteError) {
                               console.error(`Error borrando target ${dateStr}:`, deleteError);
-                            } else {
-                              console.log(`✅ Target borrado: ${dateStr}`);
+                              continue; // Saltar este día si falla
                             }
                             
                             const result = await computeAndSaveTargets(user.id, dateStr);
-                            console.log(`📊 Target recalculado para ${dateStr}:`, result.target);
+                            if (!result.success) {
+                              console.error(`Error recalculando ${dateStr}:`, result.error);
+                            }
                           }
 
                           Alert.alert('¡Listo!', 'Tus calorías han sido recalculadas con tu perfil actual. Verifica los logs.');
@@ -784,6 +1062,23 @@ export default function NutritionHomeScreen() {
           </View>
         </View>
 
+        {/* Historial Semanal */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>📅 Historial Semanal</Text>
+          {loadingHistory ? (
+            <LoadingOverlay 
+              visible={true} 
+              message="Cargando historial..." 
+            />
+          ) : (
+            <WeeklyHistoryScrollView
+              weeklyHistory={weeklyHistory}
+              onSelectDate={setSelectedDate}
+              onPressNextWeek={() => setShowNextWeekModal(true)}
+            />
+          )}
+        </View>
+
         {/* Acciones rápidas */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>⚡ Acciones Rápidas</Text>
@@ -814,14 +1109,6 @@ export default function NutritionHomeScreen() {
               <Ionicons name="cart" size={32} color="#00D4AA" />
               <Text style={styles.actionText}>Lista de Compras</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => router.push('/(tabs)/nutrition/lessons' as any)}
-            >
-              <Ionicons name="school" size={32} color="#00D4AA" />
-              <Text style={styles.actionText}>Academia</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
@@ -834,6 +1121,35 @@ export default function NutritionHomeScreen() {
         onClose={() => setShowAdjustmentModal(false)}
         adjustment={adjustmentData}
       />
+
+      {/* Modal de semana futura */}
+      <Modal
+        visible={showNextWeekModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowNextWeekModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="calendar-outline" size={32} color="#00D4AA" />
+              <Text style={styles.modalTitle}>Próxima Semana</Text>
+            </View>
+            <Text style={styles.modalMessage}>
+              El plan de la próxima semana se habilitará el lunes siguiente y se generará automáticamente en base a la información recolectada de la semana actual.
+            </Text>
+            <Text style={styles.modalSubtext}>
+              Tu plan de nutrición se ajustará automáticamente según tu progreso, adherencia y resultados de esta semana.
+            </Text>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowNextWeekModal(false)}
+            >
+              <Text style={styles.modalCloseButtonText}>Entendido</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1055,6 +1371,133 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     fontSize: 16,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  weeksContainer: {
+    paddingVertical: 8,
+    gap: 12,
+  },
+  weekCard: {
+    width: 280,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    marginRight: 12,
+  },
+  currentWeekCard: {
+    borderColor: '#00D4AA',
+    backgroundColor: '#1a2a2a',
+  },
+  nextWeekCard: {
+    borderColor: '#444444',
+    backgroundColor: '#1a1a1a',
+    opacity: 0.7,
+  },
+  weekCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  weekCardTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  weekCardDate: {
+    fontSize: 12,
+    color: '#888888',
+    marginBottom: 12,
+  },
+  weekCardSubtitle: {
+    fontSize: 11,
+    color: '#666666',
+    fontStyle: 'italic',
+    marginBottom: 12,
+  },
+  weekCardSubtext: {
+    fontSize: 11,
+    color: '#666666',
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  currentBadge: {
+    backgroundColor: '#00D4AA',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  currentBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#1a1a1a',
+  },
+  adherenceContainer: {
+    marginBottom: 12,
+  },
+  adherenceLabel: {
+    fontSize: 12,
+    color: '#888888',
+    marginBottom: 4,
+  },
+  adherenceBar: {
+    height: 6,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 4,
+  },
+  adherenceFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  adherenceText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#ffffff',
+    textAlign: 'right',
+  },
+  weekSummary: {
+    gap: 6,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  summaryLabel: {
+    fontSize: 11,
+    color: '#888888',
+  },
+  summaryValue: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: '#ffffff',
+    textAlign: 'center',
+    marginBottom: 12,
+    lineHeight: 24,
+  },
+  modalSubtext: {
+    fontSize: 14,
+    color: '#888888',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
   },
 });
 

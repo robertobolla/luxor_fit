@@ -42,13 +42,6 @@ export default function NutritionLayout() {
         }}
       />
       <Stack.Screen
-        name="lessons"
-        options={{
-          title: 'Academia',
-          headerShown: false,
-        }}
-      />
-      <Stack.Screen
         name="settings"
         options={{
           title: 'Configuración',

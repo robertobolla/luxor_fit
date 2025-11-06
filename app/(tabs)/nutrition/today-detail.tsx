@@ -53,14 +53,18 @@ export default function TodayDetailScreen() {
       const targetDate = selectedDate;
 
       // Cargar target del día
-      const { data: targetData } = await supabase
+      const { data: targetData, error: targetError } = await supabase
         .from('nutrition_targets')
         .select('*')
         .eq('user_id', user.id)
         .eq('date', targetDate)
-        .single();
+        .maybeSingle();
 
-      setTodayTarget(targetData as NutritionTarget);
+      if (targetError && targetError.code !== 'PGRST116') {
+        console.error('Error loading target:', targetError);
+      }
+
+      setTodayTarget((targetData as NutritionTarget) || null);
 
       // Cargar logs del día
       const { data: logsData } = await supabase

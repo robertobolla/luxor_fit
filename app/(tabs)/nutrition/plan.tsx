@@ -18,7 +18,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { getMealPlan, FOOD_DATABASE } from '../../../src/services/nutrition';
@@ -30,6 +30,7 @@ const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábad
 
 export default function MealPlanScreen() {
   const { user } = useUser();
+  const params = useLocalSearchParams<{ weekStart?: string }>();
   const [isLoading, setIsLoading] = useState(true);
   const [weekPlan, setWeekPlan] = useState<WeekPlan | null>(null);
   const [selectedDay, setSelectedDay] = useState(0);
@@ -37,24 +38,31 @@ export default function MealPlanScreen() {
   const [showAIModal, setShowAIModal] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [dailyTarget, setDailyTarget] = useState<{ calories: number; protein_g: number; carbs_g: number; fats_g: number } | null>(null);
+  const [weekStartDate, setWeekStartDate] = useState<string | null>(null);
+  const [isWeekPast, setIsWeekPast] = useState(false);
+  const [showNoPlanModal, setShowNoPlanModal] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
       loadWeekPlan();
     }
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, params.weekStart]);
 
   // Cargar objetivo del día al cambiar de día
   useEffect(() => {
     const loadTargetForSelectedDay = async () => {
       if (!user?.id) return;
 
-      // Calcular fecha del día seleccionado basado en el lunes
-      const today = new Date();
-      const dayOfWeek = today.getDay();
-      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-      const monday = new Date(today);
-      monday.setDate(today.getDate() + diff);
+      // Calcular fecha del día seleccionado basado en el lunes de la semana seleccionada
+      const monday = weekStartDate ? new Date(weekStartDate) : (() => {
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const mondayDate = new Date(today);
+        mondayDate.setDate(today.getDate() + diff);
+        return mondayDate;
+      })();
       const selectedDate = new Date(monday);
       selectedDate.setDate(monday.getDate() + selectedDay);
       const selectedStr = selectedDate.toISOString().split('T')[0];
@@ -99,41 +107,82 @@ export default function MealPlanScreen() {
     };
 
     loadTargetForSelectedDay();
-  }, [selectedDay, user?.id]);
+  }, [selectedDay, user?.id, weekStartDate]);
 
   const loadWeekPlan = async () => {
     if (!user?.id) return;
 
     setIsLoading(true);
     try {
-      // Obtener lunes de esta semana
+      // Usar weekStart del parámetro si está disponible, sino usar la semana actual
+      let mondayStr: string;
       const today = new Date();
+      const todayStr = today.toISOString().split('T')[0];
+      
+      // Calcular lunes de la semana actual
       const dayOfWeek = today.getDay();
       const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-      const monday = new Date(today);
-      monday.setDate(today.getDate() + diff);
-      const mondayStr = monday.toISOString().split('T')[0];
+      const currentWeekMonday = new Date(today);
+      currentWeekMonday.setDate(today.getDate() + diff);
+      const currentWeekMondayStr = currentWeekMonday.toISOString().split('T')[0];
+      
+      if (params.weekStart) {
+        mondayStr = params.weekStart;
+        setWeekStartDate(mondayStr);
+        
+        // Verificar si la semana ya pasó
+        const weekEnd = new Date(mondayStr);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+        const weekEndStr = weekEnd.toISOString().split('T')[0];
+        const isPast = todayStr > weekEndStr;
+        setIsWeekPast(isPast);
+        
+        // Verificar si la semana es futura (después del domingo de la semana actual)
+        const currentWeekEnd = new Date(currentWeekMonday);
+        currentWeekEnd.setDate(currentWeekMonday.getDate() + 6);
+        const currentWeekEndStr = currentWeekEnd.toISOString().split('T')[0];
+        const isFuture = mondayStr > currentWeekEndStr;
+        
+        if (isFuture) {
+          // Semana futura - mostrar modal y no cargar nada
+          setWeekPlan(null);
+          setShowNoPlanModal(true);
+          setIsLoading(false);
+          return;
+        }
+      } else {
+        // Obtener lunes de esta semana
+        mondayStr = currentWeekMondayStr;
+        setWeekStartDate(mondayStr);
+        setIsWeekPast(false);
+      }
+
+      // Verificar si realmente existe un plan en la base de datos
+      const { data: planExists } = await supabase
+        .from('meal_plans')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('week_start', mondayStr)
+        .maybeSingle();
 
       let plan = await getMealPlan(user.id, mondayStr);
 
-      // Si no existe plan o tiene menos de 7 días, regenerarlo automáticamente
-      if (!plan || Object.keys(plan).length < 7) {
+      // Si no existe plan en la base de datos
+      if (!planExists && !plan) {
+        // Si la semana ya pasó, mostrar modal
+        if (isWeekPast) {
+          setWeekPlan(null);
+          setShowNoPlanModal(true);
+          setIsLoading(false);
+          return;
+        }
+        // Si la semana es actual (no pasada), intentar generar uno
+        // NOTA: Las semanas futuras ya fueron filtradas arriba
         try {
           const { computeAndSaveTargets, createOrUpdateMealPlan, clearNutritionCache } = await import('../../../src/services/nutrition');
-          const { supabase } = await import('../../../src/services/supabase');
           
           // Limpiar caché para forzar regeneración completa
           clearNutritionCache(user.id);
-          
-          // Borrar plan existente si tiene menos de 7 días
-          if (plan && Object.keys(plan).length < 7) {
-            await supabase
-              .from('meal_plans')
-              .delete()
-              .eq('user_id', user.id)
-              .eq('week_start', mondayStr);
-            console.log('🗑️ Plan incompleto eliminado, regenerando...');
-          }
           
           // Asegurar target del lunes (mínimo requerido por el generador)
           await computeAndSaveTargets(user.id, mondayStr);
@@ -141,10 +190,43 @@ export default function MealPlanScreen() {
           const result = await createOrUpdateMealPlan(user.id, mondayStr);
           if (result.success) {
             plan = await getMealPlan(user.id, mondayStr);
-            console.log('✅ Plan regenerado con 7 días completos');
+            console.log('✅ Plan generado con 7 días completos');
           }
         } catch (regenErr) {
-          console.error('Error regenerating meal plan automatically:', regenErr);
+          console.error('Error generating meal plan automatically:', regenErr);
+          setWeekPlan(null);
+          setIsLoading(false);
+          return;
+        }
+      } else if (plan && Object.keys(plan).length < 7) {
+        // Si el plan existe pero está incompleto, solo regenerarlo si la semana no ha pasado
+        if (!isWeekPast) {
+          try {
+            const { computeAndSaveTargets, createOrUpdateMealPlan, clearNutritionCache } = await import('../../../src/services/nutrition');
+            const { supabase } = await import('../../../src/services/supabase');
+            
+            // Limpiar caché para forzar regeneración completa
+            clearNutritionCache(user.id);
+            
+            // Borrar plan existente incompleto
+            await supabase
+              .from('meal_plans')
+              .delete()
+              .eq('user_id', user.id)
+              .eq('week_start', mondayStr);
+            console.log('🗑️ Plan incompleto eliminado, regenerando...');
+            
+            // Asegurar target del lunes (mínimo requerido por el generador)
+            await computeAndSaveTargets(user.id, mondayStr);
+            // Generar plan de la semana completo (7 días)
+            const result = await createOrUpdateMealPlan(user.id, mondayStr);
+            if (result.success) {
+              plan = await getMealPlan(user.id, mondayStr);
+              console.log('✅ Plan regenerado con 7 días completos');
+            }
+          } catch (regenErr) {
+            console.error('Error regenerating meal plan automatically:', regenErr);
+          }
         }
       }
 
@@ -193,13 +275,18 @@ export default function MealPlanScreen() {
         custom_prompts: updatedPrompts,
       });
 
-      // Obtener lunes de esta semana
-      const today = new Date();
-      const dayOfWeek = today.getDay();
-      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-      const monday = new Date(today);
-      monday.setDate(today.getDate() + diff);
-      const mondayStr = monday.toISOString().split('T')[0];
+      // Usar weekStart del parámetro o estado si está disponible, sino usar la semana actual
+      let mondayStr: string;
+      if (weekStartDate) {
+        mondayStr = weekStartDate;
+      } else {
+        const today = new Date();
+        const dayOfWeek = today.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const monday = new Date(today);
+        monday.setDate(today.getDate() + diff);
+        mondayStr = monday.toISOString().split('T')[0];
+      }
 
       // Borrar plan existente
       await supabase
@@ -362,16 +449,91 @@ export default function MealPlanScreen() {
     );
   }
 
-  if (!weekPlan) {
+  if (!weekPlan && !showNoPlanModal) {
     return (
       <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }]}>
         <StatusBar barStyle="light-content" />
-        <Ionicons name="alert-circle-outline" size={60} color="#F44336" />
-        <Text style={styles.errorText}>No se encontró un plan de comidas.</Text>
-        <Text style={styles.errorSubtext}>Ve a Configuración para generar tu plan.</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Volver</Text>
-        </TouchableOpacity>
+        <ActivityIndicator size="large" color="#00D4AA" />
+        <Text style={styles.loadingText}>Cargando plan...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  // Si no hay plan y el modal está visible, renderizar el modal
+  if (!weekPlan && showNoPlanModal) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <Modal
+          visible={showNoPlanModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => {
+            setShowNoPlanModal(false);
+            router.back();
+          }}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalIconContainer}>
+                <Ionicons name="calendar-outline" size={48} color="#FFD93D" />
+              </View>
+              <Text style={styles.modalTitle}>Plan No Disponible</Text>
+              <Text style={styles.modalMessage}>
+                {(() => {
+                  // Verificar si es semana futura
+                  const today = new Date();
+                  const todayStr = today.toISOString().split('T')[0];
+                  const dayOfWeek = today.getDay();
+                  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+                  const currentWeekMonday = new Date(today);
+                  currentWeekMonday.setDate(today.getDate() + diff);
+                  const currentWeekEnd = new Date(currentWeekMonday);
+                  currentWeekEnd.setDate(currentWeekMonday.getDate() + 6);
+                  const currentWeekEndStr = currentWeekEnd.toISOString().split('T')[0];
+                  
+                  if (weekStartDate && weekStartDate > currentWeekEndStr) {
+                    return 'Esta semana aún no está disponible. El plan de la próxima semana se generará automáticamente el lunes siguiente basado en los datos de la semana actual.';
+                  }
+                  return 'No existe un plan de comidas para esta semana. Esto puede deberse a que:';
+                })()}
+              </Text>
+              {(() => {
+                // Solo mostrar razones si no es semana futura
+                const today = new Date();
+                const todayStr = today.toISOString().split('T')[0];
+                const dayOfWeek = today.getDay();
+                const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+                const currentWeekMonday = new Date(today);
+                currentWeekMonday.setDate(today.getDate() + diff);
+                const currentWeekEnd = new Date(currentWeekMonday);
+                currentWeekEnd.setDate(currentWeekMonday.getDate() + 6);
+                const currentWeekEndStr = currentWeekEnd.toISOString().split('T')[0];
+                
+                if (weekStartDate && weekStartDate > currentWeekEndStr) {
+                  return null; // No mostrar razones para semanas futuras
+                }
+                
+                return (
+                  <View style={styles.modalReasons}>
+                    <Text style={styles.modalReason}>• Aún no habías generado un plan para esta semana</Text>
+                    <Text style={styles.modalReason}>• No tenías la app instalada en ese momento</Text>
+                    <Text style={styles.modalReason}>• La semana ya finalizó y no se puede generar retroactivamente</Text>
+                  </View>
+                );
+              })()}
+              <TouchableOpacity
+                style={styles.modalButton}
+                onPress={() => {
+                  setShowNoPlanModal(false);
+                  router.back();
+                }}
+              >
+                <Text style={styles.modalButtonText}>Entendido</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -391,9 +553,10 @@ export default function MealPlanScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity 
             onPress={() => setShowAIModal(true)}
-            style={styles.aiButton}
+            style={[styles.aiButton, isWeekPast && styles.aiButtonDisabled]}
+            disabled={isWeekPast}
           >
-            <Ionicons name="sparkles" size={22} color="#FFD700" />
+            <Ionicons name="sparkles" size={22} color={isWeekPast ? "#666666" : "#FFD700"} />
           </TouchableOpacity>
           <TouchableOpacity 
             onPress={() => router.push('/(tabs)/nutrition/settings' as any)}
@@ -557,6 +720,43 @@ export default function MealPlanScreen() {
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Modal: No hay plan para esta semana */}
+      <Modal
+        visible={showNoPlanModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowNoPlanModal(false);
+          router.back();
+        }}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIconContainer}>
+              <Ionicons name="calendar-outline" size={48} color="#FFD93D" />
+            </View>
+            <Text style={styles.modalTitle}>Plan No Disponible</Text>
+            <Text style={styles.modalMessage}>
+              No existe un plan de comidas para esta semana. Esto puede deberse a que:
+            </Text>
+            <View style={styles.modalReasons}>
+              <Text style={styles.modalReason}>• Aún no habías generado un plan para esta semana</Text>
+              <Text style={styles.modalReason}>• No tenías la app instalada en ese momento</Text>
+              <Text style={styles.modalReason}>• La semana ya finalizó y no se puede generar retroactivamente</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => {
+                setShowNoPlanModal(false);
+                router.back();
+              }}
+            >
+              <Text style={styles.modalButtonText}>Entendido</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -583,6 +783,9 @@ const styles = StyleSheet.create({
   },
   aiButton: {
     padding: 8,
+  },
+  aiButtonDisabled: {
+    opacity: 0.5,
   },
   adjustButton: {
     padding: 8,
@@ -859,6 +1062,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#888888',
     marginTop: 4,
+  },
+  modalIconContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalReasons: {
+    marginTop: 16,
+    marginBottom: 24,
+    gap: 8,
+  },
+  modalReason: {
+    fontSize: 14,
+    color: '#cccccc',
+    lineHeight: 20,
+  },
+  modalButton: {
+    backgroundColor: '#00D4AA',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

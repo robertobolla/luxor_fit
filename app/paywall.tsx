@@ -18,13 +18,12 @@ export default function PaywallScreen() {
   // Redirigir si ya tiene suscripción activa (con timeout para evitar loops)
   useEffect(() => {
     if (!subLoading && isActive) {
-      console.log('✅ Paywall: Usuario tiene suscripción activa, redirigiendo al home');
       const timer = setTimeout(() => {
         router.replace('/(tabs)/home');
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [isActive, subLoading]); // Removido 'router' de dependencias
+  }, [isActive, subLoading, router]);
 
   const startTrial = useCallback(async () => {
     try {
@@ -76,24 +75,21 @@ export default function PaywallScreen() {
         )}
       </TouchableOpacity>
 
-      {/* Botón temporal para refrescar suscripción (debug) */}
-      <TouchableOpacity 
-        style={[styles.cta, { backgroundColor: '#333', marginTop: 12 }]} 
-        onPress={async () => {
-          try {
-            console.log('🔄 Refrescando suscripción manualmente...');
-            await refresh();
-            // Esperar un momento antes de verificar para evitar loops
-            setTimeout(() => {
-              console.log('✅ Refresh completado. Verificando estado...');
-            }, 500);
-          } catch (e) {
-            console.error('❌ Error al refrescar:', e);
-          }
-        }}
-      >
-        <Text style={[styles.ctaText, { color: '#fff' }]}>🔄 Refrescar Suscripción (Debug)</Text>
-      </TouchableOpacity>
+      {/* Botón de debug solo en desarrollo */}
+      {__DEV__ && (
+        <TouchableOpacity 
+          style={[styles.cta, { backgroundColor: '#333', marginTop: 12 }]} 
+          onPress={async () => {
+            try {
+              await refresh();
+            } catch (e) {
+              Alert.alert('Error', 'No se pudo refrescar la suscripción');
+            }
+          }}
+        >
+          <Text style={[styles.ctaText, { color: '#fff' }]}>🔄 Refrescar Suscripción (Debug)</Text>
+        </TouchableOpacity>
+      )}
 
       <Text style={styles.legal}>Se requiere tarjeta. Cancela cuando quieras antes de que termine la prueba.</Text>
     </View>

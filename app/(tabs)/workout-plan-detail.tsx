@@ -66,12 +66,16 @@ export default function WorkoutPlanDetailScreen() {
         console.log('📦 Plan data keys:', JSON.stringify(keys));
         const w = normalized?.plan_data?.weekly_structure;
         console.log('📅 Schedule es array:', Array.isArray(w), 'Longitud:', Array.isArray(w) ? w.length : 0);
-      } catch {}
+      } catch (e) {
+        console.warn('Error in diagnostic logs:', e);
+      }
 
       try {
         console.log('🧩 plan.plan_data keys:', normalized?.plan_data ? Object.keys(normalized.plan_data) : []);
         console.log('🧩 plan.plan_data.sample:', JSON.stringify(normalized?.plan_data)?.slice(0, 400));
-      } catch {}
+      } catch (e) {
+        console.warn('Error in diagnostic logs:', e);
+      }
 
       setPlan(normalized);
     } catch (err) {

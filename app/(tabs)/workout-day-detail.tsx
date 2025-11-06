@@ -55,18 +55,28 @@ export default function WorkoutDayDetailScreen() {
     try {
       console.log('🔍 Verificando completado para:', { planId, dayName, user_id: user.id });
       
+      // Verificar si fue completado hoy
+      const today = new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
         .from('workout_completions')
         .select('*')
         .eq('user_id', user.id)
         .eq('workout_plan_id', planId)
         .eq('day_name', dayName)
+        .gte('completed_at', `${today}T00:00:00`)
+        .lte('completed_at', `${today}T23:59:59`)
         .order('completed_at', { ascending: false })
         .limit(1);
       
       console.log('📊 Resultado verificación:', { data, error, isCompleted: data && data.length > 0 });
       
-      if (data && data.length > 0 && !error) {
+      if (error) {
+        console.error('Error checking completion:', error);
+        setIsCompleted(false);
+        return;
+      }
+      
+      if (data && data.length > 0) {
         setIsCompleted(true);
       } else {
         setIsCompleted(false);
@@ -92,7 +102,7 @@ export default function WorkoutDayDetailScreen() {
   };
 
   const handleSaveCompletion = async () => {
-    if (!user?.id || !planId || !dayName) return;
+    if (!user?.id || !planId || !dayName || !dayData) return;
     
     setIsSaving(true);
     try {
@@ -101,7 +111,7 @@ export default function WorkoutDayDetailScreen() {
         workout_plan_id: planId,
         day_name: dayName,
         completed_at: new Date().toISOString(),
-        exercises_completed: dayData.exercises || [],
+        exercises_completed: dayData?.exercises || [],
         duration_minutes: duration ? parseInt(duration) : null,
         difficulty_rating: difficulty,
         notes: notes || null,

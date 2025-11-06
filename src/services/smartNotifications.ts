@@ -34,6 +34,8 @@ export interface NotificationRule {
 
 class SmartNotificationService {
   private rules: NotificationRule[] = [];
+  private lastScheduledTime: Map<string, number> = new Map(); // userId -> timestamp
+  private readonly MIN_RESCHEDULE_INTERVAL = 24 * 60 * 60 * 1000; // 24 horas en ms
 
   constructor() {
     this.initializeRules();
@@ -189,11 +191,15 @@ class SmartNotificationService {
   async getAdherenceData(userId: string): Promise<AdherenceData> {
     try {
       // Obtener datos del usuario
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
         .select('*')
         .eq('user_id', userId)
-        .single();
+        .maybeSingle();
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Error loading profile for notifications:', profileError);
+      }
 
       // Obtener completados de esta semana
       const startOfWeek = this.getStartOfWeek();
@@ -204,28 +210,39 @@ class SmartNotificationService {
         .gte('completed_at', startOfWeek.toISOString());
 
       // Obtener último entrenamiento
-      const { data: lastWorkout } = await supabase
+      const { data: lastWorkout, error: lastWorkoutError } = await supabase
         .from('workout_completions')
         .select('completed_at')
         .eq('user_id', userId)
         .order('completed_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
+
+      if (lastWorkoutError && lastWorkoutError.code !== 'PGRST116') {
+        console.error('Error loading last workout:', lastWorkoutError);
+      }
 
       // Calcular racha actual
       const currentStreak = await this.calculateCurrentStreak(userId);
 
       // Obtener meta semanal del plan activo
-      const { data: activePlan } = await supabase
+      const { data: activePlan, error: planError } = await supabase
         .from('workout_plans')
         .select('plan_data')
         .eq('user_id', userId)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
+
+      if (planError && planError.code !== 'PGRST116') {
+        console.error('Error loading active plan for notifications:', planError);
+      }
 
       let weeklyGoal = 3; // Default
-      if (activePlan?.plan_data?.days_per_week) {
-        weeklyGoal = activePlan.plan_data.days_per_week;
+      if (activePlan) {
+        const planData = (activePlan as any).plan_data;
+        if (planData && typeof planData === 'object' && planData !== null && 'days_per_week' in planData) {
+          weeklyGoal = planData.days_per_week;
+        }
       }
 
       // Calcular horario promedio de entrenamiento
@@ -238,20 +255,27 @@ class SmartNotificationService {
 
       let averageWorkoutTime: string | undefined;
       if (workoutTimes && workoutTimes.length > 0) {
-        const hours = workoutTimes.map(w => new Date(w.completed_at).getHours());
+        const hours = workoutTimes.map((w: any) => new Date(w.completed_at).getHours());
         const avgHour = Math.round(hours.reduce((a, b) => a + b, 0) / hours.length);
         averageWorkoutTime = `${avgHour.toString().padStart(2, '0')}:00`;
       }
+
+      const lastWorkoutDate = lastWorkout && typeof lastWorkout === 'object' && 'completed_at' in lastWorkout
+        ? new Date((lastWorkout as any).completed_at).toISOString().split('T')[0]
+        : undefined;
+
+      const preferredWorkoutDays = profile && typeof profile === 'object' && profile !== null && 'available_days' in profile && (profile as any).available_days
+        ? this.parseAvailableDays((profile as any).available_days)
+        : [];
 
       return {
         userId,
         currentStreak,
         weeklyGoal,
         weeklyCompleted: weeklyCompletions?.length || 0,
-        lastWorkoutDate: lastWorkout?.completed_at,
+        lastWorkoutDate,
         averageWorkoutTime,
-        preferredWorkoutDays: profile?.available_days ? 
-          this.parseAvailableDays(profile.available_days) : []
+        preferredWorkoutDays
       };
     } catch (error) {
       console.error('Error obteniendo datos de adherencia:', error);
@@ -287,7 +311,7 @@ class SmartNotificationService {
       currentDate.setHours(0, 0, 0, 0);
 
       for (const completion of completions) {
-        const completionDate = new Date(completion.completed_at);
+        const completionDate = new Date((completion as any).completed_at);
         completionDate.setHours(0, 0, 0, 0);
 
         const diffDays = Math.floor(
@@ -319,47 +343,159 @@ class SmartNotificationService {
 
   async scheduleSmartNotifications(userId: string): Promise<void> {
     try {
-      const adherenceData = await this.getAdherenceData(userId);
+      // Verificar si ya se programaron notificaciones recientemente
+      const lastScheduled = this.lastScheduledTime.get(userId) || 0;
+      const timeSinceLastSchedule = Date.now() - lastScheduled;
       
-      // Cancelar notificaciones existentes
-      await this.cancelExistingNotifications(userId);
-
-      // Evaluar reglas y programar notificaciones
-      for (const rule of this.rules) {
-        if (rule.condition(adherenceData)) {
-          const notification = rule.generateNotification(adherenceData);
-          await this.scheduleNotification(notification, rule);
+      if (timeSinceLastSchedule < this.MIN_RESCHEDULE_INTERVAL) {
+        if (__DEV__) {
+          const hoursSince = Math.floor(timeSinceLastSchedule / (60 * 60 * 1000));
+          console.log(`⏭️ Saltando reprogramación (programado hace ${hoursSince}h, mínimo 24h)`);
         }
+        return;
       }
 
-      console.log('✅ Notificaciones inteligentes programadas');
+      // Verificar si ya hay notificaciones inteligentes programadas válidas
+      const existingNotifications = await getAllScheduledNotificationsAsync();
+      const hasValidSmartNotifications = existingNotifications.some(notif => {
+        const identifier = notif.identifier;
+        const data = (notif as any).content?.data || (notif as any).request?.content?.data;
+        const trigger = notif.trigger as any;
+        
+        // Verificar si es una notificación inteligente (no diaria)
+        const isSmartNotification = identifier.includes(userId) || 
+                                    (data?.userId === userId && 
+                                     !['workout_reminder', 'lunch_reminder'].includes(data?.type));
+        
+        if (!isSmartNotification) return false; // No es una notificación inteligente
+        
+        // Verificar si está programada para el futuro
+        if (!trigger) return false;
+        
+        if (trigger.type === 'timeInterval') {
+          return trigger.seconds > 60; // Más de 1 minuto en el futuro
+        }
+        if (trigger.type === 'daily' || trigger.type === 'date') {
+          // Para date, verificar que la fecha sea en el futuro
+          if (trigger.type === 'date' && trigger.date) {
+            return new Date(trigger.date).getTime() > Date.now();
+          }
+          return true; // Notificaciones diarias siempre son válidas
+        }
+        return false;
+      });
+
+      if (hasValidSmartNotifications) {
+        if (__DEV__) {
+          console.log(`⏭️ Ya hay notificaciones inteligentes programadas válidas, saltando reprogramación`);
+        }
+        return;
+      }
+
+      const adherenceData = await this.getAdherenceData(userId);
+      
+      // Cancelar solo notificaciones de este servicio (no las diarias programadas)
+      await this.cancelExistingSmartNotifications(userId);
+
+      // Evaluar reglas y programar notificaciones con horarios específicos
+      const scheduledCount = await this.scheduleNotificationsWithSpacing(userId, adherenceData);
+
+      // Guardar timestamp de última programación
+      this.lastScheduledTime.set(userId, Date.now());
+
+      if (__DEV__ && scheduledCount > 0) {
+        console.log(`✅ ${scheduledCount} notificaciones inteligentes programadas`);
+      }
     } catch (error) {
       console.error('Error programando notificaciones:', error);
     }
   }
 
-  private async scheduleNotification(
-    notification: NotificationConfig, 
-    rule: NotificationRule
-  ): Promise<void> {
-    try {
-      const trigger = {
-        seconds: this.getRandomDelay(rule.cooldownHours),
-        repeats: false
+  /**
+   * Programa notificaciones con espaciado inteligente en horarios oportunos
+   */
+  private async scheduleNotificationsWithSpacing(
+    userId: string,
+    adherenceData: AdherenceData
+  ): Promise<number> {
+    let scheduledCount = 0;
+    const eligibleRules = this.rules.filter(rule => rule.condition(adherenceData));
+    
+    if (eligibleRules.length === 0) {
+      return 0;
+    }
+
+    // Obtener horario preferido del usuario o usar horario por defecto
+    const preferredHour = this.getPreferredNotificationHour(adherenceData);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Programar notificaciones espaciadas en diferentes días y horarios
+    eligibleRules.forEach((rule, index) => {
+      const notification = rule.generateNotification(adherenceData);
+      
+      // Espaciar notificaciones: una hoy, otra mañana, otra pasado mañana, etc.
+      const dayOffset = Math.min(index, 7); // Máximo 7 días de diferencia
+      const targetDate = new Date(today);
+      targetDate.setDate(today.getDate() + dayOffset);
+      
+      // Usar horario preferido con variación pequeña (±30 min)
+      const hourVariation = Math.floor(Math.random() * 60) - 30; // -30 a +30 minutos
+      const targetHour = preferredHour + (hourVariation / 60);
+      const targetMinute = Math.floor((targetHour % 1) * 60);
+      const finalHour = Math.floor(targetHour);
+      
+      targetDate.setHours(finalHour, targetMinute, 0, 0);
+
+      // Si la fecha es en el pasado o muy pronto (menos de 2 horas), moverla al día siguiente
+      if (targetDate.getTime() <= now.getTime() + (2 * 60 * 60 * 1000)) {
+        targetDate.setDate(targetDate.getDate() + 1);
+      }
+
+      // Programar notificación para una fecha/hora específica
+      const trigger: any = {
+        type: 'date',
+        date: targetDate,
       };
 
-      await scheduleNotificationAsync({
-        identifier: `${notification.id}_${Date.now()}`,
+      scheduleNotificationAsync({
+        identifier: `${notification.id}_${userId}_${dayOffset}`,
         content: {
           title: notification.title,
           body: notification.body,
-          data: notification.data
+          data: {
+            ...notification.data,
+            userId,
+            scheduledFor: targetDate.toISOString(),
+          },
         },
-        trigger
+        trigger,
+      }).then(() => {
+        scheduledCount++;
+      }).catch((error) => {
+        console.error(`Error programando notificación ${notification.id}:`, error);
       });
-    } catch (error) {
-      console.error('Error programando notificación:', error);
+    });
+
+    // Esperar un poco para que todas se programen
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    return scheduledCount;
+  }
+
+  /**
+   * Obtiene el horario preferido para notificaciones del usuario
+   */
+  private getPreferredNotificationHour(adherenceData: AdherenceData): number {
+    // Si tiene horario promedio de entrenamiento, usarlo con offset
+    if (adherenceData.averageWorkoutTime) {
+      const [hours, minutes] = adherenceData.averageWorkoutTime.split(':').map(Number);
+      // Enviar notificación 1 hora antes del entrenamiento típico
+      return (hours - 1 + minutes / 60) % 24;
     }
+
+    // Horario por defecto: 6 PM (18:00)
+    return 18;
   }
 
   private getRandomDelay(cooldownHours: number): number {
@@ -369,18 +505,35 @@ class SmartNotificationService {
     return Math.floor(Math.random() * (maxDelay - minDelay)) + minDelay;
   }
 
-  private async cancelExistingNotifications(userId: string): Promise<void> {
+  /**
+   * Cancela solo las notificaciones inteligentes (no las diarias programadas)
+   */
+  private async cancelExistingSmartNotifications(userId: string): Promise<void> {
     try {
-      // En una implementación real, guardarías los IDs de notificaciones programadas
-      // Por ahora, obtenemos todas las notificaciones programadas y las cancelamos
       const scheduledNotifications = await getAllScheduledNotificationsAsync();
+      let cancelledCount = 0;
       
-      // Cancelar todas las notificaciones programadas
+      // Solo cancelar notificaciones inteligentes (que tienen el userId en el identificador o data)
       for (const notification of scheduledNotifications) {
-        await cancelScheduledNotificationAsync(notification.identifier);
+        const identifier = notification.identifier;
+        const data = (notification as any).content?.data || (notification as any).request?.content?.data;
+        
+        // Cancelar si:
+        // 1. Es una notificación inteligente (tiene userId en el identificador)
+        // 2. NO es una notificación diaria programada (workout_reminder, lunch_reminder)
+        const isSmartNotification = identifier.includes(userId) || 
+                                    (data?.userId === userId && 
+                                     !['workout_reminder', 'lunch_reminder'].includes(data?.type));
+        
+        if (isSmartNotification) {
+          await cancelScheduledNotificationAsync(identifier);
+          cancelledCount++;
+        }
       }
       
-      console.log(`🗑️ Canceladas ${scheduledNotifications.length} notificaciones existentes`);
+      if (__DEV__ && cancelledCount > 0) {
+        console.log(`🗑️ Canceladas ${cancelledCount} notificaciones inteligentes existentes`);
+      }
     } catch (error) {
       console.error('Error cancelando notificaciones:', error);
     }
@@ -415,7 +568,10 @@ class SmartNotificationService {
       await scheduleNotificationAsync({
         identifier: `immediate_${type}_${Date.now()}`,
         content: notification,
-        trigger: { seconds: 1 }
+        trigger: { 
+          type: 'timeInterval',
+          seconds: 1 
+        } as any
       });
     }
   }

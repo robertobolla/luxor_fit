@@ -19,6 +19,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { getMealPlan, buildGroceryList } from '../../../src/services/nutrition';
 import { GroceryItem } from '../../../src/types/nutrition';
+import { EmptyState } from '../../../src/components/EmptyStates';
+import { getFriendlyErrorMessage } from '../../../src/utils/errorMessages';
 
 export default function GroceryListScreen() {
   const { user } = useUser();
@@ -60,7 +62,11 @@ export default function GroceryListScreen() {
       }
     } catch (err) {
       console.error('Error loading grocery list:', err);
-      Alert.alert('Error', 'No se pudo cargar la lista de compras.');
+      const friendlyMessage = getFriendlyErrorMessage(err, { 
+        action: 'cargar la lista de compras',
+        screen: 'Lista de Compras'
+      });
+      Alert.alert('Error', friendlyMessage);
     } finally {
       setIsLoading(false);
     }
@@ -86,14 +92,22 @@ export default function GroceryListScreen() {
 
   if (groceryList.length === 0) {
     return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }]}>
+      <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <Ionicons name="cart-outline" size={80} color="#888888" />
-        <Text style={styles.emptyText}>No hay lista de compras.</Text>
-        <Text style={styles.emptySubtext}>Genera tu plan de comidas primero.</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backButtonText}>Volver</Text>
-        </TouchableOpacity>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backIconButton}>
+            <Ionicons name="arrow-back" size={24} color="#ffffff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Lista de Compras</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <EmptyState
+          icon="cart-outline"
+          title="No hay lista de compras"
+          subtitle="Genera tu plan de comidas semanal para ver la lista de ingredientes necesarios."
+          actionText="Ver Plan de Nutrición"
+          onAction={() => router.push('/(tabs)/nutrition/plan' as any)}
+        />
       </SafeAreaView>
     );
   }

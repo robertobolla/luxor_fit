@@ -74,6 +74,9 @@ export async function getClerkUserEmail(user: User | null | undefined): Promise<
 
 /**
  * Versión sincrónica (sin reload) para usar en renders
+ * 
+ * Nota: Si el usuario se registró con OAuth (TikTok, Google, etc.), el email puede no estar disponible
+ * si el proveedor no lo proporciona o el usuario no dio permisos.
  */
 export function getClerkUserEmailSync(user: User | null | undefined): string | null {
   if (!user) return null;
@@ -98,14 +101,17 @@ export function getClerkUserEmailSync(user: User | null | undefined): string | n
     return (user as any).publicMetadata.email;
   }
 
-  // 5. Desde externalAccounts (OAuth)
+  // 5. Desde externalAccounts (OAuth) - solo si tiene email válido
   if ((user as any).externalAccounts && (user as any).externalAccounts.length > 0) {
-    const emailProvider = (user as any).externalAccounts.find((acc: any) => acc.emailAddress);
+    const emailProvider = (user as any).externalAccounts.find(
+      (acc: any) => acc.emailAddress && acc.emailAddress.trim().length > 0
+    );
     if (emailProvider?.emailAddress) {
       return emailProvider.emailAddress;
     }
   }
 
+  // No se encontró email en Clerk (normal para usuarios de OAuth sin email compartido)
   return null;
 }
 

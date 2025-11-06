@@ -108,10 +108,14 @@ export interface UserStats {
 
 /**
  * Verifica si un usuario es admin o socio
+ * También busca por email como fallback y actualiza el user_id si es necesario
  */
-export async function checkAdminRole(userId: string): Promise<boolean> {
+export async function checkAdminRole(userId: string, userEmail?: string): Promise<boolean> {
   try {
     console.log('🔍 Verificando rol para user_id:', userId);
+    if (userEmail) {
+      console.log('📧 Email del usuario:', userEmail);
+    }
     console.log('🔗 Supabase URL:', supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'NO CONFIGURADA');
     console.log('🔑 Supabase Key:', supabaseAnonKey ? supabaseAnonKey.substring(0, 20) + '...' : 'NO CONFIGURADA');
     
@@ -120,10 +124,10 @@ export async function checkAdminRole(userId: string): Promise<boolean> {
     console.log('🔍 user_id limpio:', JSON.stringify(cleanUserId));
     console.log('🔍 user_id limpio (length):', cleanUserId.length);
     
-    // Primero intentar con la consulta normal
+    // Primero intentar con la consulta normal por user_id
     let { data, error, status, statusText } = await supabase
       .from('admin_roles')
-      .select('id, role_type, is_active, user_id')
+      .select('id, role_type, is_active, user_id, email')
       .eq('user_id', cleanUserId)
       .eq('is_active', true)
       .limit(1)
@@ -139,16 +143,54 @@ export async function checkAdminRole(userId: string): Promise<boolean> {
       return false;
     }
 
-    console.log('📋 Resultado de verificación:', data);
+    console.log('📋 Resultado de verificación por user_id:', data);
     console.log('📋 Tipo de resultado:', typeof data);
     
-    // Si no encuentra con la consulta exacta, obtener TODOS los registros activos y buscar en memoria
-    if (!data) {
-      console.log('⚠️ Consulta exacta no encontró resultados, obteniendo todos los registros activos...');
-      const { data: allRoles, error: allRolesError } = await supabase
+    // Si no encuentra por user_id pero tenemos email, buscar por email
+    if (!data && userEmail) {
+      console.log('🔍 No se encontró por user_id, buscando por email...');
+      const cleanEmail = userEmail.trim().toLowerCase();
+      
+      const { data: emailData, error: emailError } = await supabase
         .from('admin_roles')
-        .select('id, role_type, is_active, user_id')
-        .eq('is_active', true);
+        .select('id, role_type, is_active, user_id, email')
+        .eq('email', cleanEmail)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle();
+      
+      if (emailError) {
+        console.error('❌ Error buscando por email:', emailError);
+      } else if (emailData) {
+        console.log('✅ Encontrado por email:', emailData);
+        console.log('🔄 Actualizando user_id en admin_roles...');
+        
+        // Actualizar el user_id en la base de datos para que coincida
+        const { error: updateError } = await supabase
+          .from('admin_roles')
+          .update({ user_id: cleanUserId, updated_at: new Date().toISOString() })
+          .eq('id', emailData.id);
+        
+        if (updateError) {
+          console.error('❌ Error actualizando user_id:', updateError);
+          // Aún así devolver true porque el usuario tiene rol admin
+        } else {
+          console.log('✅ user_id actualizado correctamente');
+        }
+        
+        data = emailData;
+      } else {
+        console.log('⚠️ No se encontró por email tampoco');
+      }
+    }
+    
+      // Si no encuentra con la consulta exacta, obtener TODOS los registros activos y buscar en memoria
+      if (!data) {
+        console.log('⚠️ Consulta exacta no encontró resultados, obteniendo todos los registros activos...');
+        const { data: allRoles, error: allRolesError } = await supabase
+          .from('admin_roles')
+          .select('id, role_type, is_active, user_id, email')
+          .eq('is_active', true);
       
       if (!allRolesError && allRoles && allRoles.length > 0) {
         console.log('📋 Total de registros activos obtenidos:', allRoles.length);
@@ -830,8 +872,8 @@ export async function deleteUser(userId: string): Promise<boolean> {
  */
 export async function activateUserSubscription(
   userId: string,
-  activatedBy: string,
-  reactivationReason?: string
+  _activatedBy: string,
+  _reactivationReason?: string
 ) {
   try {
     // 1. Verificar si existe una suscripción cancelada
@@ -1268,7 +1310,6 @@ export async function getMonthlyGrowthData(months: number = 6): Promise<MonthlyG
     const monthlyTotals: { [key: string]: number } = {};
     
     // Inicializar todos los meses
-    const monthLabels: string[] = [];
     for (let i = months - 1; i >= 0; i--) {
       const date = new Date();
       date.setMonth(now.getMonth() - i);
@@ -1301,7 +1342,6 @@ export async function getMonthlyGrowthData(months: number = 6): Promise<MonthlyG
       .sort()
       .map(monthKey => {
         const [year, month] = monthKey.split('-');
-        const date = new Date(parseInt(year), parseInt(month) - 1);
         const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
                            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
         const monthLabel = `${monthNames[parseInt(month) - 1]} ${year}`;

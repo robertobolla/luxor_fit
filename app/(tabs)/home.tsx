@@ -22,6 +22,7 @@ import { SkeletonProfile, SkeletonCard } from '../../src/components/SkeletonLoad
 import { EmptyWorkouts } from '../../src/components/EmptyStates';
 import { CustomRefreshControl } from '../../src/components/CustomRefreshControl';
 import { useRefresh } from '../../src/hooks/useRefresh';
+import { useNetworkStatus, checkNetworkBeforeOperation } from '../../src/hooks/useNetworkStatus';
 
 export default function HomeScreen() {
   const { user } = useUser();
@@ -29,7 +30,9 @@ export default function HomeScreen() {
   const [todayWorkout, setTodayWorkout] = useState<any>(null);
   const [todayNutrition, setTodayNutrition] = useState<any>(null);
   const [userName, setUserName] = useState('');
-  const [debugInfo, setDebugInfo] = useState<string>('');
+
+  // Detectar estado de conexión
+  const { isConnected } = useNetworkStatus();
 
   // Inicializar notificaciones inteligentes
   useSmartNotifications();
@@ -55,14 +58,24 @@ export default function HomeScreen() {
   const loadData = async () => {
     if (!user?.id) return;
 
+    // Verificar conexión antes de cargar datos
+    if (!isConnected) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
       // Cargar nombre del usuario
-      const { data: profileData } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
         .select('name')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Error loading profile:', profileError);
+      }
 
       if (profileData?.name) {
         setUserName(profileData.name);
@@ -78,21 +91,16 @@ export default function HomeScreen() {
         .limit(1)
         .maybeSingle();
 
-      console.log('📋 Plan activo:', JSON.stringify(activePlan, null, 2));
-      
-      // Nunca mostrar mensaje de error en UI (solo logs)
-      setDebugInfo('');
-
-      if (activePlan && activePlan.plan_data) {
+      if (activePlan?.plan_data) {
         const planData = activePlan.plan_data;
-        console.log('📦 Plan data keys:', Object.keys(planData));
+        
+        // Validar que planData sea un objeto válido
+        if (!planData || typeof planData !== 'object') {
+          return;
+        }
         
         // El plan tiene estructura: weekly_structure es un ARRAY de días
         const schedule = planData.weekly_structure || planData.weekly_schedule || [];
-        console.log('📅 Schedule es array:', Array.isArray(schedule), 'Longitud:', schedule.length);
-        
-        // Limpiar debug
-        setDebugInfo('');
         
         // Si schedule es un array, buscar el primer día sin completar
         if (Array.isArray(schedule) && schedule.length > 0) {
@@ -112,7 +120,10 @@ export default function HomeScreen() {
               .eq('day_name', dayKey)
               .maybeSingle();
 
-            console.log(`🔍 ${dayData.day} (${dayKey}) - Completado:`, !!completionData);
+            if (compError) {
+              console.error('Error checking completion:', compError);
+              // Continuar pero no marcar como completado
+            }
 
             if (!completionData) {
               // Este día no está completado
@@ -123,14 +134,12 @@ export default function HomeScreen() {
                 planId: activePlan.id,
                 planName: activePlan.plan_name || 'Plan de Entrenamiento',
               };
-              console.log('✅ Día sin completar encontrado:', dayData.day);
               break;
             }
           }
 
           if (foundDay) {
             setTodayWorkout(foundDay);
-            console.log('💪 Entrenamiento de hoy configurado:', foundDay.name);
           } else {
             // Todos los días están completados, mostrar el primero
             const firstDay = {
@@ -141,29 +150,37 @@ export default function HomeScreen() {
               planName: activePlan.plan_name || 'Plan de Entrenamiento',
             };
             setTodayWorkout(firstDay);
-            console.log('🔄 Todos completados, mostrando día 1');
           }
-        } else {
-          // Schedule no válido - solo log, no mostrar en UI
-          console.log('⚠️ Schedule no es un array válido');
         }
-      } else {
-        // No hay plan activo o plan_data vacío - solo log, no mostrar en UI
-        console.log('⚠️ No hay plan activo o plan_data está vacío');
       }
 
       // Cargar nutrición de hoy
       const today = new Date().toISOString().split('T')[0];
-      const { data: targetData } = await supabase
+      const { data: targetData, error: targetError } = await supabase
         .from('nutrition_targets')
         .select('*')
         .eq('user_id', user.id)
         .eq('date', today)
-        .single();
+        .maybeSingle();
 
-      setTodayNutrition(targetData);
-    } catch (err) {
+      if (targetError && targetError.code !== 'PGRST116') {
+        console.error('Error loading nutrition target:', targetError);
+      }
+
+      setTodayNutrition(targetData || null);
+    } catch (err: any) {
       console.error('Error loading home data:', err);
+      
+      // Mostrar mensaje amigable si es error de red
+      if (
+        err?.message?.includes('Network') ||
+        err?.message?.includes('fetch') ||
+        err?.message?.includes('Failed to fetch') ||
+        !isConnected
+      ) {
+        // El hook useNetworkStatus ya muestra una alerta cuando se pierde conexión
+        // Aquí solo registramos el error
+      }
     } finally {
       setIsLoading(false);
     }
@@ -202,6 +219,16 @@ export default function HomeScreen() {
           />
         }
       >
+        {/* Banner de sin conexión */}
+        {!isConnected && (
+          <View style={styles.offlineBanner}>
+            <Ionicons name="cloud-offline" size={20} color="#FFD93D" />
+            <Text style={styles.offlineText}>
+              Sin conexión a internet. Algunas funciones pueden no estar disponibles.
+            </Text>
+          </View>
+        )}
+
         {/* Header con saludo */}
         <View style={styles.header}>
           <View>
@@ -239,14 +266,18 @@ export default function HomeScreen() {
               // Si no hay workout cargado, intentar cargarlo ahora
               if (!todayWorkout) {
                 // Buscar el plan activo y navegar al primer día
-                const { data: activePlan } = await supabase
+                const { data: activePlan, error: planError } = await supabase
                   .from('workout_plans')
                   .select('*')
                   .eq('user_id', user?.id)
                   .eq('is_active', true)
                   .order('created_at', { ascending: false })
                   .limit(1)
-                  .single();
+                  .maybeSingle();
+
+                if (planError && planError.code !== 'PGRST116') {
+                  console.error('Error loading active plan:', planError);
+                }
 
                 if (activePlan && activePlan.plan_data) {
                   const schedule = activePlan.plan_data.weekly_structure || 
@@ -331,44 +362,6 @@ export default function HomeScreen() {
             <Ionicons name="chevron-forward" size={24} color="#888888" />
           </TouchableOpacity>
 
-        {/* Sección: Accesos Rápidos */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Accesos Rápidos</Text>
-          
-          <View style={styles.quickAccessGrid}>
-            <TouchableOpacity 
-              style={styles.quickAccessCard}
-              onPress={() => router.push('/(tabs)/progress')}
-            >
-              <Ionicons name="analytics" size={32} color="#FFD93D" />
-              <Text style={styles.quickAccessText}>Métricas</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.quickAccessCard}
-              onPress={() => router.push('/(tabs)/workout-generator' as any)}
-            >
-              <Ionicons name="barbell" size={32} color="#FF6B6B" />
-              <Text style={styles.quickAccessText}>Nuevo Plan</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.quickAccessCard}
-              onPress={() => router.push('/(tabs)/nutrition/plan' as any)}
-            >
-              <Ionicons name="fast-food" size={32} color="#00D4AA" />
-              <Text style={styles.quickAccessText}>Plan Semanal</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity 
-              style={styles.quickAccessCard}
-              onPress={() => router.push('/(tabs)/nutrition/log' as any)}
-            >
-              <Ionicons name="add-circle" size={32} color="#A8E6CF" />
-              <Text style={styles.quickAccessText}>Registrar</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
 
         <View style={{ height: 30 }} />
       </ScrollView>
@@ -400,6 +393,22 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2a1a00',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FFD93D',
+    gap: 8,
+  },
+  offlineText: {
+    fontSize: 14,
+    color: '#FFD93D',
+    flex: 1,
   },
   dateCard: {
     flexDirection: 'row',
@@ -463,29 +472,6 @@ const styles = StyleSheet.create({
     color: '#00D4AA',
     marginTop: 4,
     fontWeight: '600',
-  },
-  quickAccessGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  quickAccessCard: {
-    flex: 1,
-    minWidth: '47%',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#333333',
-    gap: 12,
-  },
-  quickAccessText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#ffffff',
-    textAlign: 'center',
   },
 });
 

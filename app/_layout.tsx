@@ -7,6 +7,7 @@ import { ClerkProviderWrapper } from '../src/clerk.tsx';
 import { useUser } from '@clerk/clerk-expo';
 import { setupUserNotifications, setupNotificationListeners } from '../src/services/notificationService';
 import { useSubscription } from '../src/hooks/useSubscription';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
 
 function NotificationSetup() {
   const { user } = useUser();
@@ -141,20 +142,20 @@ function SubscriptionGate() {
 }
 
 export default function RootLayout() {
-  console.log('RootLayout - Renderizando layout principal');
-
   return (
-    <ClerkProviderWrapper>
-      <SafeAreaProvider>
-        <NotificationSetup />
-        <SubscriptionGate />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-          }}
-        />
-        <StatusBar style="light" />
-      </SafeAreaProvider>
-    </ClerkProviderWrapper>
+    <ErrorBoundary>
+      <ClerkProviderWrapper>
+        <SafeAreaProvider>
+          <NotificationSetup />
+          <SubscriptionGate />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+            }}
+          />
+          <StatusBar style="light" />
+        </SafeAreaProvider>
+      </ClerkProviderWrapper>
+    </ErrorBoundary>
   );
 }

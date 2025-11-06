@@ -15,6 +15,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../src/services/supabase';
 import { generateWorkoutPlan } from '../../src/services/aiService';
+import { LoadingOverlay } from '../../src/components/LoadingOverlay';
+import { useRetry } from '../../src/hooks/useRetry';
+import { useLoadingState } from '../../src/hooks/useLoadingState';
 
 interface UserProfile {
   name: string;
@@ -37,6 +40,23 @@ export default function WorkoutGeneratorScreen() {
   const [generatedPlan, setGeneratedPlan] = useState<any>(null);
   const [error, setError] = useState('');
 
+  // Hook para retry en generación de plan
+  const generatePlanWithRetry = useRetry(
+    async () => {
+      if (!userProfile) throw new Error('No se pudo cargar tu perfil');
+      const result = await generateWorkoutPlan(userProfile);
+      if (!result.success || !result.plan) {
+        throw new Error(result.error || 'No se pudo generar el plan');
+      }
+      return result.plan;
+    },
+    {
+      maxRetries: 2,
+      retryDelay: 2000,
+      showAlert: true,
+    }
+  );
+
   useEffect(() => {
     loadUserProfile();
   }, [user]);
@@ -53,9 +73,9 @@ export default function WorkoutGeneratorScreen() {
         .from('user_profiles')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) {
+      if (error && error.code !== 'PGRST116') {
         console.error('Error al cargar perfil:', error);
         setError('No se pudo cargar tu perfil');
         return;
@@ -81,26 +101,38 @@ export default function WorkoutGeneratorScreen() {
       return;
     }
 
+    setIsGenerating(true);
+    setError('');
+
     try {
-      setIsGenerating(true);
-      setError('');
+      // Generar plan con retry automático
+      const plan = await generatePlanWithRetry.executeWithRetry();
 
-      // Generar plan con IA
-      const result = await generateWorkoutPlan(userProfile);
-
-      if (result.success && result.plan) {
-        setGeneratedPlan(result.plan);
+      if (plan) {
+        setGeneratedPlan(plan);
         
-        // Guardar el plan en Supabase
-        await savePlanToDatabase(result.plan);
+        // Guardar el plan en Supabase (con retry manual)
+        let saved = false;
+        for (let attempt = 0; attempt < 3 && !saved; attempt++) {
+          try {
+            await savePlanToDatabase(plan);
+            saved = true;
+          } catch (saveError) {
+            if (attempt === 2) {
+              // Último intento falló
+              Alert.alert('Advertencia', 'El plan se generó pero no se pudo guardar. Intenta guardarlo manualmente.');
+            } else {
+              // Esperar antes del siguiente intento
+              await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+            }
+          }
+        }
       } else {
-        setError(result.error || 'No se pudo generar el plan');
-        Alert.alert('Error', result.error || 'No se pudo generar el plan');
+        setError('No se pudo generar el plan después de varios intentos');
       }
     } catch (err) {
-      console.error('Error al generar plan:', err);
-      setError('Error inesperado al generar el plan');
-      Alert.alert('Error', 'Ocurrió un error inesperado');
+      setError('Error al generar el plan');
+      console.error('Error:', err);
     } finally {
       setIsGenerating(false);
     }
@@ -175,10 +207,7 @@ export default function WorkoutGeneratorScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00D4AA" />
-          <Text style={styles.loadingText}>Cargando tu perfil...</Text>
-        </View>
+        <LoadingOverlay visible={true} message="Cargando tu perfil..." fullScreen />
       </SafeAreaView>
     );
   }
@@ -208,7 +237,7 @@ export default function WorkoutGeneratorScreen() {
         <StatusBar barStyle="light-content" />
         <View style={styles.generatingContainer}>
           <Ionicons name="fitness" size={80} color="#00D4AA" />
-          <ActivityIndicator size="large" color="#00D4AA" style={{ marginTop: 24 }} />
+          <LoadingOverlay visible={true} message="Generando tu plan personalizado..." />
           <Text style={styles.generatingTitle}>
             Generando tu plan personalizado...
           </Text>

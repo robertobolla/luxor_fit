@@ -32,12 +32,11 @@ export default function ProfileScreen() {
         .from('user_profiles')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) {
+      if (error && error.code !== 'PGRST116') {
         console.error('❌ Error al cargar perfil:', error);
-      } else {
-        console.log('✅ Perfil cargado:', data);
+      } else if (data) {
         setProfile(data);
       }
     } catch (error) {
@@ -119,15 +118,10 @@ export default function ProfileScreen() {
   const displayName = profile?.name || user?.firstName || user?.fullName || 'Usuario';
   
   // Prioridad: email de perfil Supabase (guardado en onboarding) > email de Clerk > No especificado
+  // Nota: Si el usuario se registró con OAuth (como TikTok), el email puede no estar disponible en Clerk
   const clerkEmail = getClerkUserEmailSync(user);
   const displayEmail = profile?.email || clerkEmail || 'No especificado';
   const firstLetter = displayName.charAt(0).toUpperCase();
-  
-  console.log('📊 Datos finales en Profile:');
-  console.log('  - Nombre:', displayName);
-  console.log('  - Email Supabase:', profile?.email);
-  console.log('  - Email Clerk:', clerkEmail);
-  console.log('  - Email mostrado:', displayEmail);
   
   // Mapeo de nivel de fitness a español
   const fitnessLevelMap: Record<string, string> = {

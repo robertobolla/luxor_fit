@@ -487,7 +487,7 @@ function generateEducationalExplanation(
   // Información sobre adherencia
   if (adherence < 70) {
     explanation += ` Adherencia: ${Math.round(adherence)}%`;
-    educationalMessage += ` Nota: Tu adherencia a la dieta es del ${Math.round(adherence)}%. Para obtener los mejores resultados, intenta registrar al menos el ${Math.round(adherence)}% de tus comidas.`;
+    educationalMessage += ` Nota: Tu adherencia a la dieta es del ${Math.round(adherence)}%. Para obtener los mejores resultados, intenta registrar al menos el 70% de tus comidas.`;
   }
 
   return { explanation, educationalMessage };
@@ -546,10 +546,14 @@ export async function getOnboardingProfileLite(
       .from('user_profiles')
       .select('gender, age, height, weight, body_fat_percentage, muscle_percentage, activity_types, goals')
       .eq('user_id', userId)
-      .single();
+      .maybeSingle();
 
-    if (error || !data) {
+    if (error && error.code !== 'PGRST116') {
       console.error('Error fetching onboarding profile:', error);
+      return null;
+    }
+
+    if (!data) {
       return null;
     }
 
@@ -1208,8 +1212,20 @@ IMPORTANTE: Responde SOLO con JSON válido. Cada item debe tener food_id (númer
     console.log('✅ Plan generado con IA exitosamente');
     return weekPlan as WeekPlan;
   } catch (error: any) {
-    console.error('❌ Error generando plan con IA:', error?.message || error);
-    console.log('🔄 Usando generador de respaldo...');
+    // Manejar errores específicos de quota/rate limit de manera más elegante
+    const errorMessage = error?.message || error?.toString() || '';
+    const isQuotaError = errorMessage.includes('429') || 
+                         errorMessage.includes('quota') || 
+                         errorMessage.includes('exceeded') ||
+                         error?.status === 429;
+    
+    if (isQuotaError) {
+      console.log('⚠️ Cuota de OpenAI agotada, usando generador de respaldo...');
+    } else {
+      console.error('❌ Error generando plan con IA:', errorMessage.substring(0, 200));
+      console.log('🔄 Usando generador de respaldo...');
+    }
+    
     // Si falla, usar el generador por defecto
     return generateWeekPlanFallback(targets, mealsPerDay, customPrompts, fastingWindow);
   }
@@ -2018,5 +2034,189 @@ export async function applyWeeklyAdjustment(
     console.error('Error in applyWeeklyAdjustment:', err);
     return { success: false, error: err.message };
   }
+}
+
+// ============================================================================
+// HISTORIAL SEMANAL
+// ============================================================================
+
+export interface WeekSummary {
+  weekStart: string; // Lunes de la semana
+  weekEnd: string; // Domingo de la semana
+  adherence: number; // Porcentaje de adherencia (0-100)
+  avgCalories: number; // Promedio de calorías consumidas
+  avgProtein: number; // Promedio de proteína consumida
+  avgCarbs: number; // Promedio de carbohidratos consumidos
+  avgFats: number; // Promedio de grasas consumidas
+  targetCalories: number; // Calorías objetivo promedio
+  loggedMeals: number; // Número de comidas registradas
+  expectedMeals: number; // Número de comidas esperadas
+  daysLogged: number; // Días con al menos una comida registrada
+}
+
+/**
+ * Obtiene el lunes de la semana para una fecha dada
+ */
+export function getWeekStart(date: Date): Date {
+  // Asegurar que trabajamos con la fecha local (no UTC)
+  const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayOfWeek = localDate.getDay(); // 0 = domingo, 1 = lunes, ..., 6 = sábado
+  const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Ajustar para lunes
+  const monday = new Date(localDate);
+  monday.setDate(localDate.getDate() + diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+/**
+ * Obtiene el domingo de la semana para una fecha dada
+ */
+function getWeekEnd(date: Date): Date {
+  const monday = getWeekStart(date);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  sunday.setHours(23, 59, 59, 999);
+  return sunday;
+}
+
+/**
+ * Obtiene el resumen de una semana específica
+ */
+export async function getWeekSummary(
+  userId: string,
+  weekStart: string
+): Promise<WeekSummary | null> {
+  try {
+    // Parsear la fecha del lunes asegurando que se interprete como fecha local
+    // Usar formato YYYY-MM-DD y agregar hora para evitar problemas de UTC
+    const [year, month, day] = weekStart.split('-').map(Number);
+    const startDate = new Date(year, month - 1, day);
+    
+    // Calcular el domingo directamente sumando 6 días al lunes
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 6);
+    const endDateStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
+
+    // Obtener logs de comidas de la semana
+    const { data: mealLogs } = await supabase
+      .from('meal_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('datetime', `${weekStart}T00:00:00`)
+      .lte('datetime', `${endDateStr}T23:59:59`)
+      .order('datetime', { ascending: true });
+
+    // Obtener targets de la semana
+    const { data: targets } = await supabase
+      .from('nutrition_targets')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', weekStart)
+      .lte('date', endDateStr)
+      .order('date', { ascending: true });
+
+    // Calcular promedios de consumo
+    const totalConsumed = mealLogs?.reduce(
+      (acc, log) => ({
+        calories: acc.calories + log.calories,
+        protein_g: acc.protein_g + log.protein_g,
+        carbs_g: acc.carbs_g + log.carbs_g,
+        fats_g: acc.fats_g + log.fats_g,
+      }),
+      { calories: 0, protein_g: 0, carbs_g: 0, fats_g: 0 }
+    ) || { calories: 0, protein_g: 0, carbs_g: 0, fats_g: 0 };
+
+    // Calcular días con logs únicos
+    const daysWithLogs = new Set<string>();
+    mealLogs?.forEach(log => {
+      const date = new Date(log.datetime).toISOString().split('T')[0];
+      daysWithLogs.add(date);
+    });
+
+    // Calcular promedio de targets
+    const avgTarget = targets?.reduce(
+      (acc, target) => ({
+        calories: acc.calories + target.calories,
+      }),
+      { calories: 0 }
+    ) || { calories: 0 };
+    const avgTargetCalories = targets?.length > 0 ? avgTarget.calories / targets.length : 0;
+
+    // Obtener perfil nutricional para calcular comidas esperadas
+    const nutritionProfile = await getNutritionProfile(userId);
+    const mealsPerDay = nutritionProfile?.meals_per_day || 3;
+    const expectedMeals = 7 * mealsPerDay;
+
+    // Calcular adherencia
+    const loggedMeals = mealLogs?.length || 0;
+    const adherence = Math.min(100, Math.round((loggedMeals / expectedMeals) * 100));
+
+    // Calcular promedios diarios
+    const daysCount = daysWithLogs.size || 1; // Evitar división por cero
+    const avgCalories = daysCount > 0 ? totalConsumed.calories / daysCount : 0;
+    const avgProtein = daysCount > 0 ? totalConsumed.protein_g / daysCount : 0;
+    const avgCarbs = daysCount > 0 ? totalConsumed.carbs_g / daysCount : 0;
+    const avgFats = daysCount > 0 ? totalConsumed.fats_g / daysCount : 0;
+
+    return {
+      weekStart,
+      weekEnd: endDateStr,
+      adherence,
+      avgCalories: Math.round(avgCalories),
+      avgProtein: Math.round(avgProtein),
+      avgCarbs: Math.round(avgCarbs),
+      avgFats: Math.round(avgFats),
+      targetCalories: Math.round(avgTargetCalories),
+      loggedMeals,
+      expectedMeals,
+      daysLogged: daysWithLogs.size,
+    };
+  } catch (error) {
+    console.error('Error getting week summary:', error);
+    return null;
+  }
+}
+
+/**
+ * Obtiene el historial de semanas (hasta N semanas atrás)
+ */
+export async function getWeeklyHistory(
+  userId: string,
+  weeks: number = 8
+): Promise<WeekSummary[]> {
+  try {
+    const today = new Date();
+    const currentWeekStart = getWeekStart(today);
+    const history: WeekSummary[] = [];
+
+    // Obtener resumen de semanas pasadas
+    for (let i = 0; i < weeks; i++) {
+      const weekStart = new Date(currentWeekStart);
+      weekStart.setDate(currentWeekStart.getDate() - (i * 7));
+      // Formatear como YYYY-MM-DD usando fecha local para evitar problemas de UTC
+      const weekStartStr = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+
+      const summary = await getWeekSummary(userId, weekStartStr);
+      if (summary) {
+        history.push(summary);
+      }
+    }
+
+    return history;
+  } catch (error) {
+    console.error('Error getting weekly history:', error);
+    return [];
+  }
+}
+
+/**
+ * Obtiene la fecha de inicio de la semana siguiente
+ */
+export function getNextWeekStart(): Date {
+  const today = new Date();
+  const currentWeekStart = getWeekStart(today);
+  const nextWeekStart = new Date(currentWeekStart);
+  nextWeekStart.setDate(currentWeekStart.getDate() + 7);
+  return nextWeekStart;
 }
 

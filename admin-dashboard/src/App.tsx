@@ -113,7 +113,9 @@ function AdminCheck({ user }: { user: any }) {
   React.useEffect(() => {
     async function checkRole() {
       if (user?.id) {
-        const adminStatus = await checkAdminRole(user.id);
+        // Pasar también el email como fallback para buscar en la base de datos
+        const userEmail = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress;
+        const adminStatus = await checkAdminRole(user.id, userEmail);
         setIsAdmin(adminStatus);
       }
       setLoading(false);
