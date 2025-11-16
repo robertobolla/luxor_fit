@@ -9,6 +9,7 @@ Este documento define la estructura completa de categorías de ejercicios que la
 ## 📊 Información del Onboarding que la IA Usa
 
 ### Datos Disponibles:
+
 - **fitness_level**: `beginner` | `intermediate` | `advanced`
 - **goals**: `weight_loss` | `muscle_gain` | `strength` | `endurance` | `flexibility` | `general_fitness`
 - **activity_types**: `cardio` | `strength` | `sports` | `yoga` | `hiit` | `mixed`
@@ -27,35 +28,36 @@ Este documento define la estructura completa de categorías de ejercicios que la
 ```typescript
 interface Exercise {
   // Identificación
-  name: string;                    // Nombre canónico (único, exacto)
-  
+  name: string; // Nombre canónico (único, exacto)
+
   // Categorización (para organización)
-  category: string;                // Categoría principal (ver abajo)
-  
+  category: string; // Categoría principal (ver abajo)
+
   // Metadata funcional (lo que la IA usa para buscar)
-  muscles: string[];               // Músculos trabajados (PRIMARIO, secundario, terciario)
-  movement_type: string;           // Tipo de movimiento (push, pull, legs, etc.)
-  exercise_type: string;           // Tipo de ejercicio (compound, isolation, cardio, etc.)
-  
+  muscles: string[]; // Músculos trabajados (PRIMARIO, secundario, terciario)
+  muscle_zones?: string[]; // Zonas específicas del músculo trabajadas (ver sección ZONAS MUSCULARES)
+  movement_type: string; // Tipo de movimiento (push, pull, legs, etc.)
+  exercise_type: string; // Tipo de ejercicio (compound, isolation, cardio, etc.)
+
   // Equipamiento
-  equipment: string[];             // Equipamiento necesario
+  equipment: string[]; // Equipamiento necesario
   equipment_alternatives?: string[]; // Equipamiento alternativo
-  
+
   // Dificultad y nivel
   difficulty: "beginner" | "intermediate" | "advanced";
-  fitness_levels: string[];        // Niveles para los que es apropiado
-  
+  fitness_levels: string[]; // Niveles para los que es apropiado
+
   // Objetivos
-  goals: string[];                 // Objetivos que ayuda a alcanzar
-  activity_types: string[];        // Tipos de actividad donde se usa
-  
+  goals: string[]; // Objetivos que ayuda a alcanzar
+  activity_types: string[]; // Tipos de actividad donde se usa
+
   // Variaciones y nombres alternativos
-  name_variations?: string[];      // Nombres alternativos (para matching)
-  
+  name_variations?: string[]; // Nombres alternativos (para matching)
+
   // Metadata adicional
-  instructions?: string;           // Instrucciones breves
-  tips?: string[];                 // Tips de ejecución
-  common_mistakes?: string[];      // Errores comunes
+  instructions?: string; // Instrucciones breves
+  tips?: string[]; // Tips de ejecución
+  common_mistakes?: string[]; // Errores comunes
 }
 ```
 
@@ -64,33 +66,43 @@ interface Exercise {
 ## 📂 CATEGORÍAS PRINCIPALES (Para Organización)
 
 ### 1. **CARDIO**
+
 Ejercicios cardiovasculares y de resistencia
 
 ### 2. **FUERZA_SUPERIOR_PUSH**
+
 Ejercicios de empuje para tren superior (pecho, hombros, tríceps)
 
 ### 3. **FUERZA_SUPERIOR_PULL**
+
 Ejercicios de tracción para tren superior (espalda, bíceps)
 
 ### 4. **FUERZA_INFERIOR**
+
 Ejercicios para tren inferior (piernas, glúteos)
 
 ### 5. **CORE**
+
 Ejercicios para core y abdominales
 
 ### 6. **FLEXIBILIDAD**
+
 Ejercicios de estiramiento y movilidad
 
 ### 7. **FUNCIONAL**
+
 Ejercicios funcionales y de movimiento completo
 
 ### 8. **PLIOMETRIA**
+
 Ejercicios pliométricos y de potencia
 
 ### 9. **CALISTENIA**
+
 Ejercicios con peso corporal
 
 ### 10. **HIIT**
+
 Ejercicios de alta intensidad
 
 ---
@@ -98,6 +110,7 @@ Ejercicios de alta intensidad
 ## 🎯 MÚSCULOS (Para Búsqueda por Músculo)
 
 ### Tren Superior:
+
 - `pecho` (chest)
 - `espalda` (back)
 - `hombros` (shoulders)
@@ -107,6 +120,7 @@ Ejercicios de alta intensidad
 - `trapecio` (traps)
 
 ### Tren Inferior:
+
 - `cuádriceps` (quads)
 - `isquiotibiales` (hamstrings)
 - `glúteos` (glutes)
@@ -114,12 +128,14 @@ Ejercicios de alta intensidad
 - `gemelos` (calves)
 
 ### Core:
+
 - `abdominales` (abs)
 - `oblicuos` (obliques)
 - `core` (core completo)
 - `lumbares` (lower back)
 
 ### Completo:
+
 - `cuerpo_completo` (full body)
 
 ---
@@ -201,6 +217,7 @@ Ejercicios de alta intensidad
 **Equipamiento**: Varía según ejercicio
 
 **Ejercicios sugeridos** (tú los llenarás):
+
 - Bicicleta estática
 - Cinta de correr
 - Elíptica
@@ -229,6 +246,7 @@ Ejercicios de alta intensidad
 **Ejercicios sugeridos**:
 
 **Pecho (compound)**:
+
 - Press de banca
 - Press inclinado
 - Press declinado
@@ -239,24 +257,28 @@ Ejercicios de alta intensidad
 - Fondos
 
 **Pecho (isolation)**:
+
 - Aperturas con mancuernas
 - Aperturas en banco
 - Cruces en polea
 - Flexiones diamante
 
 **Hombros (compound)**:
+
 - Press militar
 - Press de hombros con mancuernas
 - Press Arnold
 - Press tras nuca
 
 **Hombros (isolation)**:
+
 - Elevaciones laterales
 - Elevaciones frontales
 - Vuelos posteriores
 - Face pulls
 
 **Tríceps**:
+
 - Extensiones de tríceps
 - Fondos en banco
 - Patada de tríceps
@@ -275,6 +297,7 @@ Ejercicios de alta intensidad
 **Ejercicios sugeridos**:
 
 **Espalda (compound)**:
+
 - Dominadas
 - Remo con barra
 - Remo con mancuernas
@@ -285,12 +308,14 @@ Ejercicios de alta intensidad
 - Remo en polea
 
 **Espalda (isolation)**:
+
 - Vuelos posteriores
 - Remo invertido
 - Pullover
 - Hiperextensiones
 
 **Bíceps**:
+
 - Curl de bíceps
 - Curl martillo
 - Curl con barra
@@ -310,6 +335,7 @@ Ejercicios de alta intensidad
 **Ejercicios sugeridos**:
 
 **Cuádriceps (compound)**:
+
 - Sentadillas
 - Sentadilla con barra
 - Sentadilla frontal
@@ -319,20 +345,24 @@ Ejercicios de alta intensidad
 - Hack squat
 
 **Cuádriceps (isolation)**:
+
 - Extensiones de pierna
 - Sentadilla isométrica
 
 **Isquiotibiales (compound)**:
+
 - Peso muerto
 - Peso muerto rumano
 - Peso muerto con piernas rígidas
 
 **Isquiotibiales (isolation)**:
+
 - Curl de pierna
 - Curl nórdico
 - Good mornings
 
 **Glúteos**:
+
 - Hip thrust
 - Puente de glúteos
 - Patada de glúteo
@@ -341,6 +371,7 @@ Ejercicios de alta intensidad
 - Extensión de cadera
 
 **Pantorrillas**:
+
 - Elevación de talones
 - Elevación de talones sentado
 - Elevación de talones en máquina
@@ -357,6 +388,7 @@ Ejercicios de alta intensidad
 **Ejercicios sugeridos**:
 
 **Abdominales**:
+
 - Crunch
 - Crunch inverso
 - Bicicleta abdominal
@@ -368,12 +400,14 @@ Ejercicios de alta intensidad
 - Hanging leg raises
 
 **Oblicuos**:
+
 - Plancha lateral
 - Russian twists
 - Crunch lateral
 - Side bends
 
 **Core completo**:
+
 - Plancha
 - Mountain climbers
 - Dead bug
@@ -382,6 +416,7 @@ Ejercicios de alta intensidad
 - L-sit
 
 **Lumbares**:
+
 - Hiperextensiones
 - Superman
 - Good mornings
@@ -397,6 +432,7 @@ Ejercicios de alta intensidad
 **Equipamiento**: Principalmente `none`, opcional `yoga_mat`
 
 **Ejercicios sugeridos**:
+
 - Estiramiento de cuádriceps
 - Estiramiento de isquiotibiales
 - Estiramiento de glúteos
@@ -422,6 +458,7 @@ Ejercicios de alta intensidad
 **Equipamiento**: Varía
 
 **Ejercicios sugeridos**:
+
 - Peso muerto
 - Sentadilla con peso
 - Thruster
@@ -441,6 +478,7 @@ Ejercicios de alta intensidad
 **Equipamiento**: Principalmente `none`
 
 **Ejercicios sugeridos**:
+
 - Box jumps
 - Jump squats
 - Burpees
@@ -460,6 +498,7 @@ Ejercicios de alta intensidad
 **Equipamiento**: `none` o `pull_up_bar`
 
 **Ejercicios sugeridos**:
+
 - Flexiones
 - Dominadas
 - Fondos
@@ -481,6 +520,7 @@ Ejercicios de alta intensidad
 **Equipamiento**: Varía
 
 **Ejercicios sugeridos**:
+
 - Burpees
 - Mountain climbers
 - Jumping jacks
@@ -499,27 +539,32 @@ Ejercicios de alta intensidad
 ### Según Días Disponibles:
 
 **1 día/semana**: Cuerpo completo
-**2 días/semana**: 
+**2 días/semana**:
+
 - Tren superior / Tren inferior
 - Push / Pull + Legs
 - Fuerza / Cardio
 
 **3 días/semana**:
+
 - Push / Pull / Legs
 - Tren superior / Tren inferior / Cuerpo completo
 - Fuerza / Cardio / Fuerza
 
 **4 días/semana**:
+
 - Push / Pull / Legs / Cardio
 - Tren superior Push / Tren superior Pull / Tren inferior / Cardio
 - Fuerza / Fuerza / Cardio / Fuerza
 
 **5 días/semana**:
+
 - Push / Pull / Legs / Push / Pull
 - Tren superior / Tren inferior / Cardio / Tren superior / Tren inferior
 - Fuerza / Fuerza / Cardio / Fuerza / Cardio
 
 **6-7 días/semana**:
+
 - Variaciones de las anteriores con días de descanso activo
 
 ### Según Objetivos:
@@ -549,6 +594,7 @@ Ejercicios de alta intensidad
   "name": "Press de banca",
   "category": "fuerza_superior_push",
   "muscles": ["pecho", "tríceps", "hombros"],
+  "muscle_zones": ["pecho_medio", "hombros_frontales"],
   "movement_type": "push",
   "exercise_type": "compound",
   "equipment": ["barbell", "bench"],
@@ -572,17 +618,48 @@ Ejercicios de alta intensidad
 }
 ```
 
+### Ejemplo con diferentes zonas del mismo músculo:
+
+```json
+{
+  "name": "Press inclinado",
+  "category": "fuerza_superior_push",
+  "muscles": ["pecho", "hombros", "tríceps"],
+  "muscle_zones": ["pecho_superior", "hombros_frontales"],
+  "movement_type": "push",
+  "exercise_type": "compound"
+},
+{
+  "name": "Press de banca",
+  "category": "fuerza_superior_push",
+  "muscles": ["pecho", "tríceps"],
+  "muscle_zones": ["pecho_medio"],
+  "movement_type": "push",
+  "exercise_type": "compound"
+},
+{
+  "name": "Press declinado",
+  "category": "fuerza_superior_push",
+  "muscles": ["pecho", "tríceps"],
+  "muscle_zones": ["pecho_inferior"],
+  "movement_type": "push",
+  "exercise_type": "compound"
+}
+```
+
 ---
 
 ## 🔍 CÓMO LA IA BUSCARÁ EJERCICIOS
 
 ### Ejemplo 1: Usuario quiere "pecho y bíceps"
+
 ```
 Buscar: muscles incluye "pecho" Y muscles incluye "bíceps"
 Resultado: Ejercicios de pecho (push) + Ejercicios de bíceps (pull)
 ```
 
 ### Ejemplo 2: Usuario quiere estructura "push/pull/legs"
+
 ```
 Buscar por movement_type:
 - Día 1: movement_type = "push"
@@ -591,6 +668,7 @@ Buscar por movement_type:
 ```
 
 ### Ejemplo 3: Usuario quiere "un músculo por día"
+
 ```
 Buscar por músculo principal:
 - Día 1: muscles[0] = "pecho"
@@ -599,13 +677,15 @@ Buscar por músculo principal:
 ```
 
 ### Ejemplo 4: Usuario tiene solo "dumbbells"
+
 ```
 Filtrar: equipment incluye "dumbbells" O equipment = "none"
 ```
 
 ### Ejemplo 5: Usuario es "beginner" y quiere "weight_loss"
+
 ```
-Filtrar: 
+Filtrar:
 - difficulty = "beginner"
 - goals incluye "weight_loss"
 - activity_types incluye "cardio" o "hiit"
@@ -635,4 +715,3 @@ Filtrar:
 ---
 
 **Nota**: Esta estructura permite máxima flexibilidad. La IA puede crear cualquier tipo de rutina (push/pull, músculo por día, cuerpo completo, etc.) porque busca por músculos y movement_type, no solo por categoría.
-
