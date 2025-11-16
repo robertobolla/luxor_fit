@@ -4,6 +4,8 @@
 
 Este documento define la estructura completa de categorías de ejercicios que la IA puede usar para generar rutinas personalizadas basadas en la información del onboarding.
 
+**✨ NUEVO**: Incluye sistema de zonas musculares (`muscle_zones`) que permite a la IA crear rutinas profesionales trabajando diferentes zonas del mismo músculo (ej: pecho superior, medio, inferior).
+
 ---
 
 ## 📊 Información del Onboarding que la IA Usa
@@ -140,6 +142,68 @@ Ejercicios de alta intensidad
 
 ---
 
+## 🎯 ZONAS MUSCULARES (muscle_zones)
+
+**IMPORTANTE**: Este campo permite que la IA cree rutinas profesionales trabajando diferentes zonas del mismo músculo.
+
+### Pecho:
+- `pecho_superior` - Porción clavicular (ej: press inclinado)
+- `pecho_medio` - Porción esternocostal (ej: press plano, aperturas)
+- `pecho_inferior` - Porción abdominal (ej: press declinado)
+
+### Espalda:
+- `espalda_superior` - Trapecio superior, romboides superiores
+- `espalda_media` - Romboides, trapecio medio
+- `espalda_inferior` - Dorsales inferiores, erector espinal
+- `lats` - Dorsales anchos (latissimus dorsi)
+- `romboides` - Romboides mayor y menor
+- `trapecio_superior` - Parte superior del trapecio
+- `trapecio_medio` - Parte media del trapecio
+
+### Hombros:
+- `hombros_frontales` - Deltoides anterior (ej: press militar, elevaciones frontales)
+- `hombros_medios` - Deltoides lateral (ej: elevaciones laterales)
+- `hombros_posteriores` - Deltoides posterior (ej: vuelos posteriores, face pulls)
+
+### Bíceps:
+- `biceps_cabeza_larga` - Cabeza larga del bíceps
+- `biceps_cabeza_corta` - Cabeza corta del bíceps
+- `braquial` - Braquial anterior
+
+### Tríceps:
+- `triceps_cabeza_lateral` - Cabeza lateral
+- `triceps_cabeza_medial` - Cabeza medial
+- `triceps_cabeza_larga` - Cabeza larga
+
+### Cuádriceps:
+- `cuadriceps_frontal` - Recto femoral (parte frontal)
+- `cuadriceps_lateral` - Vasto lateral
+- `cuadriceps_medial` - Vasto medial
+- `cuadriceps_intermedio` - Vasto intermedio
+
+### Isquiotibiales:
+- `isquiotibiales_superior` - Bíceps femoral (cabeza larga)
+- `isquiotibiales_medio` - Semitendinoso
+- `isquiotibiales_inferior` - Semimembranoso
+
+### Glúteos:
+- `gluteos_superior` - Glúteo mayor (porción superior)
+- `gluteos_medio` - Glúteo medio
+- `gluteos_inferior` - Glúteo mayor (porción inferior)
+
+### Pantorrillas:
+- `gemelos` - Gastrocnemio (gemelos)
+- `soleo` - Sóleo
+
+### Core:
+- `abdominales_superiores` - Recto abdominal superior
+- `abdominales_inferiores` - Recto abdominal inferior
+- `oblicuos_externos` - Oblicuos externos
+- `oblicuos_internos` - Oblicuos internos
+- `transverso` - Transverso abdominal
+
+---
+
 ## 🔄 TIPOS DE MOVIMIENTO (movement_type)
 
 - `push` - Empuje (pecho, hombros, tríceps)
@@ -247,35 +311,37 @@ Ejercicios de alta intensidad
 
 **Pecho (compound)**:
 
-- Press de banca
-- Press inclinado
-- Press declinado
-- Press con mancuernas
-- Flexiones
-- Flexiones inclinadas
-- Flexiones declinadas
-- Fondos
+- Press de banca → `muscle_zones: ["pecho_medio"]`
+- Press inclinado → `muscle_zones: ["pecho_superior"]`
+- Press declinado → `muscle_zones: ["pecho_inferior"]`
+- Press con mancuernas → `muscle_zones: ["pecho_medio"]`
+- Flexiones → `muscle_zones: ["pecho_medio"]`
+- Flexiones inclinadas → `muscle_zones: ["pecho_superior"]`
+- Flexiones declinadas → `muscle_zones: ["pecho_inferior"]`
+- Fondos → `muscle_zones: ["pecho_inferior", "tríceps"]`
 
 **Pecho (isolation)**:
 
-- Aperturas con mancuernas
-- Aperturas en banco
-- Cruces en polea
-- Flexiones diamante
+- Aperturas con mancuernas → `muscle_zones: ["pecho_medio"]`
+- Aperturas en banco → `muscle_zones: ["pecho_medio"]`
+- Aperturas inclinadas → `muscle_zones: ["pecho_superior"]`
+- Aperturas declinadas → `muscle_zones: ["pecho_inferior"]`
+- Cruces en polea → `muscle_zones: ["pecho_medio", "pecho_inferior"]`
+- Flexiones diamante → `muscle_zones: ["pecho_medio", "tríceps"]`
 
 **Hombros (compound)**:
 
-- Press militar
-- Press de hombros con mancuernas
-- Press Arnold
-- Press tras nuca
+- Press militar → `muscle_zones: ["hombros_frontales", "hombros_medios"]`
+- Press de hombros con mancuernas → `muscle_zones: ["hombros_frontales", "hombros_medios"]`
+- Press Arnold → `muscle_zones: ["hombros_frontales", "hombros_medios"]`
+- Press tras nuca → `muscle_zones: ["hombros_medios", "hombros_posteriores"]`
 
 **Hombros (isolation)**:
 
-- Elevaciones laterales
-- Elevaciones frontales
-- Vuelos posteriores
-- Face pulls
+- Elevaciones laterales → `muscle_zones: ["hombros_medios"]`
+- Elevaciones frontales → `muscle_zones: ["hombros_frontales"]`
+- Vuelos posteriores → `muscle_zones: ["hombros_posteriores"]`
+- Face pulls → `muscle_zones: ["hombros_posteriores", "romboides"]`
 
 **Tríceps**:
 
@@ -298,21 +364,22 @@ Ejercicios de alta intensidad
 
 **Espalda (compound)**:
 
-- Dominadas
-- Remo con barra
-- Remo con mancuernas
-- Remo T
-- Jalones al pecho
-- Jalones tras nuca
-- Peso muerto
-- Remo en polea
+- Dominadas → `muscle_zones: ["lats", "espalda_media", "romboides"]`
+- Remo con barra → `muscle_zones: ["espalda_media", "romboides", "trapecio_medio"]`
+- Remo con mancuernas → `muscle_zones: ["espalda_media", "romboides"]`
+- Remo T → `muscle_zones: ["espalda_media", "romboides"]`
+- Jalones al pecho → `muscle_zones: ["lats", "espalda_media"]`
+- Jalones tras nuca → `muscle_zones: ["espalda_superior", "romboides"]`
+- Peso muerto → `muscle_zones: ["espalda_inferior", "trapecio_medio", "isquiotibiales"]`
+- Remo en polea → `muscle_zones: ["espalda_media", "romboides"]`
 
 **Espalda (isolation)**:
 
-- Vuelos posteriores
-- Remo invertido
-- Pullover
-- Hiperextensiones
+- Vuelos posteriores → `muscle_zones: ["hombros_posteriores", "romboides"]`
+- Remo invertido → `muscle_zones: ["espalda_media", "romboides"]`
+- Pullover → `muscle_zones: ["lats", "pecho_inferior"]`
+- Hiperextensiones → `muscle_zones: ["lumbares", "espalda_inferior"]`
+- Face pulls → `muscle_zones: ["hombros_posteriores", "romboides"]`
 
 **Bíceps**:
 
@@ -336,45 +403,45 @@ Ejercicios de alta intensidad
 
 **Cuádriceps (compound)**:
 
-- Sentadillas
-- Sentadilla con barra
-- Sentadilla frontal
-- Sentadilla búlgara
-- Zancadas
-- Prensa de piernas
-- Hack squat
+- Sentadillas → `muscle_zones: ["cuadriceps_frontal", "cuadriceps_lateral", "gluteos_medio"]`
+- Sentadilla con barra → `muscle_zones: ["cuadriceps_frontal", "cuadriceps_lateral"]`
+- Sentadilla frontal → `muscle_zones: ["cuadriceps_frontal", "cuadriceps_medial"]`
+- Sentadilla búlgara → `muscle_zones: ["cuadriceps_frontal", "cuadriceps_lateral"]`
+- Zancadas → `muscle_zones: ["cuadriceps_frontal", "cuadriceps_medial", "gluteos_medio"]`
+- Prensa de piernas → `muscle_zones: ["cuadriceps_frontal", "cuadriceps_lateral"]`
+- Hack squat → `muscle_zones: ["cuadriceps_frontal", "cuadriceps_lateral"]`
 
 **Cuádriceps (isolation)**:
 
-- Extensiones de pierna
-- Sentadilla isométrica
+- Extensiones de pierna → `muscle_zones: ["cuadriceps_frontal", "cuadriceps_lateral"]`
+- Sentadilla isométrica → `muscle_zones: ["cuadriceps_frontal", "cuadriceps_medial"]`
 
 **Isquiotibiales (compound)**:
 
-- Peso muerto
-- Peso muerto rumano
-- Peso muerto con piernas rígidas
+- Peso muerto → `muscle_zones: ["isquiotibiales_superior", "isquiotibiales_medio", "gluteos_superior"]`
+- Peso muerto rumano → `muscle_zones: ["isquiotibiales_superior", "isquiotibiales_medio"]`
+- Peso muerto con piernas rígidas → `muscle_zones: ["isquiotibiales_superior", "isquiotibiales_inferior"]`
 
 **Isquiotibiales (isolation)**:
 
-- Curl de pierna
-- Curl nórdico
-- Good mornings
+- Curl de pierna → `muscle_zones: ["isquiotibiales_superior", "isquiotibiales_medio"]`
+- Curl nórdico → `muscle_zones: ["isquiotibiales_superior", "isquiotibiales_medio"]`
+- Good mornings → `muscle_zones: ["isquiotibiales_superior", "lumbares"]`
 
 **Glúteos**:
 
-- Hip thrust
-- Puente de glúteos
-- Patada de glúteo
-- Sentadilla sumo
-- Abducción de cadera
-- Extensión de cadera
+- Hip thrust → `muscle_zones: ["gluteos_superior", "gluteos_medio", "gluteos_inferior"]`
+- Puente de glúteos → `muscle_zones: ["gluteos_medio", "gluteos_inferior"]`
+- Patada de glúteo → `muscle_zones: ["gluteos_superior", "gluteos_medio"]`
+- Sentadilla sumo → `muscle_zones: ["gluteos_medio", "gluteos_inferior", "cuadriceps_medial"]`
+- Abducción de cadera → `muscle_zones: ["gluteos_medio"]`
+- Extensión de cadera → `muscle_zones: ["gluteos_superior", "gluteos_medio"]`
 
 **Pantorrillas**:
 
-- Elevación de talones
-- Elevación de talones sentado
-- Elevación de talones en máquina
+- Elevación de talones → `muscle_zones: ["gemelos", "soleo"]`
+- Elevación de talones sentado → `muscle_zones: ["soleo"]`
+- Elevación de talones en máquina → `muscle_zones: ["gemelos", "soleo"]`
 
 ---
 
@@ -667,22 +734,38 @@ Buscar por movement_type:
 - Día 3: movement_type = "legs"
 ```
 
-### Ejemplo 3: Usuario quiere "un músculo por día"
+### Ejemplo 3: Usuario quiere "un músculo por día" (ej: "pecho")
 
 ```
-Buscar por músculo principal:
-- Día 1: muscles[0] = "pecho"
-- Día 2: muscles[0] = "espalda"
-- Día 3: muscles[0] = "piernas"
+Buscar por músculo principal Y distribuir por zonas:
+- Día 1: muscles incluye "pecho"
+  * Seleccionar ejercicios que trabajen DIFERENTES zonas:
+    - 1 ejercicio con muscle_zones: ["pecho_superior"] (ej: Press inclinado)
+    - 1-2 ejercicios con muscle_zones: ["pecho_medio"] (ej: Press de banca, Aperturas)
+    - 1 ejercicio con muscle_zones: ["pecho_inferior"] (ej: Press declinado)
+  * Combinar: compound (principal) + isolation (complementario)
+  * Resultado: Rutina profesional que trabaja todas las zonas del pecho
 ```
 
-### Ejemplo 4: Usuario tiene solo "dumbbells"
+### Ejemplo 4: Usuario quiere "espalda" (un músculo por día)
+
+```
+Buscar: muscles incluye "espalda"
+Distribuir por zonas:
+- 1 ejercicio para lats (ej: Jalones al pecho)
+- 1 ejercicio para espalda_media (ej: Remo con barra)
+- 1 ejercicio para espalda_superior (ej: Jalones tras nuca)
+- 1 ejercicio para romboides (ej: Face pulls)
+Resultado: Rutina completa que trabaja todas las zonas de la espalda
+```
+
+### Ejemplo 5: Usuario tiene solo "dumbbells"
 
 ```
 Filtrar: equipment incluye "dumbbells" O equipment = "none"
 ```
 
-### Ejemplo 5: Usuario es "beginner" y quiere "weight_loss"
+### Ejemplo 6: Usuario es "beginner" y quiere "weight_loss"
 
 ```
 Filtrar:
@@ -698,9 +781,36 @@ Filtrar:
 1. **Mínimo de ejercicios por categoría**: 5-10 ejercicios para tener variedad
 2. **Categorías principales**: Priorizar fuerza_superior_push, fuerza_superior_pull, fuerza_inferior, cardio, core
 3. **Metadata completa**: Asegurar que cada ejercicio tenga muscles, movement_type, equipment bien definidos
-4. **Variaciones de nombres**: Incluir name_variations para mejorar el matching
-5. **Niveles de dificultad**: Asignar correctamente beginner/intermediate/advanced
-6. **Equipamiento alternativo**: Especificar equipment_alternatives para flexibilidad
+4. **Zonas musculares**: Especificar muscle_zones para cada ejercicio (permite rutinas profesionales por músculo)
+5. **Variaciones de nombres**: Incluir name_variations para mejorar el matching
+6. **Niveles de dificultad**: Asignar correctamente beginner/intermediate/advanced
+7. **Equipamiento alternativo**: Especificar equipment_alternatives para flexibilidad
+
+## 🎯 INSTRUCCIONES PARA LA IA SOBRE ZONAS MUSCULARES
+
+Cuando el usuario pida trabajar un grupo muscular específico (ej: "pecho", "espalda", "piernas"):
+
+1. **Buscar ejercicios del músculo**: `muscles incluye "pecho"`
+
+2. **Distribuir por zonas**: Seleccionar ejercicios que trabajen DIFERENTES zonas del músculo:
+   - Si hay 3+ zonas: incluir al menos 1 ejercicio por zona
+   - Si hay 2 zonas: incluir ejercicios de ambas zonas
+   - Variar los ángulos y tipos de movimiento
+
+3. **Combinar tipos de ejercicio**:
+   - Empezar con ejercicios compuestos (compound) que trabajen múltiples zonas
+   - Agregar ejercicios de aislamiento (isolation) para zonas específicas
+   - Progresión: compuesto pesado → compuesto medio → aislamiento
+
+4. **Ejemplo de rutina profesional de "pecho"**:
+   ```
+   - Press inclinado (compound) → pecho_superior
+   - Press de banca (compound) → pecho_medio (principal)
+   - Press declinado (compound) → pecho_inferior
+   - Aperturas con mancuernas (isolation) → pecho_medio/inferior (bombeo)
+   ```
+
+5. **Variar entre sesiones**: Si el usuario entrena el mismo músculo múltiples veces por semana, variar los ejercicios pero mantener la distribución de zonas.
 
 ---
 
