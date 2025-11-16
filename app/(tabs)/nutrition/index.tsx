@@ -21,6 +21,7 @@ import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../../src/services/supabase';
 import { LoadingOverlay } from '../../../src/components/LoadingOverlay';
 import { useLoadingState } from '../../../src/hooks/useLoadingState';
+import { SkeletonBox } from '../../../src/components/SkeletonLoaders';
 import {
   computeAndSaveTargets,
   createOrUpdateMealPlan,
@@ -63,7 +64,7 @@ const WeekCard = React.memo(({
   }, [weekStartDate, weekEndDate]);
 
   const adherenceColor = useMemo(() => {
-    return week.adherence >= 70 ? '#00D4AA' : week.adherence >= 50 ? '#FFD93D' : '#FF6B6B';
+    return week.adherence >= 70 ? '#ffb300' : week.adherence >= 50 ? '#FFD93D' : '#FF6B6B';
   }, [week.adherence]);
 
   return (
@@ -157,6 +158,42 @@ const NextWeekCard = React.memo(({ onPress }: { onPress: () => void }) => {
     </TouchableOpacity>
   );
 });
+
+// Skeleton para tarjeta de semana
+const SkeletonWeekCard = React.memo(() => (
+  <View style={styles.weekCard}>
+    <View style={styles.weekCardHeader}>
+      <SkeletonBox width="60%" height={16} borderRadius={4} />
+      <SkeletonBox width={50} height={20} borderRadius={12} />
+    </View>
+    <SkeletonBox width="40%" height={12} borderRadius={4} style={{ marginBottom: 12 }} />
+    
+    {/* Adherencia skeleton */}
+    <View style={styles.adherenceContainer}>
+      <SkeletonBox width="50%" height={12} borderRadius={4} style={{ marginBottom: 4 }} />
+      <View style={styles.adherenceBar}>
+        <SkeletonBox width="70%" height={6} borderRadius={3} />
+      </View>
+      <SkeletonBox width="30%" height={12} borderRadius={4} style={{ alignSelf: 'flex-end', marginTop: 4 }} />
+    </View>
+
+    {/* Resumen skeleton */}
+    <View style={styles.weekSummary}>
+      <View style={styles.summaryRow}>
+        <SkeletonBox width="40%" height={11} borderRadius={4} />
+        <SkeletonBox width="35%" height={11} borderRadius={4} />
+      </View>
+      <View style={styles.summaryRow}>
+        <SkeletonBox width="40%" height={11} borderRadius={4} />
+        <SkeletonBox width="35%" height={11} borderRadius={4} />
+      </View>
+      <View style={styles.summaryRow}>
+        <SkeletonBox width="40%" height={11} borderRadius={4} />
+        <SkeletonBox width="35%" height={11} borderRadius={4} />
+      </View>
+    </View>
+  </View>
+));
 
 // Componente para el scroll de historial
 const WeeklyHistoryScrollView = React.memo(({
@@ -598,7 +635,7 @@ export default function NutritionHomeScreen() {
   const loadNutritionData = async () => {
     if (!user?.id) return;
 
-    setIsLoading(true);
+    setLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
 
@@ -795,7 +832,7 @@ export default function NutritionHomeScreen() {
             <Text style={styles.sectionTitle}>📊 {formatDate(selectedDate)}</Text>
             <View style={styles.headerActions}>
               <TouchableOpacity onPress={() => changeDate(-1)} style={styles.dateNavButton}>
-                <Ionicons name="chevron-back" size={20} color="#00D4AA" />
+                <Ionicons name="chevron-back" size={20} color="#ffb300" />
               </TouchableOpacity>
               <TouchableOpacity 
                 onPress={() => setShowDatePicker(true)} 
@@ -804,7 +841,7 @@ export default function NutritionHomeScreen() {
                 <Text style={styles.dateButtonText}>{new Date(selectedDate).toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' })}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => changeDate(1)} style={styles.dateNavButton}>
-                <Ionicons name="chevron-forward" size={20} color="#00D4AA" />
+                <Ionicons name="chevron-forward" size={20} color="#ffb300" />
               </TouchableOpacity>
               {selectedDate === new Date().toISOString().split('T')[0] && (
                 <TouchableOpacity 
@@ -913,7 +950,7 @@ export default function NutritionHomeScreen() {
               }}
               style={styles.refreshButton}
             >
-              <Ionicons name="refresh" size={20} color="#00D4AA" />
+              <Ionicons name="refresh" size={20} color="#ffb300" />
             </TouchableOpacity>
               )}
             </View>
@@ -935,7 +972,7 @@ export default function NutritionHomeScreen() {
                   styles.progressFill,
                   {
                     width: `${Math.min(100, (consumed.calories / (todayTarget?.calories || 1)) * 100)}%`,
-                    backgroundColor: '#00D4AA',
+                    backgroundColor: '#ffb300',
                   },
                 ]}
               />
@@ -1001,7 +1038,7 @@ export default function NutritionHomeScreen() {
             style={styles.detailButton}
           >
             <Text style={styles.detailButtonText}>Ver detalle completo</Text>
-            <Ionicons name="chevron-forward" size={20} color="#00D4AA" />
+            <Ionicons name="chevron-forward" size={20} color="#ffb300" />
           </TouchableOpacity>
         </View>
 
@@ -1028,7 +1065,7 @@ export default function NutritionHomeScreen() {
                     >
                       <Text style={styles.dateItemText}>{formatDate(dateStr)}</Text>
                       {dateStr === selectedDate && (
-                        <Ionicons name="checkmark" size={20} color="#00D4AA" />
+                        <Ionicons name="checkmark" size={20} color="#ffb300" />
                       )}
                     </TouchableOpacity>
                   );
@@ -1048,7 +1085,7 @@ export default function NutritionHomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>💧 Hidratación</Text>
           <View style={styles.waterCard}>
-            <Ionicons name="water" size={40} color="#00D4AA" />
+            <Ionicons name="water" size={40} color="#ffb300" />
             <Text style={styles.waterText}>
               {todayWater} / {targetWater} ml
             </Text>
@@ -1056,7 +1093,7 @@ export default function NutritionHomeScreen() {
               style={styles.addWaterButton}
               onPress={() => router.push(`/(tabs)/nutrition/log?type=water&date=${selectedDate}` as any)}
             >
-              <Ionicons name="add-circle" size={28} color="#00D4AA" />
+              <Ionicons name="add-circle" size={28} color="#ffb300" />
               <Text style={styles.addWaterText}>Agregar agua</Text>
             </TouchableOpacity>
           </View>
@@ -1066,10 +1103,15 @@ export default function NutritionHomeScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📅 Historial Semanal</Text>
           {loadingHistory ? (
-            <LoadingOverlay 
-              visible={true} 
-              message="Cargando historial..." 
-            />
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.weeksContainer}
+            >
+              <SkeletonWeekCard />
+              <SkeletonWeekCard />
+              <SkeletonWeekCard />
+            </ScrollView>
           ) : (
             <WeeklyHistoryScrollView
               weeklyHistory={weeklyHistory}
@@ -1087,7 +1129,7 @@ export default function NutritionHomeScreen() {
               style={styles.actionCard}
               onPress={() => router.push('/(tabs)/nutrition/plan' as any)}
             >
-              <Ionicons name="restaurant" size={32} color="#00D4AA" />
+              <Ionicons name="restaurant" size={32} color="#ffb300" />
               <Text style={styles.actionText}>Ver Plan</Text>
             </TouchableOpacity>
 
@@ -1095,7 +1137,7 @@ export default function NutritionHomeScreen() {
               style={styles.actionCard}
               onPress={() => router.push(`/(tabs)/nutrition/log?date=${selectedDate}` as any)}
             >
-              <Ionicons name="add-circle-outline" size={32} color="#00D4AA" />
+              <Ionicons name="add-circle-outline" size={32} color="#ffb300" />
               <Text style={styles.actionText}>Registrar Comida</Text>
               {selectedDate !== new Date().toISOString().split('T')[0] && (
                 <Text style={styles.actionSubtext}>Para el día seleccionado</Text>
@@ -1106,7 +1148,7 @@ export default function NutritionHomeScreen() {
               style={styles.actionCard}
               onPress={() => router.push('/(tabs)/nutrition/grocery' as any)}
             >
-              <Ionicons name="cart" size={32} color="#00D4AA" />
+              <Ionicons name="cart" size={32} color="#ffb300" />
               <Text style={styles.actionText}>Lista de Compras</Text>
             </TouchableOpacity>
           </View>
@@ -1132,7 +1174,7 @@ export default function NutritionHomeScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Ionicons name="calendar-outline" size={32} color="#00D4AA" />
+              <Ionicons name="calendar-outline" size={32} color="#ffb300" />
               <Text style={styles.modalTitle}>Próxima Semana</Text>
             </View>
             <Text style={styles.modalMessage}>
@@ -1210,7 +1252,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   macroRow: {
     flexDirection: 'row',
@@ -1243,7 +1285,7 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   waterText: {
     fontSize: 18,
@@ -1259,7 +1301,7 @@ const styles = StyleSheet.create({
   },
   addWaterText: {
     fontSize: 16,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
   },
   actionsGrid: {
@@ -1275,7 +1317,7 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   actionText: {
     fontSize: 14,
@@ -1286,7 +1328,7 @@ const styles = StyleSheet.create({
   },
   actionSubtext: {
     fontSize: 11,
-    color: '#00D4AA',
+    color: '#ffb300',
     marginTop: 4,
     textAlign: 'center',
   },
@@ -1302,7 +1344,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   dateButtonText: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1315,10 +1357,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#00D4AA',
+    borderTopColor: '#ffb300',
   },
   detailButtonText: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -1335,7 +1377,7 @@ const styles = StyleSheet.create({
     width: '85%',
     maxHeight: '70%',
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   modalTitle: {
     fontSize: 20,
@@ -1363,7 +1405,7 @@ const styles = StyleSheet.create({
   modalCloseButton: {
     marginTop: 16,
     padding: 12,
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 8,
     alignItems: 'center',
   },
@@ -1392,7 +1434,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   currentWeekCard: {
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     backgroundColor: '#1a2a2a',
   },
   nextWeekCard: {
@@ -1429,7 +1471,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   currentBadge: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,

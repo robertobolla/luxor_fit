@@ -236,13 +236,13 @@ export default function HomeScreen() {
             <Text style={styles.userName}>{userName || 'Usuario'}</Text>
           </View>
           <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
-            <Ionicons name="person-circle" size={48} color="#00D4AA" />
+            <Ionicons name="person-circle" size={48} color="#ffb300" />
           </TouchableOpacity>
         </View>
 
         {/* Fecha de hoy */}
         <View style={styles.dateCard}>
-          <Ionicons name="calendar" size={24} color="#00D4AA" />
+          <Ionicons name="calendar" size={24} color="#ffb300" />
           <Text style={styles.dateText}>
             {new Date().toLocaleDateString('es-ES', { 
               weekday: 'long', 
@@ -348,8 +348,8 @@ export default function HomeScreen() {
           style={styles.activityCard}
           onPress={() => router.push('/(tabs)/nutrition/today-detail' as any)}
           >
-            <View style={[styles.activityIcon, { backgroundColor: '#00D4AA20' }]}>
-              <Ionicons name="restaurant" size={32} color="#00D4AA" />
+            <View style={[styles.activityIcon, { backgroundColor: '#ffb30020' }]}>
+              <Ionicons name="restaurant" size={32} color="#ffb300" />
             </View>
             <View style={styles.activityContent}>
               <Text style={styles.activityTitle}>🥗 Dieta de Hoy</Text>
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 32,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     gap: 12,
   },
   dateText: {
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
   },
   activityExtraInfo: {
     fontSize: 12,
-    color: '#00D4AA',
+    color: '#ffb300',
     marginTop: 4,
     fontWeight: '600',
   },

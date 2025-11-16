@@ -33,8 +33,6 @@ export default function NutritionSettingsScreen() {
   const [isSaving, setIsSaving] = useState(false);
 
   const [mealsPerDay, setMealsPerDay] = useState(3);
-  const [fastingWindow, setFastingWindow] = useState('');
-  const [isFasting, setIsFasting] = useState(false);
   const [customPrompts, setCustomPrompts] = useState<string[]>([]);
   const [newPrompt, setNewPrompt] = useState('');
 
@@ -52,8 +50,6 @@ export default function NutritionSettingsScreen() {
       const profile = await getNutritionProfile(user.id);
       if (profile) {
         setMealsPerDay(profile.meals_per_day);
-        setFastingWindow(profile.fasting_window || '');
-        setIsFasting(!!profile.fasting_window);
         setCustomPrompts(profile.custom_prompts || []);
       }
     } catch (err) {
@@ -63,29 +59,12 @@ export default function NutritionSettingsScreen() {
     }
   };
 
-  const validateFastingWindow = (window: string): boolean => {
-    if (!window) return true; // Vacío es válido si no hace ayuno
-    const regex = /^\d{1,2}-\d{1,2}$/;
-    if (!regex.test(window)) return false;
-
-    const [start, end] = window.split('-').map(Number);
-    return start >= 0 && start <= 23 && end >= 0 && end <= 23 && start !== end;
-  };
-
   const handleSave = async () => {
     if (!user?.id) return;
 
     // Validaciones
     if (mealsPerDay < 1 || mealsPerDay > 6) {
       Alert.alert('Error', 'Las comidas por día deben estar entre 1 y 6.');
-      return;
-    }
-
-    if (isFasting && !validateFastingWindow(fastingWindow)) {
-      Alert.alert(
-        'Error',
-        'La ventana de ayuno debe tener el formato HH-HH (ej: 12-20) con horas válidas (0-23).'
-      );
       return;
     }
 
@@ -98,7 +77,7 @@ export default function NutritionSettingsScreen() {
     try {
       const result = await upsertNutritionProfile(user.id, {
         meals_per_day: mealsPerDay,
-        fasting_window: isFasting ? fastingWindow : null,
+        fasting_window: null,
         custom_prompts: customPrompts,
       });
 
@@ -241,7 +220,7 @@ export default function NutritionSettingsScreen() {
     return (
       <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="#00D4AA" />
+        <ActivityIndicator size="large" color="#ffb300" />
         <Text style={styles.loadingText}>Cargando configuración...</Text>
       </SafeAreaView>
     );
@@ -272,7 +251,7 @@ export default function NutritionSettingsScreen() {
               <Ionicons
                 name="remove-circle"
                 size={32}
-                color={mealsPerDay <= 1 ? '#444444' : '#00D4AA'}
+                color={mealsPerDay <= 1 ? '#444444' : '#ffb300'}
               />
             </TouchableOpacity>
             <Text style={styles.stepperValue}>{mealsPerDay}</Text>
@@ -284,39 +263,10 @@ export default function NutritionSettingsScreen() {
               <Ionicons
                 name="add-circle"
                 size={32}
-                color={mealsPerDay >= 6 ? '#444444' : '#00D4AA'}
+                color={mealsPerDay >= 6 ? '#444444' : '#ffb300'}
               />
             </TouchableOpacity>
           </View>
-        </View>
-
-        {/* Ayuno intermitente */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>⏰ Ayuno Intermitente</Text>
-          <TouchableOpacity
-            style={styles.toggleContainer}
-            onPress={() => setIsFasting(!isFasting)}
-          >
-            <Text style={styles.toggleLabel}>¿Haces ayuno intermitente?</Text>
-            <View style={[styles.toggle, isFasting && styles.toggleActive]}>
-              <View style={[styles.toggleThumb, isFasting && styles.toggleThumbActive]} />
-            </View>
-          </TouchableOpacity>
-
-          {isFasting && (
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Ventana de alimentación (HH-HH)</Text>
-              <Text style={styles.inputHelper}>Ejemplo: 12-20 (comer de 12pm a 8pm)</Text>
-              <TextInput
-                style={styles.input}
-                value={fastingWindow}
-                onChangeText={setFastingWindow}
-                placeholder="12-20"
-                placeholderTextColor="#666666"
-                keyboardType="default"
-              />
-            </View>
-          )}
         </View>
 
         {/* Preferencias personalizadas */}
@@ -431,7 +381,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   stepperButton: {
     padding: 8,
@@ -443,40 +393,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 40,
     minWidth: 60,
     textAlign: 'center',
-  },
-  toggleContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#00D4AA',
-  },
-  toggleLabel: {
-    fontSize: 16,
-    color: '#ffffff',
-  },
-  toggle: {
-    width: 50,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#2a2a2a',
-    justifyContent: 'center',
-    padding: 2,
-  },
-  toggleActive: {
-    backgroundColor: '#00D4AA',
-  },
-  toggleThumb: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#ffffff',
-  },
-  toggleThumbActive: {
-    alignSelf: 'flex-end',
   },
   inputContainer: {
     marginTop: 16,
@@ -500,13 +416,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#ffffff',
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   addButton: {
     position: 'absolute',
     right: 8,
     top: 40,
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 20,
     width: 36,
     height: 36,
@@ -527,7 +443,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     gap: 8,
   },
   promptText: {
@@ -544,7 +460,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 12,
     padding: 16,
     gap: 8,
@@ -559,7 +475,7 @@ const styles = StyleSheet.create({
   },
   inputUnit: {
     fontSize: 18,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: 'bold',
     marginLeft: 12,
   },
@@ -577,7 +493,7 @@ const styles = StyleSheet.create({
     borderColor: '#2a2a2a',
   },
   activityOptionActive: {
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     backgroundColor: '#0f2a25',
   },
   activityOptionContent: {
@@ -590,7 +506,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   activityOptionLabelActive: {
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   activityOptionDesc: {
     fontSize: 13,

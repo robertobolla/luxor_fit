@@ -162,7 +162,7 @@ export default function NotificationSettingsScreen() {
   }) => (
     <View style={styles.settingRow}>
       <View style={styles.settingLeft}>
-        <Ionicons name={icon as any} size={24} color="#00D4AA" />
+        <Ionicons name={icon as any} size={24} color="#ffb300" />
         <View style={styles.settingText}>
           <Text style={styles.settingTitle}>{title}</Text>
           {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
@@ -171,7 +171,7 @@ export default function NotificationSettingsScreen() {
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: '#E0E0E0', true: '#00D4AA' }}
+        trackColor={{ false: '#E0E0E0', true: '#ffb300' }}
         thumbColor={value ? '#FFFFFF' : '#FFFFFF'}
       />
     </View>
@@ -288,7 +288,7 @@ export default function NotificationSettingsScreen() {
           style={styles.testButton}
           onPress={testNotification}
         >
-          <Ionicons name="send" size={20} color="#00D4AA" />
+          <Ionicons name="send" size={20} color="#ffb300" />
           <Text style={styles.testButtonText}>Probar notificación</Text>
         </TouchableOpacity>
 
@@ -418,12 +418,12 @@ const styles = StyleSheet.create({
   },
   testButtonText: {
     fontSize: 16,
-    color: '#00D4AA',
+    color: '#ffb300',
     marginLeft: 8,
     fontWeight: '500',
   },
   saveButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingVertical: 16,
     borderRadius: 8,
     alignItems: 'center',

@@ -533,14 +533,14 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: '#00D4AA',
+    borderBottomColor: '#ffb300',
   },
   tabText: {
     fontSize: 16,
     color: '#999',
   },
   tabTextActive: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
   },
   periodNav: {
@@ -614,7 +614,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 1,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     borderStyle: 'dashed',
   },
   chartContent: {
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
   },
   bar: {
     width: '100%',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 4,
   },
   barHighlighted: {

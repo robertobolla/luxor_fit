@@ -8,7 +8,6 @@ import {
   RefreshControl,
   Dimensions,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +29,9 @@ import {
   ProgressComparisonCard,
   ProgressIndicator,
 } from '@/components/ProgressCharts';
+import { LoadingOverlay } from '@/components/LoadingOverlay';
+import { useLoadingState } from '@/hooks/useLoadingState';
+import { EmptyProgress } from '@/components/EmptyStates';
 
 const { width } = Dimensions.get('window');
 
@@ -93,7 +95,7 @@ export default function ProgressScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig | null>(null);
-  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
+  const { isLoading: isCheckingOnboarding, setLoading: setIsCheckingOnboarding, executeAsync } = useLoadingState(true);
   const [progressData, setProgressData] = useState<any>(null);
   const [comparison, setComparison] = useState<any>(null);
   const [progressGoals, setProgressGoals] = useState<any>(null);
@@ -128,7 +130,7 @@ export default function ProgressScreen() {
         return;
       }
 
-      try {
+      await executeAsync(async () => {
         const { data, error } = await supabase
           .from('user_profiles')
           .select('id, name, fitness_level')
@@ -145,11 +147,7 @@ export default function ProgressScreen() {
           // Redirigir al onboarding si no tiene perfil
           router.replace('/onboarding');
         }
-      } catch (error) {
-        console.error('Error inesperado al verificar onboarding:', error);
-      } finally {
-        setIsCheckingOnboarding(false);
-      }
+      }, { showError: false });
     };
 
     checkOnboarding();
@@ -176,7 +174,7 @@ export default function ProgressScreen() {
       if (!hasPermissions) {
         Alert.alert(
           'Permisos de Salud',
-          'Para mostrar tus estadísticas reales, FitMind necesita acceso a tus datos de salud (Apple Health o Google Fit).',
+          'Para mostrar tus estadísticas reales, Luxor Fitness necesita acceso a tus datos de salud (Apple Health o Google Fit).',
           [
             { text: 'Más tarde', style: 'cancel' },
             { 
@@ -438,11 +436,8 @@ export default function ProgressScreen() {
   // Mostrar loading mientras se verifica el onboarding
   if (isCheckingOnboarding) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#00D4AA" />
-        <Text style={{ color: '#ffffff', marginTop: 16, fontSize: 16 }}>
-          Cargando tu dashboard...
-        </Text>
+      <View style={styles.container}>
+        <LoadingOverlay visible={true} message="Cargando tu progreso..." fullScreen />
       </View>
     );
   }
@@ -464,7 +459,7 @@ export default function ProgressScreen() {
           >
             <Text style={styles.headerSubtitle}>{formatDate(selectedDate)}</Text>
             {!isToday && (
-              <Ionicons name="calendar" size={16} color="#00D4AA" style={{ marginLeft: 8 }} />
+              <Ionicons name="calendar" size={16} color="#ffb300" style={{ marginLeft: 8 }} />
             )}
           </TouchableOpacity>
         </View>
@@ -491,7 +486,7 @@ export default function ProgressScreen() {
           <RefreshControl 
             refreshing={refreshing} 
             onRefresh={onRefresh}
-            tintColor="#00D4AA"
+            tintColor="#ffb300"
           />
         }
       >
@@ -501,7 +496,7 @@ export default function ProgressScreen() {
             size={200}
             strokeWidth={12}
             progress={(mainMetricData.value / mainMetricData.goal) * 100}
-            color={mainMetricConfig.color}
+            color="#ffb300"
             icon={mainMetricConfig.icon as any}
             iconSize={60}
           />
@@ -544,7 +539,7 @@ export default function ProgressScreen() {
           style={styles.progressPhotosButton}
           onPress={() => router.push('/(tabs)/progress-photos' as any)}
         >
-          <Ionicons name="images" size={24} color="#00D4AA" />
+          <Ionicons name="images" size={24} color="#ffb300" />
           <View style={{ flex: 1 }}>
             <Text style={styles.progressPhotosTitle}>📸 Fotos de Progreso</Text>
             <Text style={styles.progressPhotosSubtitle}>
@@ -553,69 +548,6 @@ export default function ProgressScreen() {
           </View>
           <Ionicons name="chevron-forward" size={24} color="#666" />
         </TouchableOpacity>
-
-        {/* Sección de Gráficos de Progreso */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>📊 Análisis de Progreso</Text>
-            <TouchableOpacity
-              onPress={() => setComparisonPeriod(comparisonPeriod === 'week' ? 'month' : 'week')}
-              style={styles.periodToggle}
-            >
-              <Text style={styles.periodToggleText}>
-                {comparisonPeriod === 'week' ? '📅 Semanal' : '📆 Mensual'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Gráfico de Peso y Composición */}
-          {progressData && progressData.length > 0 && (
-            <BodyMetricsChart data={progressData} title="Peso y Composición Corporal" />
-          )}
-
-          {/* Comparación Semanal/Mensual */}
-          {comparison && (
-            <ProgressComparisonCard comparison={comparison} />
-          )}
-
-          {/* Indicadores de Progreso hacia Objetivos */}
-          {progressGoals && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🎯 Progreso hacia Objetivos</Text>
-              
-              {progressGoals.weightProgress && (
-                <ProgressIndicator
-                  title="Peso"
-                  current={progressGoals.weightProgress.current}
-                  target={progressGoals.weightProgress.target}
-                  progress={progressGoals.weightProgress.progress}
-                  unit=" kg"
-                  direction={progressGoals.weightProgress.direction}
-                />
-              )}
-
-              {progressGoals.bodyFatProgress && (
-                <ProgressIndicator
-                  title="Grasa Corporal"
-                  current={progressGoals.bodyFatProgress.current}
-                  target={progressGoals.bodyFatProgress.target}
-                  progress={progressGoals.bodyFatProgress.progress}
-                  unit="%"
-                />
-              )}
-
-              {progressGoals.muscleProgress && (
-                <ProgressIndicator
-                  title="Masa Muscular"
-                  current={progressGoals.muscleProgress.current}
-                  target={progressGoals.muscleProgress.target}
-                  progress={progressGoals.muscleProgress.progress}
-                  unit="%"
-                />
-              )}
-            </View>
-          )}
-        </View>
 
         {/* Sección de Recuperación */}
         <View style={styles.section}>
@@ -631,7 +563,7 @@ export default function ProgressScreen() {
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="moon" size={22} color="#00D4AA" />
+                <Ionicons name="moon" size={22} color="#ffb300" />
               </View>
             </View>
           </View>
@@ -707,7 +639,7 @@ export default function ProgressScreen() {
                 size={70}
                 strokeWidth={5}
                 progress={(stats.steps / stats.stepsGoal) * 100}
-                color="#00D4AA"
+                color="#ffb300"
                 icon="footsteps"
                 iconSize={20}
               />
@@ -728,7 +660,7 @@ export default function ProgressScreen() {
                 size={70}
                 strokeWidth={5}
                 progress={(stats.distance / stats.distanceGoal) * 100}
-                color="#00D4AA"
+                color="#ffb300"
                 icon="location"
                 iconSize={20}
               />
@@ -749,7 +681,7 @@ export default function ProgressScreen() {
                 size={70}
                 strokeWidth={5}
                 progress={(stats.calories / stats.caloriesGoal) * 100}
-                color="#00D4AA"
+                color="#ffb300"
                 icon="flame"
                 iconSize={20}
               />
@@ -767,7 +699,7 @@ export default function ProgressScreen() {
                 <Text style={styles.cardSubtitle}>Macros, agua y lecciones</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="restaurant" size={22} color="#00D4AA" />
+                <Ionicons name="restaurant" size={22} color="#ffb300" />
               </View>
             </View>
           </TouchableOpacity>
@@ -787,7 +719,7 @@ export default function ProgressScreen() {
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="fitness" size={22} color="#00D4AA" />
+                <Ionicons name="fitness" size={22} color="#ffb300" />
               </View>
             </View>
           </View>
@@ -802,7 +734,7 @@ export default function ProgressScreen() {
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="water" size={22} color="#00D4AA" />
+                <Ionicons name="water" size={22} color="#ffb300" />
               </View>
             </View>
           </View>
@@ -820,7 +752,7 @@ export default function ProgressScreen() {
                 <Text style={styles.cardSubtitle}>Toca para configurar</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="flower" size={22} color="#00D4AA" />
+                <Ionicons name="flower" size={22} color="#ffb300" />
               </View>
             </View>
           </View>
@@ -840,7 +772,7 @@ export default function ProgressScreen() {
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="restaurant" size={22} color="#00D4AA" />
+                <Ionicons name="restaurant" size={22} color="#ffb300" />
               </View>
             </View>
           </View>
@@ -858,7 +790,7 @@ export default function ProgressScreen() {
                 size={70}
                 strokeWidth={5}
                 progress={(stats.water / stats.waterGoal) * 100}
-                color="#00D4AA"
+                color="#ffb300"
                 icon="water"
                 iconSize={20}
               />
@@ -932,7 +864,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     gap: 12,
   },
   progressPhotosTitle: {
@@ -1011,7 +943,7 @@ const styles = StyleSheet.create({
   },
   periodToggleText: {
     fontSize: 14,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
   },
   card: {
@@ -1088,7 +1020,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dayBarCompleted: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   dayLabel: {
     fontSize: 12,

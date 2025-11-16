@@ -37,9 +37,9 @@ export default function NutritionAdjustmentModal({
   };
 
   const getColor = () => {
-    if (adjustment.explanation.includes('✅')) return '#00D4AA';
+    if (adjustment.explanation.includes('✅')) return '#ffb300';
     if (adjustment.explanation.includes('⚠️')) return '#FFA500';
-    return '#00D4AA';
+    return '#ffb300';
   };
 
   return (
@@ -69,7 +69,7 @@ export default function NutritionAdjustmentModal({
               <Text style={styles.caloriesValue}>{adjustment.calories} kcal</Text>
               {adjustment.caloriesChange !== 0 && (
                 <Text style={[styles.caloriesChange, {
-                  color: adjustment.caloriesChange > 0 ? '#FFA500' : '#00D4AA'
+                  color: adjustment.caloriesChange > 0 ? '#FFA500' : '#ffb300'
                 }]}>
                   {adjustment.caloriesChange > 0 ? '+' : ''}{adjustment.caloriesChange} kcal
                 </Text>
@@ -100,7 +100,7 @@ const styles = StyleSheet.create({
     width: '90%',
     maxHeight: '80%',
     borderWidth: 2,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   iconContainer: {
     width: 80,
@@ -132,7 +132,7 @@ const styles = StyleSheet.create({
   messageTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 8,
   },
   message: {
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   caloriesValue: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 4,
   },
   caloriesChange: {
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   closeButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',

@@ -30,6 +30,7 @@ export default function Exercises() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<ExerciseVideoRow | null>(null);
   const [newExerciseName, setNewExerciseName] = useState('');
+  const [syncing, setSyncing] = useState(false);
   
   const isAdmin = userRole === 'admin';
 
@@ -83,6 +84,109 @@ export default function Exercises() {
     fileInputRef.current?.click();
   };
 
+  const syncExercisesFromPlans = async () => {
+    if (!isAdmin) {
+      setError('❌ Solo los administradores pueden sincronizar ejercicios');
+      return;
+    }
+
+    setSyncing(true);
+    setError(null);
+    try {
+      // Obtener todos los planes de entrenamiento
+      const { data: plans, error: plansError } = await supabase
+        .from('workout_plans')
+        .select('plan_data')
+        .not('plan_data', 'is', null);
+
+      if (plansError) throw plansError;
+
+      // Extraer todos los nombres únicos de ejercicios (normalizados)
+      // Usamos un Map para mantener el nombre original pero normalizar para comparación
+      const exerciseNamesMap = new Map<string, string>(); // key: lowercase, value: original
+
+      plans?.forEach((plan: any) => {
+        const planData = plan.plan_data;
+        if (planData?.weekly_structure && Array.isArray(planData.weekly_structure)) {
+          planData.weekly_structure.forEach((day: any) => {
+            if (day.exercises && Array.isArray(day.exercises)) {
+              day.exercises.forEach((exercise: any) => {
+                // Puede ser string o objeto con campo "name"
+                const exerciseName = typeof exercise === 'string' 
+                  ? exercise 
+                  : (exercise?.name || exercise?.exercise_name);
+                
+                if (exerciseName && typeof exerciseName === 'string' && exerciseName.trim().length > 0) {
+                  const trimmed = exerciseName.trim();
+                  const normalized = trimmed.toLowerCase();
+                  
+                  // Si ya existe con diferente capitalización, mantener el que tiene más mayúsculas
+                  // (generalmente el más "correcto" gramaticalmente)
+                  if (!exerciseNamesMap.has(normalized)) {
+                    exerciseNamesMap.set(normalized, trimmed);
+                  } else {
+                    // Si el nuevo tiene más mayúsculas, usarlo
+                    const existing = exerciseNamesMap.get(normalized)!;
+                    const existingCaps = (existing.match(/[A-Z]/g) || []).length;
+                    const newCaps = (trimmed.match(/[A-Z]/g) || []).length;
+                    if (newCaps > existingCaps) {
+                      exerciseNamesMap.set(normalized, trimmed);
+                    }
+                  }
+                }
+              });
+            }
+          });
+        }
+      });
+
+      const exerciseNames = Array.from(exerciseNamesMap.values());
+
+      // Verificar qué ejercicios ya existen (case insensitive)
+      const { data: existingExercises, error: checkError } = await supabase
+        .from('exercise_videos')
+        .select('canonical_name');
+
+      if (checkError) throw checkError;
+
+      const existingNames = new Set(
+        (existingExercises || []).map((e: any) => e.canonical_name.toLowerCase())
+      );
+
+      // Insertar solo ejercicios que NO existen (case insensitive)
+      let addedCount = 0;
+      for (const exerciseName of exerciseNames) {
+        const normalized = exerciseName.toLowerCase();
+        
+        // Solo insertar si no existe (case insensitive)
+        if (!existingNames.has(normalized)) {
+          const { error: insertError } = await supabase
+            .from('exercise_videos')
+            .insert({
+              canonical_name: exerciseName,
+              name_variations: [normalized],
+              video_url: null,
+              is_storage_video: false,
+              is_primary: true,
+              priority: 1,
+              language: 'es'
+            });
+
+          if (!insertError) {
+            addedCount++;
+          }
+        }
+      }
+
+      await load();
+      alert(`✅ Sincronización completada. ${addedCount} ejercicios nuevos agregados de ${exerciseNames.length} ejercicios únicos encontrados en los planes.`);
+    } catch (e: any) {
+      setError(e.message || 'Error al sincronizar ejercicios');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !selectedExercise) return;
@@ -104,11 +208,21 @@ export default function Exercises() {
       });
       if (upErr) throw upErr;
 
+      // Asegurar que name_variations incluya al menos el nombre normalizado (minúsculas)
+      // para que la búsqueda funcione correctamente
+      const normalizedName = selectedExercise.canonical_name.toLowerCase().trim();
+      const existingVariations = selectedExercise.name_variations || [];
+      const nameVariations = Array.from(new Set([
+        normalizedName,  // Siempre incluir el nombre normalizado
+        selectedExercise.canonical_name,  // Incluir el nombre original
+        ...existingVariations  // Incluir variaciones existentes
+      ]));
+
       const { error: dbErr } = await supabase
         .from('exercise_videos')
         .upsert({
           canonical_name: selectedExercise.canonical_name,
-          name_variations: selectedExercise.name_variations || [],
+          name_variations: nameVariations,
           video_url: null,
           storage_path: path,
           is_storage_video: true,
@@ -135,7 +249,7 @@ export default function Exercises() {
       <h1>Catálogo de Ejercicios</h1>
       <p style={{ color: '#888' }}>Busca un ejercicio y sube un video asociado con un clic</p>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <input
           type="text"
           placeholder="Buscar ejercicio..."
@@ -143,7 +257,17 @@ export default function Exercises() {
           onChange={(e) => { setPage(1); setSearch(e.target.value); }}
           style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #2a2a2a', background: '#0a0a0a', color: '#fff', width: 320 }}
         />
-        <button onClick={load} className="btn-secondary">Recargar</button>
+        <button onClick={load} className="btn-secondary" disabled={loading}>Recargar</button>
+        {isAdmin && (
+          <button 
+            onClick={syncExercisesFromPlans} 
+            className="btn-primary"
+            disabled={syncing || loading}
+            title="Sincroniza ejercicios de los planes de entrenamiento generados"
+          >
+            {syncing ? 'Sincronizando...' : '🔄 Sincronizar de Planes'}
+          </button>
+        )}
         {error && <span style={{ color: '#ff6b6b' }}>❌ {error}</span>}
       </div>
 

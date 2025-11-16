@@ -74,7 +74,10 @@ export async function getExerciseVideo(
     }
 
     const video = data[0] as ExerciseVideo;
-    console.log(`✅ Video encontrado: ${video.canonical_name} -> ${video.video_url}`);
+    console.log(`✅ Video encontrado: ${video.canonical_name}`);
+    console.log(`   - video_url: ${video.video_url}`);
+    console.log(`   - storage_path: ${video.storage_path}`);
+    console.log(`   - is_storage_video: ${video.is_storage_video}`);
     return video;
   } catch (error) {
     console.error('❌ Error inesperado al buscar video:', error);
@@ -121,28 +124,51 @@ export function getYouTubeSearchUrl(exerciseName: string): string {
  */
 export async function getExerciseVideoUrl(exerciseName: string): Promise<string | null> {
   try {
+    console.log(`🔍 [getExerciseVideoUrl] Buscando URL para: "${exerciseName}"`);
     const video = await getExerciseVideo(exerciseName);
 
-    if (!video || !video.video_url) {
-      console.log(`⚠️ No hay video asignado para: "${exerciseName}"`);
+    if (!video) {
+      console.log(`⚠️ [getExerciseVideoUrl] No se encontró video para: "${exerciseName}"`);
       return null;
     }
 
+    console.log(`✅ [getExerciseVideoUrl] Video encontrado:`, {
+      canonical_name: video.canonical_name,
+      is_storage_video: video.is_storage_video,
+      storage_path: video.storage_path,
+      video_url: video.video_url
+    });
+
     // Si el video está en Supabase Storage, usar la URL pública
     if (video.is_storage_video && video.storage_path) {
-      const { data } = supabase.storage
+      console.log(`📦 [getExerciseVideoUrl] Generando URL pública para storage_path: "${video.storage_path}"`);
+      const { data, error } = supabase.storage
         .from('exercise-videos')
         .getPublicUrl(video.storage_path);
       
-      console.log(`📹 Video de Supabase Storage: ${data.publicUrl}`);
+      if (error) {
+        console.error(`❌ [getExerciseVideoUrl] Error al generar URL pública:`, error);
+        return null;
+      }
+      
+      console.log(`📹 [getExerciseVideoUrl] URL pública generada: ${data.publicUrl}`);
       return data.publicUrl;
     }
 
     // Si es URL externa, devolverla tal cual
-    console.log(`📹 Video externo: ${video.video_url}`);
-    return video.video_url;
+    if (video.video_url) {
+      console.log(`📹 [getExerciseVideoUrl] Usando video_url externa: ${video.video_url}`);
+      return video.video_url;
+    }
+
+    // Si no tiene ni storage_path ni video_url
+    console.log(`⚠️ [getExerciseVideoUrl] Video encontrado pero sin URL válida para: "${exerciseName}"`);
+    console.log(`   - is_storage_video: ${video.is_storage_video}`);
+    console.log(`   - storage_path: ${video.storage_path}`);
+    console.log(`   - video_url: ${video.video_url}`);
+    return null;
   } catch (error) {
-    console.error('❌ Error al obtener URL del video:', error);
+    console.error('❌ [getExerciseVideoUrl] Error inesperado:', error);
     return null;
   }
 }
@@ -157,18 +183,21 @@ export async function openExerciseVideo(
   onOpenUrl: (url: string) => void | Promise<void>
 ): Promise<boolean> {
   try {
+    console.log(`🎬 [openExerciseVideo] Intentando abrir video para: "${exerciseName}"`);
     const videoUrl = await getExerciseVideoUrl(exerciseName);
 
     if (videoUrl) {
-      console.log(`📹 Abriendo video asignado: ${videoUrl}`);
+      console.log(`📹 [openExerciseVideo] URL obtenida: ${videoUrl}`);
+      console.log(`📹 [openExerciseVideo] Llamando a onOpenUrl...`);
       await onOpenUrl(videoUrl);
+      console.log(`✅ [openExerciseVideo] onOpenUrl ejecutado exitosamente`);
       return true;
     } else {
-      console.log(`⚠️ No hay video asignado para: "${exerciseName}"`);
+      console.log(`⚠️ [openExerciseVideo] No hay video asignado para: "${exerciseName}"`);
       return false;
     }
   } catch (error) {
-    console.error('❌ Error al abrir video:', error);
+    console.error('❌ [openExerciseVideo] Error al abrir video:', error);
     return false;
   }
 }

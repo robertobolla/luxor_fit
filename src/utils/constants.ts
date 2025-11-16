@@ -1,13 +1,13 @@
-// Colores de la aplicación
+// Colores de la aplicación - Luxor Fitness
 export const COLORS = {
-  primary: '#F7931E', // Naranja Luxor
-  secondary: '#1a1a1a',
-  background: '#1a1a1a',
-  surface: '#2a2a2a',
-  text: '#ffffff',
-  textSecondary: '#666',
-  textTertiary: '#ccc',
-  border: '#333',
+  primary: '#ffb300', // Amarillo dorado Luxor (más oscuro para mejor contraste)
+  secondary: '#1a1a1a', // Fondo secundario (tarjetas)
+  background: '#0a0a0a', // Fondo principal
+  surface: '#1a1a1a', // Superficie de tarjetas
+  text: '#ffffff', // Texto principal
+  textSecondary: '#cccccc', // Texto secundario
+  textTertiary: '#999999', // Texto terciario
+  border: '#333333', // Bordes
   error: '#F44336',
   warning: '#FF9800',
   success: '#4CAF50',

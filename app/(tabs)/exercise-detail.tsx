@@ -721,7 +721,7 @@ export default function ExerciseDetailScreen() {
                     onPress={handleStartMonitoring}
                   >
                     <View style={styles.optionIconContainer}>
-                      <Ionicons name="play-circle" size={40} color="#00D4AA" />
+                      <Ionicons name="play-circle" size={40} color="#ffb300" />
                     </View>
                     <View style={styles.optionTextContainer}>
                       <Text style={styles.optionTitle}>Empezar a monitorizar</Text>
@@ -739,7 +739,7 @@ export default function ExerciseDetailScreen() {
                     onPress={handleRegisterActivity}
                   >
                     <View style={styles.optionIconContainer}>
-                      <Ionicons name="create" size={40} color="#00D4AA" />
+                      <Ionicons name="create" size={40} color="#ffb300" />
                     </View>
                     <View style={styles.optionTextContainer}>
                       <Text style={styles.optionTitle}>Registrar una actividad</Text>
@@ -777,7 +777,7 @@ export default function ExerciseDetailScreen() {
                       onPress={() => handleSelectMonitorActivity(activity)}
                     >
                       <View style={styles.activityIconContainer}>
-                        <Ionicons name={activity.icon as any} size={32} color="#00D4AA" />
+                        <Ionicons name={activity.icon as any} size={32} color="#ffb300" />
                       </View>
                       <Text style={styles.activityName}>{activity.name}</Text>
                       <Ionicons name="chevron-forward" size={24} color="#666" />
@@ -811,7 +811,7 @@ export default function ExerciseDetailScreen() {
                       onPress={() => handleSelectManualActivity(activity)}
                     >
                       <View style={styles.activityIconContainer}>
-                        <Ionicons name={activity.icon as any} size={32} color="#00D4AA" />
+                        <Ionicons name={activity.icon as any} size={32} color="#ffb300" />
                       </View>
                       <Text style={styles.activityName}>{activity.name}</Text>
                       <Ionicons name="chevron-forward" size={24} color="#666" />
@@ -836,7 +836,7 @@ export default function ExerciseDetailScreen() {
 
                 <View style={styles.trackingContainer}>
                   <View style={styles.mapPlaceholder}>
-                    <Ionicons name="map" size={80} color="#00D4AA" />
+                    <Ionicons name="map" size={80} color="#ffb300" />
                     <Text style={styles.mapPlaceholderText}>
                       Mapa GPS en vivo
                     </Text>
@@ -844,7 +844,7 @@ export default function ExerciseDetailScreen() {
 
                   <View style={styles.trackingStats}>
                     <View style={styles.trackingStat}>
-                      <Ionicons name="time" size={32} color="#00D4AA" />
+                      <Ionicons name="time" size={32} color="#ffb300" />
                       <Text style={styles.trackingStatValue}>
                         {Math.floor(trackingTime / 60)}:{String(trackingTime % 60).padStart(2, '0')}
                       </Text>
@@ -852,7 +852,7 @@ export default function ExerciseDetailScreen() {
                     </View>
 
                     <View style={styles.trackingStat}>
-                      <Ionicons name="navigate" size={32} color="#00D4AA" />
+                      <Ionicons name="navigate" size={32} color="#ffb300" />
                       <Text style={styles.trackingStatValue}>
                         {distance.toFixed(2)} km
                       </Text>
@@ -860,7 +860,7 @@ export default function ExerciseDetailScreen() {
                     </View>
 
                     <View style={styles.trackingStat}>
-                      <Ionicons name="speedometer" size={32} color="#00D4AA" />
+                      <Ionicons name="speedometer" size={32} color="#ffb300" />
                       <Text style={styles.trackingStatValue}>
                         {currentSpeed.toFixed(1)}
                       </Text>
@@ -1004,14 +1004,14 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: '#00D4AA',
+    borderBottomColor: '#ffb300',
   },
   tabText: {
     fontSize: 16,
     color: '#999',
   },
   tabTextActive: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
   },
   periodNav: {
@@ -1074,7 +1074,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
   },
   dayBarCompleted: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   dayBarToday: {
     borderWidth: 2,
@@ -1146,7 +1146,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterTabActive: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   filterIcon: {
     marginRight: 4,
@@ -1401,7 +1401,7 @@ const styles = StyleSheet.create({
   },
   intensityButtonActive: {
     backgroundColor: '#2a6d5e',
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   intensityButtonText: {
     fontSize: 14,

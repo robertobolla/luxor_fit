@@ -133,7 +133,7 @@ export default function LoginScreen() {
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
-          <Text style={styles.title}>¡Bienvenido a FitMind!</Text>
+          <Text style={styles.title}>¡Bienvenido a Luxor Fitness!</Text>
           <Text style={styles.subtitle}>
             Tu entrenador personal con IA
           </Text>
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: '#00D4AA',
+    color: '#ffb300',
     textAlign: 'center',
   },
   form: {
@@ -289,12 +289,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   primaryButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   secondaryButton: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   buttonText: {
     color: '#1a1a1a',
@@ -302,7 +302,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   secondaryButtonText: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   linkText: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   oauthButtonText: {
     color: '#ffffff',
@@ -355,7 +355,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   resetPasswordText: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontSize: 14,
     textDecorationLine: 'underline',
   },

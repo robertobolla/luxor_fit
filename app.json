@@ -2,7 +2,7 @@
   "expo": {
     "name": "Luxor Fitness",
     "slug": "fitmind",
-    "version": "1.0.0",
+    "version": "1.0.4",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -13,11 +13,12 @@
     "userInterfaceStyle": "automatic",
     "splash": {
       "resizeMode": "contain",
-      "backgroundColor": "#1a1a1a"
+      "backgroundColor": "#0a0a0a"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.luxorfitness.app",
+      "buildNumber": "3",
       "infoPlist": {
         "NSHealthShareUsageDescription": "Luxor Fitness necesita acceso a tus datos de salud para mostrarte estadísticas personalizadas de pasos, calorías, distancia y sueño.",
         "NSHealthUpdateUsageDescription": "Luxor Fitness puede actualizar tus datos de salud cuando registres entrenamientos.",
@@ -25,7 +26,8 @@
         "NSLocationWhenInUseUsageDescription": "Luxor Fitness necesita acceso a tu ubicación para rastrear tus actividades físicas con GPS.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Luxor Fitness necesita acceso a tu ubicación para rastrear tus actividades físicas en segundo plano.",
         "NSCameraUsageDescription": "Luxor Fitness necesita acceso a tu cámara para tomar fotos de progreso y documentar tus cambios físicos.",
-        "NSPhotoLibraryUsageDescription": "Luxor Fitness necesita acceso a tu galería para guardar y seleccionar fotos de progreso."
+        "NSPhotoLibraryUsageDescription": "Luxor Fitness necesita acceso a tu galería para guardar y seleccionar fotos de progreso.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
@@ -34,7 +36,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#1a1a1a"
+        "backgroundColor": "#0a0a0a"
       },
       "package": "com.luxorfitness.app",
       "permissions": [
@@ -67,10 +69,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#F7931E",
-          "sounds": [
-            "./assets/notification-sound.wav"
-          ]
+          "color": "#ffb300"
         }
       ]
     ],

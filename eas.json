@@ -1,7 +1,7 @@
 {
     "cli": {
         "version": ">= 5.0.0",
-        "appVersionSource": "remote"
+        "appVersionSource": "local"
     },
     "build": {
         "development": {
@@ -23,6 +23,7 @@
                 "buildType": "apk"
             },
             "ios": {
+                "distribution": "store",
                 "resourceClass": "medium"
             }
         },
@@ -38,6 +39,10 @@
         }
     },
     "submit": {
-        "production": {}
+        "production": {
+            "ios": {
+                "ascAppId": "6755304934"
+            }
+        }
     }
 }

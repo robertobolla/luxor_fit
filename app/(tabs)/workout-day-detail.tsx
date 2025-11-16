@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  ActivityIndicator,
   Modal,
   TextInput,
   KeyboardAvoidingView,
@@ -15,12 +14,14 @@ import {
 import { useLocalSearchParams, router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
-import { Linking } from 'react-native';
 import { supabase } from '../../src/services/supabase';
 import { WorkoutCompletion } from '../../src/types';
 import PersonalRecordModal from '../../src/components/PersonalRecordModal';
+import ExerciseVideoModal from '../../src/components/ExerciseVideoModal';
 import { smartNotificationService } from '../../src/services/smartNotifications';
-import { openExerciseVideo } from '../../src/services/exerciseVideoService';
+import { getExerciseVideoUrl } from '../../src/services/exerciseVideoService';
+import { LoadingOverlay } from '../../src/components/LoadingOverlay';
+import { useRetry } from '../../src/hooks/useRetry';
 
 export default function WorkoutDayDetailScreen() {
   const params = useLocalSearchParams();
@@ -34,7 +35,6 @@ export default function WorkoutDayDetailScreen() {
   
   const [isCompleted, setIsCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [duration, setDuration] = useState('');
   const [difficulty, setDifficulty] = useState(3);
@@ -43,6 +43,11 @@ export default function WorkoutDayDetailScreen() {
   // Estados para el modal de records personales
   const [showPRModal, setShowPRModal] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState('');
+  
+  // Estados para el modal de video
+  const [showVideoModal, setShowVideoModal] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoExerciseName, setVideoExerciseName] = useState('');
   
   useEffect(() => {
     checkIfCompleted();
@@ -101,11 +106,13 @@ export default function WorkoutDayDetailScreen() {
     setShowCompletionModal(true);
   };
 
-  const handleSaveCompletion = async () => {
-    if (!user?.id || !planId || !dayName || !dayData) return;
-    
-    setIsSaving(true);
-    try {
+  // Hook para retry en guardado de entrenamiento
+  const saveCompletionWithRetry = useRetry(
+    async () => {
+      if (!user?.id || !planId || !dayName || !dayData) {
+        throw new Error('Datos incompletos');
+      }
+
       const completion = {
         user_id: user.id,
         workout_plan_id: planId,
@@ -136,6 +143,21 @@ export default function WorkoutDayDetailScreen() {
         'workout_completed'
       );
       
+      return data;
+    },
+    {
+      maxRetries: 2,
+      retryDelay: 2000,
+      showAlert: true,
+    }
+  );
+
+  const handleSaveCompletion = async () => {
+    if (!user?.id || !planId || !dayName || !dayData) return;
+    
+    const result = await saveCompletionWithRetry.executeWithRetry();
+    
+    if (result) {
       setIsCompleted(true);
       setShowCompletionModal(false);
       // Resetear campos
@@ -143,11 +165,6 @@ export default function WorkoutDayDetailScreen() {
       setDifficulty(3);
       setNotes('');
       Alert.alert('¡Felicitaciones! 🎉', 'Entrenamiento completado. ¡Sigue así!');
-    } catch (err: any) {
-      console.error('❌ Error saving completion:', err);
-      Alert.alert('Error', 'No se pudo guardar el entrenamiento.');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -155,6 +172,17 @@ export default function WorkoutDayDetailScreen() {
     setSelectedExercise(exerciseName);
     setShowPRModal(true);
   };
+
+  if (isLoading) {
+    return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <View style={styles.container}>
+          <LoadingOverlay visible={true} message="Cargando entrenamiento..." fullScreen />
+        </View>
+      </>
+    );
+  }
 
   if (!dayData) {
     return (
@@ -330,11 +358,11 @@ export default function WorkoutDayDetailScreen() {
         {/* Day Info */}
         <View style={styles.dayInfo}>
           <View style={styles.focusContainer}>
-            <Ionicons name="fitness" size={28} color="#00D4AA" />
+            <Ionicons name="fitness" size={28} color="#ffb300" />
             <Text style={styles.focusText}>{dayData.focus}</Text>
           </View>
           <View style={styles.durationBadge}>
-            <Ionicons name="time-outline" size={18} color="#00D4AA" />
+            <Ionicons name="time-outline" size={18} color="#ffb300" />
             <Text style={styles.durationText}>{dayData.duration} minutos</Text>
           </View>
         </View>
@@ -357,13 +385,13 @@ export default function WorkoutDayDetailScreen() {
             style={[
               styles.completionButton,
               isCompleted && styles.completionButtonCompleted,
-              isSaving && styles.completionButtonDisabled
+              saveCompletionWithRetry.isRetrying && styles.completionButtonDisabled
             ]}
             onPress={handleMarkAsCompleted}
-            disabled={isSaving || isCompleted}
+            disabled={saveCompletionWithRetry.isRetrying || isCompleted}
           >
-            {isSaving ? (
-              <ActivityIndicator color="#1a1a1a" />
+            {saveCompletionWithRetry.isRetrying ? (
+              <Text style={styles.completionButtonText}>Guardando...</Text>
             ) : (
               <>
                 <Ionicons 
@@ -421,18 +449,16 @@ export default function WorkoutDayDetailScreen() {
                       style={styles.videoButton}
                       onPress={async () => {
                         try {
-                          const opened = await openExerciseVideo(exerciseName, async (url) => {
-                            const supported = await Linking.canOpenURL(url);
-                            if (supported) {
-                              await Linking.openURL(url);
-                            } else {
-                              Alert.alert(
-                                'Error',
-                                `No se pudo abrir el video. URL: ${url}`
-                              );
-                            }
-                          });
-                          if (!opened) {
+                          console.log(`🎯 [workout-day-detail] Botón de video presionado para: "${exerciseName}"`);
+                          const url = await getExerciseVideoUrl(exerciseName);
+                          
+                          if (url) {
+                            console.log(`📹 [workout-day-detail] Video URL obtenida: ${url}`);
+                            setVideoUrl(url);
+                            setVideoExerciseName(exerciseName);
+                            setShowVideoModal(true);
+                          } else {
+                            console.log(`⚠️ [workout-day-detail] No hay video para: "${exerciseName}"`);
                             Alert.alert(
                               'Video no disponible',
                               `No hay video asignado para "${exerciseName}". Puedes agregar uno desde la configuración de ejercicios.`,
@@ -440,12 +466,12 @@ export default function WorkoutDayDetailScreen() {
                             );
                           }
                         } catch (error) {
-                          console.error('❌ Error al abrir video:', error);
-                          Alert.alert('Error', 'No se pudo abrir el video del ejercicio');
+                          console.error('❌ [workout-day-detail] Error al obtener video:', error);
+                          Alert.alert('Error', 'No se pudo cargar el video del ejercicio');
                         }
                       }}
                     >
-                      <Ionicons name="play-circle" size={20} color="#00D4AA" />
+                      <Ionicons name="play-circle" size={20} color="#ffb300" />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -453,11 +479,11 @@ export default function WorkoutDayDetailScreen() {
                 {!isOldFormat && sets && reps && (
                   <View style={styles.exerciseStats}>
                     <View style={styles.statBadge}>
-                      <Ionicons name="repeat" size={16} color="#00D4AA" />
+                      <Ionicons name="repeat" size={16} color="#ffb300" />
                       <Text style={styles.statBadgeText}>{sets} series</Text>
                     </View>
                     <View style={styles.statBadge}>
-                      <Ionicons name="fitness" size={16} color="#00D4AA" />
+                      <Ionicons name="fitness" size={16} color="#ffb300" />
                       <Text style={styles.statBadgeText}>{reps} reps</Text>
                     </View>
                   </View>
@@ -480,7 +506,7 @@ export default function WorkoutDayDetailScreen() {
         {/* Notas Finales */}
         <View style={styles.section}>
           <View style={styles.finalNotesCard}>
-            <Ionicons name="information-circle" size={24} color="#00D4AA" />
+            <Ionicons name="information-circle" size={24} color="#ffb300" />
             <View style={styles.finalNotesContent}>
               <Text style={styles.finalNotesTitle}>Recuerda</Text>
               <Text style={styles.finalNotesText}>
@@ -588,10 +614,10 @@ export default function WorkoutDayDetailScreen() {
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonConfirm]}
                 onPress={handleSaveCompletion}
-                disabled={isSaving}
+                disabled={saveCompletionWithRetry.isRetrying}
               >
-                {isSaving ? (
-                  <ActivityIndicator color="#1a1a1a" />
+                {saveCompletionWithRetry.isRetrying ? (
+                  <Text style={styles.modalButtonTextConfirm}>Guardando...</Text>
                 ) : (
                   <Text style={styles.modalButtonTextConfirm}>Guardar</Text>
                 )}
@@ -609,6 +635,14 @@ export default function WorkoutDayDetailScreen() {
         exerciseName={selectedExercise}
         workoutPlanId={planId}
         dayName={dayName}
+      />
+
+      {/* Modal de video del ejercicio */}
+      <ExerciseVideoModal
+        visible={showVideoModal}
+        videoUrl={videoUrl}
+        exerciseName={videoExerciseName}
+        onClose={() => setShowVideoModal(false)}
       />
     </>
   );
@@ -687,8 +721,8 @@ const styles = StyleSheet.create({
     borderColor: '#333',
   },
   difficultyButtonActive: {
-    backgroundColor: '#00D4AA',
-    borderColor: '#00D4AA',
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
   },
   difficultyText: {
     fontSize: 20,
@@ -713,7 +747,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2a2a2a',
   },
   modalButtonConfirm: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   modalButtonTextCancel: {
     color: '#ffffff',
@@ -740,7 +774,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   backButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -787,12 +821,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   focusText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#00D4AA',
+    color: '#ffb300',
     marginLeft: 12,
     flex: 1,
   },
@@ -807,7 +841,7 @@ const styles = StyleSheet.create({
   },
   durationText: {
     fontSize: 14,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
     marginLeft: 6,
   },
@@ -842,7 +876,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   exerciseHeader: {
     flexDirection: 'row',
@@ -854,7 +888,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -887,7 +921,7 @@ const styles = StyleSheet.create({
   videoButton: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: '#00D4AA20',
+    backgroundColor: '#ffb30020',
   },
   exerciseStats: {
     flexDirection: 'row',
@@ -903,7 +937,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
@@ -940,7 +974,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   statBadge: {
     flexDirection: 'row',
@@ -952,7 +986,7 @@ const styles = StyleSheet.create({
   },
   statBadgeText: {
     fontSize: 13,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
     marginLeft: 6,
   },
@@ -976,7 +1010,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     marginTop: 6,
     marginRight: 8,
   },
@@ -992,7 +1026,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   finalNotesContent: {
     flex: 1,
@@ -1001,7 +1035,7 @@ const styles = StyleSheet.create({
   finalNotesTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 8,
   },
   finalNotesText: {

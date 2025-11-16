@@ -208,7 +208,7 @@ export default function PersonalRecordModal({
 
       {isLoadingHistory ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00D4AA" />
+          <ActivityIndicator size="large" color="#ffb300" />
           <Text style={styles.loadingText}>Cargando historial...</Text>
         </View>
       ) : history.length === 0 ? (
@@ -290,7 +290,7 @@ export default function PersonalRecordModal({
             <Ionicons 
               name="add-circle" 
               size={20} 
-              color={activeTab === 'add' ? '#00D4AA' : '#666'} 
+              color={activeTab === 'add' ? '#ffb300' : '#666'} 
             />
             <Text style={[
               styles.tabText,
@@ -307,7 +307,7 @@ export default function PersonalRecordModal({
             <Ionicons 
               name="time" 
               size={20} 
-              color={activeTab === 'history' ? '#00D4AA' : '#666'} 
+              color={activeTab === 'history' ? '#ffb300' : '#666'} 
             />
             <Text style={[
               styles.tabText,
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   activeTab: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   tabText: {
     fontSize: 14,
@@ -414,7 +414,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   saveButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
   },
   historySets: {
     fontSize: 14,
-    color: '#00D4AA',
+    color: '#ffb300',
     marginTop: 8,
   },
   historyNotes: {

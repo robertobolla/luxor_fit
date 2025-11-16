@@ -90,7 +90,7 @@ export const BodyMetricsChart = React.memo(function BodyMetricsChart({ data, tit
             propsForDots: {
               r: '4',
               strokeWidth: '2',
-              stroke: '#00D4AA',
+              stroke: '#ffb300',
             },
           }}
           bezier
@@ -99,7 +99,7 @@ export const BodyMetricsChart = React.memo(function BodyMetricsChart({ data, tit
       </ScrollView>
       <View style={styles.legend}>
         <View style={styles.legendItem}>
-          <View style={[styles.legendColor, { backgroundColor: '#00D4AA' }]} />
+          <View style={[styles.legendColor, { backgroundColor: '#ffb300' }]} />
           <Text style={styles.legendText}>Peso (kg)</Text>
         </View>
         {hasBodyFat && (
@@ -279,7 +279,7 @@ export const ProgressComparisonCard = React.memo(function ProgressComparisonCard
 
   const getChangeColor = (value?: number) => {
     if (value === undefined || value === null) return '#666';
-    if (value > 0) return '#00D4AA';
+    if (value > 0) return '#ffb300';
     if (value < 0) return '#FF6384';
     return '#999';
   };
@@ -345,7 +345,7 @@ export const ProgressComparisonCard = React.memo(function ProgressComparisonCard
       </View>
     </View>
   );
-}
+});
 
 interface ProgressIndicatorProps {
   title: string;
@@ -380,7 +380,7 @@ export const ProgressIndicator = React.memo(function ProgressIndicator({
               styles.progressBarFill,
               {
                 width: `${Math.min(100, Math.max(0, progress))}%`,
-                backgroundColor: isPositive ? '#00D4AA' : '#FF6384',
+                backgroundColor: isPositive ? '#ffb300' : '#FF6384',
               },
             ]}
           />
@@ -510,7 +510,7 @@ const styles = StyleSheet.create({
   indicatorProgress: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   progressBarContainer: {
     marginBottom: 12,

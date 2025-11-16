@@ -11,7 +11,7 @@ interface CustomRefreshControlProps {
 export const CustomRefreshControl: React.FC<CustomRefreshControlProps> = ({
   refreshing,
   onRefresh,
-  tintColor = '#00D4AA',
+  tintColor = '#ffb300',
   title = 'Actualizando...',
 }) => {
   const rotateAnim = useRef(new Animated.Value(0)).current;

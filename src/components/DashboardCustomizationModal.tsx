@@ -168,7 +168,7 @@ export default function DashboardCustomizationModal({
           <Ionicons
             name={isPreset ? (priority as PriorityPreset).icon as any : 'create'}
             size={32}
-            color={isSelected ? '#1a1a1a' : '#00D4AA'}
+            color={isSelected ? '#1a1a1a' : '#ffb300'}
           />
         </View>
         <View style={styles.priorityInfo}>
@@ -242,7 +242,7 @@ export default function DashboardCustomizationModal({
                   <Ionicons
                     name="create"
                     size={32}
-                    color={(isCreatingCustom || config?.customPriorities.find(p => p.name === 'Prioridades personalizadas' && p.id === selectedPriorityId)) ? '#1a1a1a' : '#00D4AA'}
+                    color={(isCreatingCustom || config?.customPriorities.find(p => p.name === 'Prioridades personalizadas' && p.id === selectedPriorityId)) ? '#1a1a1a' : '#ffb300'}
                   />
                 </View>
                 <View style={styles.priorityInfo}>
@@ -284,7 +284,7 @@ export default function DashboardCustomizationModal({
                         <Ionicons
                           name={metric.icon as any}
                           size={20}
-                          color={isSelected ? '#1a1a1a' : isDisabled ? '#666' : '#00D4AA'}
+                          color={isSelected ? '#1a1a1a' : isDisabled ? '#666' : '#ffb300'}
                         />
                         <Text style={[
                           styles.metricChipText,
@@ -391,11 +391,11 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     fontSize: 16,
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   saveButton: {
     fontSize: 16,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
   },
   content: {
@@ -422,8 +422,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   priorityCardSelected: {
-    backgroundColor: '#00D4AA',
-    borderColor: '#00D4AA',
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
   },
   priorityIconContainer: {
     width: 50,
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   },
   customMetricsTitle: {
     fontSize: 16,
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 12,
   },
   metricsGrid: {
@@ -479,8 +479,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   metricChipSelected: {
-    backgroundColor: '#00D4AA',
-    borderColor: '#00D4AA',
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
   },
   metricChipDisabled: {
     opacity: 0.3,
@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   toggleActive: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   toggleKnob: {
     width: 26,

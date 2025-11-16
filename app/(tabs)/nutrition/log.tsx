@@ -10,16 +10,17 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   SafeAreaView,
   StatusBar,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { logMeal, logWater, calculateFoodMacros } from '../../../src/services/nutrition';
 import { MealType } from '../../../src/types/nutrition';
+import { useRetry } from '../../../src/hooks/useRetry';
 
 export default function MealLogScreen() {
   const { user } = useUser();
@@ -34,8 +35,44 @@ export default function MealLogScreen() {
   const [carbs, setCarbs] = useState('');
   const [fats, setFats] = useState('');
   const [waterAmount, setWaterAmount] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Hook para retry en guardado de comida
+  const logMealWithRetry = useRetry(
+    async () => {
+      if (!user?.id) {
+        throw new Error('Usuario no autenticado');
+      }
+
+      if (!mealName.trim() || !calories || !protein || !carbs || !fats) {
+        throw new Error('Completa todos los campos');
+      }
+
+      const result = await logMeal(
+        user.id,
+        mealType,
+        { name: mealName, weight_grams: parseInt(weightGrams) || 0 },
+        {
+          calories: parseInt(calories),
+          protein_g: parseInt(protein),
+          carbs_g: parseInt(carbs),
+          fats_g: parseInt(fats),
+        }
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'No se pudo registrar la comida');
+      }
+
+      return result;
+    },
+    {
+      maxRetries: 2,
+      retryDelay: 2000,
+      showAlert: true,
+    }
+  );
 
   const handleCalculateWithAI = async () => {
     if (!mealName.trim() || !weightGrams) {
@@ -78,32 +115,12 @@ export default function MealLogScreen() {
       return;
     }
 
-    setIsSaving(true);
-    try {
-      const result = await logMeal(
-        user.id,
-        mealType,
-        { name: mealName, weight_grams: parseInt(weightGrams) || 0 },
-        {
-          calories: parseInt(calories),
-          protein_g: parseInt(protein),
-          carbs_g: parseInt(carbs),
-          fats_g: parseInt(fats),
-        }
-      );
-
-      if (result.success) {
-        Alert.alert('¡Guardado!', 'Comida registrada correctamente.', [
-          { text: 'OK', onPress: () => router.back() },
-        ]);
-      } else {
-        Alert.alert('Error', result.error || 'No se pudo registrar la comida.');
-      }
-    } catch (err: any) {
-      console.error('Error logging meal:', err);
-      Alert.alert('Error', err.message || 'Error inesperado.');
-    } finally {
-      setIsSaving(false);
+    const result = await logMealWithRetry.executeWithRetry();
+    
+    if (result) {
+      Alert.alert('¡Guardado!', 'Comida registrada correctamente.', [
+        { text: 'OK', onPress: () => router.back() },
+      ]);
     }
   };
 
@@ -149,7 +166,7 @@ export default function MealLogScreen() {
           </View>
 
           <View style={styles.waterIconContainer}>
-            <Ionicons name="water" size={80} color="#00D4AA" />
+            <Ionicons name="water" size={80} color="#ffb300" />
           </View>
 
           <View style={styles.quickButtons}>
@@ -177,18 +194,11 @@ export default function MealLogScreen() {
           </View>
 
           <TouchableOpacity
-            style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+            style={styles.saveButton}
             onPress={handleLogWater}
-            disabled={isSaving}
           >
-            {isSaving ? (
-              <ActivityIndicator size="small" color="#1a1a1a" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
-                <Text style={styles.saveButtonText}>Registrar Agua</Text>
-              </>
-            )}
+            <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
+            <Text style={styles.saveButtonText}>Registrar Agua</Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -341,12 +351,12 @@ export default function MealLogScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+          style={[styles.saveButton, logMealWithRetry.isRetrying && styles.saveButtonDisabled]}
           onPress={handleLogMeal}
-          disabled={isSaving}
+          disabled={logMealWithRetry.isRetrying}
         >
-          {isSaving ? (
-            <ActivityIndicator size="small" color="#1a1a1a" />
+          {logMealWithRetry.isRetrying ? (
+            <Text style={styles.saveButtonText}>Guardando...</Text>
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
@@ -409,8 +419,8 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
   },
   mealTypeButtonActive: {
-    backgroundColor: '#00D4AA',
-    borderColor: '#00D4AA',
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
   },
   mealTypeText: {
     fontSize: 14,
@@ -436,7 +446,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#ffffff',
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   helperText: {
     fontSize: 12,
@@ -452,7 +462,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 12,
     padding: 16,
     gap: 8,
@@ -483,18 +493,18 @@ const styles = StyleSheet.create({
     padding: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   quickButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   aiButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 12,
     padding: 14,
     gap: 8,

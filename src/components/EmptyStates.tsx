@@ -28,7 +28,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     {actionText && onAction && (
       <TouchableOpacity style={styles.actionButton} onPress={onAction}>
         <Text style={styles.actionButtonText}>{actionText}</Text>
-        <Ionicons name="arrow-forward" size={16} color="#00D4AA" />
+        <Ionicons name="arrow-forward" size={16} color="#ffb300" />
       </TouchableOpacity>
     )}
   </View>
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 24,

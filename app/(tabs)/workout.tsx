@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
@@ -29,11 +29,22 @@ export default function WorkoutScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [workoutPlans, setWorkoutPlans] = useState<any[]>([]);
 
+  // Cargar datos cuando se monta el componente
   useEffect(() => {
     loadWorkouts();
     loadSessions();
     loadWorkoutPlans();
   }, [user]);
+
+  // Recargar planes automáticamente cuando la pantalla recibe foco
+  // Esto asegura que se actualice cuando el usuario regresa después de generar un plan
+  useFocusEffect(
+    useCallback(() => {
+      loadWorkoutPlans();
+      loadWorkouts();
+      loadSessions();
+    }, [user])
+  );
 
   const loadWorkoutPlans = async () => {
     if (!user) return;
@@ -123,7 +134,7 @@ export default function WorkoutScreen() {
       {isLoadingPlans && (
         <LoadingOverlay visible={true} message="Cargando planes..." />
       )}
-      {!isLoadingPlans && workoutPlans.length > 0 && (
+      {!isLoadingPlans && workoutPlans.length > 0 ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📋 Mis Planes de Entrenamiento</Text>
           {workoutPlans.map((plan) => {
@@ -132,7 +143,7 @@ export default function WorkoutScreen() {
               <View key={plan.id} style={styles.planCard}>
                 <View style={styles.planHeader}>
                   <View style={styles.planTitleContainer}>
-                    <Ionicons name="fitness" size={24} color="#00D4AA" />
+                    <Ionicons name="fitness" size={24} color="#ffb300" />
                     <Text style={styles.planName}>{plan.plan_name}</Text>
                   </View>
                   {plan.is_active && (
@@ -146,15 +157,15 @@ export default function WorkoutScreen() {
                 
                 <View style={styles.planStats}>
                   <View style={styles.stat}>
-                    <Ionicons name="calendar" size={16} color="#00D4AA" />
+                    <Ionicons name="calendar" size={16} color="#ffb300" />
                     <Text style={styles.statText}>{planData.duration_weeks} semanas</Text>
                   </View>
                   <View style={styles.stat}>
-                    <Ionicons name="fitness-outline" size={16} color="#00D4AA" />
+                    <Ionicons name="fitness-outline" size={16} color="#ffb300" />
                     <Text style={styles.statText}>{planData.days_per_week} días/semana</Text>
                   </View>
                   <View style={styles.stat}>
-                    <Ionicons name="time-outline" size={16} color="#00D4AA" />
+                    <Ionicons name="time-outline" size={16} color="#ffb300" />
                     <Text style={styles.statText}>{planData.weekly_structure?.[0]?.duration || 45} min</Text>
                   </View>
                 </View>
@@ -203,15 +214,15 @@ export default function WorkoutScreen() {
                 
                 <View style={styles.workoutStats}>
                   <View style={styles.stat}>
-                    <Ionicons name="time-outline" size={16} color="#00D4AA" />
+                    <Ionicons name="time-outline" size={16} color="#ffb300" />
                     <Text style={styles.statText}>{workout.duration_minutes} min</Text>
                   </View>
                   <View style={styles.stat}>
-                    <Ionicons name="fitness-outline" size={16} color="#00D4AA" />
+                    <Ionicons name="fitness-outline" size={16} color="#ffb300" />
                     <Text style={styles.statText}>{workout.workout_exercises?.length || 0} ejercicios</Text>
                   </View>
                   <View style={styles.stat}>
-                    <Ionicons name="trending-up-outline" size={16} color="#00D4AA" />
+                    <Ionicons name="trending-up-outline" size={16} color="#ffb300" />
                     <Text style={styles.statText}>{type}</Text>
                   </View>
                 </View>
@@ -247,7 +258,7 @@ export default function WorkoutScreen() {
                     style={styles.detailsButton}
                     onPress={() => router.push(`/workout-details/${workout.id}`)}
                   >
-                    <Ionicons name="eye" size={16} color="#00D4AA" />
+                    <Ionicons name="eye" size={16} color="#ffb300" />
                     <Text style={styles.detailsButtonText}>Ver detalles</Text>
                   </TouchableOpacity>
                 </View>
@@ -292,7 +303,7 @@ export default function WorkoutScreen() {
               </View>
               <View style={styles.sessionStatus}>
                 {session.completed_at ? (
-                  <Ionicons name="checkmark-circle" size={24} color="#00D4AA" />
+                  <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
                 ) : (
                   <Ionicons name="time" size={24} color="#FF9800" />
                 )}
@@ -323,7 +334,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   generateButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -394,7 +405,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   startButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
@@ -424,13 +435,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     flex: 1,
     marginLeft: 8,
     justifyContent: 'center',
   },
   detailsButtonText: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 4,
@@ -454,7 +465,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   createButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -490,7 +501,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 16,
     borderWidth: 2,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   planHeader: {
     flexDirection: 'row',
@@ -511,7 +522,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   activeBadge: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
@@ -536,7 +547,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   viewPlanButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

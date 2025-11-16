@@ -84,7 +84,7 @@ export default function GroceryListScreen() {
     return (
       <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="#00D4AA" />
+        <ActivityIndicator size="large" color="#ffb300" />
         <Text style={styles.loadingText}>Cargando lista...</Text>
       </SafeAreaView>
     );
@@ -127,7 +127,7 @@ export default function GroceryListScreen() {
       
       {/* Info banner */}
       <View style={styles.infoBanner}>
-        <Ionicons name="information-circle-outline" size={18} color="#00D4AA" />
+        <Ionicons name="information-circle-outline" size={18} color="#ffb300" />
         <Text style={styles.infoBannerText}>
           La lista se actualiza automáticamente cuando modificas tu plan de comidas
         </Text>
@@ -156,7 +156,7 @@ export default function GroceryListScreen() {
             onPress={() => toggleItem(index)}
           >
             <View style={styles.checkbox}>
-              {item.checked && <Ionicons name="checkmark" size={20} color="#00D4AA" />}
+              {item.checked && <Ionicons name="checkmark" size={20} color="#ffb300" />}
             </View>
             <View style={styles.itemInfo}>
               <Text style={[styles.itemName, item.checked && styles.itemNameChecked]}>
@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     gap: 8,
   },
   infoBannerText: {
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginTop: 20,
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 4,
   },
   scrollContent: {
@@ -278,14 +278,14 @@ const styles = StyleSheet.create({
   },
   groceryItemChecked: {
     backgroundColor: '#0a0a0a',
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   checkbox: {
     width: 28,
     height: 28,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,

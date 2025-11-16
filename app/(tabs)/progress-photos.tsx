@@ -274,7 +274,7 @@ export default function ProgressPhotosScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00D4AA" />
+        <ActivityIndicator size="large" color="#ffb300" />
         <Text style={styles.loadingText}>Cargando fotos...</Text>
       </View>
     );
@@ -289,7 +289,7 @@ export default function ProgressPhotosScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Fotos de Progreso</Text>
         <TouchableOpacity onPress={handleCompare}>
-          <Ionicons name="git-compare-outline" size={24} color="#00D4AA" />
+          <Ionicons name="git-compare-outline" size={24} color="#ffb300" />
         </TouchableOpacity>
       </View>
 
@@ -297,7 +297,7 @@ export default function ProgressPhotosScreen() {
         {/* Recordatorio si es necesario */}
         {reminder?.shouldShowReminder && (
           <View style={styles.reminderCard}>
-            <Ionicons name="camera" size={32} color="#00D4AA" />
+            <Ionicons name="camera" size={32} color="#ffb300" />
             <View style={styles.reminderTextContainer}>
               <Text style={styles.reminderTitle}>📸 ¡Es hora de una foto!</Text>
               <Text style={styles.reminderText}>
@@ -397,7 +397,7 @@ export default function ProgressPhotosScreen() {
                               </View>
                             )}
                             <View style={styles.photoCheckmark}>
-                              <Ionicons name="checkmark-circle" size={16} color="#00D4AA" />
+                              <Ionicons name="checkmark-circle" size={16} color="#ffb300" />
                             </View>
                           </TouchableOpacity>
                         ) : (
@@ -467,7 +467,7 @@ export default function ProgressPhotosScreen() {
                       style={styles.sessionSecondary}
                       onPress={() => pickFromGallery(type)}
                     >
-                      <Ionicons name="image" size={18} color="#00D4AA" />
+                      <Ionicons name="image" size={18} color="#ffb300" />
                       <Text style={styles.sessionSecondaryText}>Galería</Text>
                     </TouchableOpacity>
                   </View>
@@ -596,7 +596,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     alignItems: 'center',
   },
   reminderTextContainer: {
@@ -606,7 +606,7 @@ const styles = StyleSheet.create({
   reminderTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 4,
   },
   reminderText: {
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     margin: 16,
     padding: 16,
     borderRadius: 12,
@@ -703,7 +703,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#2a2a2a',
     position: 'relative',
     borderWidth: 2,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   photoImageGrouped: {
     width: '100%',
@@ -738,7 +738,7 @@ const styles = StyleSheet.create({
   },
   photoWeightText: {
     fontSize: 11,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
   },
   photoCheckmark: {
@@ -781,7 +781,7 @@ const styles = StyleSheet.create({
   },
   photoWeight: {
     fontSize: 11,
-    color: '#00D4AA',
+    color: '#ffb300',
     marginTop: 2,
   },
   modalContainer: {
@@ -815,7 +815,7 @@ const styles = StyleSheet.create({
   },
   modalWeight: {
     fontSize: 14,
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 8,
   },
   modalNotes: {
@@ -904,7 +904,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 8,
     paddingVertical: 10,
     gap: 8,
@@ -922,7 +922,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     borderRadius: 8,
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -930,12 +930,12 @@ const styles = StyleSheet.create({
   },
   sessionSecondaryText: {
     fontSize: 13,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '500',
   },
   finishButton: {
     marginTop: 12,
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 10,
     paddingVertical: 12,
     alignItems: 'center',
@@ -1004,7 +1004,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   tipsTitle: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 6,

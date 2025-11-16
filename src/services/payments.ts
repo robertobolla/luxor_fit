@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import { checkPartnerFreeAccess } from './partnerService';
 import { checkGymMemberAccess } from './gymService';
+import { checkAdminAccess } from './adminService';
 
 type CreateCheckoutResponse = {
   url: string;
@@ -96,12 +97,13 @@ export const paymentsService = {
     return data.url;
   },
 
-  async getSubscriptionStatus(userId?: string): Promise<{
+  async getSubscriptionStatus(userId?: string, user?: any): Promise<{
     isActive: boolean;
     status?: string | null;
     trialEnd?: string | null;
     isPartnerFree?: boolean;
     isGymMember?: boolean;
+    isAdmin?: boolean;
   }> {
     if (!userId) {
       // Si no se pasa userId, intentar desde Supabase Auth (fallback)
@@ -114,6 +116,20 @@ export const paymentsService = {
     }
 
     console.log('🔍 getSubscriptionStatus: Consultando v_user_subscription para user_id:', userId);
+    
+    // PRIMERO verificar si es admin (los admins tienen acceso automático)
+    const isAdmin = await checkAdminAccess(userId, user);
+    if (isAdmin) {
+      console.log('✅ Usuario es admin, acceso automático concedido');
+      return {
+        isActive: true,
+        status: 'active',
+        trialEnd: null,
+        isPartnerFree: false,
+        isGymMember: false,
+        isAdmin: true,
+      };
+    }
     
     const { data, error } = await supabase
       .from('v_user_subscription')
@@ -142,6 +158,7 @@ export const paymentsService = {
       trialEnd: subscription?.trial_end ?? null,
       isPartnerFree,
       isGymMember,
+      isAdmin: false,
     };
     
     console.log('🔍 getSubscriptionStatus: Resultado procesado:', result);

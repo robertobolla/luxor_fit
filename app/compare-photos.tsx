@@ -139,7 +139,7 @@ export default function ComparePhotosScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00D4AA" />
+        <ActivityIndicator size="large" color="#ffb300" />
         <Text style={styles.loadingText}>Cargando fotos...</Text>
       </View>
     );
@@ -241,7 +241,7 @@ export default function ComparePhotosScreen() {
                 <Text
                   style={[
                     styles.infoValue,
-                    { color: getWeightChange()! > 0 ? '#FF9800' : '#00D4AA' },
+                    { color: getWeightChange()! > 0 ? '#FF9800' : '#ffb300' },
                   ]}
                 >
                   {getWeightChange()! > 0 ? '+' : ''}
@@ -276,7 +276,7 @@ export default function ComparePhotosScreen() {
         {analysis && (
           <View style={styles.analysisCard}>
             <View style={styles.analysisHeader}>
-              <Ionicons name="sparkles" size={24} color="#00D4AA" />
+              <Ionicons name="sparkles" size={24} color="#ffb300" />
               <Text style={styles.analysisTitle}>Análisis de IA</Text>
             </View>
 
@@ -403,7 +403,7 @@ export default function ComparePhotosScreen() {
                 </View>
                 {(selectedBefore?.id === photo.id || selectedAfter?.id === photo.id) && (
                   <View style={styles.selectionBadge}>
-                    <Ionicons name="checkmark-circle" size={24} color="#00D4AA" />
+                    <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
                   </View>
                 )}
               </TouchableOpacity>
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
   },
   photoWeightText: {
     fontSize: 11,
-    color: '#00D4AA',
+    color: '#ffb300',
     textAlign: 'center',
     marginTop: 4,
   },
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     margin: 16,
     padding: 16,
     borderRadius: 12,
@@ -537,7 +537,7 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   typeTabs: {
     flexDirection: 'row',
@@ -555,8 +555,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1f1f1f',
   },
   typeTabActive: {
-    backgroundColor: '#00D4AA',
-    borderColor: '#00D4AA',
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
   },
   typeTabText: {
     fontSize: 14,
@@ -575,7 +575,7 @@ const styles = StyleSheet.create({
   analysisTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   analysisSection: {
     marginBottom: 16,
@@ -583,7 +583,7 @@ const styles = StyleSheet.create({
   analysisSectionTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 8,
   },
   analysisText: {
@@ -641,7 +641,7 @@ const styles = StyleSheet.create({
   },
   selectedPhoto: {
     borderWidth: 3,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   galleryPhotoImage: {
     width: '100%',

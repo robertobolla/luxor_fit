@@ -98,7 +98,7 @@ export default function PlanIntroductionScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00D4AA" />
+          <ActivityIndicator size="large" color="#ffb300" />
           <Text style={styles.loadingText}>
             Analizando tus datos y creando tu plan personalizado...
           </Text>
@@ -135,7 +135,7 @@ export default function PlanIntroductionScreen() {
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <Ionicons name="fitness" size={48} color="#00D4AA" />
+          <Ionicons name="fitness" size={48} color="#ffb300" />
           <Text style={styles.headerTitle}>¡Tu Plan Está Listo, {userData.name}!</Text>
           <Text style={styles.headerSubtitle}>
             Hemos analizado tu perfil y creado un plan personalizado
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   retryButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 28,
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   introductionText: {
     fontSize: 16,
@@ -382,7 +382,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   continueButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     marginTop: 16,
     gap: 12,
-    shadowColor: '#00D4AA',
+    shadowColor: '#ffb300',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

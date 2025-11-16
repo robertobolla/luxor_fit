@@ -253,7 +253,7 @@ export default function TrackingScreen() {
       {/* Header con actividad */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Ionicons name="fitness" size={24} color="#00D4AA" />
+          <Ionicons name="fitness" size={24} color="#ffb300" />
           <Text style={styles.activityName}>{activityName}</Text>
         </View>
         {isPaused && (
@@ -284,7 +284,7 @@ export default function TrackingScreen() {
           {routePoints.length > 1 && (
             <Polyline
               coordinates={routePoints}
-              strokeColor="#00D4AA"
+              strokeColor="#ffb300"
               strokeWidth={5}
             />
           )}
@@ -294,7 +294,7 @@ export default function TrackingScreen() {
             <Marker
               coordinate={routePoints[0]}
               title="Inicio"
-              pinColor="#00D4AA"
+              pinColor="#ffb300"
             />
           )}
         </MapView>
@@ -311,19 +311,19 @@ export default function TrackingScreen() {
         {/* Estadísticas secundarias */}
         <View style={styles.secondaryStats}>
           <View style={styles.secondaryStat}>
-            <Ionicons name="navigate" size={20} color="#00D4AA" />
+            <Ionicons name="navigate" size={20} color="#ffb300" />
             <Text style={styles.secondaryStatValue}>{distance.toFixed(2)}</Text>
             <Text style={styles.secondaryStatLabel}>km</Text>
           </View>
 
           <View style={styles.secondaryStat}>
-            <Ionicons name="speedometer" size={20} color="#00D4AA" />
+            <Ionicons name="speedometer" size={20} color="#ffb300" />
             <Text style={styles.secondaryStatValue}>{currentSpeed.toFixed(1)}</Text>
             <Text style={styles.secondaryStatLabel}>km/h</Text>
           </View>
 
           <View style={styles.secondaryStat}>
-            <Ionicons name="analytics" size={20} color="#00D4AA" />
+            <Ionicons name="analytics" size={20} color="#ffb300" />
             <Text style={styles.secondaryStatValue}>
               {trackingTime > 0 ? ((distance / (trackingTime / 3600)) || 0).toFixed(1) : '0.0'}
             </Text>
@@ -372,7 +372,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     borderWidth: 3,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   map: {
     flex: 1,
@@ -426,7 +426,7 @@ const styles = StyleSheet.create({
   mainStatValue: {
     fontSize: 48,
     fontWeight: 'bold',
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   mainStatLabel: {
     fontSize: 16,

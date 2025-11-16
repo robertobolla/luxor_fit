@@ -9,8 +9,9 @@ Deno.serve((req: Request) => {
   // El usuario simplemente vuelve manualmente a la app y la app verificará
   // automáticamente la suscripción al abrirse (el webhook de Stripe ya la habrá creado).
   
-  // Para producción (app instalada), usamos fitmind://
-  const appLink = `fitmind://paywall/success?session_id=${encodeURIComponent(sessionId)}`;
+  // Para producción (app instalada), usamos luxorfitness://
+  // Redirigir directamente a home, la app verificará la suscripción automáticamente
+  const appLink = `luxorfitness://home?session_id=${encodeURIComponent(sessionId)}`;
   
   // HTML con botón visible para abrir la app
   const html = `<!DOCTYPE html>
@@ -18,7 +19,7 @@ Deno.serve((req: Request) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Redirigiendo a FitMind...</title>
+  <title>Redirigiendo a Luxor Fitness...</title>
   <script>
     // Intentar abrir automáticamente si es producción (app instalada)
     window.onload = function() {
@@ -87,7 +88,7 @@ Deno.serve((req: Request) => {
         <br><br>
         1️⃣ Cierra esta página de Safari
         <br><br>
-        2️⃣ Abre la app FitMind en Expo Go
+        2️⃣ Abre la app Luxor Fitness en Expo Go
         <br><br>
         3️⃣ Tu suscripción se verificará automáticamente
       </div>

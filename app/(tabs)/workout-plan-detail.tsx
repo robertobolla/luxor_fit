@@ -208,7 +208,7 @@ export default function WorkoutPlanDetailScreen() {
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={[styles.container, styles.centerContent]}>
-          <ActivityIndicator size="large" color="#00D4AA" />
+          <ActivityIndicator size="large" color="#ffb300" />
           <Text style={styles.loadingText}>Cargando plan...</Text>
         </View>
       </>
@@ -322,7 +322,7 @@ export default function WorkoutPlanDetailScreen() {
         {/* Plan Info */}
         <View style={styles.planHeader}>
           <View style={styles.planTitleContainer}>
-            <Ionicons name="fitness" size={32} color="#00D4AA" />
+            <Ionicons name="fitness" size={32} color="#ffb300" />
             <View style={styles.planTitleTextContainer}>
               <Text style={styles.planName}>{plan.plan_name}</Text>
               {plan.is_active && (
@@ -347,7 +347,7 @@ export default function WorkoutPlanDetailScreen() {
                 <Text style={styles.aiButtonTitle}>Adaptar con IA</Text>
                 <Text style={styles.aiButtonSubtitle}>Personaliza tu entrenamiento</Text>
               </View>
-              <Ionicons name="chevron-forward" size={16} color="#00D4AA" />
+              <Ionicons name="chevron-forward" size={16} color="#ffb300" />
             </View>
           </TouchableOpacity>
           
@@ -357,17 +357,17 @@ export default function WorkoutPlanDetailScreen() {
         {/* Stats */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Ionicons name="calendar" size={24} color="#00D4AA" />
+            <Ionicons name="calendar" size={24} color="#ffb300" />
             <Text style={styles.statValue}>{safePlanData.duration_weeks}</Text>
             <Text style={styles.statLabel}>Semanas</Text>
           </View>
           <View style={styles.statCard}>
-            <Ionicons name="fitness-outline" size={24} color="#00D4AA" />
+            <Ionicons name="fitness-outline" size={24} color="#ffb300" />
             <Text style={styles.statValue}>{safePlanData.days_per_week}</Text>
             <Text style={styles.statLabel}>Días/Semana</Text>
           </View>
           <View style={styles.statCard}>
-            <Ionicons name="time-outline" size={24} color="#00D4AA" />
+            <Ionicons name="time-outline" size={24} color="#ffb300" />
             <Text style={styles.statValue}>{safePlanData.weekly_structure?.[0]?.duration || 45}</Text>
             <Text style={styles.statLabel}>Min/Sesión</Text>
           </View>
@@ -418,7 +418,7 @@ export default function WorkoutPlanDetailScreen() {
                     )}
                   </View>
                   <View style={styles.dayDuration}>
-                    <Ionicons name="time-outline" size={14} color="#00D4AA" />
+                    <Ionicons name="time-outline" size={14} color="#ffb300" />
                     <Text style={styles.dayDurationText}>{safeDay.duration} min</Text>
                   </View>
                 </View>
@@ -432,7 +432,7 @@ export default function WorkoutPlanDetailScreen() {
 
                       return (
                         <View key={idx} style={styles.exercisePreviewItem}>
-                          <Ionicons name="checkmark-circle" size={14} color="#00D4AA" />
+                          <Ionicons name="checkmark-circle" size={14} color="#ffb300" />
                           <Text style={styles.exercisePreviewText}>{exerciseName}</Text>
                         </View>
                       );
@@ -446,7 +446,7 @@ export default function WorkoutPlanDetailScreen() {
                 </View>
                 <View style={styles.viewDetailsButton}>
                   <Text style={styles.viewDetailsText}>Ver detalles completos</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#00D4AA" />
+                  <Ionicons name="chevron-forward" size={16} color="#ffb300" />
                 </View>
               </TouchableOpacity>
             );
@@ -480,7 +480,7 @@ export default function WorkoutPlanDetailScreen() {
           <View style={styles.recommendationsContainer}>
             {(safePlanData.recommendations?.length ? safePlanData.recommendations : DEFAULT_RECOMMENDATIONS).map((rec: string, index: number) => (
               <View key={index} style={styles.recommendationItem}>
-                <Ionicons name="star" size={16} color="#00D4AA" />
+                <Ionicons name="star" size={16} color="#ffb300" />
                 <Text style={styles.recommendationText}>{rec}</Text>
               </View>
             ))}
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   backButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   activeBadge: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
@@ -635,11 +635,11 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   aiButton: {
-    backgroundColor: 'linear-gradient(135deg, #00D4AA 0%, #00B894 100%)',
-    backgroundColor: '#00D4AA',
+    backgroundColor: 'linear-gradient(135deg, #ffb300 0%, #00B894 100%)',
+    backgroundColor: '#ffb300',
     borderRadius: 16,
     marginBottom: 20,
-    shadowColor: '#00D4AA',
+    shadowColor: '#ffb300',
     shadowOffset: {
       width: 0,
       height: 4,
@@ -724,7 +724,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     position: 'relative',
     overflow: 'hidden',
   },
@@ -781,13 +781,13 @@ const styles = StyleSheet.create({
   },
   dayDurationText: {
     fontSize: 14,
-    color: '#00D4AA',
+    color: '#ffb300',
     marginLeft: 4,
     fontWeight: '600',
   },
   dayFocus: {
     fontSize: 15,
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 12,
     fontWeight: '600',
   },
@@ -815,7 +815,7 @@ const styles = StyleSheet.create({
   },
   moreExercisesText: {
     fontSize: 12,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
     marginTop: 4,
     marginLeft: 20,
@@ -831,7 +831,7 @@ const styles = StyleSheet.create({
   },
   viewDetailsText: {
     fontSize: 13,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
     marginRight: 4,
   },
@@ -852,7 +852,7 @@ const styles = StyleSheet.create({
   },
   exerciseSpecs: {
     fontSize: 12,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '500',
   },
   exerciseText: {
@@ -924,7 +924,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   activateButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   deactivateButton: {
     backgroundColor: '#FF9800',

@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: '#00D4AA',
+    color: '#ffb300',
     textAlign: 'center',
   },
   form: {
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   primaryButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   buttonText: {
     color: '#1a1a1a',
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   linkText: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -259,7 +259,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   oauthButtonText: {
     color: '#ffffff',

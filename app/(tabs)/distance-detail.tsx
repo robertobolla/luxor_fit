@@ -504,7 +504,7 @@ export default function DistanceDetailScreen() {
                 </Text>
               </View>
               <View style={styles.progressCircle}>
-                <Ionicons name="location" size={40} color="#00D4AA" />
+                <Ionicons name="location" size={40} color="#ffb300" />
               </View>
             </View>
           </View>
@@ -558,14 +558,14 @@ const styles = StyleSheet.create({
   },
   tabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: '#00D4AA',
+    borderBottomColor: '#ffb300',
   },
   tabText: {
     fontSize: 16,
     color: '#999',
   },
   tabTextActive: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
   },
   periodNav: {
@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 30,
     height: 1,
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     opacity: 0.5,
   },
   chartContent: {
@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
   },
   bar: {
     width: '100%',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 3,
     minHeight: 2,
   },

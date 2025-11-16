@@ -141,7 +141,7 @@ export default function TodayDetailScreen() {
     return (
       <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="#00D4AA" />
+        <ActivityIndicator size="large" color="#ffb300" />
         <Text style={styles.loadingText}>Cargando...</Text>
       </SafeAreaView>
     );
@@ -191,7 +191,7 @@ export default function TodayDetailScreen() {
               style={styles.addButton}
               onPress={() => router.push('/(tabs)/nutrition/log' as any)}
             >
-              <Ionicons name="add-circle" size={28} color="#00D4AA" />
+              <Ionicons name="add-circle" size={28} color="#ffb300" />
             </TouchableOpacity>
           </View>
 
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   summaryTitle: {
     fontSize: 18,
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
   summaryValue: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   summaryLabel: {
     fontSize: 12,
@@ -364,7 +364,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   emptyButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
   logFoodName: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 4,
   },
   logWeight: {

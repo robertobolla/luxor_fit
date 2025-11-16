@@ -262,7 +262,7 @@ export default function ProfileEditScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#00D4AA" />
+        <ActivityIndicator size="large" color="#ffb300" />
         <Text style={styles.loadingText}>Cargando perfil...</Text>
       </SafeAreaView>
     );
@@ -357,7 +357,7 @@ export default function ProfileEditScreen() {
                 <Ionicons
                   name={goal.icon as any}
                   size={32}
-                  color={selectedGoal === goal.value ? '#00D4AA' : '#888888'}
+                  color={selectedGoal === goal.value ? '#ffb300' : '#888888'}
                 />
                 <Text
                   style={[
@@ -388,7 +388,7 @@ export default function ProfileEditScreen() {
                 <Ionicons
                   name={activity.icon as any}
                   size={32}
-                  color={selectedActivity === activity.value ? '#00D4AA' : '#888888'}
+                  color={selectedActivity === activity.value ? '#ffb300' : '#888888'}
                 />
                 <Text
                   style={[
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#ffffff',
     borderWidth: 2,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   optionsGrid: {
     flexDirection: 'row',
@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
     borderColor: '#2a2a2a',
   },
   optionCardActive: {
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     backgroundColor: '#0f2a25',
   },
   optionLabel: {
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   optionLabelActive: {
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   daysGrid: {
     flexDirection: 'row',
@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a',
   },
   dayChipActive: {
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     backgroundColor: '#0f2a25',
   },
   dayChipText: {
@@ -558,11 +558,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   dayChipTextActive: {
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   saveButton: {
     flexDirection: 'row',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     borderRadius: 12,
     padding: 18,
     alignItems: 'center',

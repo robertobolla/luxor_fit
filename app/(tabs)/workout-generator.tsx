@@ -236,7 +236,7 @@ export default function WorkoutGeneratorScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
         <View style={styles.generatingContainer}>
-          <Ionicons name="fitness" size={80} color="#00D4AA" />
+          <Ionicons name="fitness" size={80} color="#ffb300" />
           <LoadingOverlay visible={true} message="Generando tu plan personalizado..." />
           <Text style={styles.generatingTitle}>
             Generando tu plan personalizado...
@@ -268,18 +268,18 @@ export default function WorkoutGeneratorScreen() {
 
           {/* Plan Overview */}
           <View style={styles.planOverview}>
-            <Ionicons name="checkmark-circle" size={64} color="#00D4AA" />
+            <Ionicons name="checkmark-circle" size={64} color="#ffb300" />
             <Text style={styles.planTitle}>{generatedPlan.name}</Text>
             <Text style={styles.planDescription}>{generatedPlan.description}</Text>
             <View style={styles.planStats}>
               <View style={styles.planStat}>
-                <Ionicons name="calendar" size={24} color="#00D4AA" />
+                <Ionicons name="calendar" size={24} color="#ffb300" />
                 <Text style={styles.planStatText}>
                   {generatedPlan.duration_weeks} semanas
                 </Text>
               </View>
               <View style={styles.planStat}>
-                <Ionicons name="fitness" size={24} color="#00D4AA" />
+                <Ionicons name="fitness" size={24} color="#ffb300" />
                 <Text style={styles.planStatText}>
                   {generatedPlan.days_per_week} días/semana
                 </Text>
@@ -389,7 +389,7 @@ export default function WorkoutGeneratorScreen() {
 
         {/* Intro */}
         <View style={styles.intro}>
-          <Ionicons name="sparkles" size={48} color="#00D4AA" />
+          <Ionicons name="sparkles" size={48} color="#ffb300" />
           <Text style={styles.introTitle}>
             Plan de Entrenamiento con IA
           </Text>
@@ -436,25 +436,25 @@ export default function WorkoutGeneratorScreen() {
           <Text style={styles.sectionTitle}>✨ Qué Incluye</Text>
           <View style={styles.featuresCard}>
             <View style={styles.featureItem}>
-              <Ionicons name="checkmark-circle" size={24} color="#00D4AA" />
+              <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
                 Plan semanal estructurado adaptado a tu disponibilidad
               </Text>
             </View>
             <View style={styles.featureItem}>
-              <Ionicons name="checkmark-circle" size={24} color="#00D4AA" />
+              <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
                 Ejercicios específicos basados en tu equipamiento
               </Text>
             </View>
             <View style={styles.featureItem}>
-              <Ionicons name="checkmark-circle" size={24} color="#00D4AA" />
+              <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
                 Progresión gradual según tu nivel de fitness
               </Text>
             </View>
             <View style={styles.featureItem}>
-              <Ionicons name="checkmark-circle" size={24} color="#00D4AA" />
+              <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
                 Recomendaciones basadas en evidencia científica
               </Text>
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   backButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 28,
@@ -632,7 +632,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   generateButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -640,7 +640,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     marginHorizontal: 24,
     gap: 12,
-    shadowColor: '#00D4AA',
+    shadowColor: '#ffb300',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -700,7 +700,7 @@ const styles = StyleSheet.create({
   dayTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   dayDuration: {
     fontSize: 14,
@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
   },
   exerciseDetails: {
     fontSize: 12,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
     marginLeft: 8,
   },
@@ -770,7 +770,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   usePlanButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     marginHorizontal: 24,
     gap: 12,
-    shadowColor: '#00D4AA',
+    shadowColor: '#ffb300',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

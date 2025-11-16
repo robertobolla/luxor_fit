@@ -20,7 +20,7 @@ export function useSubscription() {
     (async () => {
       try {
         console.log('📋 useSubscription: Verificando suscripción para user:', user.id);
-        const res = await paymentsService.getSubscriptionStatus(user.id);
+        const res = await paymentsService.getSubscriptionStatus(user.id, user);
         console.log('📋 useSubscription: Resultado:', res);
         if (!mounted) return;
         setIsActive(!!res.isActive);
@@ -50,7 +50,7 @@ export function useSubscription() {
     }
     try {
       console.log('🔄 refresh: Refrescando suscripción para user:', user.id);
-      const res = await paymentsService.getSubscriptionStatus(user.id);
+      const res = await paymentsService.getSubscriptionStatus(user.id, user);
       console.log('🔄 refresh: Resultado:', res);
       setIsActive(!!res.isActive);
       setStatus(res.status ?? undefined);

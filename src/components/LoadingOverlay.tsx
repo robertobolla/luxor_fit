@@ -28,7 +28,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = React.memo(({
       >
         <View style={styles.fullScreen}>
           <View style={styles.container}>
-            <ActivityIndicator size="large" color="#00D4AA" />
+            <ActivityIndicator size="large" color="#ffb300" />
             {message && <Text style={styles.message}>{message}</Text>}
           </View>
         </View>
@@ -39,7 +39,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = React.memo(({
   return (
     <View style={styles.overlay}>
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#00D4AA" />
+        <ActivityIndicator size="large" color="#ffb300" />
         {message && <Text style={styles.message}>{message}</Text>}
       </View>
     </View>
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     padding: 32,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     minWidth: 200,
   },
   message: {

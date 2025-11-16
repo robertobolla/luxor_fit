@@ -205,7 +205,7 @@ export default function GymDetailScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#00D4AA" />
+        <ActivityIndicator size="large" color="#ffb300" />
         <Text style={{ color: '#ffffff', marginTop: 16, fontSize: 16 }}>
           Cargando datos de gimnasio...
         </Text>
@@ -242,7 +242,7 @@ export default function GymDetailScreen() {
           <RefreshControl 
             refreshing={refreshing} 
             onRefresh={onRefresh}
-            tintColor="#00D4AA"
+            tintColor="#ffb300"
           />
         }
       >
@@ -252,7 +252,7 @@ export default function GymDetailScreen() {
             size={200}
             strokeWidth={12}
             progress={(gymDaysThisWeek / gymDaysGoal) * 100}
-            color="#00D4AA"
+            color="#ffb300"
             icon="fitness"
             iconSize={60}
           />
@@ -484,7 +484,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dayBarToday: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   dayLabel: {
     fontSize: 12,
@@ -492,7 +492,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   dayLabelToday: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: 'bold',
   },
   dayDate: {
@@ -500,7 +500,7 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   dayDateToday: {
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: 'bold',
   },
   weekSummary: {
@@ -517,7 +517,7 @@ const styles = StyleSheet.create({
   },
   weekProgressText: {
     fontSize: 14,
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   monthGrid: {
     flexDirection: 'row',
@@ -541,7 +541,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   dayCircleCompleted: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   dayCircleToday: {
     backgroundColor: '#FF5722',
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 4,
   },
   statLabel: {

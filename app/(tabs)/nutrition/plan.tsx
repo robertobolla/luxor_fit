@@ -9,7 +9,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   SafeAreaView,
   StatusBar,
   Alert,
@@ -17,6 +16,7 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +24,9 @@ import { useUser } from '@clerk/clerk-expo';
 import { getMealPlan, FOOD_DATABASE } from '../../../src/services/nutrition';
 import { supabase } from '../../../src/services/supabase';
 import { WeekPlan, DayPlan, MealOption } from '../../../src/types/nutrition';
+import { LoadingOverlay } from '../../../src/components/LoadingOverlay';
+import { useLoadingState } from '../../../src/hooks/useLoadingState';
+import { EmptyNutrition } from '../../../src/components/EmptyStates';
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -31,7 +34,7 @@ const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábad
 export default function MealPlanScreen() {
   const { user } = useUser();
   const params = useLocalSearchParams<{ weekStart?: string }>();
-  const [isLoading, setIsLoading] = useState(true);
+  const { isLoading, setLoading: setIsLoading, executeAsync } = useLoadingState(true);
   const [weekPlan, setWeekPlan] = useState<WeekPlan | null>(null);
   const [selectedDay, setSelectedDay] = useState(0);
   const [selectedMealOptions, setSelectedMealOptions] = useState<Record<string, number>>({});
@@ -431,7 +434,7 @@ export default function MealPlanScreen() {
               setSelectedMealOptions({ ...selectedMealOptions, [key]: nextIndex });
             }}
           >
-            <Ionicons name="swap-horizontal" size={20} color="#00D4AA" />
+            <Ionicons name="swap-horizontal" size={20} color="#ffb300" />
             <Text style={styles.replaceText}>Cambiar comida ({selectedIndex + 1}/{meals.length})</Text>
           </TouchableOpacity>
         )}
@@ -443,7 +446,7 @@ export default function MealPlanScreen() {
     return (
       <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="#00D4AA" />
+        <ActivityIndicator size="large" color="#ffb300" />
         <Text style={styles.loadingText}>Cargando plan...</Text>
       </SafeAreaView>
     );
@@ -451,10 +454,9 @@ export default function MealPlanScreen() {
 
   if (!weekPlan && !showNoPlanModal) {
     return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 }]}>
+      <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="#00D4AA" />
-        <Text style={styles.loadingText}>Cargando plan...</Text>
+        <LoadingOverlay visible={true} message="Cargando plan..." fullScreen />
       </SafeAreaView>
     );
   }
@@ -562,7 +564,7 @@ export default function MealPlanScreen() {
             onPress={() => router.push('/(tabs)/nutrition/settings' as any)}
             style={styles.adjustButton}
           >
-            <Ionicons name="options-outline" size={22} color="#00D4AA" />
+            <Ionicons name="options-outline" size={22} color="#ffb300" />
           </TouchableOpacity>
         </View>
       </View>
@@ -815,7 +817,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginTop: 20,
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 8,
@@ -840,8 +842,8 @@ const styles = StyleSheet.create({
     borderColor: '#333333',
   },
   dayButtonActive: {
-    backgroundColor: '#00D4AA',
-    borderColor: '#00D4AA',
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
   },
   dayButtonText: {
     fontSize: 14,
@@ -866,12 +868,12 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   mealType: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 8,
   },
   mealName: {
@@ -887,7 +889,7 @@ const styles = StyleSheet.create({
   ingredientsTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 8,
   },
   ingredientRow: {
@@ -933,13 +935,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
     gap: 8,
   },
   replaceText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#00D4AA',
+    color: '#ffb300',
   },
   modalOverlay: {
     flex: 1,
@@ -961,7 +963,7 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
     borderWidth: 1,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1016,7 +1018,7 @@ const styles = StyleSheet.create({
     color: '#888888',
   },
   confirmButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     flexDirection: 'row',
     gap: 8,
   },
@@ -1037,12 +1039,12 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 20,
     borderWidth: 2,
-    borderColor: '#00D4AA',
+    borderColor: '#ffb300',
   },
   dailySummaryTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#00D4AA',
+    color: '#ffb300',
     marginBottom: 16,
     textAlign: 'center',
   },
@@ -1078,7 +1080,7 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   modalButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingVertical: 14,
     paddingHorizontal: 32,
     borderRadius: 8,

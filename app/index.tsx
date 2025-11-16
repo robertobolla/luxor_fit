@@ -56,25 +56,10 @@ export default function Index() {
     checkOnboardingAndRedirect();
   }, [isLoaded, isSignedIn, user]);
 
-  // Mostrar loading mientras se carga Clerk o se verifica el perfil
+  // Durante la carga inicial, el splash se muestra desde _layout.tsx
+  // Aquí solo mostramos un loading si es necesario (no debería mostrarse)
   if (!isLoaded || isCheckingProfile) {
-    return (
-      <View style={{ 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        backgroundColor: '#1a1a1a' 
-      }}>
-        <ActivityIndicator size="large" color="#00D4AA" />
-        <Text style={{ 
-          color: '#ffffff', 
-          marginTop: 16, 
-          fontSize: 16 
-        }}>
-          {isCheckingProfile ? 'Verificando tu perfil...' : 'Cargando FitMind...'}
-        </Text>
-      </View>
-    );
+    return null; // El splash se maneja en _layout.tsx
   }
 
   // Si no está autenticado, mostrar pantalla de bienvenida con botón de login
@@ -94,11 +79,11 @@ export default function Index() {
           marginBottom: 20,
           textAlign: 'center'
         }}>
-          ¡Bienvenido a FitMind!
+          ¡Bienvenido a Luxor Fitness!
         </Text>
         
         <Text style={{ 
-          color: '#00D4AA', 
+          color: '#ffb300', 
           fontSize: 18,
           marginBottom: 40,
           textAlign: 'center'
@@ -108,7 +93,7 @@ export default function Index() {
 
         <TouchableOpacity
           style={{
-            backgroundColor: '#00D4AA',
+            backgroundColor: '#ffb300',
             paddingHorizontal: 32,
             paddingVertical: 16,
             borderRadius: 12,
@@ -132,12 +117,12 @@ export default function Index() {
             paddingVertical: 16,
             borderRadius: 12,
             borderWidth: 1,
-            borderColor: '#00D4AA'
+            borderColor: '#ffb300'
           }}
           onPress={() => router.push('/(auth)/register')}
         >
           <Text style={{
-            color: '#00D4AA',
+            color: '#ffb300',
             fontSize: 18,
             fontWeight: '600'
           }}>
@@ -168,7 +153,7 @@ export default function Index() {
       </Text>
       
       <Text style={{ 
-        color: '#00D4AA', 
+        color: '#ffb300', 
         fontSize: 16,
         marginBottom: 40,
         textAlign: 'center'
@@ -176,7 +161,7 @@ export default function Index() {
         Redirigiendo a inicio...
       </Text>
 
-      <ActivityIndicator size="large" color="#00D4AA" />
+      <ActivityIndicator size="large" color="#ffb300" />
     </View>
   );
 }

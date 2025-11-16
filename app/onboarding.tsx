@@ -8,14 +8,13 @@ import {
   TextInput,
   Alert,
   StatusBar,
-  SafeAreaView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { useUser } from '@clerk/clerk-expo';
+import { useUser, useAuth } from '@clerk/clerk-expo';
 import { supabase } from '../src/services/supabase';
 import { FitnessLevel, FitnessGoal, Equipment, ActivityType, Gender } from '../src/types';
 import { getClerkUserEmail } from '../src/utils/clerkHelpers';
-import ClearClerkSessionButton from '../src/components/ClearClerkSessionButton';
 import { validateEmail, validateAge, validateWeight, validateHeight, validateRequired, validateMinLength } from '../src/utils/formValidation';
 
 const STEPS = [
@@ -33,11 +32,13 @@ const STEPS = [
 
 export default function OnboardingScreen() {
   const { user } = useUser();
+  const { signOut } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [hasClerkEmail, setHasClerkEmail] = useState(false); // Indica si el usuario tiene email en Clerk
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -55,15 +56,32 @@ export default function OnboardingScreen() {
     equipment: [] as Equipment[],
   });
 
-  // Cargar perfil existente si hay uno
+  // Cargar email de Clerk y perfil existente
   React.useEffect(() => {
-    const loadExistingProfile = async () => {
+    const loadData = async () => {
       if (!user?.id) {
         setIsLoadingProfile(false);
         return;
       }
 
       try {
+        // Primero cargar email de Clerk
+        let clerkEmail: string | null = null;
+        try {
+          clerkEmail = await getClerkUserEmail(user);
+          if (clerkEmail) {
+            console.log('✅ Email de Clerk encontrado:', clerkEmail);
+            setHasClerkEmail(true);
+          } else {
+            console.log('ℹ️ No hay email en Clerk, el usuario deberá ingresarlo');
+            setHasClerkEmail(false);
+          }
+        } catch (error) {
+          console.error('❌ Error obteniendo email de Clerk:', error);
+          setHasClerkEmail(false);
+        }
+
+        // Luego cargar perfil existente
         console.log('🔍 Verificando si existe perfil para pre-cargar...');
         const { data, error } = await supabase
           .from('user_profiles')
@@ -81,9 +99,13 @@ export default function OnboardingScreen() {
           console.log('✅ Perfil existente encontrado, pre-cargando datos...');
           setIsEditing(true);
           const allowedGenders = [Gender.MALE, Gender.FEMALE];
+          
+          // Prioridad: email de Clerk > email del perfil guardado
+          const emailToUse = clerkEmail || data.email || '';
+          
           setFormData({
             name: data.name || '',
-            email: data.email || '',
+            email: emailToUse,
             age: data.age?.toString() || '',
             gender: allowedGenders.includes(data.gender as Gender) ? (data.gender as Gender) : Gender.MALE,
             height: data.height?.toString() || '',
@@ -100,6 +122,10 @@ export default function OnboardingScreen() {
         } else {
           console.log('ℹ️ No hay perfil existente, creando nuevo...');
           setIsEditing(false);
+          // Si hay email de Clerk, pre-llenarlo
+          if (clerkEmail) {
+            setFormData(prev => ({ ...prev, email: clerkEmail! }));
+          }
         }
       } catch (error) {
         console.error('❌ Error inesperado:', error);
@@ -108,7 +134,7 @@ export default function OnboardingScreen() {
       }
     };
 
-    loadExistingProfile();
+    loadData();
   }, [user]);
 
   const nextStep = () => {
@@ -165,8 +191,8 @@ export default function OnboardingScreen() {
       errors.weight = weightValidation.error || '';
     }
 
-    // Validar email si está presente
-    if (formData.email && formData.email.trim().length > 0) {
+    // Validar email solo si NO viene de Clerk (si el usuario lo ingresó manualmente)
+    if (!hasClerkEmail && formData.email && formData.email.trim().length > 0) {
       const emailValidation = validateEmail(formData.email);
       if (!emailValidation.isValid) {
         errors.email = emailValidation.error || '';
@@ -225,6 +251,63 @@ export default function OnboardingScreen() {
     try {
       console.log('💾 Guardando perfil en Supabase...');
 
+      // Verificar si ya existe un perfil con este email pero diferente user_id
+      if (userEmail) {
+        const { data: existingProfile } = await supabase
+          .from('user_profiles')
+          .select('user_id, name, created_at')
+          .eq('email', userEmail)
+          .neq('user_id', user.id)
+          .maybeSingle();
+
+        if (existingProfile) {
+          console.warn('⚠️ Usuario duplicado detectado:', {
+            email: userEmail,
+            existing_user_id: existingProfile.user_id,
+            current_user_id: user.id,
+          });
+          
+          Alert.alert(
+            'Cuenta existente',
+            `Ya existe una cuenta con el email ${userEmail}. Por favor, inicia sesión con esa cuenta en lugar de crear una nueva.`,
+            [
+              {
+                text: 'Cerrar sesión',
+                style: 'destructive',
+                onPress: async () => {
+                  // Cerrar sesión y redirigir al login
+                  try {
+                    await signOut();
+                    router.replace('/(auth)/login');
+                  } catch (error) {
+                    console.error('Error cerrando sesión:', error);
+                    router.replace('/(auth)/login');
+                  }
+                }
+              },
+              {
+                text: 'Cancelar',
+                style: 'cancel',
+                onPress: () => {
+                  // No hacer nada, el usuario cancela
+                }
+              }
+            ]
+          );
+          return;
+        }
+      }
+
+      continueWithSave(userEmail);
+    } catch (error) {
+      console.error('❌ Error verificando duplicados:', error);
+      // Continuar con el guardado normal si hay error en la verificación
+      continueWithSave(userEmail);
+    }
+  };
+
+  const continueWithSave = async (userEmail: string | null) => {
+    try {
       // Preparar datos base
       const profileData: any = {
         user_id: user.id,
@@ -428,7 +511,7 @@ export default function OnboardingScreen() {
         return (
           <View style={styles.stepContainer}>
             <Text style={styles.title}>
-              {isEditing ? '✏️ Editar perfil' : '¡Bienvenido a FitMind!'}
+              {isEditing ? '✏️ Editar perfil' : '¡Bienvenido a Luxor Fitness!'}
             </Text>
             <Text style={styles.subtitle}>
               {isEditing 
@@ -449,17 +532,26 @@ export default function OnboardingScreen() {
         return (
           <View style={styles.stepContainer}>
             <Text style={styles.stepTitle}>Información personal</Text>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
-              <TextInput
-                style={[styles.input, fieldErrors.email && styles.inputError]}
-                value={formData.email}
-                onChangeText={(text) => {
-                  setFormData(prev => ({ ...prev, email: text }));
-                  if (text.trim().length > 0) {
-                    const validation = validateEmail(text);
-                    if (!validation.isValid) {
-                      setFieldErrors(prev => ({ ...prev, email: validation.error || '' }));
+            {/* Solo mostrar campo de email si NO tiene email en Clerk */}
+            {!hasClerkEmail && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  style={[styles.input, fieldErrors.email && styles.inputError]}
+                  value={formData.email}
+                  onChangeText={(text) => {
+                    setFormData(prev => ({ ...prev, email: text }));
+                    if (text.trim().length > 0) {
+                      const validation = validateEmail(text);
+                      if (!validation.isValid) {
+                        setFieldErrors(prev => ({ ...prev, email: validation.error || '' }));
+                      } else {
+                        setFieldErrors(prev => {
+                          const newErrors = { ...prev };
+                          delete newErrors.email;
+                          return newErrors;
+                        });
+                      }
                     } else {
                       setFieldErrors(prev => {
                         const newErrors = { ...prev };
@@ -467,24 +559,30 @@ export default function OnboardingScreen() {
                         return newErrors;
                       });
                     }
-                  } else {
-                    setFieldErrors(prev => {
-                      const newErrors = { ...prev };
-                      delete newErrors.email;
-                      return newErrors;
-                    });
-                  }
-                }}
-                placeholder="tu@email.com"
-                placeholderTextColor="#666"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {fieldErrors.email && (
-                <Text style={styles.errorText}>{fieldErrors.email}</Text>
-              )}
-            </View>
+                  }}
+                  placeholder="tu@email.com"
+                  placeholderTextColor="#666"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {fieldErrors.email && (
+                  <Text style={styles.errorText}>{fieldErrors.email}</Text>
+                )}
+              </View>
+            )}
+            {/* Si tiene email de Clerk, mostrar un mensaje informativo */}
+            {hasClerkEmail && formData.email && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email</Text>
+                <View style={[styles.input, { backgroundColor: '#f5f5f5', paddingVertical: 12 }]}>
+                  <Text style={{ color: '#666' }}>{formData.email}</Text>
+                  <Text style={{ color: '#999', fontSize: 12, marginTop: 4 }}>
+                    Usaremos el email de tu cuenta de Gmail
+                  </Text>
+                </View>
+              </View>
+            )}
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Nombre *</Text>
               <TextInput
@@ -904,11 +1002,6 @@ export default function OnboardingScreen() {
 
       <ScrollView style={styles.content}>
         {renderStep()}
-        
-        {/* Botón de limpiar sesión solo en el primer paso */}
-        {currentStep === 0 && (
-          <ClearClerkSessionButton />
-        )}
       </ScrollView>
 
       <View style={styles.footer}>
@@ -982,7 +1075,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   content: {
     flex: 1,
@@ -1002,7 +1095,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 20,
-    color: '#00D4AA',
+    color: '#ffb300',
     textAlign: 'center',
     marginBottom: 16,
     paddingHorizontal: 20,
@@ -1067,8 +1160,8 @@ const styles = StyleSheet.create({
     borderColor: '#333',
   },
   selectedOption: {
-    backgroundColor: '#00D4AA',
-    borderColor: '#00D4AA',
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
   },
   optionText: {
     fontSize: 16,
@@ -1098,14 +1191,14 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   nextButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 48,
     paddingVertical: 16,
     borderRadius: 28,
     minWidth: 140,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#00D4AA',
+    shadowColor: '#ffb300',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1122,14 +1215,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   completeButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     paddingHorizontal: 48,
     paddingVertical: 16,
     borderRadius: 28,
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#00D4AA',
+    shadowColor: '#ffb300',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,

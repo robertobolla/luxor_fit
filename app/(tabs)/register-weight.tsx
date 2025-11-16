@@ -14,6 +14,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../src/services/supabase';
+import { useRetry } from '../../src/hooks/useRetry';
 
 export default function RegisterWeightScreen() {
   const { user } = useUser();
@@ -26,16 +27,14 @@ export default function RegisterWeightScreen() {
   const [muscle, setMuscle] = useState('');
   const [waist, setWaist] = useState('');
   const [notes, setNotes] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSave = async () => {
-    if (!user?.id || !weight) {
-      Alert.alert('Error', 'El peso es requerido');
-      return;
-    }
+  // Hook para retry en guardado de peso
+  const saveWeightWithRetry = useRetry(
+    async () => {
+      if (!user?.id || !weight) {
+        throw new Error('El peso es requerido');
+      }
 
-    setIsSaving(true);
-    try {
       const bodyMetric = {
         user_id: user.id,
         date,
@@ -53,15 +52,27 @@ export default function RegisterWeightScreen() {
         });
 
       if (error) throw error;
+      return true;
+    },
+    {
+      maxRetries: 2,
+      retryDelay: 2000,
+      showAlert: true,
+    }
+  );
 
+  const handleSave = async () => {
+    if (!user?.id || !weight) {
+      Alert.alert('Error', 'El peso es requerido');
+      return;
+    }
+
+    const result = await saveWeightWithRetry.executeWithRetry();
+    
+    if (result) {
       Alert.alert('¡Guardado!', 'Mediciones registradas correctamente.', [
         { text: 'OK', onPress: () => router.back() }
       ]);
-    } catch (err: any) {
-      console.error('Error saving body metrics:', err);
-      Alert.alert('Error', 'No se pudieron guardar las mediciones.');
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -172,12 +183,12 @@ export default function RegisterWeightScreen() {
 
         {/* Botón Guardar */}
         <TouchableOpacity
-          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+          style={[styles.saveButton, saveWeightWithRetry.isRetrying && styles.saveButtonDisabled]}
           onPress={handleSave}
-          disabled={isSaving}
+          disabled={saveWeightWithRetry.isRetrying}
         >
           <Text style={styles.saveButtonText}>
-            {isSaving ? 'Guardando...' : 'Guardar Medición'}
+            {saveWeightWithRetry.isRetrying ? 'Guardando...' : 'Guardar Medición'}
           </Text>
         </TouchableOpacity>
 
@@ -226,7 +237,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 16,
-    color: '#00D4AA',
+    color: '#ffb300',
     fontWeight: '600',
     marginBottom: 8,
   },
@@ -248,7 +259,7 @@ const styles = StyleSheet.create({
     minHeight: 100,
   },
   saveButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     marginHorizontal: 20,
     padding: 18,
     borderRadius: 12,

@@ -110,7 +110,7 @@ export const AIWorkoutAdaptationModal: React.FC<AIWorkoutAdaptationModalProps> =
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {/* Descripción */}
           <View style={styles.descriptionContainer}>
-            <Ionicons name="bulb" size={24} color="#00D4AA" />
+            <Ionicons name="bulb" size={24} color="#ffb300" />
             <Text style={styles.description}>
               Describe cómo quieres adaptar tu entrenamiento. La IA modificará tu plan actual según tus necesidades específicas.
             </Text>
@@ -140,7 +140,7 @@ export const AIWorkoutAdaptationModal: React.FC<AIWorkoutAdaptationModalProps> =
                 style={styles.suggestionItem}
                 onPress={() => handleSuggestionPress(suggestion)}
               >
-                <Ionicons name="arrow-forward" size={16} color="#00D4AA" />
+                <Ionicons name="arrow-forward" size={16} color="#ffb300" />
                 <Text style={styles.suggestionText}>{suggestion}</Text>
               </TouchableOpacity>
             ))}
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     borderTopColor: '#2a2a2a',
   },
   adaptButton: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

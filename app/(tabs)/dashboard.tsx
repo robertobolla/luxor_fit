@@ -8,7 +8,6 @@ import {
   RefreshControl,
   Dimensions,
   Alert,
-  ActivityIndicator,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +19,8 @@ import { getExerciseDaysThisWeek, getGymDaysThisWeek } from '@/services/exercise
 import DashboardCustomizationModal from '@/components/DashboardCustomizationModal';
 import { DashboardConfig, MetricType, AVAILABLE_METRICS, PRESET_PRIORITIES } from '@/types/dashboard';
 import { loadDashboardConfig } from '@/services/dashboardPreferences';
+import { LoadingOverlay } from '@/components/LoadingOverlay';
+import { useLoadingState } from '@/hooks/useLoadingState';
 
 const { width } = Dimensions.get('window');
 
@@ -83,7 +84,7 @@ export default function DashboardScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig | null>(null);
-  const [isCheckingOnboarding, setIsCheckingOnboarding] = useState(true);
+  const { isLoading: isCheckingOnboarding, setLoading: setIsCheckingOnboarding, executeAsync } = useLoadingState(true);
 
   // Datos de ejemplo
   const [stats, setStats] = useState({
@@ -114,28 +115,24 @@ export default function DashboardScreen() {
         return;
       }
 
-      try {
-        const { data, error } = await supabase
-          .from('user_profiles')
-          .select('id, name, fitness_level')
-          .eq('user_id', user.id)
-          .maybeSingle();
+        await executeAsync(async () => {
+          const { data, error } = await supabase
+            .from('user_profiles')
+            .select('id, name, fitness_level')
+            .eq('user_id', user.id)
+            .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') {
-          console.error('Error al verificar onboarding:', error);
-        }
+          if (error && error.code !== 'PGRST116') {
+            console.error('Error al verificar onboarding:', error);
+          }
 
-        const hasProfile = !!data && !!data.name && !!data.fitness_level;
+          const hasProfile = !!data && !!data.name && !!data.fitness_level;
 
-        if (!hasProfile) {
-          // Redirigir al onboarding si no tiene perfil
-          router.replace('/onboarding');
-        }
-      } catch (error) {
-        console.error('Error inesperado al verificar onboarding:', error);
-      } finally {
-        setIsCheckingOnboarding(false);
-      }
+          if (!hasProfile) {
+            // Redirigir al onboarding si no tiene perfil
+            router.replace('/onboarding');
+          }
+        }, { showError: false });
     };
 
     checkOnboarding();
@@ -162,7 +159,7 @@ export default function DashboardScreen() {
       if (!hasPermissions) {
         Alert.alert(
           'Permisos de Salud',
-          'Para mostrar tus estadísticas reales, FitMind necesita acceso a tus datos de salud (Apple Health o Google Fit).',
+          'Para mostrar tus estadísticas reales, Luxor Fitness necesita acceso a tus datos de salud (Apple Health o Google Fit).',
           [
             { text: 'Más tarde', style: 'cancel' },
             { 
@@ -398,11 +395,8 @@ export default function DashboardScreen() {
   // Mostrar loading mientras se verifica el onboarding
   if (isCheckingOnboarding) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#00D4AA" />
-        <Text style={{ color: '#ffffff', marginTop: 16, fontSize: 16 }}>
-          Cargando tu dashboard...
-        </Text>
+      <View style={styles.container}>
+        <LoadingOverlay visible={true} message="Cargando tu dashboard..." fullScreen />
       </View>
     );
   }
@@ -416,7 +410,7 @@ export default function DashboardScreen() {
         </TouchableOpacity>
         
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>FitMind Premium</Text>
+          <Text style={styles.headerTitle}>Luxor Fitness</Text>
           <TouchableOpacity 
             onPress={() => {
               if (!isToday) setSelectedDate(new Date());
@@ -425,7 +419,7 @@ export default function DashboardScreen() {
           >
             <Text style={styles.headerSubtitle}>{formatDate(selectedDate)}</Text>
             {!isToday && (
-              <Ionicons name="calendar" size={16} color="#00D4AA" style={{ marginLeft: 8 }} />
+              <Ionicons name="calendar" size={16} color="#ffb300" style={{ marginLeft: 8 }} />
             )}
           </TouchableOpacity>
         </View>
@@ -467,7 +461,7 @@ export default function DashboardScreen() {
           <RefreshControl 
             refreshing={refreshing} 
             onRefresh={onRefresh}
-            tintColor="#00D4AA"
+            tintColor="#ffb300"
           />
         }
       >
@@ -477,7 +471,7 @@ export default function DashboardScreen() {
             size={200}
             strokeWidth={12}
             progress={(mainMetricData.value / mainMetricData.goal) * 100}
-            color={mainMetricConfig.color}
+            color="#ffb300"
             icon={mainMetricConfig.icon as any}
             iconSize={60}
           />
@@ -529,7 +523,7 @@ export default function DashboardScreen() {
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="moon" size={22} color="#00D4AA" />
+                <Ionicons name="moon" size={22} color="#ffb300" />
               </View>
             </View>
           </View>
@@ -605,7 +599,7 @@ export default function DashboardScreen() {
                 size={70}
                 strokeWidth={5}
                 progress={(stats.steps / stats.stepsGoal) * 100}
-                color="#00D4AA"
+                color="#ffb300"
                 icon="footsteps"
                 iconSize={20}
               />
@@ -626,7 +620,7 @@ export default function DashboardScreen() {
                 size={70}
                 strokeWidth={5}
                 progress={(stats.distance / stats.distanceGoal) * 100}
-                color="#00D4AA"
+                color="#ffb300"
                 icon="location"
                 iconSize={20}
               />
@@ -647,7 +641,7 @@ export default function DashboardScreen() {
                 size={70}
                 strokeWidth={5}
                 progress={(stats.calories / stats.caloriesGoal) * 100}
-                color="#00D4AA"
+                color="#ffb300"
                 icon="flame"
                 iconSize={20}
               />
@@ -665,7 +659,7 @@ export default function DashboardScreen() {
                 <Text style={styles.cardSubtitle}>Macros, agua y lecciones</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="restaurant" size={22} color="#00D4AA" />
+                <Ionicons name="restaurant" size={22} color="#ffb300" />
               </View>
             </View>
           </TouchableOpacity>
@@ -685,7 +679,7 @@ export default function DashboardScreen() {
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="fitness" size={22} color="#00D4AA" />
+                <Ionicons name="fitness" size={22} color="#ffb300" />
               </View>
             </View>
           </View>
@@ -700,7 +694,7 @@ export default function DashboardScreen() {
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="water" size={22} color="#00D4AA" />
+                <Ionicons name="water" size={22} color="#ffb300" />
               </View>
             </View>
           </View>
@@ -718,7 +712,7 @@ export default function DashboardScreen() {
                 <Text style={styles.cardSubtitle}>Toca para configurar</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="flower" size={22} color="#00D4AA" />
+                <Ionicons name="flower" size={22} color="#ffb300" />
               </View>
             </View>
           </View>
@@ -738,7 +732,7 @@ export default function DashboardScreen() {
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
               <View style={styles.iconCircle}>
-                <Ionicons name="restaurant" size={22} color="#00D4AA" />
+                <Ionicons name="restaurant" size={22} color="#ffb300" />
               </View>
             </View>
           </View>
@@ -756,7 +750,7 @@ export default function DashboardScreen() {
                 size={70}
                 strokeWidth={5}
                 progress={(stats.water / stats.waterGoal) * 100}
-                color="#00D4AA"
+                color="#ffb300"
                 icon="water"
                 iconSize={20}
               />
@@ -826,7 +820,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
@@ -965,7 +959,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dayBarCompleted: {
-    backgroundColor: '#00D4AA',
+    backgroundColor: '#ffb300',
   },
   dayLabel: {
     fontSize: 12,
