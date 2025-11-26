@@ -10,25 +10,32 @@ import {
   Alert,
   SafeAreaView,
   StatusBar,
+  Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../src/services/supabase';
 import { computeAndSaveTargets, createOrUpdateMealPlan, getNutritionProfile } from '../src/services/nutrition';
+import { validateUsernameFormat } from '../src/utils/formValidation';
+import { ConfirmModal } from '../src/components/CustomModal';
 
 export default function ProfileEditScreen() {
   const { user } = useUser();
+  const insets = useSafeAreaInsets();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   
   // Estados del formulario
+  const [username, setUsername] = useState('');
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
   const [age, setAge] = useState('');
-  const [selectedGoal, setSelectedGoal] = useState('');
-  const [selectedActivity, setSelectedActivity] = useState('');
-  const [availableDays, setAvailableDays] = useState<number>(3);
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [usernameError, setUsernameError] = useState('');
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const [showNutritionConfirm, setShowNutritionConfirm] = useState(false);
   
   // Datos originales para detectar cambios
   const [originalData, setOriginalData] = useState<any>(null);
@@ -55,16 +62,10 @@ export default function ProfileEditScreen() {
       }
 
       if (data) {
+        setUsername(data.username || '');
         setWeight(data.weight?.toString() || '');
         setHeight(data.height?.toString() || '');
         setAge(data.age?.toString() || '');
-        setSelectedGoal(data.goals?.[0] || 'general_health');
-        setSelectedActivity(data.activity_types?.[0] || 'mixed');
-        if (typeof (data as any).available_days === 'number') {
-          setAvailableDays((data as any).available_days);
-        } else {
-          setAvailableDays(3);
-        }
         setOriginalData(data);
       }
     } catch (err) {
@@ -78,12 +79,10 @@ export default function ProfileEditScreen() {
     if (!originalData) return false;
     
     return (
+      username !== (originalData.username || '') ||
       weight !== (originalData.weight?.toString() || '') ||
       height !== (originalData.height?.toString() || '') ||
-      age !== (originalData.age?.toString() || '') ||
-      selectedGoal !== (originalData.goals?.[0] || 'general_health') ||
-      selectedActivity !== (originalData.activity_types?.[0] || 'mixed') ||
-      availableDays !== ((originalData as any).available_days ?? 3)
+      age !== (originalData.age?.toString() || '')
     );
   };
 
@@ -91,18 +90,61 @@ export default function ProfileEditScreen() {
     if (!originalData) return false;
     
     // Cualquier cambio en el perfil puede afectar nutrición
-    // Incluyendo edad (afecta BMR), peso, altura, objetivo, actividad
+    // Incluyendo edad (afecta BMR), peso, altura
     return (
       weight !== (originalData.weight?.toString() || '') ||
       height !== (originalData.height?.toString() || '') ||
-      age !== (originalData.age?.toString() || '') ||
-      selectedGoal !== (originalData.goals?.[0] || 'general_health') ||
-      selectedActivity !== (originalData.activity_types?.[0] || 'mixed')
+      age !== (originalData.age?.toString() || '')
     );
   };
 
   const handleSave = async () => {
     if (!user?.id) return;
+
+    // Validar username solo si cambió y no está vacío
+    const trimmedUsername = username.trim();
+    const originalUsername = originalData?.username || '';
+    
+    if (trimmedUsername !== originalUsername) {
+      // Si el username cambió, validar
+      if (!trimmedUsername || trimmedUsername.length === 0) {
+        Alert.alert('Error', 'El nombre de usuario es requerido');
+        return;
+      }
+      
+      const usernameValidation = validateUsernameFormat(trimmedUsername);
+      if (!usernameValidation.isValid) {
+        Alert.alert('Error', usernameValidation.error || 'El nombre de usuario no es válido');
+        setUsernameError(usernameValidation.error || '');
+        return;
+      }
+      
+      // Verificar que el username no esté en uso
+      try {
+        const { data: existingUsername, error: checkError } = await supabase
+          .from('user_profiles')
+          .select('username')
+          .eq('username', trimmedUsername.toLowerCase())
+          .neq('user_id', user.id)
+          .maybeSingle();
+        
+        if (checkError) {
+          console.error('Error verificando username:', checkError);
+          Alert.alert('Error', 'No se pudo verificar el nombre de usuario. Intenta nuevamente.');
+          return;
+        }
+        
+        if (existingUsername) {
+          Alert.alert('Error', 'Este nombre de usuario ya está en uso. Por favor elige otro.');
+          setUsernameError('Este nombre de usuario ya está en uso');
+          return;
+        }
+      } catch (checkErr: any) {
+        console.error('Error verificando username:', checkErr);
+        Alert.alert('Error', 'No se pudo verificar el nombre de usuario. Intenta nuevamente.');
+        return;
+      }
+    }
 
     // Validaciones
     const weightNum = parseFloat(weight);
@@ -170,26 +212,42 @@ export default function ProfileEditScreen() {
 
     setIsSaving(true);
     try {
+      const updateData: any = {
+        weight: weightNum,
+        height: heightNum,
+        age: ageNum,
+        updated_at: new Date().toISOString(),
+      };
+      
+      // Solo actualizar username si cambió y no está vacío
+      const trimmedUsername = username.trim().toLowerCase();
+      const originalUsername = (originalData?.username || '').trim().toLowerCase();
+      
+      if (trimmedUsername !== originalUsername && trimmedUsername.length > 0) {
+        updateData.username = trimmedUsername;
+      } else if (trimmedUsername !== originalUsername && trimmedUsername.length === 0 && originalUsername.length > 0) {
+        // Si el usuario está intentando borrar el username, no permitirlo
+        Alert.alert('Error', 'El nombre de usuario es requerido y no puede estar vacío.');
+        setIsSaving(false);
+        return;
+      }
+      
       const { error } = await supabase
         .from('user_profiles')
-        .update({
-          weight: weightNum,
-          height: heightNum,
-          age: ageNum,
-          goals: [selectedGoal],
-          activity_types: [selectedActivity],
-          available_days: availableDays,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('user_id', user.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error de Supabase al guardar perfil:', error);
+        throw new Error(error.message || 'Error al actualizar el perfil en la base de datos');
+      }
 
       Alert.alert('¡Guardado!', 'Tu perfil ha sido actualizado.');
       router.back();
     } catch (err: any) {
       console.error('Error saving profile:', err);
-      Alert.alert('Error', 'No se pudo guardar el perfil.');
+      const errorMessage = err.message || 'No se pudo guardar el perfil.';
+      Alert.alert('Error', errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -201,20 +259,35 @@ export default function ProfileEditScreen() {
     setIsSaving(true);
     try {
       // 1. Guardar perfil actualizado
+      const updateData: any = {
+        weight: weightNum,
+        height: heightNum,
+        age: ageNum,
+        updated_at: new Date().toISOString(),
+      };
+      
+      // Solo actualizar username si cambió y no está vacío
+      const trimmedUsername = username.trim().toLowerCase();
+      const originalUsername = (originalData?.username || '').trim().toLowerCase();
+      
+      if (trimmedUsername !== originalUsername && trimmedUsername.length > 0) {
+        updateData.username = trimmedUsername;
+      } else if (trimmedUsername !== originalUsername && trimmedUsername.length === 0 && originalUsername.length > 0) {
+        // Si el usuario está intentando borrar el username, no permitirlo
+        Alert.alert('Error', 'El nombre de usuario es requerido y no puede estar vacío.');
+        setIsSaving(false);
+        return;
+      }
+      
       const { error } = await supabase
         .from('user_profiles')
-        .update({
-          weight: weightNum,
-          height: heightNum,
-          age: ageNum,
-          goals: [selectedGoal],
-          activity_types: [selectedActivity],
-          available_days: availableDays,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('user_id', user.id);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error de Supabase al guardar perfil:', error);
+        throw new Error(error.message || 'Error al actualizar el perfil en la base de datos');
+      }
 
       // 2. Recalcular targets de nutrición
       const today = new Date();
@@ -253,7 +326,8 @@ export default function ProfileEditScreen() {
       router.back();
     } catch (err: any) {
       console.error('Error saving and adapting:', err);
-      Alert.alert('Error', 'Hubo un problema al actualizar. Intenta nuevamente.');
+      const errorMessage = err.message || 'Hubo un problema al actualizar. Intenta nuevamente.';
+      Alert.alert('Error', errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -268,39 +342,91 @@ export default function ProfileEditScreen() {
     );
   }
 
-  const goals = [
-    { value: 'weight_loss', label: 'Perder peso', icon: 'trending-down' },
-    { value: 'muscle_gain', label: 'Ganar músculo', icon: 'fitness' },
-    { value: 'strength', label: 'Aumentar fuerza', icon: 'barbell' },
-    { value: 'endurance', label: 'Resistencia', icon: 'bicycle' },
-    { value: 'general_health', label: 'Salud general', icon: 'heart' },
-  ];
-
-  const activities = [
-    { value: 'cardio', label: 'Cardio', icon: 'walk' },
-    { value: 'strength', label: 'Fuerza', icon: 'barbell' },
-    { value: 'yoga', label: 'Yoga', icon: 'leaf' },
-    { value: 'hiit', label: 'HIIT', icon: 'flame' },
-    { value: 'sports', label: 'Deportes', icon: 'football' },
-    { value: 'mixed', label: 'Mixto', icon: 'shuffle' },
-  ];
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      {/* Header - Fuera del ScrollView para que siempre sea accesible */}
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
+        <TouchableOpacity 
+          onPress={() => {
+            if (hasChanges()) {
+              setShowExitConfirm(true);
+            } else {
+              router.back();
+            }
+          }} 
+          style={styles.backButton}
+          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+        >
+          <Ionicons name="close" size={28} color="#ffffff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Editar Perfil</Text>
+        <View style={{ width: 44 }} />
+      </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color="#ffffff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Editar Perfil</Text>
-          <View style={{ width: 24 }} />
-        </View>
 
         {/* Datos Básicos */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📊 Datos Básicos</Text>
+          
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Nombre de usuario</Text>
+            <Text style={{ color: '#666', fontSize: 12, marginBottom: 8 }}>
+              Este será tu identificador único en la red social
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Text style={{ color: '#666', fontSize: 16, marginRight: 4 }}>@</Text>
+              <TextInput
+                style={[styles.input, { flex: 1 }, usernameError && styles.inputError]}
+                value={username}
+                onChangeText={async (text) => {
+                  const lowerText = text.toLowerCase().trim();
+                  setUsername(lowerText);
+                  setUsernameError('');
+                  
+                  if (lowerText.length > 0) {
+                    const validation = validateUsernameFormat(lowerText);
+                    if (!validation.isValid) {
+                      setUsernameError(validation.error || '');
+                      return;
+                    }
+                    
+                    // Verificar disponibilidad
+                    setCheckingUsername(true);
+                    try {
+                      const { data } = await supabase
+                        .from('user_profiles')
+                        .select('username')
+                        .eq('username', lowerText)
+                        .neq('user_id', user?.id || '')
+                        .maybeSingle();
+                      
+                      if (data) {
+                        setUsernameError('Este nombre de usuario ya está en uso');
+                      }
+                    } catch (error) {
+                      console.error('Error verificando username:', error);
+                    } finally {
+                      setCheckingUsername(false);
+                    }
+                  }
+                }}
+                placeholder="juan_fitness"
+                placeholderTextColor="#666"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              {checkingUsername && (
+                <ActivityIndicator size="small" color="#666" style={{ marginLeft: 8 }} />
+              )}
+            </View>
+            {usernameError && (
+              <Text style={{ color: '#ff4444', fontSize: 12, marginTop: 4 }}>{usernameError}</Text>
+            )}
+            {!usernameError && username.length >= 3 && !checkingUsername && username !== (originalData?.username || '') && (
+              <Text style={{ color: '#4CAF50', fontSize: 12, marginTop: 4 }}>✓ Disponible</Text>
+            )}
+          </View>
           
           <View style={styles.inputRow}>
             <View style={styles.inputGroup}>
@@ -341,84 +467,6 @@ export default function ProfileEditScreen() {
           </View>
         </View>
 
-        {/* Objetivo */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🎯 Objetivo Principal</Text>
-          <View style={styles.optionsGrid}>
-            {goals.map((goal) => (
-              <TouchableOpacity
-                key={goal.value}
-                style={[
-                  styles.optionCard,
-                  selectedGoal === goal.value && styles.optionCardActive,
-                ]}
-                onPress={() => setSelectedGoal(goal.value)}
-              >
-                <Ionicons
-                  name={goal.icon as any}
-                  size={32}
-                  color={selectedGoal === goal.value ? '#ffb300' : '#888888'}
-                />
-                <Text
-                  style={[
-                    styles.optionLabel,
-                    selectedGoal === goal.value && styles.optionLabelActive,
-                  ]}
-                >
-                  {goal.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Tipo de Actividad */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🏃 Tipo de Actividad</Text>
-          <View style={styles.optionsGrid}>
-            {activities.map((activity) => (
-              <TouchableOpacity
-                key={activity.value}
-                style={[
-                  styles.optionCard,
-                  selectedActivity === activity.value && styles.optionCardActive,
-                ]}
-                onPress={() => setSelectedActivity(activity.value)}
-              >
-                <Ionicons
-                  name={activity.icon as any}
-                  size={32}
-                  color={selectedActivity === activity.value ? '#ffb300' : '#888888'}
-                />
-                <Text
-                  style={[
-                    styles.optionLabel,
-                    selectedActivity === activity.value && styles.optionLabelActive,
-                  ]}
-                >
-                  {activity.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Días de entrenamiento por semana */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📅 Días de entrenamiento por semana</Text>
-          <View style={styles.daysGrid}>
-            {Array.from({ length: 7 }, (_, i) => i + 1).map((d) => (
-              <TouchableOpacity
-                key={d}
-                style={[styles.dayChip, availableDays === d && styles.dayChipActive]}
-                onPress={() => setAvailableDays(d)}
-              >
-                <Text style={[styles.dayChipText, availableDays === d && styles.dayChipTextActive]}>{d}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
         {/* Botón Guardar */}
         <TouchableOpacity
           style={[styles.saveButton, (isSaving || !hasChanges()) && styles.saveButtonDisabled]}
@@ -443,6 +491,35 @@ export default function ProfileEditScreen() {
           </Text>
         )}
       </ScrollView>
+
+      {/* Modal de confirmación al salir */}
+      <ConfirmModal
+        visible={showExitConfirm}
+        onClose={() => setShowExitConfirm(false)}
+        title="¿Descartar cambios?"
+        message="Tienes cambios sin guardar. ¿Estás seguro de que quieres salir sin guardar?"
+        confirmText="Descartar"
+        cancelText="Cancelar"
+        confirmButtonStyle="danger"
+        onConfirm={() => router.back()}
+      />
+
+      {/* Modal de confirmación para adaptar nutrición */}
+      <ConfirmModal
+        visible={showNutritionConfirm}
+        onClose={() => setShowNutritionConfirm(false)}
+        title="Actualizar plan de nutrición"
+        message="Los cambios que realizaste afectan tu plan de nutrición. ¿Deseas guardar los cambios y adaptar tu dieta?"
+        confirmText="Guardar y adaptar"
+        cancelText="Solo guardar"
+        onConfirm={async () => {
+          if (!user?.id) return;
+          const weightNum = parseFloat(weight);
+          const heightNum = parseFloat(height);
+          const ageNum = parseInt(age);
+          await saveProfileAndAdaptDiet(weightNum, heightNum, ageNum);
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -454,15 +531,25 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
+    paddingTop: 8,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    backgroundColor: '#0a0a0a',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
   },
   backButton: {
-    padding: 8,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 22,
+    backgroundColor: 'transparent',
   },
   headerTitle: {
     fontSize: 24,

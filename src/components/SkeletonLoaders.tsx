@@ -146,6 +146,78 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  skeletonContainer: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  skeletonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  skeletonProgressCircles: {
+    marginBottom: 32,
+  },
+  skeletonCircleContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  skeletonProgressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 16,
+  },
+  skeletonMetrics: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  skeletonMetricCard: {
+    width: '48%',
+    backgroundColor: '#2a2a2a',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  skeletonChartContainer: {
+    marginBottom: 24,
+  },
+  skeletonStatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  skeletonStatCard: {
+    width: '48%',
+    marginBottom: 12,
+  },
+  skeletonMacrosContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  skeletonMacroCard: {
+    width: '48%',
+    marginBottom: 12,
+  },
+  skeletonMealsContainer: {
+    marginBottom: 24,
+  },
+  skeletonMealCard: {
+    backgroundColor: '#2a2a2a',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  skeletonWorkoutStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
 });
 
 // Componentes de animación
@@ -245,3 +317,136 @@ export const SlideInView: React.FC<SlideInViewProps> = ({
     </Animated.View>
   );
 };
+
+// Skeleton específico para Dashboard
+export const SkeletonDashboard: React.FC = () => (
+  <View style={styles.skeletonContainer}>
+    {/* Header */}
+    <View style={styles.skeletonHeader}>
+      <SkeletonBox width={40} height={40} borderRadius={20} />
+      <SkeletonBox width="60%" height={24} style={{ marginLeft: 12 }} />
+      <SkeletonBox width={40} height={40} borderRadius={20} />
+    </View>
+    
+    {/* Círculos de progreso */}
+    <View style={styles.skeletonProgressCircles}>
+      <View style={styles.skeletonCircleContainer}>
+        <SkeletonBox width={120} height={120} borderRadius={60} />
+        <SkeletonBox width="80%" height={16} style={{ marginTop: 12 }} />
+        <SkeletonBox width="60%" height={14} style={{ marginTop: 4 }} />
+      </View>
+      <View style={styles.skeletonProgressRow}>
+        <View style={styles.skeletonCircleContainer}>
+          <SkeletonBox width={80} height={80} borderRadius={40} />
+          <SkeletonBox width="70%" height={14} style={{ marginTop: 8 }} />
+        </View>
+        <View style={styles.skeletonCircleContainer}>
+          <SkeletonBox width={80} height={80} borderRadius={40} />
+          <SkeletonBox width="70%" height={14} style={{ marginTop: 8 }} />
+        </View>
+      </View>
+    </View>
+    
+    {/* Métricas */}
+    <View style={styles.skeletonMetrics}>
+      {[1, 2, 3, 4].map((i) => (
+        <View key={i} style={styles.skeletonMetricCard}>
+          <SkeletonBox width="40%" height={16} style={{ marginBottom: 8 }} />
+          <SkeletonBox width="60%" height={20} style={{ marginBottom: 4 }} />
+          <SkeletonBox width="50%" height={14} />
+        </View>
+      ))}
+    </View>
+  </View>
+);
+
+// Skeleton específico para Progress
+export const SkeletonProgress: React.FC = () => (
+  <View style={styles.skeletonContainer}>
+    {/* Header */}
+    <View style={styles.skeletonHeader}>
+      <SkeletonBox width={40} height={40} borderRadius={20} />
+      <SkeletonBox width="60%" height={24} style={{ marginLeft: 12 }} />
+      <SkeletonBox width={40} height={40} borderRadius={20} />
+    </View>
+    
+    {/* Gráficos */}
+    <View style={styles.skeletonChartContainer}>
+      <SkeletonBox width="100%" height={200} borderRadius={12} style={{ marginBottom: 16 }} />
+      <SkeletonBox width="100%" height={150} borderRadius={12} />
+    </View>
+    
+    {/* Estadísticas */}
+    <View style={styles.skeletonStatsGrid}>
+      {[1, 2, 3, 4, 5, 6].map((i) => (
+        <View key={i} style={styles.skeletonStatCard}>
+          <SkeletonBox width="100%" height={60} borderRadius={8} />
+        </View>
+      ))}
+    </View>
+  </View>
+);
+
+// Skeleton específico para Workout
+export const SkeletonWorkout: React.FC = () => (
+  <View style={styles.skeletonContainer}>
+    {/* Header */}
+    <View style={styles.skeletonHeader}>
+      <SkeletonBox width="50%" height={28} />
+      <SkeletonBox width={100} height={36} borderRadius={18} />
+    </View>
+    
+    {/* Planes de entrenamiento */}
+    <View style={styles.skeletonList}>
+      {[1, 2, 3].map((i) => (
+        <View key={i} style={styles.skeletonWorkoutCard}>
+          <View style={styles.skeletonWorkoutHeader}>
+            <SkeletonBox width={24} height={24} borderRadius={12} />
+            <SkeletonBox width="60%" height={18} style={{ marginLeft: 8 }} />
+            <SkeletonBox width={60} height={20} borderRadius={10} />
+          </View>
+          <SkeletonBox width="100%" height={12} style={{ marginBottom: 8, marginTop: 12 }} />
+          <SkeletonBox width="80%" height={12} style={{ marginBottom: 12 }} />
+          <View style={styles.skeletonWorkoutStats}>
+            <SkeletonBox width="30%" height={14} />
+            <SkeletonBox width="30%" height={14} />
+            <SkeletonBox width="30%" height={14} />
+          </View>
+        </View>
+      ))}
+    </View>
+  </View>
+);
+
+// Skeleton específico para Nutrition
+export const SkeletonNutrition: React.FC = () => (
+  <View style={styles.skeletonContainer}>
+    {/* Header con fecha */}
+    <View style={styles.skeletonHeader}>
+      <SkeletonBox width={40} height={40} borderRadius={20} />
+      <SkeletonBox width="50%" height={24} style={{ marginLeft: 12 }} />
+      <SkeletonBox width={40} height={40} borderRadius={20} />
+    </View>
+    
+    {/* Tarjetas de macros */}
+    <View style={styles.skeletonMacrosContainer}>
+      {[1, 2, 3, 4].map((i) => (
+        <View key={i} style={styles.skeletonMacroCard}>
+          <SkeletonBox width="100%" height={80} borderRadius={12} />
+        </View>
+      ))}
+    </View>
+    
+    {/* Comidas del día */}
+    <View style={styles.skeletonMealsContainer}>
+      {[1, 2, 3, 4].map((i) => (
+        <View key={i} style={styles.skeletonMealCard}>
+          <SkeletonBox width="30%" height={16} style={{ marginBottom: 8 }} />
+          <SkeletonBox width="100%" height={12} style={{ marginBottom: 4 }} />
+          <SkeletonBox width="80%" height={12} style={{ marginBottom: 4 }} />
+          <SkeletonBox width="60%" height={12} />
+        </View>
+      ))}
+    </View>
+  </View>
+);

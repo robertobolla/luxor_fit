@@ -268,7 +268,7 @@ export default function ProfileScreen() {
     {
       title: 'Editar perfil',
       icon: 'person-outline',
-      onPress: () => router.push('/profile-edit'),
+      onPress: () => router.push('/onboarding'),
     },
     {
       title: 'Configuración',
@@ -349,23 +349,6 @@ export default function ProfileScreen() {
         <Text style={styles.email}>{displayEmail}</Text>
       </View>
 
-      <View style={styles.statsContainer}>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>
-            {profile ? fitnessLevelMap[profile.fitness_level] || 'N/A' : 'N/A'}
-          </Text>
-          <Text style={styles.statLabel}>Nivel</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{profile?.available_days || 0}</Text>
-          <Text style={styles.statLabel}>Días/semana</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>{profile?.goals?.length || 0}</Text>
-          <Text style={styles.statLabel}>Objetivos</Text>
-        </View>
-      </View>
-
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Información personal</Text>
         <View style={styles.infoCard}>
@@ -379,6 +362,14 @@ export default function ProfileScreen() {
           </View>
           {profile && (
             <>
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Género</Text>
+                <Text style={styles.infoValue}>
+                  {profile.gender === 'male' ? 'Masculino' : 
+                   profile.gender === 'female' ? 'Femenino' : 
+                   profile.gender === 'other' ? 'Otro' : 'No especificado'}
+                </Text>
+              </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Edad</Text>
                 <Text style={styles.infoValue}>{profile.age} años</Text>
@@ -394,13 +385,6 @@ export default function ProfileScreen() {
             </>
           )}
         </View>
-        <TouchableOpacity 
-          style={styles.editProfileButton}
-          onPress={() => router.push('/onboarding')}
-        >
-          <Text style={styles.editProfileText}>Editar perfil</Text>
-          <Ionicons name="arrow-forward" size={20} color="#ffb300" />
-        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>

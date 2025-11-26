@@ -1,0 +1,666 @@
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../services/adminService';
+
+interface ExerciseMetadataModalProps {
+  exercise: {
+    id: string;
+    canonical_name: string;
+    category?: string | null;
+    muscles?: string[] | null;
+    muscle_zones?: string[] | null;
+    movement_type?: string | null;
+    exercise_type?: string | null;
+    equipment?: string[] | null;
+    goals?: string[] | null;
+    activity_types?: string[] | null;
+    uses_time?: boolean | null;
+  };
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: () => void;
+}
+
+const CATEGORIES = [
+  { value: 'CARDIO', label: 'Cardio', movementType: 'cardio' },
+  { value: 'FUERZA_SUPERIOR_PUSH', label: 'Fuerza Superior Push', movementType: 'push' },
+  { value: 'FUERZA_SUPERIOR_PULL', label: 'Fuerza Superior Pull', movementType: 'pull' },
+  { value: 'FUERZA_INFERIOR', label: 'Fuerza Inferior', movementType: 'legs' },
+  { value: 'CORE', label: 'Core', movementType: 'core' },
+  { value: 'FLEXIBILIDAD', label: 'Flexibilidad', movementType: 'flexibility' },
+  { value: 'FUNCIONAL', label: 'Funcional', movementType: 'full_body' },
+  { value: 'PLIOMETRIA', label: 'Pliometría', movementType: 'plyometric' },
+  { value: 'FULL_BODY', label: 'Full Body', movementType: 'full_body' },
+  { value: 'HIIT', label: 'HIIT', movementType: 'cardio' },
+];
+
+const EXERCISE_TYPES = [
+  { value: 'compound', label: 'Compuesto' },
+  { value: 'isolation', label: 'Aislado' },
+];
+
+const MUSCLES = [
+  'pecho', 'espalda', 'hombros', 'bíceps', 'tríceps', 'antebrazos', 'trapecio',
+  'cuádriceps', 'isquiotibiales', 'glúteos', 'pantorrillas', 'gemelos',
+  'abdominales', 'oblicuos', 'lumbares', 'cuerpo_completo'
+];
+
+const MUSCLE_ZONES: Record<string, string[]> = {
+  pecho: ['pecho_superior', 'pecho_medio', 'pecho_inferior'],
+  espalda: ['espalda_superior', 'espalda_media', 'espalda_inferior', 'lats', 'romboides', 'trapecio_superior', 'trapecio_medio'],
+  hombros: ['hombros_frontales', 'hombros_medios', 'hombros_posteriores'],
+  bíceps: ['biceps_cabeza_larga', 'biceps_cabeza_corta', 'braquial'],
+  tríceps: ['triceps_cabeza_lateral', 'triceps_cabeza_medial', 'triceps_cabeza_larga'],
+  cuádriceps: ['cuadriceps_frontal', 'cuadriceps_lateral', 'cuadriceps_medial', 'cuadriceps_intermedio'],
+  isquiotibiales: ['isquiotibiales_superior', 'isquiotibiales_medio', 'isquiotibiales_inferior'],
+  glúteos: ['gluteos_superior', 'gluteos_medio', 'gluteos_inferior'],
+  pantorrillas: ['gemelos', 'soleo'],
+  gemelos: ['gemelos', 'soleo'],
+  abdominales: ['abdominales_superiores', 'abdominales_inferiores', 'transverso'],
+  oblicuos: ['oblicuos_externos', 'oblicuos_internos'],
+};
+
+const EQUIPMENT = [
+  'none', 'dumbbells', 'barbell', 'resistance_bands', 'pull_up_bar', 'bench',
+  'bench_dumbbells', 'bench_barbell', 'gym_access', 'kettlebell', 'cable_machine', 
+  'smith_machine', 'leg_press', 'medicine_ball', 'yoga_mat'
+];
+
+const GOALS = [
+  'weight_loss', 'muscle_gain', 'strength', 'endurance', 'flexibility', 'general_fitness'
+];
+
+const ACTIVITY_TYPES = [
+  'cardio', 'strength', 'sports', 'yoga', 'hiit', 'mixed'
+];
+
+const EQUIPMENT_LABELS: Record<string, string> = {
+  none: 'Solo peso corporal',
+  dumbbells: 'Mancuernas',
+  barbell: 'Barra olímpica',
+  resistance_bands: 'Bandas de resistencia',
+  pull_up_bar: 'Barra de dominadas',
+  bench: 'Banco',
+  bench_dumbbells: 'Banco y mancuernas',
+  bench_barbell: 'Banco con barra',
+  gym_access: 'Acceso a gimnasio',
+  kettlebell: 'Kettlebell',
+  cable_machine: 'Máquina de poleas',
+  smith_machine: 'Máquina Smith',
+  leg_press: 'Prensa de piernas',
+  medicine_ball: 'Balón medicinal',
+  yoga_mat: 'Mat de yoga',
+};
+
+const GOAL_LABELS: Record<string, string> = {
+  weight_loss: 'Perder peso',
+  muscle_gain: 'Ganar músculo',
+  strength: 'Aumentar fuerza',
+  endurance: 'Mejorar resistencia',
+  flexibility: 'Flexibilidad',
+  general_fitness: 'Forma general',
+};
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  cardio: 'Cardio',
+  strength: 'Fuerza',
+  sports: 'Deportes',
+  yoga: 'Yoga/Pilates',
+  hiit: 'HIIT',
+  mixed: 'Mixto',
+};
+
+export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSave }: ExerciseMetadataModalProps) {
+  const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Form state
+  const [canonicalName, setCanonicalName] = useState(exercise.canonical_name || '');
+  const [category, setCategory] = useState(exercise.category || '');
+  const [exerciseType, setExerciseType] = useState(exercise.exercise_type || '');
+  const [usesTime, setUsesTime] = useState(exercise.uses_time || false);
+  const [muscles, setMuscles] = useState<string[]>(exercise.muscles || []);
+  const [muscleZones, setMuscleZones] = useState<string[]>(exercise.muscle_zones || []);
+  const [equipment, setEquipment] = useState<string[]>(exercise.equipment || []);
+  const [goals, setGoals] = useState<string[]>(exercise.goals || []);
+  const [activityTypes, setActivityTypes] = useState<string[]>(exercise.activity_types || []);
+
+  // Auto-set movement_type when category changes
+  useEffect(() => {
+    const selectedCategory = CATEGORIES.find(c => c.value === category);
+    if (selectedCategory) {
+      // movement_type will be set automatically on save
+    }
+  }, [category]);
+
+  // Reset form when exercise changes
+  useEffect(() => {
+    if (isOpen) {
+      setCanonicalName(exercise.canonical_name || '');
+      setCategory(exercise.category || '');
+      setExerciseType(exercise.exercise_type || '');
+      setUsesTime(exercise.uses_time || false);
+      setMuscles(exercise.muscles || []);
+      setMuscleZones(exercise.muscle_zones || []);
+      setEquipment(exercise.equipment || []);
+      setGoals(exercise.goals || []);
+      setActivityTypes(exercise.activity_types || []);
+      setStep(1);
+      setError(null);
+    }
+  }, [exercise, isOpen]);
+
+  const availableZones = React.useMemo(() => {
+    const zones: string[] = [];
+    muscles.forEach(muscle => {
+      const muscleZonesForMuscle = MUSCLE_ZONES[muscle] || [];
+      zones.push(...muscleZonesForMuscle);
+    });
+    return Array.from(new Set(zones));
+  }, [muscles]);
+
+  const toggleArrayItem = (array: string[], setter: (arr: string[]) => void, item: string) => {
+    if (array.includes(item)) {
+      setter(array.filter(i => i !== item));
+    } else {
+      setter([...array, item]);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+
+    try {
+      const selectedCategory = CATEGORIES.find(c => c.value === category);
+      const movementType = selectedCategory?.movementType || null;
+
+      // Si el nombre cambió, actualizarlo también
+      const updates: any = {
+        category: category || null,
+        movement_type: movementType,
+        exercise_type: exerciseType || null,
+        uses_time: usesTime,
+        muscles: muscles.length > 0 ? muscles : null,
+        muscle_zones: muscleZones.length > 0 ? muscleZones : null,
+        equipment: equipment.length > 0 ? equipment : null,
+        goals: goals.length > 0 ? goals : null,
+        activity_types: activityTypes.length > 0 ? activityTypes : null,
+      };
+
+      // Solo actualizar el nombre si cambió
+      if (canonicalName.trim() !== exercise.canonical_name) {
+        updates.canonical_name = canonicalName.trim();
+      }
+
+      const { error: updateError } = await supabase
+        .from('exercise_videos')
+        .update(updates)
+        .eq('id', exercise.id);
+
+      if (updateError) throw updateError;
+
+      onSave();
+      onClose();
+    } catch (e: any) {
+      setError(e.message || 'Error al guardar metadata');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  const canGoNext = () => {
+    if (step === 1) return category && exerciseType;
+    if (step === 2) return muscles.length > 0;
+    if (step === 3) return equipment.length > 0;
+    if (step === 4) return goals.length > 0 || activityTypes.length > 0;
+    return true;
+  };
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000,
+    }}>
+      <div style={{
+        backgroundColor: '#1a1a1a',
+        borderRadius: 12,
+        padding: 24,
+        width: '95%',
+        maxWidth: 900,
+        maxHeight: '95vh',
+        overflow: 'auto',
+        border: '1px solid #333',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ display: 'block', color: '#888', fontSize: 12, marginBottom: 4 }}>
+              Nombre del ejercicio:
+            </label>
+            <input
+              type="text"
+              value={canonicalName}
+              onChange={(e) => setCanonicalName(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #2a2a2a',
+                background: '#0a0a0a',
+                color: '#fff',
+                fontSize: 18,
+                fontWeight: 'bold',
+              }}
+              placeholder="Nombre del ejercicio"
+            />
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#888',
+              fontSize: 24,
+              cursor: 'pointer',
+              padding: 0,
+              width: 32,
+              height: 32,
+              marginLeft: 16,
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Progress indicator */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+          {[1, 2, 3, 4].map((s) => (
+            <div
+              key={s}
+              style={{
+                flex: 1,
+                height: 4,
+                backgroundColor: s <= step ? '#4CAF50' : '#333',
+                borderRadius: 2,
+              }}
+            />
+          ))}
+        </div>
+
+        {error && (
+          <div style={{
+            padding: 12,
+            backgroundColor: '#ff4444',
+            color: '#fff',
+            borderRadius: 8,
+            marginBottom: 16,
+          }}>
+            ❌ {error}
+          </div>
+        )}
+
+        {/* Step 1: Categoría y Tipo de Ejercicio */}
+        {step === 1 && (
+          <div>
+            <h3 style={{ color: '#fff', marginBottom: 16 }}>Paso 1: Categoría y Tipo de Ejercicio</h3>
+            
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
+                Categoría Principal *
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  borderRadius: 8,
+                  border: '1px solid #2a2a2a',
+                  background: '#0a0a0a',
+                  color: '#fff',
+                  fontSize: 14,
+                }}
+              >
+                <option value="">Selecciona una categoría</option>
+                {CATEGORIES.map(cat => (
+                  <option key={cat.value} value={cat.value}>{cat.label}</option>
+                ))}
+              </select>
+              {category && (
+                <p style={{ color: '#888', fontSize: 12, marginTop: 4 }}>
+                  Tipo de movimiento: {CATEGORIES.find(c => c.value === category)?.movementType}
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
+                Tipo de Ejercicio *
+              </label>
+              <div style={{ display: 'flex', gap: 12 }}>
+                {EXERCISE_TYPES.map(type => (
+                  <label
+                    key={type.value}
+                    style={{
+                      flex: 1,
+                      padding: 12,
+                      border: `2px solid ${exerciseType === type.value ? '#4CAF50' : '#2a2a2a'}`,
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      backgroundColor: exerciseType === type.value ? '#1a3a1a' : '#0a0a0a',
+                      color: '#fff',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="exerciseType"
+                      value={type.value}
+                      checked={exerciseType === type.value}
+                      onChange={(e) => setExerciseType(e.target.value)}
+                      style={{ marginRight: 8 }}
+                    />
+                    {type.label}
+                  </label>
+                ))}
+              </div>
+              <p style={{ color: '#888', fontSize: 12, marginTop: 8 }}>
+                💡 Si seleccionas 2 o más músculos en el siguiente paso, es recomendable marcar "Compuesto"
+              </p>
+            </div>
+
+            <div style={{ marginTop: 20 }}>
+              <label style={{ display: 'flex', alignItems: 'center', color: '#ccc', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={usesTime}
+                  onChange={(e) => setUsesTime(e.target.checked)}
+                  style={{ marginRight: 8, width: 18, height: 18, cursor: 'pointer' }}
+                />
+                <span>Este ejercicio usa tiempo en lugar de repeticiones</span>
+              </label>
+              <p style={{ color: '#888', fontSize: 12, marginTop: 4, marginLeft: 26 }}>
+                💡 Marca esto para ejercicios como battle ropes, plancha, cardio, etc. que se miden por tiempo (ej: 30s, 1min) en lugar de repeticiones
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Músculos y Zonas */}
+        {step === 2 && (
+          <div>
+            <h3 style={{ color: '#fff', marginBottom: 16 }}>Paso 2: Músculos y Zonas Musculares</h3>
+            
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
+                Músculos Trabajados *
+              </label>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 8,
+                maxHeight: 300,
+                overflow: 'auto',
+                padding: 12,
+                border: '1px solid #2a2a2a',
+                borderRadius: 8,
+              }}>
+                {MUSCLES.map(muscle => (
+                  <label
+                    key={muscle}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      padding: 8,
+                      borderRadius: 4,
+                      backgroundColor: muscles.includes(muscle) ? '#1a3a1a' : 'transparent',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={muscles.includes(muscle)}
+                      onChange={() => toggleArrayItem(muscles, setMuscles, muscle)}
+                      style={{ marginRight: 8 }}
+                    />
+                    {muscle}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {availableZones.length > 0 && (
+              <div>
+                <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
+                  Zonas Musculares (opcional)
+                </label>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: 8,
+                  maxHeight: 300,
+                  overflow: 'auto',
+                  padding: 12,
+                  border: '1px solid #2a2a2a',
+                  borderRadius: 8,
+                }}>
+                  {availableZones.map(zone => (
+                    <label
+                      key={zone}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        padding: 8,
+                        borderRadius: 4,
+                        backgroundColor: muscleZones.includes(zone) ? '#1a3a1a' : 'transparent',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={muscleZones.includes(zone)}
+                        onChange={() => toggleArrayItem(muscleZones, setMuscleZones, zone)}
+                        style={{ marginRight: 8 }}
+                      />
+                      {zone.replace(/_/g, ' ')}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 3: Equipamiento */}
+        {step === 3 && (
+          <div>
+            <h3 style={{ color: '#fff', marginBottom: 16 }}>Paso 3: Equipamiento</h3>
+            
+            <div>
+              <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
+                Equipamiento Necesario * (puedes seleccionar múltiples)
+              </label>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 8,
+                maxHeight: 400,
+                overflow: 'auto',
+                padding: 12,
+                border: '1px solid #2a2a2a',
+                borderRadius: 8,
+              }}>
+                {EQUIPMENT.map(eq => (
+                  <label
+                    key={eq}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      padding: 8,
+                      borderRadius: 4,
+                      backgroundColor: equipment.includes(eq) ? '#1a3a1a' : 'transparent',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={equipment.includes(eq)}
+                      onChange={() => toggleArrayItem(equipment, setEquipment, eq)}
+                      style={{ marginRight: 8 }}
+                    />
+                    {EQUIPMENT_LABELS[eq] || eq}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Objetivos y Actividad */}
+        {step === 4 && (
+          <div>
+            <h3 style={{ color: '#fff', marginBottom: 16 }}>Paso 4: Objetivos y Actividad</h3>
+            
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
+                Objetivos *
+              </label>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: 8,
+                padding: 8,
+                border: '1px solid #2a2a2a',
+                borderRadius: 8,
+              }}>
+                {GOALS.map(goal => (
+                  <label
+                    key={goal}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      padding: 8,
+                      borderRadius: 4,
+                      backgroundColor: goals.includes(goal) ? '#1a3a1a' : 'transparent',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={goals.includes(goal)}
+                      onChange={() => toggleArrayItem(goals, setGoals, goal)}
+                      style={{ marginRight: 8 }}
+                    />
+                    {GOAL_LABELS[goal] || goal}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
+                Tipos de Actividad *
+              </label>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: 8,
+                padding: 8,
+                border: '1px solid #2a2a2a',
+                borderRadius: 8,
+              }}>
+                {ACTIVITY_TYPES.map(activity => (
+                  <label
+                    key={activity}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: '#fff',
+                      cursor: 'pointer',
+                      padding: 8,
+                      borderRadius: 4,
+                      backgroundColor: activityTypes.includes(activity) ? '#1a3a1a' : 'transparent',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={activityTypes.includes(activity)}
+                      onChange={() => toggleArrayItem(activityTypes, setActivityTypes, activity)}
+                      style={{ marginRight: 8 }}
+                    />
+                    {ACTIVITY_LABELS[activity] || activity}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Navigation buttons */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
+          <button
+            onClick={() => setStep(Math.max(1, step - 1))}
+            disabled={step === 1}
+            style={{
+              padding: '10px 20px',
+              borderRadius: 8,
+              border: '1px solid #2a2a2a',
+              background: step === 1 ? '#1a1a1a' : '#2a2a2a',
+              color: step === 1 ? '#666' : '#fff',
+              cursor: step === 1 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            ← Anterior
+          </button>
+          
+          {step < 4 ? (
+            <button
+              onClick={() => setStep(step + 1)}
+              disabled={!canGoNext()}
+              style={{
+                padding: '10px 20px',
+                borderRadius: 8,
+                border: 'none',
+                background: canGoNext() ? '#4CAF50' : '#2a2a2a',
+                color: '#fff',
+                cursor: canGoNext() ? 'pointer' : 'not-allowed',
+              }}
+            >
+              Siguiente →
+            </button>
+          ) : (
+            <button
+              onClick={handleSave}
+              disabled={!canGoNext() || saving}
+              style={{
+                padding: '10px 20px',
+                borderRadius: 8,
+                border: 'none',
+                background: canGoNext() && !saving ? '#4CAF50' : '#2a2a2a',
+                color: '#fff',
+                cursor: canGoNext() && !saving ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {saving ? 'Guardando...' : 'Guardar'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+

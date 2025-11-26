@@ -11,6 +11,7 @@ export interface UserProfile {
   id: string;
   user_id: string;
   email?: string | null; // email del usuario (respaldo de Clerk)
+  username?: string | null; // nombre de usuario único para red social
   name: string;
   age: number;
   gender: Gender; // género del usuario
@@ -66,7 +67,15 @@ export enum Equipment {
   RESISTANCE_BANDS = 'resistance_bands',
   PULL_UP_BAR = 'pull_up_bar',
   BENCH = 'bench',
-  GYM_ACCESS = 'gym_access'
+  BENCH_DUMBBELLS = 'bench_dumbbells',
+  BENCH_BARBELL = 'bench_barbell',
+  GYM_ACCESS = 'gym_access',
+  KETTLEBELL = 'kettlebell',
+  CABLE_MACHINE = 'cable_machine',
+  SMITH_MACHINE = 'smith_machine',
+  LEG_PRESS = 'leg_press',
+  MEDICINE_BALL = 'medicine_ball',
+  YOGA_MAT = 'yoga_mat'
 }
 
 // Tipos de ejercicio

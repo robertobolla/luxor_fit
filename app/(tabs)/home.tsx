@@ -12,6 +12,7 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,6 +24,7 @@ import { EmptyWorkouts } from '../../src/components/EmptyStates';
 import { CustomRefreshControl } from '../../src/components/CustomRefreshControl';
 import { useRefresh } from '../../src/hooks/useRefresh';
 import { useNetworkStatus, checkNetworkBeforeOperation } from '../../src/hooks/useNetworkStatus';
+import ChatList from '../../src/components/ChatList';
 
 export default function HomeScreen() {
   const { user } = useUser();
@@ -30,6 +32,7 @@ export default function HomeScreen() {
   const [todayWorkout, setTodayWorkout] = useState<any>(null);
   const [todayNutrition, setTodayNutrition] = useState<any>(null);
   const [userName, setUserName] = useState('');
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
 
   // Detectar estado de conexión
   const { isConnected } = useNetworkStatus();
@@ -66,10 +69,10 @@ export default function HomeScreen() {
 
     setIsLoading(true);
     try {
-      // Cargar nombre del usuario
+      // Cargar nombre del usuario y foto de perfil
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
-        .select('name')
+        .select('name, profile_photo_url')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -79,6 +82,12 @@ export default function HomeScreen() {
 
       if (profileData?.name) {
         setUserName(profileData.name);
+      }
+
+      if (profileData?.profile_photo_url) {
+        setProfilePhotoUrl(profileData.profile_photo_url);
+      } else {
+        setProfilePhotoUrl(null);
       }
 
       // Cargar plan de entrenamiento activo
@@ -235,8 +244,19 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>{getGreeting()}</Text>
             <Text style={styles.userName}>{userName || 'Usuario'}</Text>
           </View>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/profile')}>
-            <Ionicons name="person-circle" size={48} color="#ffb300" />
+          <TouchableOpacity 
+            onPress={() => router.push('/(tabs)/profile')}
+            style={styles.profileButton}
+          >
+            {profilePhotoUrl ? (
+              <Image
+                source={{ uri: profilePhotoUrl }}
+                style={styles.profileImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <Ionicons name="person-circle" size={48} color="#ffb300" />
+            )}
           </TouchableOpacity>
         </View>
 
@@ -362,6 +382,10 @@ export default function HomeScreen() {
             <Ionicons name="chevron-forward" size={24} color="#888888" />
           </TouchableOpacity>
 
+        {/* Sección: Chats */}
+        <View style={{ marginTop: 30 }}>
+          <ChatList />
+        </View>
 
         <View style={{ height: 30 }} />
       </ScrollView>
@@ -472,6 +496,19 @@ const styles = StyleSheet.create({
     color: '#ffb300',
     marginTop: 4,
     fontWeight: '600',
+  },
+  profileButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
   },
 });
 

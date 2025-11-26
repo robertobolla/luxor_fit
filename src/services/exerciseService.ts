@@ -166,9 +166,9 @@ export async function getDaysWithExercise(
 }
 
 /**
- * Obtener el número de días de ejercicio en la semana actual
+ * Obtener las fechas de los días con ejercicio en la semana actual
  */
-export async function getExerciseDaysThisWeek(userId: string): Promise<number> {
+export async function getExerciseDaysDatesThisWeek(userId: string): Promise<string[]> {
   try {
     const today = new Date();
     const startOfWeek = new Date(today);
@@ -178,11 +178,6 @@ export async function getExerciseDaysThisWeek(userId: string): Promise<number> {
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999);
-
-    console.log('📅 Semana actual:', {
-      start: startOfWeek.toISOString(),
-      end: endOfWeek.toISOString()
-    });
 
     // Obtener días con ejercicios tradicionales
     const { data: exercisesData, error: exercisesError } = await supabase
@@ -196,8 +191,6 @@ export async function getExerciseDaysThisWeek(userId: string): Promise<number> {
       console.error('❌ Error al obtener ejercicios:', exercisesError);
     }
 
-    console.log('🏃 Ejercicios tradicionales:', exercisesData?.map(e => e.date));
-
     // Obtener días con entrenamientos completados
     const { data: workoutCompletionsData, error: completionsError } = await supabase
       .from('workout_completions')
@@ -209,11 +202,6 @@ export async function getExerciseDaysThisWeek(userId: string): Promise<number> {
     if (completionsError) {
       console.error('❌ Error al obtener entrenamientos completados:', completionsError);
     }
-
-    console.log('🏋️ Entrenamientos completados:', workoutCompletionsData?.map(w => ({
-      date: w.completed_at,
-      day: w.day_name
-    })));
 
     const daysSet = new Set<string>();
 
@@ -230,18 +218,22 @@ export async function getExerciseDaysThisWeek(userId: string): Promise<number> {
         const date = new Date(item.completed_at);
         const dateStr = date.toISOString().split('T')[0];
         daysSet.add(dateStr);
-        console.log(`📆 Entrenamiento el ${dateStr} (${item.day_name})`);
       });
     }
 
-    const exerciseDaysCount = daysSet.size;
-    console.log(`✅ Días únicos con ejercicio esta semana: ${exerciseDaysCount} (días: ${Array.from(daysSet).join(', ')})`);
-    
-    return exerciseDaysCount;
+    return Array.from(daysSet);
   } catch (error) {
-    console.error('❌ Error al obtener días de ejercicio de la semana:', error);
-    return 0;
+    console.error('❌ Error al obtener fechas de ejercicio de la semana:', error);
+    return [];
   }
+}
+
+/**
+ * Obtener el número de días de ejercicio en la semana actual
+ */
+export async function getExerciseDaysThisWeek(userId: string): Promise<number> {
+  const dates = await getExerciseDaysDatesThisWeek(userId);
+  return dates.length;
 }
 
 /**
@@ -293,10 +285,9 @@ export async function cleanupActivePlans(userId: string): Promise<void> {
 }
 
 /**
- * Obtener días de gimnasio (solo entrenamientos completados) en la semana actual
- * Retorna tanto el número de días como la meta del plan de entrenamiento activo
+ * Obtener las fechas de los días de gimnasio (solo entrenamientos completados) en la semana actual
  */
-export async function getGymDaysThisWeek(userId: string): Promise<{ days: number; goal: number }> {
+export async function getGymDaysDatesThisWeek(userId: string): Promise<string[]> {
   try {
     // Limpiar planes activos duplicados antes de continuar
     await cleanupActivePlans(userId);
@@ -310,11 +301,6 @@ export async function getGymDaysThisWeek(userId: string): Promise<{ days: number
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999);
 
-    console.log('🏋️ Semana actual para gimnasio:', {
-      start: startOfWeek.toISOString(),
-      end: endOfWeek.toISOString()
-    });
-
     // Obtener días con entrenamientos completados (solo gimnasio)
     const { data: workoutCompletionsData, error: completionsError } = await supabase
       .from('workout_completions')
@@ -325,13 +311,8 @@ export async function getGymDaysThisWeek(userId: string): Promise<{ days: number
 
     if (completionsError) {
       console.error('❌ Error al obtener entrenamientos completados:', completionsError);
-      return { days: 0, goal: 3 }; // Fallback a 3 días
+      return [];
     }
-
-    console.log('🏋️ Entrenamientos completados esta semana:', workoutCompletionsData?.map(w => ({
-      date: w.completed_at,
-      day: w.day_name
-    })));
 
     const daysSet = new Set<string>();
 
@@ -341,12 +322,24 @@ export async function getGymDaysThisWeek(userId: string): Promise<{ days: number
         const date = new Date(item.completed_at);
         const dateStr = date.toISOString().split('T')[0];
         daysSet.add(dateStr);
-        console.log(`🏋️ Gimnasio el ${dateStr} (${item.day_name})`);
       });
     }
 
-    const gymDaysCount = daysSet.size;
-    console.log(`✅ Días únicos de gimnasio esta semana: ${gymDaysCount} (días: ${Array.from(daysSet).join(', ')})`);
+    return Array.from(daysSet);
+  } catch (error) {
+    console.error('❌ Error al obtener fechas de gimnasio de la semana:', error);
+    return [];
+  }
+}
+
+/**
+ * Obtener días de gimnasio (solo entrenamientos completados) en la semana actual
+ * Retorna tanto el número de días como la meta del plan de entrenamiento activo
+ */
+export async function getGymDaysThisWeek(userId: string): Promise<{ days: number; goal: number }> {
+  try {
+    const dates = await getGymDaysDatesThisWeek(userId);
+    const gymDaysCount = dates.length;
 
     // Obtener la meta del plan de entrenamiento activo
     let goal = 3; // Fallback por defecto

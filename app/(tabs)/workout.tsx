@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +16,7 @@ import { supabase } from '@/services/supabase';
 import { useWorkoutStore } from '@/store/workoutStore';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
+import { SkeletonWorkout } from '@/components/SkeletonLoaders';
 
 export default function WorkoutScreen() {
   const { user } = useUser();
@@ -28,6 +30,7 @@ export default function WorkoutScreen() {
   const { isLoading: isLoadingPlans, setLoading: setLoadingPlans } = useLoadingState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [workoutPlans, setWorkoutPlans] = useState<any[]>([]);
+  const [showSelectionModal, setShowSelectionModal] = useState(false);
 
   // Cargar datos cuando se monta el componente
   useEffect(() => {
@@ -123,7 +126,7 @@ export default function WorkoutScreen() {
         <Text style={styles.title}>Entrenamientos</Text>
         <TouchableOpacity
           style={styles.generateButton}
-          onPress={() => router.push('/workout-generator')}
+          onPress={() => setShowSelectionModal(true)}
         >
           <Ionicons name="add" size={20} color="#1a1a1a" />
           <Text style={styles.generateButtonText}>Generar</Text>
@@ -131,10 +134,9 @@ export default function WorkoutScreen() {
       </View>
 
       {/* Planes de Entrenamiento Generados */}
-      {isLoadingPlans && (
-        <LoadingOverlay visible={true} message="Cargando planes..." />
-      )}
-      {!isLoadingPlans && workoutPlans.length > 0 ? (
+      {isLoadingPlans ? (
+        <SkeletonWorkout />
+      ) : workoutPlans.length > 0 ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📋 Mis Planes de Entrenamiento</Text>
           {workoutPlans.map((plan) => {
@@ -164,10 +166,12 @@ export default function WorkoutScreen() {
                     <Ionicons name="fitness-outline" size={16} color="#ffb300" />
                     <Text style={styles.statText}>{planData.days_per_week} días/semana</Text>
                   </View>
-                  <View style={styles.stat}>
-                    <Ionicons name="time-outline" size={16} color="#ffb300" />
-                    <Text style={styles.statText}>{planData.weekly_structure?.[0]?.duration || 45} min</Text>
-                  </View>
+                  {!plan.description?.toLowerCase().includes('plan personalizado') && (
+                    <View style={styles.stat}>
+                      <Ionicons name="time-outline" size={16} color="#ffb300" />
+                      <Text style={styles.statText}>{planData.weekly_structure?.[0]?.duration || 45} min</Text>
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.planActions}>
@@ -278,7 +282,7 @@ export default function WorkoutScreen() {
           </Text>
           <TouchableOpacity
             style={styles.createButton}
-            onPress={() => router.push('/(tabs)/workout-generator' as any)}
+            onPress={() => setShowSelectionModal(true)}
           >
             <Text style={styles.createButtonText}>Crear plan de entrenamiento</Text>
           </TouchableOpacity>
@@ -312,6 +316,80 @@ export default function WorkoutScreen() {
           ))}
         </View>
       )}
+
+      {/* Modal de selección de tipo de plan */}
+      <Modal
+        visible={showSelectionModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSelectionModal(false)}
+        onDismiss={() => {
+          // Este callback se ejecuta cuando el modal se cierra completamente
+        }}
+      >
+        <View style={styles.modalOverlay} pointerEvents="box-none">
+          <View style={styles.modalContent} pointerEvents="box-none">
+            <View pointerEvents="auto">
+              <Text style={styles.modalTitle}>¿Cómo quieres crear tu plan?</Text>
+              <Text style={styles.modalSubtitle}>
+                Elige el método que prefieras para generar tu plan de entrenamiento
+              </Text>
+              
+              <TouchableOpacity
+                style={[styles.selectionOption, styles.selectionOptionPrimary]}
+                onPress={() => {
+                  setShowSelectionModal(false);
+                  // Usar requestAnimationFrame para asegurar que el modal se cierre antes de navegar
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      router.push('/(tabs)/workout-generator');
+                    });
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={styles.optionIconContainer}>
+                  <Ionicons name="sparkles" size={28} color="#ffb300" />
+                </View>
+                <Text style={styles.selectionOptionTitlePrimary}>Generar con IA</Text>
+                <Text style={styles.selectionOptionDescriptionPrimary}>
+                  Crea un plan completo y personalizado usando inteligencia artificial basada en evidencia científica
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.selectionOption, styles.selectionOptionSecondary]}
+                onPress={() => {
+                  setShowSelectionModal(false);
+                  // Usar requestAnimationFrame para asegurar que el modal se cierre antes de navegar
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      router.push('/(tabs)/workout/custom-plan-setup');
+                    });
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={styles.optionIconContainer}>
+                  <Ionicons name="create" size={28} color="#ffb300" />
+                </View>
+                <Text style={styles.selectionOptionTitleSecondary}>Crear Personalizado</Text>
+                <Text style={styles.selectionOptionDescriptionSecondary}>
+                  Construye tu propio plan seleccionando ejercicios día por día desde nuestro banco de ejercicios
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowSelectionModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCloseButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -591,5 +669,95 @@ const styles = StyleSheet.create({
   },
   sessionStatus: {
     marginLeft: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 20,
+    padding: 32,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  selectionOption: {
+    width: '100%',
+    padding: 24,
+    borderRadius: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    backgroundColor: '#1f1f1f',
+  },
+  selectionOptionPrimary: {
+    borderColor: '#ffb300',
+    backgroundColor: '#1f1f1f',
+  },
+  selectionOptionSecondary: {
+    borderColor: '#ffb300',
+    backgroundColor: '#1f1f1f',
+  },
+  optionIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 179, 0, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  selectionOptionTitlePrimary: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  selectionOptionDescriptionPrimary: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  selectionOptionTitleSecondary: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  selectionOptionDescriptionSecondary: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalCloseButton: {
+    marginTop: 8,
+    paddingVertical: 12,
+  },
+  modalCloseButtonText: {
+    color: '#999',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

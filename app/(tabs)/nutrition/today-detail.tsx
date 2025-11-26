@@ -130,12 +130,6 @@ export default function TodayDetailScreen() {
 
   const consumed = calculateConsumed();
 
-  const mealTypeLabels = {
-    breakfast: '🍳 Desayuno',
-    lunch: '🍽️ Almuerzo',
-    dinner: '🌙 Cena',
-    snack: '🥤 Snack',
-  };
 
   if (isLoading) {
     return (
@@ -153,7 +147,21 @@ export default function TodayDetailScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity 
+            onPress={() => {
+              try {
+                if (router.canGoBack && router.canGoBack()) {
+                  router.back();
+                } else {
+                  throw new Error('Cannot go back');
+                }
+              } catch (error) {
+                // Si no hay pantalla anterior, navegar a nutrición
+                router.push('/(tabs)/nutrition' as any);
+              }
+            }} 
+            style={styles.backButton}
+          >
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Hoy - {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
@@ -217,9 +225,6 @@ export default function TodayDetailScreen() {
                 <View key={log.id || index} style={styles.logCard}>
                   <View style={styles.logHeader}>
                     <View>
-                      <Text style={styles.logMealType}>
-                        {mealTypeLabels[log.meal_type as keyof typeof mealTypeLabels] || log.meal_type}
-                      </Text>
                       <Text style={styles.logTime}>{time}</Text>
                     </View>
                     <TouchableOpacity 
@@ -387,11 +392,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12,
-  },
-  logMealType: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ffffff',
   },
   logTime: {
     fontSize: 12,

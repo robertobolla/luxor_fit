@@ -170,67 +170,19 @@ export default function MealPlanScreen() {
 
       let plan = await getMealPlan(user.id, mondayStr);
 
-      // Si no existe plan en la base de datos
+      // Si no existe plan en la base de datos, mostrar modal
+      // NO generar automáticamente - el usuario debe generarlo manualmente
       if (!planExists && !plan) {
-        // Si la semana ya pasó, mostrar modal
-        if (isWeekPast) {
-          setWeekPlan(null);
-          setShowNoPlanModal(true);
-          setIsLoading(false);
-          return;
-        }
-        // Si la semana es actual (no pasada), intentar generar uno
-        // NOTA: Las semanas futuras ya fueron filtradas arriba
-        try {
-          const { computeAndSaveTargets, createOrUpdateMealPlan, clearNutritionCache } = await import('../../../src/services/nutrition');
-          
-          // Limpiar caché para forzar regeneración completa
-          clearNutritionCache(user.id);
-          
-          // Asegurar target del lunes (mínimo requerido por el generador)
-          await computeAndSaveTargets(user.id, mondayStr);
-          // Generar plan de la semana completo (7 días)
-          const result = await createOrUpdateMealPlan(user.id, mondayStr);
-          if (result.success) {
-            plan = await getMealPlan(user.id, mondayStr);
-            console.log('✅ Plan generado con 7 días completos');
-          }
-        } catch (regenErr) {
-          console.error('Error generating meal plan automatically:', regenErr);
-          setWeekPlan(null);
-          setIsLoading(false);
-          return;
-        }
-      } else if (plan && Object.keys(plan).length < 7) {
-        // Si el plan existe pero está incompleto, solo regenerarlo si la semana no ha pasado
-        if (!isWeekPast) {
-          try {
-            const { computeAndSaveTargets, createOrUpdateMealPlan, clearNutritionCache } = await import('../../../src/services/nutrition');
-            const { supabase } = await import('../../../src/services/supabase');
-            
-            // Limpiar caché para forzar regeneración completa
-            clearNutritionCache(user.id);
-            
-            // Borrar plan existente incompleto
-            await supabase
-              .from('meal_plans')
-              .delete()
-              .eq('user_id', user.id)
-              .eq('week_start', mondayStr);
-            console.log('🗑️ Plan incompleto eliminado, regenerando...');
-            
-            // Asegurar target del lunes (mínimo requerido por el generador)
-            await computeAndSaveTargets(user.id, mondayStr);
-            // Generar plan de la semana completo (7 días)
-            const result = await createOrUpdateMealPlan(user.id, mondayStr);
-            if (result.success) {
-              plan = await getMealPlan(user.id, mondayStr);
-              console.log('✅ Plan regenerado con 7 días completos');
-            }
-          } catch (regenErr) {
-            console.error('Error regenerating meal plan automatically:', regenErr);
-          }
-        }
+        setWeekPlan(null);
+        setShowNoPlanModal(true);
+        setIsLoading(false);
+        return;
+      }
+
+      // Si el plan existe pero está incompleto, solo mostrarlo tal como está
+      // NO regenerar automáticamente - el usuario puede regenerarlo manualmente si lo desea
+      if (plan && Object.keys(plan).length < 7) {
+        console.log('⚠️ Plan incompleto detectado, mostrando tal como está');
       }
 
       setWeekPlan(plan);
@@ -497,7 +449,14 @@ export default function MealPlanScreen() {
                   if (weekStartDate && weekStartDate > currentWeekEndStr) {
                     return 'Esta semana aún no está disponible. El plan de la próxima semana se generará automáticamente el lunes siguiente basado en los datos de la semana actual.';
                   }
-                  return 'No existe un plan de comidas para esta semana. Esto puede deberse a que:';
+                  
+                  // Verificar si es semana pasada o actual
+                  if (isWeekPast) {
+                    return 'No existe un plan de comidas para esta semana. Esto puede deberse a que:';
+                  }
+                  
+                  // Es la semana actual
+                  return 'Aún no has generado un plan nutricional para esta semana.';
                 })()}
               </Text>
               {(() => {
@@ -516,11 +475,21 @@ export default function MealPlanScreen() {
                   return null; // No mostrar razones para semanas futuras
                 }
                 
+                // Si es semana pasada, mostrar razones
+                if (isWeekPast) {
+                  return (
+                    <View style={styles.modalReasons}>
+                      <Text style={styles.modalReason}>• Aún no habías generado un plan para esta semana</Text>
+                      <Text style={styles.modalReason}>• No tenías la app instalada en ese momento</Text>
+                      <Text style={styles.modalReason}>• La semana ya finalizó y no se puede generar retroactivamente</Text>
+                    </View>
+                  );
+                }
+                
+                // Si es semana actual, mostrar mensaje de acción
                 return (
                   <View style={styles.modalReasons}>
-                    <Text style={styles.modalReason}>• Aún no habías generado un plan para esta semana</Text>
-                    <Text style={styles.modalReason}>• No tenías la app instalada en ese momento</Text>
-                    <Text style={styles.modalReason}>• La semana ya finalizó y no se puede generar retroactivamente</Text>
+                    <Text style={styles.modalReason}>Ve a la pantalla principal de Nutrición para generar tu plan semanal.</Text>
                   </View>
                 );
               })()}
@@ -548,7 +517,21 @@ export default function MealPlanScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backIconButton}>
+        <TouchableOpacity 
+          onPress={() => {
+            try {
+              if (router.canGoBack && router.canGoBack()) {
+                router.back();
+              } else {
+                throw new Error('Cannot go back');
+              }
+            } catch (error) {
+              // Si no hay pantalla anterior, navegar a nutrición
+              router.push('/(tabs)/nutrition' as any);
+            }
+          }} 
+          style={styles.backIconButton}
+        >
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Plan Semanal</Text>
@@ -559,12 +542,6 @@ export default function MealPlanScreen() {
             disabled={isWeekPast}
           >
             <Ionicons name="sparkles" size={22} color={isWeekPast ? "#666666" : "#FFD700"} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            onPress={() => router.push('/(tabs)/nutrition/settings' as any)}
-            style={styles.adjustButton}
-          >
-            <Ionicons name="options-outline" size={22} color="#ffb300" />
           </TouchableOpacity>
         </View>
       </View>

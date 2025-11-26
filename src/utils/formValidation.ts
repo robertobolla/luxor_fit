@@ -143,3 +143,61 @@ export function validateAtLeastOne(
   return { isValid: true };
 }
 
+/**
+ * Valida formato de username
+ * - Solo letras minúsculas, números, guiones y guiones bajos
+ * - Entre 3 y 30 caracteres
+ * - No puede empezar o terminar con guión o guión bajo
+ */
+export function validateUsernameFormat(username: string): ValidationResult {
+  if (!username || username.trim().length === 0) {
+    return {
+      isValid: false,
+      error: 'El nombre de usuario es requerido',
+    };
+  }
+
+  const trimmed = username.trim().toLowerCase();
+
+  // Longitud
+  if (trimmed.length < 3) {
+    return {
+      isValid: false,
+      error: 'El nombre de usuario debe tener al menos 3 caracteres',
+    };
+  }
+
+  if (trimmed.length > 30) {
+    return {
+      isValid: false,
+      error: 'El nombre de usuario no puede tener más de 30 caracteres',
+    };
+  }
+
+  // Solo letras minúsculas, números, guiones y guiones bajos
+  const usernameRegex = /^[a-z0-9_-]+$/;
+  if (!usernameRegex.test(trimmed)) {
+    return {
+      isValid: false,
+      error: 'El nombre de usuario solo puede contener letras minúsculas, números, guiones (-) y guiones bajos (_)',
+    };
+  }
+
+  // No puede empezar o terminar con guión o guión bajo
+  if (trimmed.startsWith('-') || trimmed.startsWith('_')) {
+    return {
+      isValid: false,
+      error: 'El nombre de usuario no puede empezar con guión o guión bajo',
+    };
+  }
+
+  if (trimmed.endsWith('-') || trimmed.endsWith('_')) {
+    return {
+      isValid: false,
+      error: 'El nombre de usuario no puede terminar con guión o guión bajo',
+    };
+  }
+
+  return { isValid: true };
+}
+

@@ -8,19 +8,22 @@ import {
   RefreshControl,
   Dimensions,
   Alert,
+  Platform,
+  Image,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser, useAuth } from '@clerk/clerk-expo';
 import Svg, { Circle } from 'react-native-svg';
 import { supabase } from '@/services/supabase';
-import { getHealthDataForDate, requestHealthPermissions } from '@/services/healthService';
+import { getHealthDataForDate, requestHealthPermissions, hasHealthPermissions, resetPermissionsCache } from '@/services/healthService';
 import { getExerciseDaysThisWeek, getGymDaysThisWeek } from '@/services/exerciseService';
 import DashboardCustomizationModal from '@/components/DashboardCustomizationModal';
 import { DashboardConfig, MetricType, AVAILABLE_METRICS, PRESET_PRIORITIES } from '@/types/dashboard';
 import { loadDashboardConfig } from '@/services/dashboardPreferences';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
+import { SkeletonDashboard } from '@/components/SkeletonLoaders';
 
 const { width } = Dimensions.get('window');
 
@@ -85,6 +88,7 @@ export default function DashboardScreen() {
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig | null>(null);
   const { isLoading: isCheckingOnboarding, setLoading: setIsCheckingOnboarding, executeAsync } = useLoadingState(true);
+  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
 
   // Datos de ejemplo
   const [stats, setStats] = useState({
@@ -155,19 +159,36 @@ export default function DashboardScreen() {
     if (isCheckingOnboarding) return; // Esperar a verificar onboarding
     
     const initializeHealthData = async () => {
-      const hasPermissions = await requestHealthPermissions();
-      if (!hasPermissions) {
-        Alert.alert(
-          'Permisos de Salud',
-          'Para mostrar tus estadísticas reales, Luxor Fitness necesita acceso a tus datos de salud (Apple Health o Google Fit).',
-          [
-            { text: 'Más tarde', style: 'cancel' },
-            { 
-              text: 'Dar permisos', 
-              onPress: () => requestHealthPermissions() 
-            }
-          ]
-        );
+      // Primero verificar si ya tiene permisos
+      const alreadyHasPermissions = await hasHealthPermissions();
+      
+      if (!alreadyHasPermissions) {
+        // Si no tiene permisos, solicitarlos
+        const granted = await requestHealthPermissions();
+        if (!granted) {
+          const platformMessage = Platform.OS === 'ios' 
+            ? 'Ve a Configuración → Salud → Datos de Salud y Apps → Luxor Fitness para otorgar permisos.'
+            : 'Asegúrate de tener Google Fit instalado y conectado.';
+          
+          Alert.alert(
+            'Permisos de Salud',
+            'Para mostrar tus estadísticas reales (pasos, distancia, calorías), Luxor Fitness necesita acceso a tus datos de salud.\n\n' + platformMessage,
+            [
+              { text: 'Más tarde', style: 'cancel' },
+              { 
+                text: 'Intentar de nuevo', 
+                onPress: async () => {
+                  resetPermissionsCache();
+                  await requestHealthPermissions();
+                }
+              }
+            ]
+          );
+        } else {
+          console.log('✅ Permisos de salud otorgados correctamente');
+        }
+      } else {
+        console.log('✅ Ya tiene permisos de salud');
       }
     };
     
@@ -201,6 +222,19 @@ export default function DashboardScreen() {
       
       // Obtener días de gimnasio de la semana actual (solo entrenamientos completados)
       const gymData = await getGymDaysThisWeek(user.id);
+      
+      // Cargar foto de perfil
+      const { data: profileData } = await supabase
+        .from('user_profiles')
+        .select('profile_photo_url')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (profileData?.profile_photo_url) {
+        setProfilePhotoUrl(profileData.profile_photo_url);
+      } else {
+        setProfilePhotoUrl(null);
+      }
       
       // Actualizar estados con los datos obtenidos
       setStats({
@@ -392,11 +426,13 @@ export default function DashboardScreen() {
   const weekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
   const completedDays = [false, false, false, false, false, true, false]; // Ejemplo
 
-  // Mostrar loading mientras se verifica el onboarding
+  // Mostrar skeleton mientras se verifica el onboarding
   if (isCheckingOnboarding) {
     return (
       <View style={styles.container}>
-        <LoadingOverlay visible={true} message="Cargando tu dashboard..." fullScreen />
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+          <SkeletonDashboard />
+        </ScrollView>
       </View>
     );
   }
@@ -444,11 +480,19 @@ export default function DashboardScreen() {
                 style={styles.headerIcon}
                 onPress={() => router.push('/(tabs)/profile')}
               >
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>
-                    {user?.firstName?.charAt(0) || 'U'}
-                  </Text>
-                </View>
+                {profilePhotoUrl ? (
+                  <Image
+                    source={{ uri: profilePhotoUrl }}
+                    style={styles.avatarImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>
+                      {user?.firstName?.charAt(0) || 'U'}
+                    </Text>
+                  </View>
+                )}
               </TouchableOpacity>
             </>
           )}
@@ -823,6 +867,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffb300',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FF5722',
+  },
+  avatarImage: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 2,
     borderColor: '#FF5722',
   },

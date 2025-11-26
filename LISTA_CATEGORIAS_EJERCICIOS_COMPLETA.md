@@ -147,11 +147,13 @@ Ejercicios de alta intensidad
 **IMPORTANTE**: Este campo permite que la IA cree rutinas profesionales trabajando diferentes zonas del mismo músculo.
 
 ### Pecho:
+
 - `pecho_superior` - Porción clavicular (ej: press inclinado)
 - `pecho_medio` - Porción esternocostal (ej: press plano, aperturas)
 - `pecho_inferior` - Porción abdominal (ej: press declinado)
 
 ### Espalda:
+
 - `espalda_superior` - Trapecio superior, romboides superiores
 - `espalda_media` - Romboides, trapecio medio
 - `espalda_inferior` - Dorsales inferiores, erector espinal
@@ -161,41 +163,49 @@ Ejercicios de alta intensidad
 - `trapecio_medio` - Parte media del trapecio
 
 ### Hombros:
+
 - `hombros_frontales` - Deltoides anterior (ej: press militar, elevaciones frontales)
 - `hombros_medios` - Deltoides lateral (ej: elevaciones laterales)
 - `hombros_posteriores` - Deltoides posterior (ej: vuelos posteriores, face pulls)
 
 ### Bíceps:
+
 - `biceps_cabeza_larga` - Cabeza larga del bíceps
 - `biceps_cabeza_corta` - Cabeza corta del bíceps
 - `braquial` - Braquial anterior
 
 ### Tríceps:
+
 - `triceps_cabeza_lateral` - Cabeza lateral
 - `triceps_cabeza_medial` - Cabeza medial
 - `triceps_cabeza_larga` - Cabeza larga
 
 ### Cuádriceps:
+
 - `cuadriceps_frontal` - Recto femoral (parte frontal)
 - `cuadriceps_lateral` - Vasto lateral
 - `cuadriceps_medial` - Vasto medial
 - `cuadriceps_intermedio` - Vasto intermedio
 
 ### Isquiotibiales:
+
 - `isquiotibiales_superior` - Bíceps femoral (cabeza larga)
 - `isquiotibiales_medio` - Semitendinoso
 - `isquiotibiales_inferior` - Semimembranoso
 
 ### Glúteos:
+
 - `gluteos_superior` - Glúteo mayor (porción superior)
 - `gluteos_medio` - Glúteo medio
 - `gluteos_inferior` - Glúteo mayor (porción inferior)
 
 ### Pantorrillas:
+
 - `gemelos` - Gastrocnemio (gemelos)
 - `soleo` - Sóleo
 
 ### Core:
+
 - `abdominales_superiores` - Recto abdominal superior
 - `abdominales_inferiores` - Recto abdominal inferior
 - `oblicuos_externos` - Oblicuos externos
@@ -793,16 +803,19 @@ Cuando el usuario pida trabajar un grupo muscular específico (ej: "pecho", "esp
 1. **Buscar ejercicios del músculo**: `muscles incluye "pecho"`
 
 2. **Distribuir por zonas**: Seleccionar ejercicios que trabajen DIFERENTES zonas del músculo:
+
    - Si hay 3+ zonas: incluir al menos 1 ejercicio por zona
    - Si hay 2 zonas: incluir ejercicios de ambas zonas
    - Variar los ángulos y tipos de movimiento
 
 3. **Combinar tipos de ejercicio**:
+
    - Empezar con ejercicios compuestos (compound) que trabajen múltiples zonas
    - Agregar ejercicios de aislamiento (isolation) para zonas específicas
    - Progresión: compuesto pesado → compuesto medio → aislamiento
 
 4. **Ejemplo de rutina profesional de "pecho"**:
+
    ```
    - Press inclinado (compound) → pecho_superior
    - Press de banca (compound) → pecho_medio (principal)

@@ -27,8 +27,17 @@ export default function WorkoutDayDetailScreen() {
   const params = useLocalSearchParams();
   const { user } = useUser();
   
-  // Parsear los datos del día
-  const dayData = params.dayData ? JSON.parse(params.dayData as string) : null;
+  // Parsear los datos del día con validación
+  let dayData = null;
+  try {
+    if (params.dayData) {
+      dayData = JSON.parse(params.dayData as string);
+    }
+  } catch (e) {
+    console.error('Error parseando dayData:', e);
+    dayData = null;
+  }
+  
   const planName = params.planName as string || 'Plan de Entrenamiento';
   const planId = params.planId as string;
   const dayName = params.dayName as string; // ej: 'day_1'
@@ -336,12 +345,21 @@ export default function WorkoutDayDetailScreen() {
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => {
-              // Volver al detalle del plan usando el planId de los params
-              const planId = params.planId;
-              if (planId) {
-                router.push(`/(tabs)/workout-plan-detail?planId=${planId}` as any);
-              } else {
-                router.push('/(tabs)/workout' as any);
+              // Intentar volver atrás primero
+              try {
+                if (router.canGoBack && router.canGoBack()) {
+                  router.back();
+                } else {
+                  throw new Error('Cannot go back');
+                }
+              } catch (error) {
+                // Si no hay pantalla anterior, navegar según el planId
+                const planId = params.planId;
+                if (planId) {
+                  router.push(`/(tabs)/workout-plan-detail?planId=${planId}` as any);
+                } else {
+                  router.push('/(tabs)/workout' as any);
+                }
               }
             }} 
             style={styles.backIconButton}

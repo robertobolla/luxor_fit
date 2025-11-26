@@ -8,14 +8,15 @@ import {
   RefreshControl,
   Dimensions,
   Alert,
+  Platform,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser, useAuth } from '@clerk/clerk-expo';
 import Svg, { Circle } from 'react-native-svg';
 import { supabase } from '@/services/supabase';
-import { getHealthDataForDate, requestHealthPermissions } from '@/services/healthService';
-import { getExerciseDaysThisWeek, getGymDaysThisWeek } from '@/services/exerciseService';
+import { getHealthDataForDate, requestHealthPermissions, hasHealthPermissions, resetPermissionsCache } from '@/services/healthService';
+import { getExerciseDaysThisWeek, getGymDaysThisWeek, getExerciseDaysDatesThisWeek, getGymDaysDatesThisWeek } from '@/services/exerciseService';
 import DashboardCustomizationModal from '@/components/DashboardCustomizationModal';
 import { DashboardConfig, MetricType, AVAILABLE_METRICS, PRESET_PRIORITIES } from '@/types/dashboard';
 import { loadDashboardConfig } from '@/services/dashboardPreferences';
@@ -32,6 +33,7 @@ import {
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
 import { EmptyProgress } from '@/components/EmptyStates';
+import { SkeletonProgress } from '@/components/SkeletonLoaders';
 
 const { width } = Dimensions.get('window');
 
@@ -122,6 +124,10 @@ export default function ProgressScreen() {
     waterGoal: 2000,
   });
 
+  // Estados para los días completados
+  const [exerciseCompletedDays, setExerciseCompletedDays] = useState<boolean[]>([false, false, false, false, false, false, false]);
+  const [gymCompletedDays, setGymCompletedDays] = useState<boolean[]>([false, false, false, false, false, false, false]);
+
   // Verificar si el usuario completó el onboarding
   useEffect(() => {
     const checkOnboarding = async () => {
@@ -170,19 +176,36 @@ export default function ProgressScreen() {
     if (isCheckingOnboarding) return; // Esperar a verificar onboarding
     
     const initializeHealthData = async () => {
-      const hasPermissions = await requestHealthPermissions();
-      if (!hasPermissions) {
-        Alert.alert(
-          'Permisos de Salud',
-          'Para mostrar tus estadísticas reales, Luxor Fitness necesita acceso a tus datos de salud (Apple Health o Google Fit).',
-          [
-            { text: 'Más tarde', style: 'cancel' },
-            { 
-              text: 'Dar permisos', 
-              onPress: () => requestHealthPermissions() 
-            }
-          ]
-        );
+      // Primero verificar si ya tiene permisos
+      const alreadyHasPermissions = await hasHealthPermissions();
+      
+      if (!alreadyHasPermissions) {
+        // Si no tiene permisos, solicitarlos
+        const granted = await requestHealthPermissions();
+        if (!granted) {
+          const platformMessage = Platform.OS === 'ios' 
+            ? 'Ve a Configuración → Salud → Datos de Salud y Apps → Luxor Fitness para otorgar permisos.'
+            : 'Asegúrate de tener Google Fit instalado y conectado.';
+          
+          Alert.alert(
+            'Permisos de Salud',
+            'Para mostrar tus estadísticas reales (pasos, distancia, calorías), Luxor Fitness necesita acceso a tus datos de salud.\n\n' + platformMessage,
+            [
+              { text: 'Más tarde', style: 'cancel' },
+              { 
+                text: 'Intentar de nuevo', 
+                onPress: async () => {
+                  resetPermissionsCache();
+                  await requestHealthPermissions();
+                }
+              }
+            ]
+          );
+        } else {
+          console.log('✅ Permisos de salud otorgados correctamente');
+        }
+      } else {
+        console.log('✅ Ya tiene permisos de salud');
       }
     };
     
@@ -220,9 +243,36 @@ export default function ProgressScreen() {
       
       // Obtener días de ejercicio de la semana actual (incluye ejercicios libres y entrenamientos)
       const exerciseDays = await getExerciseDaysThisWeek(user.id);
+      const exerciseDates = await getExerciseDaysDatesThisWeek(user.id);
       
       // Obtener días de gimnasio de la semana actual (solo entrenamientos completados)
       const gymData = await getGymDaysThisWeek(user.id);
+      const gymDates = await getGymDaysDatesThisWeek(user.id);
+      
+      // Calcular el inicio de la semana (domingo)
+      const today = new Date();
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay()); // Domingo
+      startOfWeek.setHours(0, 0, 0, 0);
+      
+      // Calcular qué días de la semana tienen actividad
+      // weekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'] (0=Domingo, 1=Lunes, etc.)
+      const exerciseDaysArray = [false, false, false, false, false, false, false];
+      exerciseDates.forEach((dateStr) => {
+        const date = new Date(dateStr);
+        const dayOfWeek = date.getDay(); // 0=Domingo, 1=Lunes, etc.
+        exerciseDaysArray[dayOfWeek] = true;
+      });
+      
+      const gymDaysArray = [false, false, false, false, false, false, false];
+      gymDates.forEach((dateStr) => {
+        const date = new Date(dateStr);
+        const dayOfWeek = date.getDay(); // 0=Domingo, 1=Lunes, etc.
+        gymDaysArray[dayOfWeek] = true;
+      });
+      
+      setExerciseCompletedDays(exerciseDaysArray);
+      setGymCompletedDays(gymDaysArray);
       
       // Actualizar estados con los datos obtenidos
       setStats({
@@ -431,13 +481,14 @@ export default function ProgressScreen() {
   const mainMetricData = getMetricData(mainMetric);
 
   const weekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
-  const completedDays = [false, false, false, false, false, true, false]; // Ejemplo
 
   // Mostrar loading mientras se verifica el onboarding
   if (isCheckingOnboarding) {
     return (
       <View style={styles.container}>
-        <LoadingOverlay visible={true} message="Cargando tu progreso..." fullScreen />
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+          <SkeletonProgress />
+        </ScrollView>
       </View>
     );
   }
@@ -590,7 +641,7 @@ export default function ProgressScreen() {
                   <View key={index} style={styles.dayColumn}>
                     <View style={[
                       styles.dayBar,
-                      completedDays[index] && styles.dayBarCompleted
+                      exerciseCompletedDays[index] && styles.dayBarCompleted
                     ]} />
                     <Text style={styles.dayLabel}>{day}</Text>
                   </View>
@@ -616,7 +667,7 @@ export default function ProgressScreen() {
                   <View key={index} style={styles.dayColumn}>
                     <View style={[
                       styles.dayBar,
-                      completedDays[index] && styles.dayBarCompleted
+                      gymCompletedDays[index] && styles.dayBarCompleted
                     ]} />
                     <Text style={styles.dayLabel}>{day}</Text>
                   </View>

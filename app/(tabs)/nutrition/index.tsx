@@ -14,6 +14,7 @@ import {
   StatusBar,
   Alert,
   Modal,
+  TextInput,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,11 +22,12 @@ import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../../src/services/supabase';
 import { LoadingOverlay } from '../../../src/components/LoadingOverlay';
 import { useLoadingState } from '../../../src/hooks/useLoadingState';
-import { SkeletonBox } from '../../../src/components/SkeletonLoaders';
+import { SkeletonBox, SkeletonNutrition } from '../../../src/components/SkeletonLoaders';
 import {
   computeAndSaveTargets,
   createOrUpdateMealPlan,
   getNutritionProfile,
+  upsertNutritionProfile,
   applyWeeklyAdjustment,
   getWeeklyHistory,
   getNextWeekStart,
@@ -302,6 +304,12 @@ export default function NutritionHomeScreen() {
   const [weeklyHistory, setWeeklyHistory] = useState<WeekSummary[]>([]);
   const [showNextWeekModal, setShowNextWeekModal] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [showSelectionModal, setShowSelectionModal] = useState(false);
+  const [showGeneratePlanModal, setShowGeneratePlanModal] = useState(false);
+  const [activePlanData, setActivePlanData] = useState<any>(null);
+  const [mealsPerDay, setMealsPerDay] = useState(3);
+  const [customPrompts, setCustomPrompts] = useState<string[]>([]);
+  const [newPrompt, setNewPrompt] = useState('');
 
   useEffect(() => {
     if (user?.id) {
@@ -618,6 +626,237 @@ export default function NutritionHomeScreen() {
     }
   };
 
+  const handleGenerateNewPlan = async () => {
+    if (!user?.id) return;
+
+    try {
+      // Verificar si hay plan activo
+      const { data: activePlan } = await supabase
+        .from('workout_plans')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      // Mostrar modal de selección
+      if (activePlan) {
+        // Extraer datos del plan activo
+        let planData = activePlan.plan_data;
+        if (typeof planData === 'string') {
+          try {
+            planData = JSON.parse(planData);
+          } catch (e) {
+            console.error('Error parseando plan_data:', e);
+            planData = {};
+          }
+        }
+        
+        const workoutPlanData = {
+          fitness_level: planData.userData?.fitness_level || planData.fitness_level,
+          goals: planData.userData?.goals || planData.goals || [],
+          activity_types: planData.userData?.activity_types || planData.activity_types || [],
+          available_days: planData.userData?.available_days || planData.available_days || planData.days_per_week,
+          session_duration: planData.userData?.session_duration || planData.session_duration,
+        };
+        
+        setActivePlanData(workoutPlanData);
+        setShowSelectionModal(true);
+      } else {
+        // No hay plan activo, mostrar cartel
+        Alert.alert(
+          'No hay plan activo',
+          'No tienes un plan de entrenamiento activo. Crea un plan de entrenamiento para poder generar una dieta basada en ese plan.',
+          [
+            {
+              text: 'Cerrar',
+              style: 'cancel',
+            },
+            {
+              text: 'Ir a Entrenamiento',
+              onPress: () => {
+                router.push('/(tabs)/workout' as any);
+              },
+            },
+          ]
+        );
+      }
+    } catch (err: any) {
+      console.error('Error checking active plan:', err);
+      Alert.alert('Error', 'No se pudo verificar el plan activo. Intenta nuevamente.');
+    }
+  };
+
+  const addPrompt = () => {
+    if (!newPrompt.trim()) {
+      Alert.alert('Error', 'Escribe una preferencia.');
+      return;
+    }
+
+    if (newPrompt.length > 80) {
+      Alert.alert('Error', 'Máximo 80 caracteres por preferencia.');
+      return;
+    }
+
+    if (customPrompts.length >= 10) {
+      Alert.alert('Error', 'Máximo 10 preferencias.');
+      return;
+    }
+
+    setCustomPrompts([...customPrompts, newPrompt.trim()]);
+    setNewPrompt('');
+  };
+
+  const removePrompt = (index: number) => {
+    setCustomPrompts(customPrompts.filter((_, i) => i !== index));
+  };
+
+  const handleGenerateWithActivePlan = async () => {
+    if (!user?.id || !activePlanData) return;
+
+    // Validaciones
+    if (mealsPerDay < 1 || mealsPerDay > 6) {
+      Alert.alert('Error', 'Las comidas por día deben estar entre 1 y 6.');
+      return;
+    }
+
+    if (customPrompts.length > 10) {
+      Alert.alert('Error', 'Máximo 10 preferencias personalizadas.');
+      return;
+    }
+
+    // Confirmar antes de generar
+    Alert.alert(
+      '¿Generar nuevo plan?',
+      '¿Estás seguro de generar un nuevo plan? Se borrarán los datos del plan nutricional anterior.',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Generar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Guardar configuración de nutrición
+              const currentProfile = await getNutritionProfile(user.id);
+              const existingHash = currentProfile?.custom_prompts?.find((p: string) => 
+                p.startsWith('__PROFILE_HASH__:')
+              );
+              
+              const promptsToSave = existingHash 
+                ? [...customPrompts, existingHash]
+                : customPrompts;
+
+              await upsertNutritionProfile(user.id, {
+                meals_per_day: mealsPerDay,
+                fasting_window: null,
+                custom_prompts: promptsToSave,
+              });
+
+              // Obtener el plan activo completo
+              const { data: activePlan } = await supabase
+                .from('workout_plans')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('is_active', true)
+                .maybeSingle();
+
+              if (activePlan) {
+                setShowGeneratePlanModal(false);
+                await regenerateMealPlan(true, activePlan);
+              }
+            } catch (err: any) {
+              console.error('Error saving configuration:', err);
+              Alert.alert('Error', 'No se pudo guardar la configuración. Intenta nuevamente.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const regenerateMealPlan = async (useActivePlan: boolean, activePlan: any) => {
+    if (!user?.id) return;
+
+    try {
+      setIsInitializing(true);
+      
+      // Obtener lunes de esta semana
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(today);
+      monday.setDate(today.getDate() + diff);
+      const mondayStr = monday.toISOString().split('T')[0];
+
+      // Extraer datos del plan activo si se usa
+      let workoutPlanData = null;
+      if (useActivePlan && activePlan) {
+        // Normalizar plan_data: puede venir como string o como objeto
+        let planData = activePlan.plan_data;
+        if (typeof planData === 'string') {
+          try {
+            planData = JSON.parse(planData);
+          } catch (e) {
+            console.error('Error parseando plan_data:', e);
+            planData = {};
+          }
+        }
+
+        // Extraer datos relevantes del plan para usar en la generación de dieta
+        // Priorizar userData si existe (datos del formulario), sino usar datos directos del plan
+        workoutPlanData = {
+          fitness_level: planData.userData?.fitness_level || planData.fitness_level,
+          goals: planData.userData?.goals || planData.goals || [],
+          activity_types: planData.userData?.activity_types || planData.activity_types || [],
+          available_days: planData.userData?.available_days || planData.available_days || planData.days_per_week,
+          session_duration: planData.userData?.session_duration || planData.session_duration,
+        };
+        console.log('📋 Usando datos del plan activo para generar dieta:', workoutPlanData);
+      }
+
+      // Borrar plan existente
+      await supabase
+        .from('meal_plans')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('week_start', mondayStr);
+
+      // Borrar targets existentes de esta semana
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + i);
+        const dateStr = date.toISOString().split('T')[0];
+        
+        await supabase
+          .from('nutrition_targets')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('date', dateStr);
+      }
+
+      // Regenerar targets (si usa plan activo, se pasarán esos datos)
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(monday);
+        date.setDate(monday.getDate() + i);
+        const dateStr = date.toISOString().split('T')[0];
+        await computeAndSaveTargets(user.id, dateStr, workoutPlanData);
+      }
+
+      // Regenerar plan (pasar datos del plan activo si corresponde)
+      await createOrUpdateMealPlan(user.id, mondayStr, workoutPlanData);
+
+      Alert.alert('¡Listo!', 'Tu nuevo plan de comidas ha sido generado.');
+      loadNutritionData();
+    } catch (err: any) {
+      console.error('Error regenerating plan:', err);
+      Alert.alert('Error', 'No se pudo regenerar el plan. Intenta nuevamente.');
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
   const loadWeeklyHistory = async () => {
     if (!user?.id) return;
 
@@ -802,6 +1041,18 @@ export default function NutritionHomeScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+          <SkeletonNutrition />
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // Mantener el LoadingOverlay para otros casos
+  if (false) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
         <LoadingOverlay 
           visible={true} 
           message={isInitializing ? 'Generando tu plan nutricional...' : 'Cargando...'} 
@@ -817,13 +1068,62 @@ export default function NutritionHomeScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity 
+            onPress={() => {
+              try {
+                if (router.canGoBack && router.canGoBack()) {
+                  router.back();
+                }
+              } catch (error) {
+                // Si no hay pantalla anterior, no hacer nada (ya estamos en la tab de nutrición)
+              }
+            }} 
+            style={styles.backButton}
+          >
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Nutrición</Text>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/nutrition/settings' as any)}>
-            <Ionicons name="settings-outline" size={24} color="#ffffff" />
-          </TouchableOpacity>
+          <View style={{ width: 24 }} />
+        </View>
+
+        {/* Acciones rápidas */}
+        <View style={styles.section}>
+          <View style={styles.actionsGrid}>
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => router.push('/(tabs)/nutrition/plan' as any)}
+            >
+              <Ionicons name="restaurant" size={32} color="#ffb300" />
+              <Text style={styles.actionText}>Ver Plan</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => router.push(`/(tabs)/nutrition/log?date=${selectedDate}` as any)}
+            >
+              <Ionicons name="add-circle-outline" size={32} color="#ffb300" />
+              <Text style={styles.actionText}>Registrar Comida</Text>
+              {selectedDate !== new Date().toISOString().split('T')[0] && (
+                <Text style={styles.actionSubtext}>Para el día seleccionado</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => router.push('/(tabs)/nutrition/grocery' as any)}
+            >
+              <Ionicons name="cart" size={32} color="#ffb300" />
+              <Text style={styles.actionText}>Lista de Compras</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={handleGenerateNewPlan}
+            >
+              <Ionicons name="create" size={32} color="#ffb300" />
+              <Text style={styles.actionText}>Generar Plan Nutricional</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Macros del día */}
@@ -843,116 +1143,6 @@ export default function NutritionHomeScreen() {
               <TouchableOpacity onPress={() => changeDate(1)} style={styles.dateNavButton}>
                 <Ionicons name="chevron-forward" size={20} color="#ffb300" />
               </TouchableOpacity>
-              {selectedDate === new Date().toISOString().split('T')[0] && (
-                <TouchableOpacity 
-                onPress={async () => {
-                // Forzar recálculo de targets
-                if (!user?.id) return;
-                
-                Alert.alert(
-                  'Recalcular calorías',
-                  '¿Quieres recalcular tus calorías y macros con tu perfil actual?',
-                  [
-                    { text: 'Cancelar', style: 'cancel' },
-                    {
-                      text: 'Sí, recalcular',
-                      onPress: async () => {
-                        setIsInitializing(true);
-                        try {
-                          const today = new Date();
-                          const dayOfWeek = today.getDay();
-                          const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-                          const monday = new Date(today);
-                          monday.setDate(today.getDate() + diff);
-
-                          console.log('🔄 Recalculando targets para la semana...');
-
-                          // Primero, actualizar el hash del perfil para forzar sincronización
-                          const { data: profileData, error: profileError } = await supabase
-                            .from('user_profiles')
-                            .select('weight, height, goals, activity_types, age, gender')
-                            .eq('user_id', user.id)
-                            .maybeSingle();
-
-                          if (profileError) {
-                            console.error('Error loading profile:', profileError);
-                            Alert.alert('Error', 'No se pudo cargar el perfil.');
-                            return;
-                          }
-
-                          if (profileData) {
-                            const currentProfileHash = JSON.stringify({
-                              weight: profileData.weight,
-                              height: profileData.height,
-                              goals: profileData.goals,
-                              activity_types: profileData.activity_types,
-                              age: profileData.age,
-                              gender: profileData.gender,
-                            });
-                            
-                            console.log('📝 Datos del perfil actual:', profileData);
-                            
-                            // Guardar el nuevo hash
-                            const nutritionProfile = await getNutritionProfile(user.id);
-                            if (nutritionProfile) {
-                              const customPrompts = nutritionProfile.custom_prompts || [];
-                              const filteredPrompts = customPrompts.filter((p: string) => 
-                                !p.startsWith('__PROFILE_HASH__:')
-                              );
-                              filteredPrompts.push(`__PROFILE_HASH__:${currentProfileHash}`);
-                              
-                              await supabase
-                                .from('nutrition_profiles')
-                                .update({ custom_prompts: filteredPrompts })
-                                .eq('user_id', user.id);
-                            }
-                          }
-
-                          // Borrar targets de esta semana
-                          for (let i = 0; i < 7; i++) {
-                            const date = new Date(monday);
-                            date.setDate(monday.getDate() + i);
-                            const dateStr = date.toISOString().split('T')[0];
-                            
-                            const { error: deleteError } = await supabase
-                              .from('nutrition_targets')
-                              .delete()
-                              .eq('user_id', user.id)
-                              .eq('date', dateStr);
-                            
-                            if (deleteError) {
-                              console.error(`Error borrando target ${dateStr}:`, deleteError);
-                              continue; // Saltar este día si falla
-                            }
-                            
-                            const result = await computeAndSaveTargets(user.id, dateStr);
-                            if (!result.success) {
-                              console.error(`Error recalculando ${dateStr}:`, result.error);
-                            }
-                          }
-
-                          Alert.alert('¡Listo!', 'Tus calorías han sido recalculadas con tu perfil actual. Verifica los logs.');
-                          
-                          // Esperar un momento antes de recargar
-                          setTimeout(() => {
-                            loadNutritionData();
-                          }, 500);
-                        } catch (err) {
-                          console.error('❌ Error recalculando:', err);
-                          Alert.alert('Error', 'No se pudo recalcular.');
-                        } finally {
-                          setIsInitializing(false);
-                        }
-                      },
-                    },
-                  ]
-                );
-              }}
-              style={styles.refreshButton}
-            >
-              <Ionicons name="refresh" size={20} color="#ffb300" />
-            </TouchableOpacity>
-              )}
             </View>
           </View>
           <TouchableOpacity 
@@ -1121,39 +1311,6 @@ export default function NutritionHomeScreen() {
           )}
         </View>
 
-        {/* Acciones rápidas */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>⚡ Acciones Rápidas</Text>
-          <View style={styles.actionsGrid}>
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => router.push('/(tabs)/nutrition/plan' as any)}
-            >
-              <Ionicons name="restaurant" size={32} color="#ffb300" />
-              <Text style={styles.actionText}>Ver Plan</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => router.push(`/(tabs)/nutrition/log?date=${selectedDate}` as any)}
-            >
-              <Ionicons name="add-circle-outline" size={32} color="#ffb300" />
-              <Text style={styles.actionText}>Registrar Comida</Text>
-              {selectedDate !== new Date().toISOString().split('T')[0] && (
-                <Text style={styles.actionSubtext}>Para el día seleccionado</Text>
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => router.push('/(tabs)/nutrition/grocery' as any)}
-            >
-              <Ionicons name="cart" size={32} color="#ffb300" />
-              <Text style={styles.actionText}>Lista de Compras</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
         <View style={{ height: 50 }} />
       </ScrollView>
 
@@ -1189,6 +1346,268 @@ export default function NutritionHomeScreen() {
             >
               <Text style={styles.modalCloseButtonText}>Entendido</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de selección de tipo de plan */}
+      <Modal
+        visible={showSelectionModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSelectionModal(false)}
+        onDismiss={() => {
+          // Este callback se ejecuta cuando el modal se cierra completamente
+        }}
+      >
+        <View style={styles.modalOverlay} pointerEvents="box-none">
+          <View style={styles.modalContent} pointerEvents="box-none">
+            <View pointerEvents="auto">
+              <Text style={styles.modalTitle}>¿Cómo quieres crear tu plan?</Text>
+              <Text style={styles.modalSubtitle}>
+                Elige el método que prefieras para generar tu plan de nutrición
+              </Text>
+              
+              <TouchableOpacity
+                style={[styles.selectionOption, styles.selectionOptionPrimary]}
+                onPress={async () => {
+                  setShowSelectionModal(false);
+                  // Usar requestAnimationFrame para asegurar que el modal se cierre antes de navegar
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      setShowGeneratePlanModal(true);
+                    });
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={styles.optionIconContainer}>
+                  <Ionicons name="restaurant" size={28} color="#ffb300" />
+                </View>
+                <Text style={styles.selectionOptionTitlePrimary}>Basada en plan activo</Text>
+                <Text style={styles.selectionOptionDescriptionPrimary}>
+                  Genera tu dieta usando los parámetros de tu plan de entrenamiento activo
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.selectionOption, styles.selectionOptionSecondary]}
+                onPress={async () => {
+                  setShowSelectionModal(false);
+                  // Usar requestAnimationFrame para asegurar que el modal se cierre antes de navegar
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      router.push({
+                        pathname: '/(tabs)/nutrition/settings' as any,
+                        params: {
+                          useActivePlan: 'false',
+                        },
+                      });
+                    });
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={styles.optionIconContainer}>
+                  <Ionicons name="settings" size={28} color="#ffb300" />
+                </View>
+                <Text style={styles.selectionOptionTitleSecondary}>Con objetivos diferentes</Text>
+                <Text style={styles.selectionOptionDescriptionSecondary}>
+                  Configura objetivos y preferencias personalizadas para tu plan de nutrición
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowSelectionModal(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.modalCloseButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de generar plan con plan activo */}
+      <Modal
+        visible={showGeneratePlanModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowGeneratePlanModal(false)}
+      >
+        <View style={styles.generatePlanModalOverlay} pointerEvents="box-none">
+          <View style={styles.generatePlanModalContent} pointerEvents="box-none">
+            <View pointerEvents="auto">
+              <View style={styles.generatePlanModalHeader}>
+                <Text style={styles.generatePlanModalTitle}>Generar Plan de Nutrición</Text>
+                <TouchableOpacity
+                  onPress={() => setShowGeneratePlanModal(false)}
+                  style={styles.generatePlanModalCloseButton}
+                >
+                  <Ionicons name="close" size={24} color="#999" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView 
+                style={styles.generatePlanModalScroll} 
+                contentContainerStyle={styles.generatePlanModalScrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+              {/* Información del Plan Activo */}
+              {activePlanData && (
+                <View style={styles.generatePlanSection}>
+                  <Text style={styles.generatePlanSectionTitle}>📋 Plan de Entrenamiento Activo</Text>
+                  <View style={styles.generatePlanInfoCard}>
+                    <View style={styles.generatePlanInfoRow}>
+                      <Text style={styles.generatePlanInfoLabel}>Nivel de Fitness:</Text>
+                      <Text style={styles.generatePlanInfoValue}>
+                        {activePlanData.fitness_level === 'beginner' ? 'Principiante' :
+                         activePlanData.fitness_level === 'intermediate' ? 'Intermedio' :
+                         activePlanData.fitness_level === 'advanced' ? 'Avanzado' :
+                         activePlanData.fitness_level || 'N/A'}
+                      </Text>
+                    </View>
+                    <View style={styles.generatePlanInfoRow}>
+                      <Text style={styles.generatePlanInfoLabel}>Objetivos:</Text>
+                      <View style={styles.generatePlanTagsContainer}>
+                        {(activePlanData.goals || []).map((goal: string, index: number) => {
+                          const goalMap: { [key: string]: string } = {
+                            weight_loss: 'Perder peso',
+                            muscle_gain: 'Ganar músculo',
+                            strength: 'Aumentar fuerza',
+                            endurance: 'Mejorar resistencia',
+                            flexibility: 'Flexibilidad',
+                            general_fitness: 'Forma general',
+                          };
+                          return (
+                            <View key={index} style={styles.generatePlanTag}>
+                              <Text style={styles.generatePlanTagText}>{goalMap[goal] || goal}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                    <View style={styles.generatePlanInfoRow}>
+                      <Text style={styles.generatePlanInfoLabel}>Tipos de Actividad:</Text>
+                      <View style={styles.generatePlanTagsContainer}>
+                        {(activePlanData.activity_types || []).map((activity: string, index: number) => {
+                          const activityMap: { [key: string]: string } = {
+                            cardio: 'Cardio',
+                            strength: 'Fuerza',
+                            sports: 'Deportes',
+                            yoga: 'Yoga/Pilates',
+                            hiit: 'HIIT',
+                            mixed: 'Mixto',
+                          };
+                          return (
+                            <View key={index} style={styles.generatePlanTag}>
+                              <Text style={styles.generatePlanTagText}>{activityMap[activity] || activity}</Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                    <View style={styles.generatePlanInfoRow}>
+                      <Text style={styles.generatePlanInfoLabel}>Días por Semana:</Text>
+                      <Text style={styles.generatePlanInfoValue}>{activePlanData.available_days || 0} días</Text>
+                    </View>
+                    <View style={styles.generatePlanInfoRow}>
+                      <Text style={styles.generatePlanInfoLabel}>Duración por Sesión:</Text>
+                      <Text style={styles.generatePlanInfoValue}>{activePlanData.session_duration || 0} minutos</Text>
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Comidas por día */}
+              <View style={styles.generatePlanSection}>
+                <Text style={styles.generatePlanSectionTitle}>🍽️ Comidas por Día</Text>
+                <View style={styles.generatePlanStepperContainer}>
+                  <TouchableOpacity
+                    style={styles.generatePlanStepperButton}
+                    onPress={() => setMealsPerDay(Math.max(1, mealsPerDay - 1))}
+                    disabled={mealsPerDay <= 1}
+                  >
+                    <Ionicons
+                      name="remove-circle"
+                      size={32}
+                      color={mealsPerDay <= 1 ? '#444444' : '#ffb300'}
+                    />
+                  </TouchableOpacity>
+                  <Text style={styles.generatePlanStepperValue}>{mealsPerDay}</Text>
+                  <TouchableOpacity
+                    style={styles.generatePlanStepperButton}
+                    onPress={() => setMealsPerDay(Math.min(6, mealsPerDay + 1))}
+                    disabled={mealsPerDay >= 6}
+                  >
+                    <Ionicons
+                      name="add-circle"
+                      size={32}
+                      color={mealsPerDay >= 6 ? '#444444' : '#ffb300'}
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Preferencias personalizadas */}
+              <View style={styles.generatePlanSection}>
+                <Text style={styles.generatePlanSectionTitle}>✨ Preferencias Personalizadas</Text>
+                <Text style={styles.generatePlanSectionHelper}>
+                  Estas preferencias afectarán tu plan de comidas. Ejemplos: "prefiero platos rápidos",
+                  "evitar picantes", "más opciones con pescado", "budget bajo".
+                </Text>
+
+                <View style={styles.generatePlanInputContainer}>
+                  <TextInput
+                    style={styles.generatePlanInput}
+                    value={newPrompt}
+                    onChangeText={setNewPrompt}
+                    placeholder="Ej: prefiero comidas rápidas"
+                    placeholderTextColor="#666666"
+                    maxLength={80}
+                    onSubmitEditing={addPrompt}
+                  />
+                  <TouchableOpacity style={styles.generatePlanAddButton} onPress={addPrompt}>
+                    <Ionicons name="add" size={24} color="#ffffff" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.generatePlanPromptsList}>
+                  {customPrompts.map((prompt, index) => (
+                    <View key={index} style={styles.generatePlanPromptChip}>
+                      <Text style={styles.generatePlanPromptText}>{prompt}</Text>
+                      <TouchableOpacity onPress={() => removePrompt(index)}>
+                        <Ionicons name="close-circle" size={20} color="#FF6B6B" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+
+                <Text style={styles.generatePlanPromptsCount}>
+                  {customPrompts.length} / 10 preferencias
+                </Text>
+              </View>
+
+              {/* Botón generar */}
+              <TouchableOpacity
+                style={[styles.generatePlanButton, isInitializing && styles.generatePlanButtonDisabled]}
+                onPress={handleGenerateWithActivePlan}
+                disabled={isInitializing}
+              >
+                {isInitializing ? (
+                  <ActivityIndicator size="small" color="#1a1a1a" />
+                ) : (
+                  <>
+                    <Ionicons name="create" size={24} color="#1a1a1a" />
+                    <Text style={styles.generatePlanButtonText}>Generar Plan Nutricional</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+                <View style={{ height: 20 }} />
+              </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1241,11 +1660,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#ffffff',
-  },
-  refreshButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#2a2a2a',
   },
   macrosCard: {
     backgroundColor: '#1a1a1a',
@@ -1540,6 +1954,279 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 20,
+  },
+  // Estilos del modal de generar plan
+  generatePlanModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  generatePlanModalContent: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 20,
+    padding: 32,
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '90%',
+  },
+  generatePlanModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  generatePlanModalCloseButton: {
+    padding: 4,
+  },
+  generatePlanModalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    flex: 1,
+  },
+  generatePlanModalScroll: {
+    maxHeight: 500,
+  },
+  generatePlanModalScrollContent: {
+    paddingBottom: 10,
+  },
+  generatePlanSection: {
+    marginBottom: 32,
+  },
+  generatePlanSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 12,
+  },
+  generatePlanSectionHelper: {
+    fontSize: 14,
+    color: '#888888',
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  generatePlanInfoCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#ffb300',
+  },
+  generatePlanInfoRow: {
+    marginBottom: 16,
+  },
+  generatePlanInfoLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#888888',
+    marginBottom: 8,
+  },
+  generatePlanInfoValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#ffb300',
+  },
+  generatePlanTagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 8,
+  },
+  generatePlanTag: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#ffb300',
+  },
+  generatePlanTagText: {
+    fontSize: 14,
+    color: '#ffffff',
+  },
+  generatePlanStepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#ffb300',
+  },
+  generatePlanStepperButton: {
+    padding: 8,
+  },
+  generatePlanStepperValue: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginHorizontal: 40,
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  generatePlanInputContainer: {
+    marginTop: 16,
+    position: 'relative',
+  },
+  generatePlanInput: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    padding: 16,
+    paddingRight: 50,
+    fontSize: 16,
+    color: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#ffb300',
+  },
+  generatePlanAddButton: {
+    position: 'absolute',
+    right: 8,
+    top: 8,
+    backgroundColor: '#ffb300',
+    borderRadius: 20,
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  generatePlanPromptsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 16,
+  },
+  generatePlanPromptChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#ffb300',
+    gap: 8,
+  },
+  generatePlanPromptText: {
+    fontSize: 14,
+    color: '#ffffff',
+  },
+  generatePlanPromptsCount: {
+    fontSize: 12,
+    color: '#888888',
+    marginTop: 8,
+    textAlign: 'right',
+  },
+  generatePlanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffb300',
+    borderRadius: 12,
+    padding: 16,
+    gap: 8,
+    marginTop: 20,
+  },
+  generatePlanButtonDisabled: {
+    opacity: 0.6,
+  },
+  generatePlanButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+  },
+  // Estilos del modal de selección (iguales al de entrenamiento)
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 20,
+    padding: 32,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  selectionOption: {
+    width: '100%',
+    padding: 24,
+    borderRadius: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+    backgroundColor: '#1f1f1f',
+  },
+  selectionOptionPrimary: {
+    borderColor: '#ffb300',
+    backgroundColor: '#1f1f1f',
+  },
+  selectionOptionSecondary: {
+    borderColor: '#ffb300',
+    backgroundColor: '#1f1f1f',
+  },
+  optionIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 179, 0, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  selectionOptionTitlePrimary: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  selectionOptionDescriptionPrimary: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  selectionOptionTitleSecondary: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  selectionOptionDescriptionSecondary: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalCloseButton: {
+    marginTop: 8,
+    paddingVertical: 12,
+  },
+  modalCloseButtonText: {
+    color: '#999',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

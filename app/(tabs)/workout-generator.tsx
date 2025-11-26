@@ -9,8 +9,9 @@ import {
   SafeAreaView,
   StatusBar,
   Alert,
+  Modal,
 } from 'react-native';
-import { router } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../src/services/supabase';
@@ -18,6 +19,26 @@ import { generateWorkoutPlan } from '../../src/services/aiService';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 import { useRetry } from '../../src/hooks/useRetry';
 import { useLoadingState } from '../../src/hooks/useLoadingState';
+import { FitnessLevel, FitnessGoal, Equipment, ActivityType } from '../../src/types';
+
+// Mapeo de etiquetas para equipamiento
+const EQUIPMENT_LABELS: Record<Equipment, string> = {
+  [Equipment.NONE]: 'Solo peso corporal',
+  [Equipment.DUMBBELLS]: 'Mancuernas',
+  [Equipment.BARBELL]: 'Barra olímpica',
+  [Equipment.RESISTANCE_BANDS]: 'Bandas de resistencia',
+  [Equipment.PULL_UP_BAR]: 'Barra de dominadas',
+  [Equipment.BENCH]: 'Banco',
+  [Equipment.BENCH_DUMBBELLS]: 'Banco y mancuernas',
+  [Equipment.BENCH_BARBELL]: 'Banco con barra',
+  [Equipment.GYM_ACCESS]: 'Acceso a gimnasio',
+  [Equipment.KETTLEBELL]: 'Kettlebell',
+  [Equipment.CABLE_MACHINE]: 'Máquina de poleas',
+  [Equipment.SMITH_MACHINE]: 'Máquina Smith',
+  [Equipment.LEG_PRESS]: 'Prensa de piernas',
+  [Equipment.MEDICINE_BALL]: 'Balón medicinal',
+  [Equipment.YOGA_MAT]: 'Mat de yoga',
+};
 
 interface UserProfile {
   name: string;
@@ -30,36 +51,40 @@ interface UserProfile {
   available_days: number;
   session_duration: number;
   equipment: string[];
+  body_fat_percentage?: number | null;
+  muscle_percentage?: number | null;
 }
 
 export default function WorkoutGeneratorScreen() {
   const { user } = useUser();
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [generatedPlan, setGeneratedPlan] = useState<any>(null);
   const [error, setError] = useState('');
+  
+  // Estados para el formulario de generación
+  const [showForm, setShowForm] = useState(false);
+  const [formStep, setFormStep] = useState(0);
+  const [formData, setFormData] = useState({
+    fitness_level: FitnessLevel.BEGINNER,
+    goals: [] as FitnessGoal[],
+    activity_types: [] as ActivityType[],
+    available_days: 3,
+    session_duration: 30,
+    equipment: [] as Equipment[],
+  });
+  const [showActivateModal, setShowActivateModal] = useState(false);
+  const [newPlanId, setNewPlanId] = useState<string | null>(null);
 
-  // Hook para retry en generación de plan
-  const generatePlanWithRetry = useRetry(
-    async () => {
-      if (!userProfile) throw new Error('No se pudo cargar tu perfil');
-      const result = await generateWorkoutPlan(userProfile);
-      if (!result.success || !result.plan) {
-        throw new Error(result.error || 'No se pudo generar el plan');
-      }
-      return result.plan;
-    },
-    {
-      maxRetries: 2,
-      retryDelay: 2000,
-      showAlert: true,
-    }
-  );
+  // Hook para retry en generación de plan (ya no se usa directamente, pero lo mantenemos por compatibilidad)
 
   useEffect(() => {
     loadUserProfile();
   }, [user]);
+
+  // NO mostrar modal automáticamente - solo cuando se hace clic en el botón
 
   const loadUserProfile = async () => {
     if (!user) {
@@ -78,21 +103,96 @@ export default function WorkoutGeneratorScreen() {
       if (error && error.code !== 'PGRST116') {
         console.error('Error al cargar perfil:', error);
         setError('No se pudo cargar tu perfil');
+        setIsLoading(false);
         return;
       }
 
       if (!data) {
         setError('No se encontró tu perfil. Completa el onboarding primero.');
+        setIsLoading(false);
         return;
       }
 
       setUserProfile(data as UserProfile);
+      setIsLoading(false);
     } catch (err) {
       console.error('Error inesperado:', err);
       setError('Error al cargar datos');
-    } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleStartGeneration = () => {
+    // Validar que tenga datos básicos del perfil
+    if (!userProfile) {
+      Alert.alert('Error', 'No se pudo cargar tu perfil');
+      return;
+    }
+    // Mostrar formulario directamente (ya se seleccionó IA desde el modal anterior)
+    setShowForm(true);
+  };
+
+  const canProceedForm = () => {
+    switch (formStep) {
+      case 0: // fitness_level - siempre puede proceder
+        return true;
+      case 1: // goals
+        return formData.goals.length > 0;
+      case 2: // activity_types
+        return formData.activity_types.length > 0;
+      case 3: // availability
+        return true;
+      case 4: // session_duration
+        return true;
+      case 5: // equipment
+        return formData.equipment.length > 0;
+      default:
+        return true;
+    }
+  };
+
+  const nextFormStep = () => {
+    if (formStep < 5) {
+      setFormStep(formStep + 1);
+    } else {
+      // Último paso, generar plan
+      handleGeneratePlan();
+    }
+  };
+
+  const prevFormStep = () => {
+    if (formStep > 0) {
+      setFormStep(formStep - 1);
+    } else {
+      setShowForm(false);
+    }
+  };
+
+  const toggleGoal = (goal: FitnessGoal) => {
+    setFormData(prev => ({
+      ...prev,
+      goals: prev.goals.includes(goal)
+        ? prev.goals.filter(g => g !== goal)
+        : [...prev.goals, goal]
+    }));
+  };
+
+  const toggleActivityType = (activityType: ActivityType) => {
+    setFormData(prev => ({
+      ...prev,
+      activity_types: prev.activity_types.includes(activityType)
+        ? prev.activity_types.filter(a => a !== activityType)
+        : [...prev.activity_types, activityType]
+    }));
+  };
+
+  const toggleEquipment = (equipment: Equipment) => {
+    setFormData(prev => ({
+      ...prev,
+      equipment: prev.equipment.includes(equipment)
+        ? prev.equipment.filter(e => e !== equipment)
+        : [...prev.equipment, equipment]
+    }));
   };
 
   const handleGeneratePlan = async () => {
@@ -101,21 +201,41 @@ export default function WorkoutGeneratorScreen() {
       return;
     }
 
+    // Cerrar formulario
+    setShowForm(false);
     setIsGenerating(true);
     setError('');
 
     try {
+      // Combinar datos del perfil con datos del formulario
+      const workoutData: UserProfile = {
+        ...userProfile,
+        fitness_level: formData.fitness_level,
+        goals: formData.goals,
+        activity_types: formData.activity_types,
+        available_days: formData.available_days,
+        session_duration: formData.session_duration,
+        equipment: formData.equipment,
+      };
+
       // Generar plan con retry automático
-      const plan = await generatePlanWithRetry.executeWithRetry();
+      const result = await generateWorkoutPlan(workoutData);
+      
+      if (!result.success || !result.plan) {
+        throw new Error(result.error || 'No se pudo generar el plan');
+      }
+
+      const plan = result.plan;
 
       if (plan) {
         setGeneratedPlan(plan);
         
         // Guardar el plan en Supabase (con retry manual)
         let saved = false;
+        let planId: string | null = null;
         for (let attempt = 0; attempt < 3 && !saved; attempt++) {
           try {
-            await savePlanToDatabase(plan);
+            planId = await savePlanToDatabase(plan);
             saved = true;
           } catch (saveError) {
             if (attempt === 2) {
@@ -126,6 +246,12 @@ export default function WorkoutGeneratorScreen() {
               await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
             }
           }
+        }
+
+        // Si se guardó exitosamente, mostrar modal para activar
+        if (saved && planId) {
+          setNewPlanId(planId);
+          setShowActivateModal(true);
         }
       } else {
         setError('No se pudo generar el plan después de varios intentos');
@@ -138,35 +264,86 @@ export default function WorkoutGeneratorScreen() {
     }
   };
 
-  const savePlanToDatabase = async (plan: any) => {
-    if (!user) return;
+  const savePlanToDatabase = async (plan: any): Promise<string> => {
+    if (!user) throw new Error('Usuario no autenticado');
 
     try {
       console.log('💾 Guardando nuevo plan de entrenamiento (inactivo)...');
 
+      // Incluir datos del usuario en el plan_data para uso futuro en generación de dieta
+      const planWithUserData = {
+        ...plan,
+        userData: {
+          fitness_level: formData.fitness_level,
+          goals: formData.goals,
+          activity_types: formData.activity_types,
+          available_days: formData.available_days,
+          session_duration: formData.session_duration,
+          equipment: formData.equipment,
+        },
+      };
+
       // Insertar el nuevo plan como INACTIVO por defecto
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('workout_plans')
         .insert({
           user_id: user.id,
           plan_name: plan.name,
           description: plan.description,
           duration_weeks: plan.duration_weeks,
-          plan_data: plan,
+          plan_data: planWithUserData,
           is_active: false, // Se activa explícitamente luego
           created_at: new Date().toISOString(),
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) {
         console.error('❌ Error al guardar plan:', error);
         throw error;
       } else {
         console.log('✅ Nuevo plan guardado (inactivo). Actívalo desde la lista.');
+        return data.id;
       }
     } catch (err) {
       console.error('❌ Error inesperado al guardar:', err);
       throw err;
     }
+  };
+
+  const handleActivatePlan = async (activate: boolean) => {
+    if (!newPlanId || !user) return;
+
+    setShowActivateModal(false);
+
+    if (activate) {
+      try {
+        // Desactivar todos los planes del usuario
+        await supabase
+          .from('workout_plans')
+          .update({ is_active: false })
+          .eq('user_id', user.id);
+
+        // Activar el nuevo plan
+        const { error } = await supabase
+          .from('workout_plans')
+          .update({ is_active: true })
+          .eq('id', newPlanId)
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('Error activando plan:', error);
+          Alert.alert('Advertencia', 'El plan se guardó pero no se pudo activar. Puedes activarlo manualmente desde la lista.');
+        } else {
+          console.log('✅ Plan activado correctamente');
+        }
+      } catch (err) {
+        console.error('Error activando plan:', err);
+      }
+    }
+
+    // Redirigir a la pantalla de entrenamientos
+    router.replace('/(tabs)/workout');
   };
 
   const handleUsePlan = () => {
@@ -203,11 +380,235 @@ export default function WorkoutGeneratorScreen() {
     return map[goal] || goal;
   };
 
+  // Render del formulario
+  const renderForm = () => {
+    const formSteps = [
+      {
+        title: '¿Cuál es tu nivel de fitness?',
+        subtitle: 'Selecciona el nivel que mejor te describe',
+        content: (
+          <View>
+            {Object.values(FitnessLevel).map((level) => (
+              <TouchableOpacity
+                key={level}
+                style={[
+                  styles.formOptionButton,
+                  formData.fitness_level === level && styles.formOptionButtonSelected
+                ]}
+                onPress={() => setFormData(prev => ({ ...prev, fitness_level: level }))}
+              >
+                <Text style={[
+                  styles.formOptionText,
+                  formData.fitness_level === level && styles.formOptionTextSelected
+                ]}>
+                  {level === FitnessLevel.BEGINNER && 'Principiante - Nuevo en el fitness'}
+                  {level === FitnessLevel.INTERMEDIATE && 'Intermedio - Algunos meses de experiencia'}
+                  {level === FitnessLevel.ADVANCED && 'Avanzado - Años de experiencia'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ),
+      },
+      {
+        title: '¿Cuáles son tus objetivos?',
+        subtitle: 'Selecciona todos los que apliquen',
+        content: (
+          <View>
+            {Object.values(FitnessGoal).map((goal) => (
+              <TouchableOpacity
+                key={goal}
+                style={[
+                  styles.formOptionButton,
+                  formData.goals.includes(goal) && styles.formOptionButtonSelected
+                ]}
+                onPress={() => toggleGoal(goal)}
+              >
+                <Text style={[
+                  styles.formOptionText,
+                  formData.goals.includes(goal) && styles.formOptionTextSelected
+                ]}>
+                  {goal === FitnessGoal.WEIGHT_LOSS && 'Perder peso'}
+                  {goal === FitnessGoal.MUSCLE_GAIN && 'Ganar músculo'}
+                  {goal === FitnessGoal.STRENGTH && 'Aumentar fuerza'}
+                  {goal === FitnessGoal.ENDURANCE && 'Mejorar resistencia'}
+                  {goal === FitnessGoal.FLEXIBILITY && 'Flexibilidad/Movilidad'}
+                  {goal === FitnessGoal.GENERAL_FITNESS && 'Mantener forma general'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ),
+      },
+      {
+        title: '¿Qué tipo de actividades prefieres?',
+        subtitle: 'Selecciona todas las que te gusten',
+        content: (
+          <View>
+            {Object.values(ActivityType).map((activity) => (
+              <TouchableOpacity
+                key={activity}
+                style={[
+                  styles.formOptionButton,
+                  formData.activity_types.includes(activity) && styles.formOptionButtonSelected
+                ]}
+                onPress={() => toggleActivityType(activity)}
+              >
+                <Text style={[
+                  styles.formOptionText,
+                  formData.activity_types.includes(activity) && styles.formOptionTextSelected
+                ]}>
+                  {activity === ActivityType.CARDIO && '🏃 Cardio (correr, nadar, bici)'}
+                  {activity === ActivityType.STRENGTH && '💪 Fuerza (pesas, calistenia)'}
+                  {activity === ActivityType.SPORTS && '⚽ Deportes (fútbol, basketball)'}
+                  {activity === ActivityType.YOGA && '🧘 Yoga/Pilates'}
+                  {activity === ActivityType.HIIT && '🔥 HIIT (entrenamiento intenso)'}
+                  {activity === ActivityType.MIXED && '🎯 Mixto (de todo un poco)'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ),
+      },
+      {
+        title: '¿Cuántos días puedes entrenar por semana?',
+        subtitle: '',
+        content: (
+          <View>
+            {[1, 2, 3, 4, 5, 6, 7].map((days) => (
+              <TouchableOpacity
+                key={days}
+                style={[
+                  styles.formOptionButton,
+                  formData.available_days === days && styles.formOptionButtonSelected
+                ]}
+                onPress={() => setFormData(prev => ({ ...prev, available_days: days }))}
+              >
+                <Text style={[
+                  styles.formOptionText,
+                  formData.available_days === days && styles.formOptionTextSelected
+                ]}>
+                  {days} {days === 1 ? 'día' : 'días'} por semana
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ),
+      },
+      {
+        title: '¿Cuánto tiempo tienes por sesión?',
+        subtitle: '',
+        content: (
+          <View>
+            {[15, 30, 45, 60, 90].map((minutes) => (
+              <TouchableOpacity
+                key={minutes}
+                style={[
+                  styles.formOptionButton,
+                  formData.session_duration === minutes && styles.formOptionButtonSelected
+                ]}
+                onPress={() => setFormData(prev => ({ ...prev, session_duration: minutes }))}
+              >
+                <Text style={[
+                  styles.formOptionText,
+                  formData.session_duration === minutes && styles.formOptionTextSelected
+                ]}>
+                  {minutes} minutos
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ),
+      },
+      {
+        title: '¿Qué equipamiento tienes disponible?',
+        subtitle: 'Selecciona todo lo que tengas',
+        content: (
+          <View>
+            {Object.values(Equipment).map((equipment) => (
+              <TouchableOpacity
+                key={equipment}
+                style={[
+                  styles.formOptionButton,
+                  formData.equipment.includes(equipment) && styles.formOptionButtonSelected
+                ]}
+                onPress={() => toggleEquipment(equipment)}
+              >
+                <Text style={[
+                  styles.formOptionText,
+                  formData.equipment.includes(equipment) && styles.formOptionTextSelected
+                ]}>
+                  {EQUIPMENT_LABELS[equipment] || equipment}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ),
+      },
+    ];
+
+    const currentStepData = formSteps[formStep];
+
+    return (
+      <Modal
+        visible={showForm}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowForm(false)}
+      >
+        <SafeAreaView style={styles.formContainer}>
+          <StatusBar barStyle="light-content" />
+          <View style={styles.formHeader}>
+            <TouchableOpacity onPress={() => setShowForm(false)}>
+              <Ionicons name="close" size={28} color="#ffffff" />
+            </TouchableOpacity>
+            <Text style={styles.formHeaderTitle}>
+              Paso {formStep + 1} de {formSteps.length}
+            </Text>
+            <View style={{ width: 28 }} />
+          </View>
+
+          <ScrollView style={styles.formContent}>
+            <Text style={styles.formTitle}>{currentStepData.title}</Text>
+            {currentStepData.subtitle && (
+              <Text style={styles.formSubtitle}>{currentStepData.subtitle}</Text>
+            )}
+            {currentStepData.content}
+          </ScrollView>
+
+          <View style={styles.formFooter}>
+            {formStep > 0 && (
+              <TouchableOpacity style={styles.formBackButton} onPress={prevFormStep}>
+                <Text style={styles.formBackButtonText}>Atrás</Text>
+              </TouchableOpacity>
+            )}
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity
+              style={[
+                styles.formNextButton,
+                !canProceedForm() && styles.formNextButtonDisabled
+              ]}
+              onPress={nextFormStep}
+              disabled={!canProceedForm()}
+            >
+              <Text style={styles.formNextButtonText}>
+                {formStep === formSteps.length - 1 ? 'Generar Plan' : 'Siguiente'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+    );
+  };
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <LoadingOverlay visible={true} message="Cargando tu perfil..." fullScreen />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#ffb300" />
+          <Text style={styles.loadingText}>Cargando tu perfil...</Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -259,7 +660,20 @@ export default function WorkoutGeneratorScreen() {
         <ScrollView style={styles.scrollView}>
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()}>
+            <TouchableOpacity 
+              onPress={() => {
+                try {
+                  if (router.canGoBack && router.canGoBack()) {
+                    router.back();
+                  } else {
+                    throw new Error('Cannot go back');
+                  }
+                } catch (error) {
+                  // Si no hay pantalla anterior, navegar a workout
+                  router.push('/(tabs)/workout' as any);
+                }
+              }}
+            >
               <Ionicons name="close" size={28} color="#ffffff" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Tu Plan Generado</Text>
@@ -370,6 +784,41 @@ export default function WorkoutGeneratorScreen() {
 
           <View style={{ height: 40 }} />
         </ScrollView>
+
+        {/* Modal para activar plan */}
+        <Modal
+          visible={showActivateModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowActivateModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Ionicons name="checkmark-circle" size={64} color="#ffb300" />
+              <Text style={styles.modalTitle}>¡Plan Generado!</Text>
+              <Text style={styles.modalText}>
+                Tu plan de entrenamiento ha sido creado exitosamente.
+              </Text>
+              <Text style={styles.modalQuestion}>
+                ¿Quieres activar este plan ahora?
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonSecondary]}
+                  onPress={() => handleActivatePlan(false)}
+                >
+                  <Text style={styles.modalButtonSecondaryText}>Más tarde</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonPrimary]}
+                  onPress={() => handleActivatePlan(true)}
+                >
+                  <Text style={styles.modalButtonPrimaryText}>Activar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -380,7 +829,16 @@ export default function WorkoutGeneratorScreen() {
       <ScrollView style={styles.scrollView}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity 
+            onPress={() => {
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                // Si no hay pantalla anterior, navegar a workout
+                router.push('/(tabs)/workout' as any);
+              }
+            }}
+          >
             <Ionicons name="arrow-back" size={28} color="#ffffff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Generar Plan</Text>
@@ -397,39 +855,6 @@ export default function WorkoutGeneratorScreen() {
             Generaremos un plan personalizado basado en evidencia científica usando tus datos
           </Text>
         </View>
-
-        {/* User Profile Summary */}
-        {userProfile && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📊 Tu Perfil</Text>
-            <View style={styles.profileCard}>
-              <View style={styles.profileRow}>
-                <Text style={styles.profileLabel}>Nivel:</Text>
-                <Text style={styles.profileValue}>
-                  {getFitnessLevelText(userProfile.fitness_level)}
-                </Text>
-              </View>
-              <View style={styles.profileRow}>
-                <Text style={styles.profileLabel}>Objetivos:</Text>
-                <Text style={styles.profileValue}>
-                  {userProfile.goals.map(getGoalText).join(', ')}
-                </Text>
-              </View>
-              <View style={styles.profileRow}>
-                <Text style={styles.profileLabel}>Disponibilidad:</Text>
-                <Text style={styles.profileValue}>
-                  {userProfile.available_days} días/semana, {userProfile.session_duration} min/sesión
-                </Text>
-              </View>
-              <View style={styles.profileRow}>
-                <Text style={styles.profileLabel}>Equipamiento:</Text>
-                <Text style={styles.profileValue}>
-                  {userProfile.equipment.length} tipos disponibles
-                </Text>
-              </View>
-            </View>
-          </View>
-        )}
 
         {/* What to Expect */}
         <View style={styles.section}>
@@ -462,17 +887,22 @@ export default function WorkoutGeneratorScreen() {
           </View>
         </View>
 
-        {/* Generate Button */}
-        <TouchableOpacity
-          style={styles.generateButton}
-          onPress={handleGeneratePlan}
-        >
-          <Ionicons name="flash" size={24} color="#1a1a1a" />
-          <Text style={styles.generateButtonText}>Generar Mi Plan</Text>
-        </TouchableOpacity>
+        {/* Generate Button - Solo mostrar si no hay plan generado */}
+        {!generatedPlan && (
+          <TouchableOpacity
+            style={styles.generateButton}
+            onPress={handleStartGeneration}
+          >
+            <Ionicons name="flash" size={24} color="#1a1a1a" />
+            <Text style={styles.generateButtonText}>Generar Mi Plan</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      {/* Modal de formulario */}
+      {renderForm()}
     </SafeAreaView>
   );
 }
@@ -788,6 +1218,206 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     fontSize: 18,
     fontWeight: '700',
+  },
+  // Estilos del formulario
+  formContainer: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+  },
+  formHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  formHeaderTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  formContent: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: 32,
+  },
+  formTitle: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  formSubtitle: {
+    fontSize: 16,
+    color: '#888',
+    marginBottom: 32,
+    textAlign: 'center',
+  },
+  formOptionButton: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: '#333',
+  },
+  formOptionButtonSelected: {
+    borderColor: '#ffb300',
+    backgroundColor: '#2a2a2a',
+  },
+  formOptionText: {
+    fontSize: 16,
+    color: '#ffffff',
+    textAlign: 'center',
+  },
+  formOptionTextSelected: {
+    color: '#ffb300',
+    fontWeight: '600',
+  },
+  formFooter: {
+    flexDirection: 'row',
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+    alignItems: 'center',
+  },
+  formBackButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  formBackButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+  },
+  formNextButton: {
+    backgroundColor: '#ffb300',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 24,
+  },
+  formNextButtonDisabled: {
+    backgroundColor: '#444',
+    opacity: 0.5,
+  },
+  formNextButtonText: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  // Estilos del modal de activación
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 20,
+    padding: 32,
+    width: '100%',
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  modalText: {
+    fontSize: 16,
+    color: '#ccc',
+    textAlign: 'center',
+    marginBottom: 8,
+    lineHeight: 24,
+  },
+  modalQuestion: {
+    fontSize: 18,
+    color: '#ffffff',
+    textAlign: 'center',
+    marginTop: 16,
+    marginBottom: 24,
+    fontWeight: '600',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 24,
+    alignItems: 'center',
+  },
+  modalButtonSecondary: {
+    backgroundColor: '#444',
+  },
+  modalButtonPrimary: {
+    backgroundColor: '#ffb300',
+  },
+  modalButtonSecondaryText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalButtonPrimaryText: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20,
+  },
+  selectionOption: {
+    width: '100%',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
+    alignItems: 'center',
+    borderWidth: 2,
+  },
+  selectionOptionPrimary: {
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
+  },
+  selectionOptionSecondary: {
+    backgroundColor: '#2a2a2a',
+    borderColor: '#ffb300',
+  },
+  selectionOptionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  selectionOptionDescription: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalCloseButton: {
+    marginTop: 8,
+    paddingVertical: 12,
+  },
+  modalCloseButtonText: {
+    color: '#999',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

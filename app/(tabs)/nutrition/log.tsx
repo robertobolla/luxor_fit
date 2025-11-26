@@ -19,7 +19,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { logMeal, logWater, calculateFoodMacros } from '../../../src/services/nutrition';
-import { MealType } from '../../../src/types/nutrition';
 import { useRetry } from '../../../src/hooks/useRetry';
 
 export default function MealLogScreen() {
@@ -27,7 +26,6 @@ export default function MealLogScreen() {
   const params = useLocalSearchParams();
   const isWaterLog = params.type === 'water';
 
-  const [mealType, setMealType] = useState<MealType>('breakfast');
   const [mealName, setMealName] = useState('');
   const [weightGrams, setWeightGrams] = useState('');
   const [calories, setCalories] = useState('');
@@ -51,7 +49,6 @@ export default function MealLogScreen() {
 
       const result = await logMeal(
         user.id,
-        mealType,
         { name: mealName, weight_grams: parseInt(weightGrams) || 0 },
         {
           calories: parseInt(calories),
@@ -158,7 +155,21 @@ export default function MealLogScreen() {
         <StatusBar barStyle="light-content" />
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <TouchableOpacity 
+              onPress={() => {
+                try {
+                  if (router.canGoBack && router.canGoBack()) {
+                    router.back();
+                  } else {
+                    throw new Error('Cannot go back');
+                  }
+                } catch (error) {
+                  // Si no hay pantalla anterior, navegar a nutrición
+                  router.push('/(tabs)/nutrition' as any);
+                }
+              }} 
+              style={styles.backButton}
+            >
               <Ionicons name="arrow-back" size={24} color="#ffffff" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Registrar Agua</Text>
@@ -215,33 +226,6 @@ export default function MealLogScreen() {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Registrar Comida</Text>
           <View style={{ width: 24 }} />
-        </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tipo de Comida</Text>
-          <View style={styles.mealTypeGrid}>
-            {[
-              { type: 'breakfast' as MealType, label: '🍳 Desayuno' },
-              { type: 'lunch' as MealType, label: '🍽️ Almuerzo' },
-              { type: 'dinner' as MealType, label: '🌙 Cena' },
-              { type: 'snack' as MealType, label: '🥤 Snack' },
-            ].map((item) => (
-              <TouchableOpacity
-                key={item.type}
-                style={[styles.mealTypeButton, mealType === item.type && styles.mealTypeButtonActive]}
-                onPress={() => setMealType(item.type)}
-              >
-                <Text
-                  style={[
-                    styles.mealTypeText,
-                    mealType === item.type && styles.mealTypeTextActive,
-                  ]}
-                >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
         </View>
 
         <View style={styles.section}>
@@ -402,33 +386,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 12,
-  },
-  mealTypeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  mealTypeButton: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#333333',
-  },
-  mealTypeButtonActive: {
-    backgroundColor: '#ffb300',
-    borderColor: '#ffb300',
-  },
-  mealTypeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#888888',
-  },
-  mealTypeTextActive: {
-    color: '#1a1a1a',
   },
   inputContainer: {
     marginBottom: 16,

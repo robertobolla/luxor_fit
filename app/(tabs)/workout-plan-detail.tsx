@@ -13,6 +13,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
 import { AIWorkoutAdaptationModal } from '../../src/components/AIWorkoutAdaptationModal';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getFriends } from '../../src/services/friendsService';
+import { shareWorkout } from '../../src/services/sharedWorkoutService';
+import { FriendSelectionModal, ConfirmModal } from '../../src/components/CustomModal';
 
 export default function WorkoutPlanDetailScreen() {
   const { planId } = useLocalSearchParams();
@@ -22,6 +26,11 @@ export default function WorkoutPlanDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [completedDays, setCompletedDays] = useState<Set<string>>(new Set());
   const [showAIModal, setShowAIModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [friends, setFriends] = useState<any[]>([]);
+  const [isLoadingFriends, setIsLoadingFriends] = useState(false);
+  const [showShareSuccess, setShowShareSuccess] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   const loadPlanDetails = async () => {
     if (!planId) return;
@@ -124,6 +133,95 @@ export default function WorkoutPlanDetailScreen() {
     } catch (err) {
       console.error('Error inesperado:', err);
       Alert.alert('Error', 'Ocurrió un error inesperado');
+    }
+  };
+
+  const handleSharePlan = async () => {
+    if (!plan || !user?.id) return;
+
+    setIsLoadingFriends(true);
+
+    // Obtener lista de amigos
+    const friendsResult = await getFriends(user.id);
+    if (friendsResult.success && friendsResult.data && friendsResult.data.length > 0) {
+      setFriends(friendsResult.data);
+      setShowShareModal(true);
+    } else {
+      // Mostrar mensaje si no hay amigos
+      setShareError('No tienes amigos aún. Ve a la pestaña Inicio y agrega amigos para compartir entrenamientos.');
+    }
+    setIsLoadingFriends(false);
+  };
+
+  const handleSelectFriend = async (friendId: string, friendName: string) => {
+    if (!plan || !user?.id) return;
+
+    const result = await shareWorkout(user.id, friendId, plan.id);
+    if (result.success) {
+      setShowShareSuccess(true);
+    } else {
+      setShareError(result.error || 'No se pudo compartir el entrenamiento');
+    }
+  };
+
+  const handleEditPlan = async () => {
+    if (!plan || !plan.plan_data) {
+      Alert.alert('Error', 'No se pueden cargar los datos del plan');
+      return;
+    }
+
+    try {
+      const planData = plan.plan_data;
+      const weeklyStructure = planData.weekly_structure || [];
+      const daysPerWeek = planData.days_per_week || weeklyStructure.length;
+      const equipment = planData.equipment || [];
+
+      // Limpiar datos anteriores de AsyncStorage
+      for (let i = 1; i <= 7; i++) {
+        await AsyncStorage.removeItem(`day_${i}_data`);
+      }
+      await AsyncStorage.removeItem('selectedExercise');
+
+      // Guardar nombre del plan
+      await AsyncStorage.setItem('custom_plan_name', plan.plan_name || `Plan Personalizado - ${new Date().toLocaleDateString()}`);
+
+      // Guardar cada día en AsyncStorage
+      for (let i = 0; i < weeklyStructure.length; i++) {
+        const day = weeklyStructure[i];
+        const dayNumber = i + 1;
+        
+        // Convertir ejercicios del formato del plan al formato de edición
+        const exercises = (day.exercises || []).map((ex: any) => ({
+          id: `${ex.name}_${dayNumber}_${Date.now()}_${Math.random()}`,
+          name: ex.name,
+          sets: ex.sets || 3,
+          reps: ex.reps || [10, 10, 10],
+        }));
+
+        const dayData = {
+          dayNumber,
+          name: day.day || day.focus || `Día ${dayNumber}`,
+          exercises,
+        };
+
+        await AsyncStorage.setItem(`day_${dayNumber}_data`, JSON.stringify(dayData));
+      }
+
+      // Guardar el planId para saber que estamos editando
+      await AsyncStorage.setItem('editing_plan_id', plan.id.toString());
+
+      // Navegar a la pantalla de edición
+      router.push({
+        pathname: '/(tabs)/workout/custom-plan-days',
+        params: {
+          daysPerWeek: daysPerWeek.toString(),
+          equipment: JSON.stringify(equipment),
+          planId: plan.id.toString(),
+        },
+      });
+    } catch (error) {
+      console.error('Error al cargar plan para edición:', error);
+      Alert.alert('Error', 'No se pudo cargar el plan para edición');
     }
   };
 
@@ -312,7 +410,21 @@ export default function WorkoutPlanDetailScreen() {
       <ScrollView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/workout' as any)} style={styles.backIconButton}>
+          <TouchableOpacity 
+            onPress={() => {
+              try {
+                if (router.canGoBack && router.canGoBack()) {
+                  router.back();
+                } else {
+                  throw new Error('Cannot go back');
+                }
+              } catch (error) {
+                // Si no hay pantalla anterior, navegar a workout
+                router.push('/(tabs)/workout' as any);
+              }
+            }} 
+            style={styles.backIconButton}
+          >
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Plan de Entrenamiento</Text>
@@ -333,21 +445,52 @@ export default function WorkoutPlanDetailScreen() {
             </View>
           </View>
           
-          {/* Botón de IA */}
-          <TouchableOpacity 
-            style={styles.aiButton}
-            onPress={() => setShowAIModal(true)}
+          {/* Botón de IA o Editar según el tipo de plan */}
+          {plan.description?.toLowerCase().includes('plan personalizado') ? (
+            <TouchableOpacity 
+              style={styles.aiButton}
+              onPress={handleEditPlan}
+              activeOpacity={0.8}
+            >
+              <View style={styles.aiButtonContent}>
+                <View style={styles.aiIconContainer}>
+                  <Ionicons name="create-outline" size={18} color="#ffffff" />
+                </View>
+                <View style={styles.aiTextContainer}>
+                  <Text style={styles.aiButtonTitle}>Editar</Text>
+                  <Text style={styles.aiButtonSubtitle}>Modifica tu plan personalizado</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#ffb300" />
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={styles.aiButton}
+              onPress={() => setShowAIModal(true)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.aiButtonContent}>
+                <View style={styles.aiIconContainer}>
+                  <Ionicons name="sparkles" size={18} color="#ffffff" />
+                </View>
+                <View style={styles.aiTextContainer}>
+                  <Text style={styles.aiButtonTitle}>Adaptar con IA</Text>
+                  <Text style={styles.aiButtonSubtitle}>Personaliza tu entrenamiento</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#ffb300" />
+              </View>
+            </TouchableOpacity>
+          )}
+
+          {/* Botón de compartir */}
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={handleSharePlan}
             activeOpacity={0.8}
           >
-            <View style={styles.aiButtonContent}>
-              <View style={styles.aiIconContainer}>
-                <Ionicons name="sparkles" size={18} color="#ffffff" />
-              </View>
-              <View style={styles.aiTextContainer}>
-                <Text style={styles.aiButtonTitle}>Adaptar con IA</Text>
-                <Text style={styles.aiButtonSubtitle}>Personaliza tu entrenamiento</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#ffb300" />
+            <View style={styles.shareButtonContent}>
+              <Ionicons name="share-social" size={18} color="#ffb300" />
+              <Text style={styles.shareButtonText}>Compartir con un amigo</Text>
             </View>
           </TouchableOpacity>
           
@@ -366,11 +509,13 @@ export default function WorkoutPlanDetailScreen() {
             <Text style={styles.statValue}>{safePlanData.days_per_week}</Text>
             <Text style={styles.statLabel}>Días/Semana</Text>
           </View>
-          <View style={styles.statCard}>
-            <Ionicons name="time-outline" size={24} color="#ffb300" />
-            <Text style={styles.statValue}>{safePlanData.weekly_structure?.[0]?.duration || 45}</Text>
-            <Text style={styles.statLabel}>Min/Sesión</Text>
-          </View>
+          {!plan.description?.toLowerCase().includes('plan personalizado') && (
+            <View style={styles.statCard}>
+              <Ionicons name="time-outline" size={24} color="#ffb300" />
+              <Text style={styles.statValue}>{safePlanData.weekly_structure?.[0]?.duration || 45}</Text>
+              <Text style={styles.statLabel}>Min/Sesión</Text>
+            </View>
+          )}
         </View>
 
         {/* Weekly Structure */}
@@ -546,6 +691,40 @@ export default function WorkoutPlanDetailScreen() {
         workoutPlan={plan}
         userId={user?.id || ''}
       />
+
+      {/* Modal de compartir con amigos */}
+      <FriendSelectionModal
+        visible={showShareModal}
+        onClose={() => {
+          setShowShareModal(false);
+          setShareError(null);
+        }}
+        friends={friends}
+        onSelectFriend={handleSelectFriend}
+        title={`Compartir "${plan?.plan_name || 'Entrenamiento'}"`}
+      />
+
+      {/* Modal de éxito al compartir */}
+      <ConfirmModal
+        visible={showShareSuccess}
+        onClose={() => setShowShareSuccess(false)}
+        title="¡Entrenamiento compartido!"
+        message="El entrenamiento se ha compartido correctamente con tu amigo."
+        confirmText="OK"
+        cancelText=""
+        onConfirm={() => setShowShareSuccess(false)}
+      />
+
+      {/* Modal de error al compartir */}
+      <ConfirmModal
+        visible={!!shareError}
+        onClose={() => setShareError(null)}
+        title="Error al compartir"
+        message={shareError || 'No se pudo compartir el entrenamiento'}
+        confirmText="OK"
+        cancelText=""
+        onConfirm={() => setShareError(null)}
+      />
     </>
   );
 }
@@ -633,6 +812,26 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#ccc',
     lineHeight: 22,
+  },
+  shareButton: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#ffb300',
+  },
+  shareButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  shareButtonText: {
+    color: '#ffb300',
+    fontSize: 15,
+    fontWeight: '600',
   },
   aiButton: {
     backgroundColor: 'linear-gradient(135deg, #ffb300 0%, #00B894 100%)',

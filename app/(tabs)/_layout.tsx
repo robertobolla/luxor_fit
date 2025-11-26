@@ -51,7 +51,7 @@ export default function TabLayout() {
         options={{
           title: 'Entrenar',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="fitness" size={size} color={color} />
+            <Ionicons name="barbell" size={size} color={color} />
           ),
         }}
       />
@@ -150,6 +150,34 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="register-weight"
+        options={{
+          href: null,
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="workout/custom-plan-setup"
+        options={{
+          href: null,
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="workout/custom-plan-days"
+        options={{
+          href: null,
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="workout/custom-plan-day-detail"
+        options={{
+          href: null,
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="workout/custom-plan-select-exercise"
         options={{
           href: null,
           headerShown: false,

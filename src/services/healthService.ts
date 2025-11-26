@@ -118,28 +118,70 @@ export async function requestHealthPermissions(): Promise<boolean> {
   }
 }
 
+// Cache de permisos para evitar solicitar múltiples veces
+let permissionsRequested = false;
+let hasPermissionsCache: boolean | null = null;
+
 /**
  * Obtiene datos de salud para una fecha específica
  */
 export async function getHealthDataForDate(date: Date): Promise<HealthData> {
   try {
-    const hasPermissions = await requestHealthPermissions();
-    
-    if (!hasPermissions) {
-      throw new Error('No hay permisos para acceder a datos de salud');
+    // Verificar permisos solo si no se han verificado antes
+    if (!permissionsRequested) {
+      console.log('🔐 Verificando permisos de salud...');
+      hasPermissionsCache = await requestHealthPermissions();
+      permissionsRequested = true;
+      
+      if (!hasPermissionsCache) {
+        console.warn('⚠️ No se otorgaron permisos de salud. Retornando datos vacíos.');
+        // Retornar datos vacíos en lugar de simulados
+        return {
+          steps: 0,
+          distance: 0,
+          calories: 0,
+          sleep: 0,
+        };
+      }
+    } else if (hasPermissionsCache === false) {
+      // Si ya sabemos que no hay permisos, retornar datos vacíos
+      console.warn('⚠️ No hay permisos de salud. Retornando datos vacíos.');
+      return {
+        steps: 0,
+        distance: 0,
+        calories: 0,
+        sleep: 0,
+      };
     }
     
+    // Intentar obtener datos reales
     if (Platform.OS === 'ios') {
-      return await getAppleHealthData(date);
+      const data = await getAppleHealthData(date);
+      // Verificar si realmente obtuvo datos o si son simulados
+      // Si todos los valores principales son 0, es probable que no haya datos reales
+      if (data.steps === 0 && data.distance === 0 && data.calories === 0) {
+        console.warn('⚠️ No se encontraron datos en Apple Health para esta fecha.');
+      }
+      return data;
     } else if (Platform.OS === 'android') {
-      return await getGoogleFitData(date);
+      const data = await getGoogleFitData(date);
+      // Verificar si realmente obtuvo datos o si son simulados
+      if (data.steps === 0 && data.distance === 0 && data.calories === 0) {
+        console.warn('⚠️ No se encontraron datos en Google Fit para esta fecha.');
+      }
+      return data;
     }
     
     throw new Error('Plataforma no soportada');
   } catch (error) {
-    console.error('Error getting health data:', error);
-    // Retornar datos simulados en caso de error
-    return getSimulatedHealthData(date);
+    console.error('❌ Error obteniendo datos de salud:', error);
+    // Retornar datos vacíos en lugar de simulados cuando hay error
+    return {
+      steps: 0,
+      distance: 0,
+      calories: 0,
+      sleep: 0,
+    };
   }
 }
 
@@ -147,13 +189,63 @@ export async function getHealthDataForDate(date: Date): Promise<HealthData> {
  * Obtiene datos de Apple Health
  */
 async function getAppleHealthData(date: Date): Promise<HealthData> {
-  // Si AppleHealthKit no está disponible, usar datos simulados
+  // Si AppleHealthKit no está disponible, retornar datos vacíos
   if (!AppleHealthKit) {
-    console.log('📱 Apple Health no disponible, usando datos simulados');
-    return getSimulatedHealthData(date);
+    console.log('📱 Apple Health no disponible (probablemente Expo Go). Retornando datos vacíos.');
+    console.log('💡 Para usar datos reales, crea un Development Build con: npm run build:dev:ios');
+    return {
+      steps: 0,
+      distance: 0,
+      calories: 0,
+      sleep: 0,
+    };
   }
 
   try {
+    // Verificar permisos antes de intentar obtener datos
+    const hasPermissions = await new Promise<boolean>((resolve) => {
+      AppleHealthKit.getAuthStatus(
+        {
+          permissions: {
+            read: [
+              AppleHealthKit.Constants.Permissions.Steps,
+              AppleHealthKit.Constants.Permissions.DistanceWalkingRunning,
+              AppleHealthKit.Constants.Permissions.ActiveEnergyBurned,
+            ],
+          },
+        },
+        (err: any, results: any) => {
+          if (err) {
+            console.error('❌ Error verificando permisos:', err);
+            resolve(false);
+            return;
+          }
+          
+          // Verificar que al menos uno tenga permiso autorizado
+          const hasAnyPermission = Object.values(results).some(
+            (status: any) => status === AppleHealthKit.Constants.Permissions.Authorized
+          );
+          
+          if (!hasAnyPermission) {
+            console.warn('⚠️ No hay permisos autorizados para leer datos de Apple Health');
+            console.log('💡 Ve a Configuración > Privacidad y seguridad > Salud > Luxor Fitness y activa los permisos');
+          }
+          
+          resolve(hasAnyPermission);
+        }
+      );
+    });
+
+    if (!hasPermissions) {
+      console.warn('⚠️ No se tienen permisos para leer datos de Apple Health');
+      return {
+        steps: 0,
+        distance: 0,
+        calories: 0,
+        sleep: 0,
+      };
+    }
+
     const startDate = new Date(date);
     startDate.setHours(0, 0, 0, 0);
     const endDate = new Date(date);
@@ -164,42 +256,143 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
       endDate: endDate.toISOString(),
     };
 
-    console.log('📱 Obteniendo datos de Apple Health...');
+    console.log('📱 Obteniendo datos de Apple Health para:', date.toISOString().split('T')[0]);
 
-    // Obtener pasos
+    // Obtener pasos usando getDailyStepCountSamples para obtener todos los datos agregados del día
+    // Este método devuelve el total agregado del día, que coincide con la app de Salud
     const steps = await new Promise<number>((resolve) => {
-      AppleHealthKit.getStepCount(options, (err, results) => {
-        if (err) {
-          console.error('Error obteniendo pasos:', err);
-          resolve(0);
-          return;
-        }
-        resolve(results.value);
-      });
+      // Primero intentar con getDailyStepCountSamples (método recomendado)
+      if (AppleHealthKit.getDailyStepCountSamples) {
+        AppleHealthKit.getDailyStepCountSamples(options, (err: any, results: any) => {
+          if (err || !results || results.length === 0) {
+            // Fallback a getStepCount si getDailyStepCountSamples falla
+            console.log('⚠️ getDailyStepCountSamples no devolvió datos, usando getStepCount como fallback');
+            AppleHealthKit.getStepCount(options, (fallbackErr: any, fallbackResults: any) => {
+              if (fallbackErr || !fallbackResults || fallbackResults.value === undefined) {
+                console.warn('⚠️ No hay datos de pasos disponibles');
+                console.log('💡 Verifica que la app tenga permisos en Configuración > Privacidad y seguridad > Salud');
+                resolve(0);
+                return;
+              }
+              console.log('✅ Pasos obtenidos de Apple Health (getStepCount):', fallbackResults.value);
+              console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
+              resolve(fallbackResults.value);
+            });
+            return;
+          }
+          // Sumar todos los pasos del día (puede haber múltiples muestras de diferentes fuentes)
+          const totalSteps = results.reduce((total: number, sample: any) => {
+            return total + (sample.value || 0);
+          }, 0);
+          console.log('✅ Pasos obtenidos de Apple Health (getDailyStepCountSamples):', totalSteps);
+          console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
+          console.log('📊 Muestras encontradas:', results.length);
+          resolve(totalSteps);
+        });
+      } else {
+        // Si getDailyStepCountSamples no está disponible, usar getStepCount directamente
+        AppleHealthKit.getStepCount(options, (err: any, results: any) => {
+          if (err || !results || results.value === undefined) {
+            console.warn('⚠️ No hay datos de pasos disponibles');
+            console.log('💡 Verifica que la app tenga permisos en Configuración > Privacidad y seguridad > Salud');
+            resolve(0);
+            return;
+          }
+          console.log('✅ Pasos obtenidos de Apple Health (getStepCount):', results.value);
+          console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
+          resolve(results.value);
+        });
+      }
     });
 
-    // Obtener distancia (en metros, convertir a km)
+    // Obtener distancia (incluye datos de Apple Watch y otras fuentes)
     const distance = await new Promise<number>((resolve) => {
-      AppleHealthKit.getDistanceWalkingRunning(options, (err, results) => {
-        if (err) {
-          console.error('Error obteniendo distancia:', err);
-          resolve(0);
-          return;
-        }
-        resolve(results.value / 1000); // Convertir metros a km
-      });
+      // Intentar con getDailyDistanceWalkingRunningSamples primero
+      if (AppleHealthKit.getDailyDistanceWalkingRunningSamples) {
+        AppleHealthKit.getDailyDistanceWalkingRunningSamples(options, (err: any, results: any) => {
+          if (err || !results || results.length === 0) {
+            // Fallback a getDistanceWalkingRunning
+            AppleHealthKit.getDistanceWalkingRunning(options, (fallbackErr: any, fallbackResults: any) => {
+              if (fallbackErr || !fallbackResults || fallbackResults.value === undefined) {
+                console.warn('⚠️ No hay datos de distancia disponibles');
+                resolve(0);
+                return;
+              }
+              const distanceKm = fallbackResults.value / 1000; // Convertir metros a km
+              console.log('✅ Distancia obtenida de Apple Health (getDistanceWalkingRunning):', distanceKm.toFixed(2), 'km');
+              resolve(distanceKm);
+            });
+            return;
+          }
+          // Sumar todas las muestras de distancia
+          const totalDistance = results.reduce((total: number, sample: any) => {
+            return total + (sample.value || 0);
+          }, 0) / 1000; // Convertir metros a km
+          console.log('✅ Distancia obtenida de Apple Health (getDailyDistanceWalkingRunningSamples):', totalDistance.toFixed(2), 'km');
+          resolve(totalDistance);
+        });
+      } else {
+        AppleHealthKit.getDistanceWalkingRunning(options, (err: any, results: any) => {
+          if (err) {
+            console.error('❌ Error obteniendo distancia de Apple Health:', err);
+            resolve(0);
+            return;
+          }
+          if (!results || results.value === undefined) {
+            console.warn('⚠️ No hay datos de distancia disponibles');
+            resolve(0);
+            return;
+          }
+          const distanceKm = results.value / 1000; // Convertir metros a km
+          console.log('✅ Distancia obtenida de Apple Health:', distanceKm.toFixed(2), 'km');
+          console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
+          resolve(distanceKm);
+        });
+      }
     });
 
-    // Obtener calorías activas
+    // Obtener calorías activas (incluye datos de Apple Watch y otras fuentes)
     const calories = await new Promise<number>((resolve) => {
-      AppleHealthKit.getActiveEnergyBurned(options, (err, results) => {
-        if (err) {
-          console.error('Error obteniendo calorías:', err);
-          resolve(0);
-          return;
-        }
-        resolve(results.value);
-      });
+      // Intentar con getDailyEnergyBurnedSamples primero
+      if (AppleHealthKit.getDailyEnergyBurnedSamples) {
+        AppleHealthKit.getDailyEnergyBurnedSamples(options, (err: any, results: any) => {
+          if (err || !results || results.length === 0) {
+            // Fallback a getActiveEnergyBurned
+            AppleHealthKit.getActiveEnergyBurned(options, (fallbackErr: any, fallbackResults: any) => {
+              if (fallbackErr || !fallbackResults || fallbackResults.value === undefined) {
+                console.warn('⚠️ No hay datos de calorías disponibles');
+                resolve(0);
+                return;
+              }
+              console.log('✅ Calorías obtenidas de Apple Health (getActiveEnergyBurned):', fallbackResults.value);
+              resolve(fallbackResults.value);
+            });
+            return;
+          }
+          // Sumar todas las muestras de calorías
+          const totalCalories = results.reduce((total: number, sample: any) => {
+            return total + (sample.value || 0);
+          }, 0);
+          console.log('✅ Calorías obtenidas de Apple Health (getDailyEnergyBurnedSamples):', totalCalories);
+          resolve(totalCalories);
+        });
+      } else {
+        AppleHealthKit.getActiveEnergyBurned(options, (err: any, results: any) => {
+          if (err) {
+            console.error('❌ Error obteniendo calorías de Apple Health:', err);
+            resolve(0);
+            return;
+          }
+          if (!results || results.value === undefined) {
+            console.warn('⚠️ No hay datos de calorías disponibles');
+            resolve(0);
+            return;
+          }
+          console.log('✅ Calorías obtenidas de Apple Health:', results.value);
+          console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
+          resolve(results.value);
+        });
+      }
     });
 
     // Obtener sueño (en horas)
@@ -264,9 +457,7 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
       });
     });
 
-    console.log('✅ Datos obtenidos de Apple Health:', { steps, distance, calories });
-
-    return {
+    const healthData = {
       steps,
       distance,
       calories,
@@ -276,9 +467,25 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
       water,
       food,
     };
+    
+    console.log('✅ Datos reales obtenidos de Apple Health:', {
+      pasos: steps,
+      distancia: `${distance.toFixed(2)} km`,
+      calorías: calories,
+      sueño: `${sleep.toFixed(1)} horas`,
+      peso: weight ? `${weight.toFixed(1)} kg` : 'N/A',
+    });
+
+    return healthData;
   } catch (error) {
     console.error('❌ Error obteniendo datos de Apple Health:', error);
-    return getSimulatedHealthData(date);
+    // Retornar datos vacíos en lugar de simulados
+    return {
+      steps: 0,
+      distance: 0,
+      calories: 0,
+      sleep: 0,
+    };
   }
 }
 
@@ -286,10 +493,16 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
  * Obtiene datos de Google Fit
  */
 async function getGoogleFitData(date: Date): Promise<HealthData> {
-  // Si GoogleFit no está disponible, usar datos simulados
+  // Si GoogleFit no está disponible, retornar datos vacíos
   if (!GoogleFit) {
-    console.log('📱 Google Fit no disponible, usando datos simulados');
-    return getSimulatedHealthData(date);
+    console.log('📱 Google Fit no disponible (probablemente Expo Go). Retornando datos vacíos.');
+    console.log('💡 Para usar datos reales, crea un Development Build con: npm run build:dev:android');
+    return {
+      steps: 0,
+      distance: 0,
+      calories: 0,
+      sleep: 0,
+    };
   }
 
   try {
@@ -300,26 +513,51 @@ async function getGoogleFitData(date: Date): Promise<HealthData> {
 
     console.log('📱 Obteniendo datos de Google Fit...');
 
-    // Obtener pasos
+    // Obtener pasos (incluye datos de relojes inteligentes sincronizados con Google Fit)
     const stepsData = await GoogleFit.getDailyStepCountSamples({
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
     });
 
     let steps = 0;
+    const sources: string[] = [];
+    
     if (stepsData && stepsData.length > 0) {
-      // Buscar datos de Google Fit (no de otros sources)
-      const googleFitData = stepsData.find((source: any) => 
-        source.source === 'com.google.android.gms:estimated_steps' ||
-        source.source === 'com.google.android.gms:merge_step_deltas'
-      );
+      // Sumar pasos de TODAS las fuentes (incluyendo relojes inteligentes)
+      // Google Fit agrega automáticamente datos de Wear OS, Fitbit, Garmin, etc.
+      stepsData.forEach((source: any) => {
+        if (source.steps && source.steps.length > 0) {
+          const sourceSteps = source.steps.reduce((total: number, step: any) => total + step.value, 0);
+          steps += sourceSteps;
+          
+          // Registrar la fuente para logging
+          if (source.source) {
+            const sourceName = source.source.includes('wear') ? 'Reloj inteligente (Wear OS)' :
+                              source.source.includes('fitbit') ? 'Fitbit' :
+                              source.source.includes('garmin') ? 'Garmin' :
+                              source.source.includes('samsung') ? 'Samsung Health' :
+                              source.source.includes('huawei') ? 'Huawei Health' :
+                              source.source.includes('estimated') ? 'Estimación Google Fit' :
+                              source.source.includes('merge') ? 'Datos agregados' :
+                              source.source;
+            sources.push(`${sourceName}: ${sourceSteps} pasos`);
+          }
+        }
+      });
       
-      if (googleFitData && googleFitData.steps && googleFitData.steps.length > 0) {
-        steps = googleFitData.steps.reduce((total: number, step: any) => total + step.value, 0);
+      if (steps > 0) {
+        console.log('✅ Pasos obtenidos de Google Fit:', steps);
+        if (sources.length > 0) {
+          console.log('📱 Fuentes de datos:', sources.join(', '));
+        }
+      } else {
+        console.warn('⚠️ No hay datos de pasos disponibles en Google Fit');
       }
+    } else {
+      console.warn('⚠️ No se encontraron datos de pasos en Google Fit');
     }
 
-    // Obtener distancia (en metros, convertir a km)
+    // Obtener distancia (incluye datos de relojes inteligentes)
     const distanceData = await GoogleFit.getDailyDistanceSamples({
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
@@ -327,12 +565,17 @@ async function getGoogleFitData(date: Date): Promise<HealthData> {
 
     let distance = 0;
     if (distanceData && distanceData.length > 0) {
+      // Sumar distancia de TODAS las fuentes (incluyendo relojes)
       distance = distanceData.reduce((total: number, sample: any) => {
         return total + (sample.distance || 0);
       }, 0) / 1000; // Convertir metros a km
+      console.log('✅ Distancia obtenida de Google Fit:', distance.toFixed(2), 'km');
+      console.log('📱 Incluye datos de relojes inteligentes sincronizados con Google Fit');
+    } else {
+      console.warn('⚠️ No hay datos de distancia disponibles en Google Fit');
     }
 
-    // Obtener calorías
+    // Obtener calorías (incluye datos de relojes inteligentes)
     const caloriesData = await GoogleFit.getDailyCalorieSamples({
       startDate: startDate.toISOString(),
       endDate: endDate.toISOString(),
@@ -340,9 +583,14 @@ async function getGoogleFitData(date: Date): Promise<HealthData> {
 
     let calories = 0;
     if (caloriesData && caloriesData.length > 0) {
+      // Sumar calorías de TODAS las fuentes (incluyendo relojes)
       calories = caloriesData.reduce((total: number, sample: any) => {
         return total + (sample.calorie || 0);
       }, 0);
+      console.log('✅ Calorías obtenidas de Google Fit:', calories);
+      console.log('📱 Incluye datos de relojes inteligentes sincronizados con Google Fit');
+    } else {
+      console.warn('⚠️ No hay datos de calorías disponibles en Google Fit');
     }
 
     // Obtener peso (último valor)
@@ -372,9 +620,7 @@ async function getGoogleFitData(date: Date): Promise<HealthData> {
       sleep = totalMinutes / 60;
     }
 
-    console.log('✅ Datos obtenidos de Google Fit:', { steps, distance, calories });
-
-    return {
+    const healthData = {
       steps,
       distance,
       calories,
@@ -384,9 +630,25 @@ async function getGoogleFitData(date: Date): Promise<HealthData> {
       water: undefined,
       food: undefined,
     };
+    
+    console.log('✅ Datos reales obtenidos de Google Fit:', {
+      pasos: steps,
+      distancia: `${distance.toFixed(2)} km`,
+      calorías: calories,
+      sueño: `${sleep.toFixed(1)} horas`,
+      peso: weight ? `${weight.toFixed(1)} kg` : 'N/A',
+    });
+
+    return healthData;
   } catch (error) {
     console.error('❌ Error obteniendo datos de Google Fit:', error);
-    return getSimulatedHealthData(date);
+    // Retornar datos vacíos en lugar de simulados
+    return {
+      steps: 0,
+      distance: 0,
+      calories: 0,
+      sleep: 0,
+    };
   }
 }
 
@@ -454,10 +716,61 @@ export async function saveHealthData(
  */
 export async function hasHealthPermissions(): Promise<boolean> {
   try {
-    // En producción, verificar permisos reales
-    return true;
+    if (Platform.OS === 'ios') {
+      if (!AppleHealthKit) {
+        return false;
+      }
+      
+      // Verificar permisos específicos
+      return new Promise((resolve) => {
+        AppleHealthKit.getAuthStatus(
+          {
+            permissions: {
+              read: [
+                AppleHealthKit.Constants.Permissions.Steps,
+                AppleHealthKit.Constants.Permissions.DistanceWalkingRunning,
+                AppleHealthKit.Constants.Permissions.ActiveEnergyBurned,
+              ],
+            },
+          },
+          (err: any, results: any) => {
+            if (err) {
+              console.error('Error verificando permisos:', err);
+              resolve(false);
+              return;
+            }
+            
+            // Verificar que al menos uno tenga permiso
+            const hasAnyPermission = Object.values(results).some(
+              (status: any) => status === AppleHealthKit.Constants.Permissions.Authorized
+            );
+            resolve(hasAnyPermission);
+          }
+        );
+      });
+    } else if (Platform.OS === 'android') {
+      if (!GoogleFit) {
+        return false;
+      }
+      
+      // Verificar si está autorizado
+      const isAuthorized = await GoogleFit.isAuthorized();
+      return isAuthorized;
+    }
+    
+    return false;
   } catch (error) {
+    console.error('Error verificando permisos:', error);
     return false;
   }
+}
+
+/**
+ * Fuerza una nueva solicitud de permisos (útil si el usuario los revocó)
+ */
+export function resetPermissionsCache(): void {
+  permissionsRequested = false;
+  hasPermissionsCache = null;
+  console.log('🔄 Cache de permisos reiniciado');
 }
 

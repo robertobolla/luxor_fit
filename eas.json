@@ -36,6 +36,16 @@
             "android": {
                 "buildType": "apk"
             }
+        },
+        "production-local": {
+            "distribution": "store",
+            "ios": {
+                "resourceClass": "medium",
+                "simulator": false
+            },
+            "android": {
+                "buildType": "apk"
+            }
         }
     },
     "submit": {

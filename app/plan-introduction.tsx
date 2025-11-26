@@ -19,16 +19,32 @@ export default function PlanIntroductionScreen() {
   const [introduction, setIntroduction] = useState('');
   const [error, setError] = useState('');
 
-  // Parsear los datos del onboarding de los parámetros
+  // Parsear los datos del onboarding de los parámetros con validación
+  const parseSafeInt = (value: string | undefined, defaultValue: number): number => {
+    if (!value) return defaultValue;
+    const parsed = parseInt(value);
+    return isNaN(parsed) ? defaultValue : parsed;
+  };
+
+  const parseSafeJSON = (value: string | undefined, defaultValue: any[]): any[] => {
+    if (!value) return defaultValue;
+    try {
+      return JSON.parse(value);
+    } catch (e) {
+      console.error('Error parseando JSON:', e);
+      return defaultValue;
+    }
+  };
+
   const userData = {
-    name: params.name as string,
-    age: parseInt(params.age as string),
-    fitness_level: params.fitness_level as string,
-    goals: JSON.parse(params.goals as string || '[]'),
-    activity_types: JSON.parse(params.activity_types as string || '[]'),
-    available_days: parseInt(params.available_days as string),
-    session_duration: parseInt(params.session_duration as string),
-    equipment: JSON.parse(params.equipment as string || '[]'),
+    name: (params.name as string) || 'Usuario',
+    age: parseSafeInt(params.age as string, 25),
+    fitness_level: (params.fitness_level as string) || 'intermediate',
+    goals: parseSafeJSON(params.goals as string, []),
+    activity_types: parseSafeJSON(params.activity_types as string, []),
+    available_days: parseSafeInt(params.available_days as string, 3),
+    session_duration: parseSafeInt(params.session_duration as string, 45),
+    equipment: parseSafeJSON(params.equipment as string, []),
   };
 
   useEffect(() => {

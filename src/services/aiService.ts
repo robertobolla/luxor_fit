@@ -171,7 +171,15 @@ function buildPrompt(userData: UserProfile): string {
       resistance_bands: 'bandas de resistencia',
       pull_up_bar: 'barra de dominadas',
       bench: 'banco',
+      bench_dumbbells: 'banco y mancuernas',
+      bench_barbell: 'banco con barra',
       gym_access: 'gimnasio completo',
+      kettlebell: 'kettlebell',
+      cable_machine: 'máquina de poleas',
+      smith_machine: 'máquina Smith',
+      leg_press: 'prensa de piernas',
+      medicine_ball: 'balón medicinal',
+      yoga_mat: 'mat de yoga',
     };
     return equipmentMap[eq] || eq;
   }).join(', ');
@@ -413,7 +421,15 @@ function buildWorkoutPrompt(userData: UserProfile): string {
       resistance_bands: 'bandas de resistencia',
       pull_up_bar: 'barra de dominadas',
       bench: 'banco',
+      bench_dumbbells: 'banco y mancuernas',
+      bench_barbell: 'banco con barra',
       gym_access: 'gimnasio completo',
+      kettlebell: 'kettlebell',
+      cable_machine: 'máquina de poleas',
+      smith_machine: 'máquina Smith',
+      leg_press: 'prensa de piernas',
+      medicine_ball: 'balón medicinal',
+      yoga_mat: 'mat de yoga',
     };
     return equipmentMap[eq] || eq;
   }).join(', ');

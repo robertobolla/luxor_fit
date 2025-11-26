@@ -977,7 +977,14 @@ async function generateAIMealPlan(
   mealsPerDay: number,
   customPrompts: string[],
   fastingWindow: string | null,
-  userProfile: UserProfileLite | null
+  userProfile: UserProfileLite | null,
+  workoutPlanData?: {
+    fitness_level?: string;
+    goals?: string[];
+    activity_types?: string[];
+    available_days?: number;
+    session_duration?: number;
+  } | null
 ): Promise<WeekPlan> {
   try {
     // Construir el contexto del usuario con composición corporal
@@ -988,9 +995,56 @@ async function generateAIMealPlan(
         ].filter(Boolean).join(', ')
       : '';
     
+    // Construir contexto del plan de entrenamiento si está disponible
+    let workoutContext = '';
+    if (workoutPlanData) {
+      const fitnessLevelMap: Record<string, string> = {
+        beginner: 'Principiante',
+        intermediate: 'Intermedio',
+        advanced: 'Avanzado',
+      };
+      const goalMap: Record<string, string> = {
+        weight_loss: 'Perder peso',
+        muscle_gain: 'Ganar músculo',
+        strength: 'Aumentar fuerza',
+        endurance: 'Mejorar resistencia',
+        flexibility: 'Flexibilidad',
+        general_fitness: 'Forma general',
+      };
+      const activityMap: Record<string, string> = {
+        cardio: 'Cardio',
+        strength: 'Fuerza',
+        sports: 'Deportes',
+        yoga: 'Yoga',
+        hiit: 'HIIT',
+        mixed: 'Mixto',
+      };
+      
+      const fitnessLevel = workoutPlanData.fitness_level 
+        ? fitnessLevelMap[workoutPlanData.fitness_level] || workoutPlanData.fitness_level 
+        : '';
+      const goals = workoutPlanData.goals 
+        ? workoutPlanData.goals.map(g => goalMap[g] || g).join(', ') 
+        : '';
+      const activities = workoutPlanData.activity_types 
+        ? workoutPlanData.activity_types.map(a => activityMap[a] || a).join(', ') 
+        : '';
+      const days = workoutPlanData.available_days || 0;
+      const duration = workoutPlanData.session_duration || 0;
+      
+      workoutContext = `\n\nPLAN DE ENTRENAMIENTO ACTIVO:\n` +
+        `- Nivel de fitness: ${fitnessLevel}\n` +
+        `- Objetivos: ${goals}\n` +
+        `- Tipos de actividad: ${activities}\n` +
+        `- Frecuencia: ${days} días por semana\n` +
+        `- Duración por sesión: ${duration} minutos\n` +
+        `IMPORTANTE: La dieta debe estar alineada con este plan de entrenamiento. ` +
+        `Ajusta las calorías y macros según la intensidad y frecuencia del entrenamiento.`;
+    }
+    
     const userContext = userProfile
-      ? `Usuario: ${userProfile.sex === 'male' ? 'Hombre' : 'Mujer'}, ${calculateAge(userProfile.birthdate)} años, ${userProfile.height_cm}cm, ${userProfile.weight_kg}kg${bodyComposition ? `, ${bodyComposition}` : ''}, objetivo: ${userProfile.goal}, nivel de actividad: ${userProfile.activity_level}`
-      : 'Usuario sin perfil completo';
+      ? `Usuario: ${userProfile.sex === 'male' ? 'Hombre' : 'Mujer'}, ${calculateAge(userProfile.birthdate)} años, ${userProfile.height_cm}cm, ${userProfile.weight_kg}kg${bodyComposition ? `, ${bodyComposition}` : ''}, objetivo: ${userProfile.goal}, nivel de actividad: ${userProfile.activity_level}${workoutContext}`
+      : `Usuario sin perfil completo${workoutContext}`;
 
     // Construir el prompt con la base de datos de alimentos (solo los primeros 50 para no sobrecargar el prompt)
     const foodListStr = FOOD_DATABASE.slice(0, 50).map(
@@ -1529,7 +1583,13 @@ export function clearNutritionCache(userId?: string) {
 
 export async function computeAndSaveTargets(
   userId: string,
-  date: string
+  date: string,
+  workoutPlanData?: {
+    fitness_level?: string;
+    goals?: string[];
+    activity_types?: string[];
+    available_days?: number;
+  } | null
 ): Promise<{ success: boolean; target?: NutritionTarget; error?: string }> {
   try {
     // Verificar si ya existe un target para esta fecha
@@ -1551,19 +1611,80 @@ export async function computeAndSaveTargets(
       profileCache.set(userId, profile);
     }
 
+    // Si hay datos del plan de entrenamiento activo, usarlos para sobrescribir activity_level y goal
+    let activityLevel = profile.activity_level;
+    let goal = profile.goal;
+
+    if (workoutPlanData) {
+      console.log('📋 Usando datos del plan de entrenamiento activo para calcular targets');
+      
+      // Mapear activity_types del plan a Activity level
+      // Considerar tanto el tipo de actividad como los días disponibles
+      const activityMap: Record<string, Activity> = {
+        cardio: 'moderate',
+        strength: 'moderate',
+        sports: 'moderate',
+        yoga: 'light',
+        hiit: 'high',
+        mixed: 'moderate',
+      };
+      
+      const planActivityType = workoutPlanData.activity_types?.[0] || 'mixed';
+      const baseActivityLevel = activityMap[planActivityType] || 'moderate';
+      
+      // Ajustar según días disponibles (más días = más actividad)
+      if (workoutPlanData.available_days) {
+        if (workoutPlanData.available_days >= 5) {
+          // Si entrena 5+ días, aumentar nivel de actividad
+          if (baseActivityLevel === 'light') activityLevel = 'moderate';
+          else if (baseActivityLevel === 'moderate') activityLevel = 'high';
+          else activityLevel = 'high';
+        } else if (workoutPlanData.available_days >= 3) {
+          activityLevel = baseActivityLevel;
+        } else {
+          // Si entrena menos de 3 días, reducir nivel
+          if (baseActivityLevel === 'high') activityLevel = 'moderate';
+          else if (baseActivityLevel === 'moderate') activityLevel = 'light';
+          else activityLevel = 'light';
+        }
+      } else {
+        activityLevel = baseActivityLevel;
+      }
+
+      // Mapear goals del plan a Goal de nutrición
+      const goalMap: Record<string, Goal> = {
+        weight_loss: 'cut',
+        muscle_gain: 'bulk',
+        strength: 'bulk',
+        endurance: 'maintain',
+        flexibility: 'maintain',
+        general_fitness: 'maintain',
+      };
+      
+      const planGoal = workoutPlanData.goals?.[0] || 'general_fitness';
+      goal = goalMap[planGoal] || 'maintain';
+      
+      console.log('📋 Datos del plan aplicados:', {
+        activity_level: activityLevel,
+        goal,
+        fitness_level: workoutPlanData.fitness_level,
+        available_days: workoutPlanData.available_days,
+      });
+    }
+
     // Calcular edad una sola vez
     const birthYear = parseInt(profile.birthdate.split('-')[0]);
     const age = new Date().getFullYear() - birthYear;
 
-    // Calcular BMR y TDEE una sola vez
+    // Calcular BMR y TDEE usando activity_level (puede ser del plan activo)
     const bmr = calculateBMR(profile.sex, profile.weight_kg, profile.height_cm, age);
-    const tdee = calculateTDEE(bmr, profile.activity_level);
+    const tdee = calculateTDEE(bmr, activityLevel);
 
-    // Calcular calorías objetivo
-    const targetCalories = calculateTargetCalories(tdee, profile.goal);
+    // Calcular calorías objetivo usando goal (puede ser del plan activo)
+    const targetCalories = calculateTargetCalories(tdee, goal);
 
-    // Calcular macros
-    const macros = calculateMacros(targetCalories, profile.weight_kg, profile.goal);
+    // Calcular macros usando goal (puede ser del plan activo)
+    const macros = calculateMacros(targetCalories, profile.weight_kg, goal);
 
     const target: NutritionTarget = {
       date,
@@ -1597,7 +1718,14 @@ export async function computeAndSaveTargets(
 
 export async function createOrUpdateMealPlan(
   userId: string,
-  weekStart: string
+  weekStart: string,
+  workoutPlanData?: {
+    fitness_level?: string;
+    goals?: string[];
+    activity_types?: string[];
+    available_days?: number;
+    session_duration?: number;
+  } | null
 ): Promise<{ success: boolean; weekPlan?: WeekPlan; error?: string }> {
   try {
     console.log('🤖 Generando plan de comidas con IA...');
@@ -1631,6 +1759,54 @@ export async function createOrUpdateMealPlan(
       }
     }
 
+    // Si hay datos del plan de entrenamiento, actualizar el perfil temporalmente para el contexto de IA
+    if (workoutPlanData && userProfile) {
+      console.log('📋 Aplicando datos del plan de entrenamiento al contexto de IA');
+      
+      // Mapear activity_types del plan a Activity level
+      const activityMap: Record<string, Activity> = {
+        cardio: 'moderate',
+        strength: 'moderate',
+        sports: 'moderate',
+        yoga: 'light',
+        hiit: 'high',
+        mixed: 'moderate',
+      };
+      
+      const planActivityType = workoutPlanData.activity_types?.[0] || 'mixed';
+      let baseActivityLevel = activityMap[planActivityType] || 'moderate';
+      
+      // Ajustar según días disponibles
+      if (workoutPlanData.available_days) {
+        if (workoutPlanData.available_days >= 5) {
+          if (baseActivityLevel === 'light') baseActivityLevel = 'moderate';
+          else if (baseActivityLevel === 'moderate') baseActivityLevel = 'high';
+        } else if (workoutPlanData.available_days < 3) {
+          if (baseActivityLevel === 'high') baseActivityLevel = 'moderate';
+          else if (baseActivityLevel === 'moderate') baseActivityLevel = 'light';
+        }
+      }
+      
+      // Mapear goals del plan a Goal
+      const goalMap: Record<string, Goal> = {
+        weight_loss: 'cut',
+        muscle_gain: 'bulk',
+        strength: 'bulk',
+        endurance: 'maintain',
+        flexibility: 'maintain',
+        general_fitness: 'maintain',
+      };
+      
+      const planGoal = workoutPlanData.goals?.[0] || 'general_fitness';
+      
+      // Crear perfil temporal con datos del plan
+      userProfile = {
+        ...userProfile,
+        activity_level: baseActivityLevel,
+        goal: goalMap[planGoal] || 'maintain',
+      };
+    }
+
     // Generar plan semanal usando IA
     console.log('📄 Respuesta de IA recibida, parseando...');
     const weekPlan = await generateAIMealPlan(
@@ -1638,7 +1814,8 @@ export async function createOrUpdateMealPlan(
       nutritionProfile.meals_per_day,
       nutritionProfile.custom_prompts || [],
       nutritionProfile.fasting_window,
-      userProfile
+      userProfile,
+      workoutPlanData // Pasar datos del plan para contexto adicional
     );
 
     console.log('✅ 7 días válidos encontrados');
@@ -1801,7 +1978,6 @@ Responde SOLO el JSON.`;
 
 export async function logMeal(
   userId: string,
-  mealType: string,
   itemJson: any,
   macros: { calories: number; protein_g: number; carbs_g: number; fats_g: number },
   photoUrl?: string
@@ -1810,7 +1986,6 @@ export async function logMeal(
     const { error } = await supabase.from('meal_logs').insert({
       user_id: userId,
       datetime: new Date().toISOString(),
-      meal_type: mealType,
       item_json: itemJson,
       ...macros,
       photo_url: photoUrl,

@@ -13,20 +13,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useUser, useAuth } from '@clerk/clerk-expo';
 import { supabase } from '../src/services/supabase';
-import { FitnessLevel, FitnessGoal, Equipment, ActivityType, Gender } from '../src/types';
+import { Gender } from '../src/types';
 import { getClerkUserEmail } from '../src/utils/clerkHelpers';
-import { validateEmail, validateAge, validateWeight, validateHeight, validateRequired, validateMinLength } from '../src/utils/formValidation';
+import { validateEmail, validateAge, validateWeight, validateHeight, validateRequired, validateMinLength, validateUsernameFormat } from '../src/utils/formValidation';
 
 const STEPS = [
   'welcome',
   'personal_info',
   'gender',
-  'fitness_level',
-  'goals',
-  'activity_types',
-  'availability',
-  'session_duration',
-  'equipment',
   'complete',
 ];
 
@@ -42,19 +36,13 @@ export default function OnboardingScreen() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    username: '',
     age: '',
     gender: Gender.MALE,
     height: '',
     weight: '',
-    body_fat_percentage: '',
-    muscle_percentage: '',
-    fitness_level: FitnessLevel.BEGINNER,
-    goals: [] as FitnessGoal[],
-    activity_types: [] as ActivityType[],
-    available_days: 3,
-    session_duration: 30,
-    equipment: [] as Equipment[],
   });
+  const [checkingUsername, setCheckingUsername] = useState(false);
 
   // Cargar email de Clerk y perfil existente
   React.useEffect(() => {
@@ -106,18 +94,11 @@ export default function OnboardingScreen() {
           setFormData({
             name: data.name || '',
             email: emailToUse,
+            username: data.username || '',
             age: data.age?.toString() || '',
             gender: allowedGenders.includes(data.gender as Gender) ? (data.gender as Gender) : Gender.MALE,
             height: data.height?.toString() || '',
             weight: data.weight?.toString() || '',
-            body_fat_percentage: data.body_fat_percentage?.toString() || '',
-            muscle_percentage: data.muscle_percentage?.toString() || '',
-            fitness_level: data.fitness_level || FitnessLevel.BEGINNER,
-            goals: data.goals || [],
-            activity_types: data.activity_types || [],
-            available_days: data.available_days || 3,
-            session_duration: data.session_duration || 30,
-            equipment: data.equipment || [],
           });
         } else {
           console.log('ℹ️ No hay perfil existente, creando nuevo...');
@@ -308,35 +289,49 @@ export default function OnboardingScreen() {
 
   const continueWithSave = async (userEmail: string | null) => {
     try {
+      // Validar username antes de guardar
+      if (!formData.username || formData.username.trim().length === 0) {
+        Alert.alert('Error', 'El nombre de usuario es requerido');
+        setCurrentStep(STEPS.indexOf('personal_info'));
+        return;
+      }
+      
+      const usernameValidation = validateUsernameFormat(formData.username);
+      if (!usernameValidation.isValid) {
+        Alert.alert('Error', usernameValidation.error || 'El nombre de usuario no es válido');
+        setCurrentStep(STEPS.indexOf('personal_info'));
+        setFieldErrors(prev => ({ ...prev, username: usernameValidation.error || '' }));
+        return;
+      }
+      
+      // Verificar que el username no esté en uso
+      const { data: existingUsername } = await supabase
+        .from('user_profiles')
+        .select('username')
+        .eq('username', formData.username.toLowerCase().trim())
+        .neq('user_id', user.id)
+        .maybeSingle();
+      
+      if (existingUsername) {
+        Alert.alert('Error', 'Este nombre de usuario ya está en uso. Por favor elige otro.');
+        setCurrentStep(STEPS.indexOf('personal_info'));
+        setFieldErrors(prev => ({ ...prev, username: 'Este nombre de usuario ya está en uso' }));
+        return;
+      }
+
       // Preparar datos base
       const profileData: any = {
         user_id: user.id,
         email: userEmail,
+        username: formData.username.toLowerCase().trim(),
         name: formData.name,
         age: parseInt(formData.age),
         gender: formData.gender,
         height: parseInt(formData.height),
         weight: parseInt(formData.weight),
-        fitness_level: formData.fitness_level,
-        goals: formData.goals,
-        activity_types: formData.activity_types,
-        available_days: formData.available_days,
-        session_duration: formData.session_duration,
-        equipment: formData.equipment,
         updated_at: new Date().toISOString(),
       };
 
-      // Agregar campos opcionales de composición corporal solo si tienen valores
-      // (para evitar errores si las columnas aún no existen en Supabase)
-      const bodyFat = parseOptionalNumber(formData.body_fat_percentage);
-      const muscle = parseOptionalNumber(formData.muscle_percentage);
-      
-      if (bodyFat !== null) {
-        profileData.body_fat_percentage = bodyFat;
-      }
-      if (muscle !== null) {
-        profileData.muscle_percentage = muscle;
-      }
 
       console.log('📊 Datos a guardar:', Object.keys(profileData));
       
@@ -355,18 +350,13 @@ export default function OnboardingScreen() {
         if (error.message?.includes('body_fat_percentage') || error.message?.includes('muscle_percentage')) {
           console.log('⚠️ Las columnas de composición corporal no existen aún en Supabase');
           console.log('💡 Ejecuta los scripts SQL primero (ver INSTRUCCIONES_SQL.md)');
-          console.log('   Intentando guardar sin campos de composición...');
-          
-          // Intentar de nuevo sin los campos de composición corporal
-          delete profileData.body_fat_percentage;
-          delete profileData.muscle_percentage;
           
           const { error: retryError } = await supabase
             .from('user_profiles')
             .upsert(profileData, { onConflict: 'user_id' });
           
           if (retryError) {
-            console.error('❌ Error incluso sin campos de composición:', retryError);
+            console.error('❌ Error al guardar:', retryError);
             Alert.alert('Error', 'No se pudo guardar tu perfil. Por favor, intenta nuevamente.');
             throw retryError;
           } else {
@@ -458,52 +448,16 @@ export default function OnboardingScreen() {
         }
       }
 
-      // Éxito - redirigir a la pantalla de introducción del plan
-      router.replace({
-        pathname: '/plan-introduction',
-        params: {
-          name: formData.name,
-          age: formData.age.toString(),
-          fitness_level: formData.fitness_level,
-          goals: JSON.stringify(formData.goals),
-          activity_types: JSON.stringify(formData.activity_types),
-          available_days: formData.available_days.toString(),
-          session_duration: formData.session_duration.toString(),
-          equipment: JSON.stringify(formData.equipment),
-        },
-      });
+      // Éxito - redirigir al dashboard
+      // El onboarding básico solo recopila datos personales
+      // Los datos del plan de entrenamiento se recopilan en otro flujo
+      router.replace('/(tabs)/dashboard');
     } catch (error) {
       console.error('❌ Error al guardar:', error);
       Alert.alert('Error', 'Ocurrió un error al guardar. Por favor, intenta nuevamente.');
     }
   };
 
-  const toggleGoal = (goal: FitnessGoal) => {
-    setFormData(prev => ({
-      ...prev,
-      goals: prev.goals.includes(goal)
-        ? prev.goals.filter(g => g !== goal)
-        : [...prev.goals, goal]
-    }));
-  };
-
-  const toggleActivityType = (activityType: ActivityType) => {
-    setFormData(prev => ({
-      ...prev,
-      activity_types: prev.activity_types.includes(activityType)
-        ? prev.activity_types.filter(a => a !== activityType)
-        : [...prev.activity_types, activityType]
-    }));
-  };
-
-  const toggleEquipment = (equipment: Equipment) => {
-    setFormData(prev => ({
-      ...prev,
-      equipment: prev.equipment.includes(equipment)
-        ? prev.equipment.filter(e => e !== equipment)
-        : [...prev.equipment, equipment]
-    }));
-  };
 
   const renderStep = () => {
     switch (STEPS[currentStep]) {
@@ -617,6 +571,73 @@ export default function OnboardingScreen() {
               )}
             </View>
             <View style={styles.inputGroup}>
+              <Text style={styles.label}>Nombre de usuario *</Text>
+              <Text style={styles.inputHint}>
+                Este será tu identificador único en la red social (ej: @juan_fitness)
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={{ color: '#666', fontSize: 16, marginRight: 4 }}>@</Text>
+                <TextInput
+                  style={[styles.input, { flex: 1 }, fieldErrors.username && styles.inputError]}
+                  value={formData.username}
+                  onChangeText={async (text) => {
+                    const lowerText = text.toLowerCase().trim();
+                    setFormData(prev => ({ ...prev, username: lowerText }));
+                    
+                    // Limpiar error previo
+                    setFieldErrors(prev => {
+                      const newErrors = { ...prev };
+                      delete newErrors.username;
+                      return newErrors;
+                    });
+                    
+                    if (lowerText.length > 0) {
+                      // Validar formato
+                      const validation = validateUsernameFormat(lowerText);
+                      if (!validation.isValid) {
+                        setFieldErrors(prev => ({ ...prev, username: validation.error || '' }));
+                        return;
+                      }
+                      
+                      // Verificar disponibilidad (solo si el formato es válido)
+                      setCheckingUsername(true);
+                      try {
+                        const { data, error } = await supabase
+                          .from('user_profiles')
+                          .select('username')
+                          .eq('username', lowerText)
+                          .neq('user_id', user?.id || '')
+                          .maybeSingle();
+                        
+                        if (error && error.code !== 'PGRST116') {
+                          console.error('Error verificando username:', error);
+                        } else if (data) {
+                          setFieldErrors(prev => ({ ...prev, username: 'Este nombre de usuario ya está en uso' }));
+                        }
+                      } catch (error) {
+                        console.error('Error verificando username:', error);
+                      } finally {
+                        setCheckingUsername(false);
+                      }
+                    }
+                  }}
+                  placeholder="juan_fitness"
+                  placeholderTextColor="#666"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {checkingUsername && (
+                  <Text style={{ marginLeft: 8, color: '#666' }}>✓</Text>
+                )}
+              </View>
+              {fieldErrors.username && (
+                <Text style={styles.errorText}>{fieldErrors.username}</Text>
+              )}
+              {!fieldErrors.username && formData.username.length >= 3 && !checkingUsername && (
+                <Text style={{ color: '#4CAF50', fontSize: 12, marginTop: 4 }}>✓ Disponible</Text>
+              )}
+            </View>
+            <View style={styles.inputGroup}>
               <Text style={styles.label}>Edad *</Text>
               <TextInput
                 style={[styles.input, fieldErrors.age && styles.inputError]}
@@ -718,30 +739,6 @@ export default function OnboardingScreen() {
                 <Text style={styles.errorText}>{fieldErrors.weight}</Text>
               )}
             </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Grasa corporal (%) - Opcional</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.body_fat_percentage}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, body_fat_percentage: text }))}
-                placeholder="15"
-                placeholderTextColor="#666"
-                keyboardType="numeric"
-              />
-              <Text style={styles.optionalText}>Esta información ayuda a personalizar mejor tu plan nutricional</Text>
-            </View>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Masa muscular (%) - Opcional</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.muscle_percentage}
-                onChangeText={(text) => setFormData(prev => ({ ...prev, muscle_percentage: text }))}
-                placeholder="40"
-                placeholderTextColor="#666"
-                keyboardType="numeric"
-              />
-              <Text style={styles.optionalText}>Esta información ayuda a personalizar mejor tu plan nutricional</Text>
-            </View>
           </View>
         );
 
@@ -771,171 +768,6 @@ export default function OnboardingScreen() {
           </View>
         );
 
-      case 'fitness_level':
-        return (
-          <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>¿Cuál es tu nivel de fitness?</Text>
-            {Object.values(FitnessLevel).map((level) => (
-              <TouchableOpacity
-                key={level}
-                style={[
-                  styles.optionButton,
-                  formData.fitness_level === level && styles.selectedOption
-                ]}
-                onPress={() => setFormData(prev => ({ ...prev, fitness_level: level }))}
-              >
-                <Text style={[
-                  styles.optionText,
-                  formData.fitness_level === level && styles.selectedOptionText
-                ]}>
-                  {level === FitnessLevel.BEGINNER && 'Principiante - Nuevo en el fitness'}
-                  {level === FitnessLevel.INTERMEDIATE && 'Intermedio - Algunos meses de experiencia'}
-                  {level === FitnessLevel.ADVANCED && 'Avanzado - Años de experiencia'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        );
-
-      case 'goals':
-        return (
-          <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>¿Cuáles son tus objetivos?</Text>
-            <Text style={styles.stepSubtitle}>Selecciona todos los que apliquen</Text>
-            {Object.values(FitnessGoal).map((goal) => (
-              <TouchableOpacity
-                key={goal}
-                style={[
-                  styles.optionButton,
-                  formData.goals.includes(goal) && styles.selectedOption
-                ]}
-                onPress={() => toggleGoal(goal)}
-              >
-                <Text style={[
-                  styles.optionText,
-                  formData.goals.includes(goal) && styles.selectedOptionText
-                ]}>
-                  {goal === FitnessGoal.WEIGHT_LOSS && 'Perder peso'}
-                  {goal === FitnessGoal.MUSCLE_GAIN && 'Ganar músculo'}
-                  {goal === FitnessGoal.STRENGTH && 'Aumentar fuerza'}
-                  {goal === FitnessGoal.ENDURANCE && 'Mejorar resistencia'}
-                  {goal === FitnessGoal.FLEXIBILITY && 'Flexibilidad/Movilidad'}
-                  {goal === FitnessGoal.GENERAL_FITNESS && 'Mantener forma general'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        );
-
-      case 'activity_types':
-        return (
-          <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>¿Qué tipo de actividades prefieres?</Text>
-            <Text style={styles.stepSubtitle}>Selecciona todas las que te gusten</Text>
-            {Object.values(ActivityType).map((activity) => (
-              <TouchableOpacity
-                key={activity}
-                style={[
-                  styles.optionButton,
-                  formData.activity_types.includes(activity) && styles.selectedOption
-                ]}
-                onPress={() => toggleActivityType(activity)}
-              >
-                <Text style={[
-                  styles.optionText,
-                  formData.activity_types.includes(activity) && styles.selectedOptionText
-                ]}>
-                  {activity === ActivityType.CARDIO && '🏃 Cardio (correr, nadar, bici)'}
-                  {activity === ActivityType.STRENGTH && '💪 Fuerza (pesas, calistenia)'}
-                  {activity === ActivityType.SPORTS && '⚽ Deportes (fútbol, basketball)'}
-                  {activity === ActivityType.YOGA && '🧘 Yoga/Pilates'}
-                  {activity === ActivityType.HIIT && '🔥 HIIT (entrenamiento intenso)'}
-                  {activity === ActivityType.MIXED && '🎯 Mixto (de todo un poco)'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        );
-
-      case 'availability':
-        return (
-          <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>¿Cuántos días puedes entrenar por semana?</Text>
-            {[1, 2, 3, 4, 5, 6, 7].map((days) => (
-              <TouchableOpacity
-                key={days}
-                style={[
-                  styles.optionButton,
-                  formData.available_days === days && styles.selectedOption
-                ]}
-                onPress={() => setFormData(prev => ({ ...prev, available_days: days }))}
-              >
-                <Text style={[
-                  styles.optionText,
-                  formData.available_days === days && styles.selectedOptionText
-                ]}>
-                  {days} {days === 1 ? 'día' : 'días'} por semana
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        );
-
-      case 'session_duration':
-        return (
-          <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>¿Cuánto tiempo tienes por sesión?</Text>
-            {[15, 30, 45, 60, 90].map((minutes) => (
-              <TouchableOpacity
-                key={minutes}
-                style={[
-                  styles.optionButton,
-                  formData.session_duration === minutes && styles.selectedOption
-                ]}
-                onPress={() => setFormData(prev => ({ ...prev, session_duration: minutes }))}
-              >
-                <Text style={[
-                  styles.optionText,
-                  formData.session_duration === minutes && styles.selectedOptionText
-                ]}>
-                  {minutes} minutos
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        );
-
-      case 'equipment':
-        return (
-          <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>¿Qué equipamiento tienes disponible?</Text>
-            <Text style={styles.stepSubtitle}>Selecciona todo lo que tengas</Text>
-            {Object.values(Equipment).map((equipment) => (
-              <TouchableOpacity
-                key={equipment}
-                style={[
-                  styles.optionButton,
-                  formData.equipment.includes(equipment) && styles.selectedOption
-                ]}
-                onPress={() => toggleEquipment(equipment)}
-              >
-                <Text style={[
-                  styles.optionText,
-                  formData.equipment.includes(equipment) && styles.selectedOptionText
-                ]}>
-                  {equipment === Equipment.NONE && 'Solo peso corporal'}
-                  {equipment === Equipment.DUMBBELLS && 'Mancuernas'}
-                  {equipment === Equipment.BARBELL && 'Barra olímpica'}
-                  {equipment === Equipment.RESISTANCE_BANDS && 'Bandas de resistencia'}
-                  {equipment === Equipment.PULL_UP_BAR && 'Barra de dominadas'}
-                  {equipment === Equipment.BENCH && 'Banco'}
-                  {equipment === Equipment.GYM_ACCESS && 'Acceso a gimnasio'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        );
-
       case 'complete':
         return (
           <View style={styles.stepContainer}>
@@ -957,13 +789,7 @@ export default function OnboardingScreen() {
   const canProceed = () => {
     switch (STEPS[currentStep]) {
       case 'personal_info':
-        return formData.name && formData.age && formData.height && formData.weight;
-      case 'goals':
-        return formData.goals.length > 0;
-      case 'activity_types':
-        return formData.activity_types.length > 0;
-      case 'equipment':
-        return formData.equipment.length > 0;
+        return formData.name && formData.username && formData.age && formData.height && formData.weight;
       default:
         return true;
     }
@@ -1132,6 +958,11 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginBottom: 8,
     fontWeight: '500',
+  },
+  inputHint: {
+    fontSize: 13,
+    color: '#999',
+    marginBottom: 8,
   },
   input: {
     backgroundColor: '#2a2a2a',

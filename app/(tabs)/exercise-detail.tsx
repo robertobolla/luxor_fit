@@ -592,7 +592,20 @@ export default function ExerciseDetailScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity 
+          onPress={() => {
+            try {
+              if (router.canGoBack && router.canGoBack()) {
+                router.back();
+              } else {
+                throw new Error('Cannot go back');
+              }
+            } catch (error) {
+              // Si no hay pantalla anterior, navegar a workout
+              router.push('/(tabs)/workout' as any);
+            }
+          }}
+        >
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Ejercicio</Text>
