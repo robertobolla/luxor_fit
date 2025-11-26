@@ -360,6 +360,12 @@ export default function ProfileScreen() {
             <Text style={styles.infoLabel}>Nombre</Text>
             <Text style={styles.infoValue}>{displayName}</Text>
           </View>
+          {profile?.username && (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Nombre de usuario</Text>
+              <Text style={styles.infoValue}>@{profile.username}</Text>
+            </View>
+          )}
           {profile && (
             <>
               <View style={styles.infoRow}>
