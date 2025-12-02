@@ -19,11 +19,13 @@ import { supabase } from '@/services/supabase';
 import { getHealthDataForDate, requestHealthPermissions, hasHealthPermissions, resetPermissionsCache, showHealthDiagnosticsAlert, getHealthDiagnostics, HealthData } from '@/services/healthService';
 import { getExerciseDaysThisWeek, getGymDaysThisWeek } from '@/services/exerciseService';
 import DashboardCustomizationModal from '@/components/DashboardCustomizationModal';
+import WeeklyCheckinModal from '@/components/WeeklyCheckinModal';
 import { DashboardConfig, MetricType, AVAILABLE_METRICS, PRESET_PRIORITIES } from '@/types/dashboard';
 import { loadDashboardConfig } from '@/services/dashboardPreferences';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
 import { SkeletonDashboard } from '@/components/SkeletonLoaders';
+import { checkIfNeedsWeeklyCheckin, CheckinStatus, shouldShowCheckinReminder, markCheckinReminderShown } from '@/services/weeklyCheckinService';
 
 const { width } = Dimensions.get('window');
 
@@ -86,6 +88,8 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
+  const [showCheckinModal, setShowCheckinModal] = useState(false);
+  const [checkinStatus, setCheckinStatus] = useState<CheckinStatus | null>(null);
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig | null>(null);
   const { isLoading: isCheckingOnboarding, setLoading: setIsCheckingOnboarding, executeAsync } = useLoadingState(true);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
@@ -211,9 +215,49 @@ export default function DashboardScreen() {
     useCallback(() => {
       if (!isCheckingOnboarding && user?.id) {
         loadHealthData();
+        checkWeeklyCheckin();
       }
     }, [isCheckingOnboarding, user])
   );
+
+  // Verificar si necesita hacer check-in semanal
+  const checkWeeklyCheckin = async () => {
+    if (!user?.id) return;
+
+    try {
+      const status = await checkIfNeedsWeeklyCheckin(user.id);
+      setCheckinStatus(status);
+
+      // Solo mostrar el modal si:
+      // 1. Necesita check-in
+      // 2. Estamos viendo "hoy" (no navegando por días pasados)
+      // 3. No se ha mostrado el recordatorio esta semana
+      const isViewingToday = selectedDate.toDateString() === new Date().toDateString();
+      const showReminder = await shouldShowCheckinReminder();
+
+      if (status.needsCheckin && isViewingToday && showReminder) {
+        // Mostrar el modal después de un pequeño delay para mejor UX
+        setTimeout(() => {
+          setShowCheckinModal(true);
+          markCheckinReminderShown();
+        }, 1500);
+      }
+    } catch (error) {
+      console.error('Error verificando check-in semanal:', error);
+    }
+  };
+
+  const handleCheckinComplete = async () => {
+    // Recargar datos después del check-in
+    await loadHealthData();
+    
+    // Mostrar mensaje de éxito
+    Alert.alert(
+      '✅ ¡Genial!',
+      'Tu check-in se completó exitosamente. Tu plan de nutrición ha sido actualizado.',
+      [{ text: 'OK' }]
+    );
+  };
 
   const loadHealthData = async () => {
     try {
@@ -856,6 +900,17 @@ export default function DashboardScreen() {
         onClose={() => setShowCustomizationModal(false)}
         onSave={handleSaveCustomization}
       />
+
+      {/* Modal de check-in semanal */}
+      {checkinStatus && (
+        <WeeklyCheckinModal
+          visible={showCheckinModal}
+          onClose={() => setShowCheckinModal(false)}
+          userId={user?.id || ''}
+          checkinStatus={checkinStatus}
+          onCheckinComplete={handleCheckinComplete}
+        />
+      )}
     </View>
   );
 }

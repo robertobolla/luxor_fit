@@ -2,7 +2,7 @@
   "expo": {
     "name": "Luxor Fitness",
     "slug": "fitmind",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.luxorfitness.app",
-      "buildNumber": "16",
+      "buildNumber": "17",
       "infoPlist": {
         "NSHealthShareUsageDescription": "Luxor Fitness necesita acceso a tus datos de salud para mostrarte estadísticas personalizadas de pasos, calorías, distancia y sueño.",
         "NSHealthUpdateUsageDescription": "Luxor Fitness puede actualizar tus datos de salud cuando registres entrenamientos.",

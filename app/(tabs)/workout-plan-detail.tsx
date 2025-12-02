@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { useLocalSearchParams, router, Stack, useFocusEffect } from 'expo-router';
@@ -17,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFriends } from '../../src/services/friendsService';
 import { shareWorkout } from '../../src/services/sharedWorkoutService';
 import { FriendSelectionModal, ConfirmModal } from '../../src/components/CustomModal';
+import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 
 export default function WorkoutPlanDetailScreen() {
   const { planId } = useLocalSearchParams();
@@ -305,9 +305,8 @@ export default function WorkoutPlanDetailScreen() {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
-        <View style={[styles.container, styles.centerContent]}>
-          <ActivityIndicator size="large" color="#ffb300" />
-          <Text style={styles.loadingText}>Cargando plan...</Text>
+        <View style={styles.container}>
+          <LoadingOverlay visible={true} message="Cargando plan..." fullScreen />
         </View>
       </>
     );
@@ -526,9 +525,24 @@ export default function WorkoutPlanDetailScreen() {
             const dayKey = day.day || `day_${index + 1}`;
             const isCompleted = completedDays.has(dayKey);
             
+            // Procesar el título del día para evitar duplicados
+            let dayTitle = day.day;
+            if (!dayTitle || dayTitle.trim() === '') {
+              // Si no hay título, usar el índice
+              dayTitle = `Día ${index + 1}`;
+            } else {
+              // Limpiar espacios
+              dayTitle = dayTitle.trim();
+              // Si el título ya tiene formato "Día X", usarlo tal cual
+              // Si no tiene formato, usar el índice
+              if (!dayTitle.match(/^Día\s*\d+/i)) {
+                dayTitle = `Día ${index + 1}`;
+              }
+            }
+            
             // Asegurar que tenemos todos los campos necesarios para el día
             const safeDay = {
-              day: day.day || `Día ${index + 1}`,
+              day: dayTitle,
               duration: day.duration || 45,
               focus: day.focus || 'Entrenamiento general',
               exercises: day.exercises || [],

@@ -3,6 +3,8 @@
  * Integración con ChatGPT (OpenAI API)
  */
 
+import { supabase } from './supabase';
+
 interface UserProfile {
   name: string;
   age: number;
@@ -12,6 +14,7 @@ interface UserProfile {
   available_days: number;
   session_duration: number;
   equipment: string[];
+  gender?: string;
 }
 
 interface AIResponse {
@@ -234,9 +237,115 @@ Recuerda que la consistencia es clave. Con tu dedicación y nuestro plan persona
 }
 
 /**
+ * Analiza el feedback del usuario de entrenamientos completados
+ */
+interface WorkoutFeedback {
+  avgDifficulty: number;
+  completedExercises: string[];
+  skippedExercises: string[];
+  commonNotes: string;
+  totalCompletions: number;
+}
+
+async function analyzeWorkoutFeedback(userId: string): Promise<WorkoutFeedback | null> {
+  try {
+    // Obtener últimos 10 entrenamientos completados con plan_id para comparar
+    const { data: completions, error } = await supabase
+      .from('workout_completions')
+      .select('difficulty_rating, notes, exercises_completed, workout_plan_id, day_name')
+      .eq('user_id', userId)
+      .order('completed_at', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      console.error('Error obteniendo feedback:', error);
+      return null;
+    }
+
+    if (!completions || completions.length === 0) {
+      console.log('📊 No hay historial de entrenamientos para analizar');
+      return null;
+    }
+
+    // Calcular dificultad promedio
+    const validRatings = completions
+      .map(c => c.difficulty_rating)
+      .filter((r): r is number => r !== null && r !== undefined && r > 0);
+    
+    const avgDifficulty = validRatings.length > 0
+      ? validRatings.reduce((sum, r) => sum + r, 0) / validRatings.length
+      : 0;
+
+    // Analizar ejercicios completados
+    // Por ahora, analizamos solo los ejercicios que aparecen en completions
+    // En el futuro se puede mejorar comparando con el plan original
+    const exerciseCounts: { [key: string]: { completed: number; total: number } } = {};
+    
+    completions.forEach(completion => {
+      const exercises = completion.exercises_completed;
+      if (Array.isArray(exercises) && exercises.length > 0) {
+        exercises.forEach((ex: any) => {
+          // El ejercicio puede venir como string o como objeto con name
+          const exerciseName = typeof ex === 'string' ? ex : (ex?.name || ex?.exercise_name || '');
+          if (exerciseName && exerciseName.trim()) {
+            const normalizedName = exerciseName.trim();
+            if (!exerciseCounts[normalizedName]) {
+              exerciseCounts[normalizedName] = { completed: 0, total: 0 };
+            }
+            exerciseCounts[normalizedName].total++;
+            // Si el ejercicio está en exercises_completed, se completó
+            exerciseCounts[normalizedName].completed++;
+          }
+        });
+      }
+    });
+
+    // Identificar ejercicios completados consistentemente (>80% de las veces)
+    const completedExercises = Object.entries(exerciseCounts)
+      .filter(([_, counts]) => counts.total >= 2 && (counts.completed / counts.total) >= 0.8)
+      .map(([name, _]) => name);
+
+    // Identificar ejercicios frecuentemente saltados (<50% de las veces)
+    const skippedExercises = Object.entries(exerciseCounts)
+      .filter(([_, counts]) => counts.total >= 2 && (counts.completed / counts.total) < 0.5)
+      .map(([name, _]) => name);
+
+    // Extraer notas comunes
+    const notes = completions
+      .map(c => c.notes)
+      .filter((n): n is string => n !== null && n !== undefined && n.trim().length > 0);
+    
+    const commonNotes = notes.length > 0
+      ? notes.slice(0, 3).join('; ') // Tomar las primeras 3 notas
+      : '';
+
+    console.log('📊 Análisis de feedback:', {
+      avgDifficulty: avgDifficulty.toFixed(1),
+      completedExercises: completedExercises.length,
+      skippedExercises: skippedExercises.length,
+      totalCompletions: completions.length,
+    });
+
+    return {
+      avgDifficulty,
+      completedExercises,
+      skippedExercises,
+      commonNotes,
+      totalCompletions: completions.length,
+    };
+  } catch (error) {
+    console.error('Error analizando feedback:', error);
+    return null;
+  }
+}
+
+/**
  * Genera una rutina de entrenamiento personalizada
  */
-export async function generateWorkoutPlan(userData: UserProfile): Promise<any> {
+export async function generateWorkoutPlan(
+  userData: UserProfile,
+  userId?: string
+): Promise<any> {
   try {
     // Si no hay API key, usar plan por defecto
     if (!OPENAI_API_KEY || OPENAI_API_KEY === '') {
@@ -247,8 +356,14 @@ export async function generateWorkoutPlan(userData: UserProfile): Promise<any> {
       };
     }
 
-    // Construir el prompt para generar el plan
-    const prompt = buildWorkoutPrompt(userData);
+    // Analizar feedback si tenemos userId
+    let feedback: WorkoutFeedback | null = null;
+    if (userId) {
+      feedback = await analyzeWorkoutFeedback(userId);
+    }
+
+    // Construir el prompt para generar el plan (con feedback si está disponible)
+    const prompt = await buildWorkoutPrompt(userData, feedback);
 
     // Llamar a la API de OpenAI
     const response = await fetch(OPENAI_API_URL, {
@@ -382,7 +497,10 @@ function cleanJsonString(s: string): string {
 /**
  * Construye el prompt para generar un plan de entrenamiento
  */
-function buildWorkoutPrompt(userData: UserProfile): string {
+async function buildWorkoutPrompt(
+  userData: UserProfile,
+  feedback: WorkoutFeedback | null = null
+): Promise<string> {
   const fitnessLevelText = {
     beginner: 'principiante',
     intermediate: 'intermedio',
@@ -473,23 +591,112 @@ INSTRUCCIONES CRÍTICAS:
 2. VOLUMEN Y INTENSIDAD (basado en ciencia):
    Principiante:
    - 8-12 series por grupo muscular/semana
-   - 3-4 ejercicios por sesión
    - Reps: 8-15 para hipertrofia, 12-20 para resistencia
+   - RIR: 3-4 (intensidad moderada, enfoque en técnica)
    - Descansos: 60-90s
+   - Tiempo por ejercicio: 12-15 minutos (menos series, descansos cortos)
    
    Intermedio:
    - 12-18 series por grupo muscular/semana
-   - 4-6 ejercicios por sesión
    - Reps: 6-12 para fuerza, 8-15 para hipertrofia
+   - RIR: 2-3 (intensidad alta pero controlada)
    - Descansos: 90-180s para compuestos, 60-90s para accesorios
+   - Tiempo por ejercicio: 15-18 minutos (series moderadas, descansos intermedios)
    
    Avanzado:
    - 16-25 series por grupo muscular/semana
-   - 5-8 ejercicios por sesión
    - Reps: 3-6 para fuerza máxima, 6-12 para hipertrofia, 12-20 para resistencia
+   - RIR: 1-2 (muy cerca del fallo, solo en series finales)
    - Descansos: 2-5min para fuerza, 90-120s para hipertrofia
+   - Tiempo por ejercicio: 18-20 minutos (más series, descansos largos, calentamiento extenso)
+   
+   NOTA: El número de ejercicios por sesión se calcula automáticamente según la duración disponible (ver sección 3).
 
-3. ESTRUCTURA SEMANAL:
+2.1. INTENSIDAD Y PROXIMIDAD AL FALLO (RIR/RPE) - CRÍTICO:
+   - USA SIEMPRE RIR (Reps In Reserve) en el formato de repeticiones
+   - NUNCA uses números fijos sin RIR (ej: "10, 10, 10" es INCORRECTO)
+   - Formato correcto: "8-10 @ RIR 2" significa 8-10 repeticiones dejando 2 en reserva
+   - Alternativa: "6-8 @ RPE 8" (RPE 8 = RIR 2)
+   
+   RIR por nivel y objetivo:
+   - Principiante: RIR 3-4 (intensidad moderada, enfoque en técnica y seguridad)
+   - Intermedio: RIR 2-3 (intensidad alta pero controlada, permite progresión)
+   - Avanzado: RIR 1-2 (muy cerca del fallo, solo en series finales de ejercicios principales)
+   
+   Reglas de RIR:
+   - RIR 0 (fallo absoluto): SOLO para avanzados y SOLO en última serie del último ejercicio compuesto
+   - RIR 1-2: Para series principales de ejercicios compuestos (sentadilla, peso muerto, press)
+   - RIR 2-3: Para ejercicios accesorios y series de volumen
+   - RIR 3-4: Para principiantes y series de calentamiento/aproximación
+   
+   IMPORTANTE: Cada serie debe tener RIR diferente según su posición:
+   - Primera serie de trabajo: RIR 2-3 (más conservador)
+   - Series intermedias: RIR 2 (intensidad objetivo)
+   - Última serie: RIR 1-2 (puede acercarse más al fallo)
+
+2.2. SERIES DE APROXIMACIÓN Y CALENTAMIENTO (OBLIGATORIO):
+   Para ejercicios COMPUESTOS principales (sentadilla, peso muerto, press de banca, press militar, remo):
+   - Series de calentamiento: 1-2 series con 40-60% del peso de trabajo, RIR 4-5
+   - Series de aproximación: 1 serie con 70-85% del peso de trabajo, RIR 3
+   - Series de trabajo: 3-5 series con peso objetivo y RIR específico
+   
+   Para ejercicios ACCESORIOS:
+   - Pueden empezar directamente con series de trabajo
+   - O 1 serie de calentamiento ligera (50% peso, RIR 4)
+   
+   Ejemplo de estructura profesional:
+   Sentadilla con barra (objetivo: 100kg x 6-8):
+   - Calentamiento 1: 1x10 @ 50kg (RIR 4-5)
+   - Calentamiento 2: 1x5 @ 70kg (RIR 3)
+   - Trabajo 1: 1x6-8 @ 100kg (RIR 2)
+   - Trabajo 2: 1x6-8 @ 100kg (RIR 2)
+   - Trabajo 3: 1x6-8 @ 100kg (RIR 1)
+
+2.3. PROGRESIÓN DENTRO DE LA SESIÓN:
+   NUNCA uses el mismo peso y repeticiones en todas las series (ej: 70kg x 10, 70kg x 10, 70kg x 10).
+   
+   Tipos de progresión profesional:
+   - PIramidal: Aumenta peso, reduce reps (ej: 60kgx10, 70kgx8, 80kgx6) - MÁS COMÚN
+   - Ascendente: Aumenta peso progresivamente (ej: 60kgx8, 65kgx8, 70kgx8)
+   - Constante: Mismo peso y reps (SOLO para principiantes o ejercicios accesorios)
+   - Inversa: Reduce peso, aumenta reps (avanzados, para fatiga acumulada)
+   
+   Regla general:
+   - Principiantes: Constante o ascendente ligera (ej: 60kgx10, 62.5kgx10, 65kgx10)
+   - Intermedios: Piramidal o ascendente (ej: 60kgx10, 70kgx8, 80kgx6)
+   - Avanzados: Piramidal, inversa, o técnicas avanzadas (cluster sets, rest-pause)
+   
+   IMPORTANTE: Varía el peso entre series según el tipo de progresión elegido
+
+3. NÚMERO DE EJERCICIOS POR SESIÓN (CRÍTICO - CALCULAR POR TIEMPO):
+   El número de ejercicios DEBE calcularse basándose en el tiempo disponible:
+   - Cada ejercicio toma 15-20 minutos (incluyendo calentamiento, series de trabajo, descansos)
+   - Para INTENSIDAD ALTA (RIR 1-2): 18-20 minutos por ejercicio
+   - Para INTENSIDAD MODERADA (RIR 2-3): 15-18 minutos por ejercicio
+   - Para INTENSIDAD BAJA (RIR 3-4): 12-15 minutos por ejercicio
+   
+   FÓRMULA DE CÁLCULO:
+   - Tiempo disponible: ${userData.session_duration} minutos
+   - Tiempo por ejercicio (intensidad alta): 18-20 minutos
+   - Número de ejercicios = ${userData.session_duration} ÷ 18-20 = ${Math.floor(userData.session_duration / 20)}-${Math.floor(userData.session_duration / 18)} ejercicios
+   
+   EJEMPLOS:
+   - 30 minutos: 30 ÷ 20 = 1-2 ejercicios (máximo 2)
+   - 45 minutos: 45 ÷ 20 = 2-3 ejercicios (máximo 3)
+   - 60 minutos: 60 ÷ 20 = 3-4 ejercicios (máximo 4)
+   - 90 minutos: 90 ÷ 20 = 4-5 ejercicios (máximo 5)
+   
+   IMPORTANTE:
+   - Para una sesión de ${userData.session_duration} minutos, DEBES incluir ${Math.max(1, Math.floor(userData.session_duration / 20))}-${Math.max(2, Math.floor(userData.session_duration / 18))} ejercicios.
+   - NUNCA excedas este número - cada ejercicio necesita tiempo suficiente para calentamiento, series de trabajo y descansos.
+   - Si el nivel es avanzado o la intensidad es alta (RIR 1-2), usa el límite inferior (más tiempo por ejercicio).
+   - Si el nivel es principiante o la intensidad es moderada (RIR 3-4), puedes usar el límite superior.
+   
+   DISTRIBUCIÓN RECOMENDADA:
+   - Ejercicios COMPUESTOS principales: 20-25 minutos cada uno (calentamiento + 3-5 series + descansos largos)
+   - Ejercicios ACCESORIOS: 12-15 minutos cada uno (1 serie calentamiento + 2-3 series + descansos cortos)
+
+4. ESTRUCTURA SEMANAL:
    - Distribuye grupos musculares inteligentemente (evita solapamiento)
    - Incluye días de recuperación activa si es necesario
    - Para perder peso: más frecuencia cardio, déficit calórico
@@ -520,9 +727,27 @@ FORMATO JSON REQUERIDO:
       "exercises": [
         {
           "name": "Nombre ESPECÍFICO del ejercicio",
-          "sets": número,
-          "reps": "rango específico",
-          "rest": "tiempo específico"
+          "warmup_sets": [
+            {
+              "reps": número,
+              "weight_note": "porcentaje o peso aproximado (ej: '50% peso de trabajo' o '40kg')",
+              "rir": número (3-4 para calentamiento)
+            }
+          ],
+          "working_sets": [
+            {
+              "reps": "rango con RIR (ej: '6-8 @ RIR 2')",
+              "weight_note": "peso objetivo o progresión (ej: '80kg' o '60kg → 70kg → 80kg' para piramidal)",
+              "rir": número (1-3 según nivel y posición de la serie),
+              "rest": "tiempo específico",
+              "notes": "opcional: notas sobre esta serie específica"
+            }
+          ],
+          "progression_type": "piramidal" | "ascendente" | "constante" | "inversa",
+          "total_sets": número (incluyendo warmup),
+          "sets": número (total de series de trabajo, para compatibilidad),
+          "reps": "rango con RIR (ej: '6-8 @ RIR 2', para compatibilidad con UI)",
+          "rest": "tiempo de descanso entre series de trabajo"
         }
       ]
     }
@@ -540,13 +765,102 @@ FORMATO JSON REQUERIDO:
   ]
 }
 
-IMPORTANTE:
+${feedback ? `
+HISTORIAL DE ENTRENAMIENTOS (últimos ${feedback.totalCompletions}):
+- Dificultad promedio reportada: ${feedback.avgDifficulty.toFixed(1)}/5
+${feedback.avgDifficulty < 2.5 
+  ? '  ⚠️ El usuario reporta entrenamientos muy fáciles. AUMENTAR intensidad en 15-20%'
+  : feedback.avgDifficulty > 4 
+  ? '  ⚠️ El usuario reporta entrenamientos muy difíciles. REDUCIR volumen o simplificar ejercicios'
+  : '  ✅ Dificultad adecuada. Mantener nivel similar'
+}
+- Ejercicios completados consistentemente (>80%): ${feedback.completedExercises.length > 0 ? feedback.completedExercises.join(', ') : 'Ninguno identificado'}
+- Ejercicios frecuentemente saltados (<50%): ${feedback.skippedExercises.length > 0 ? feedback.skippedExercises.join(', ') : 'Ninguno identificado'}
+${feedback.commonNotes ? `- Notas del usuario: "${feedback.commonNotes}"` : ''}
+
+ADAPTACIONES REQUERIDAS BASADAS EN FEEDBACK:
+${generateAdaptationInstructions(feedback)}
+` : ''}
+
+IMPORTANTE - REGLAS CRÍTICAS:
 - Responde SOLO con el JSON válido, sin markdown ni texto adicional
 - Asegúrate de que el plan sea REALISTA y ALCANZABLE
 - Prioriza CALIDAD sobre cantidad
 - El plan debe ser lo suficientemente desafiante pero no abrumador
 - Adapta el lenguaje técnico al nivel del usuario
+
+REGLAS OBLIGATORIAS DE FORMATO:
+1. NUNCA uses repeticiones fijas sin RIR (ej: "10, 10, 10" es INCORRECTO)
+2. SIEMPRE incluye RIR en el formato: "8-10 @ RIR 2" o "6-8 @ RPE 8"
+3. SIEMPRE incluye series de calentamiento/aproximación para ejercicios compuestos
+4. SIEMPRE varía el peso entre series (piramidal, ascendente, etc.) - NUNCA constante en todas las series
+5. Cada serie de trabajo debe tener RIR diferente según su posición (primera más conservadora, última más intensa)
+6. Para ejercicios accesorios, puedes usar formato simplificado pero SIEMPRE con RIR
+7. OBLIGATORIO: Incluye los campos "sets", "reps" y "rest" en cada ejercicio para compatibilidad con la UI
+8. OBLIGATORIO: El número de ejercicios debe ser proporcional a la duración (60 min = mínimo 6 ejercicios)
+
+EJEMPLO CORRECTO de ejercicio:
+{
+  "name": "Sentadilla con barra",
+  "warmup_sets": [
+    { "reps": 10, "weight_note": "50kg (50% peso de trabajo)", "rir": 4 },
+    { "reps": 5, "weight_note": "70kg (70% peso de trabajo)", "rir": 3 }
+  ],
+  "working_sets": [
+    { "reps": "6-8 @ RIR 2", "weight_note": "80kg", "rir": 2, "rest": "3min" },
+    { "reps": "6-8 @ RIR 2", "weight_note": "85kg", "rir": 2, "rest": "3min" },
+    { "reps": "6-8 @ RIR 1", "weight_note": "90kg", "rir": 1, "rest": "3min", "notes": "Última serie, puede acercarse más al fallo" }
+  ],
+  "progression_type": "piramidal",
+  "total_sets": 5
+}
+
+${feedback ? '- PRIORIZA ejercicios que el usuario completa consistentemente' : ''}
+${feedback && feedback.skippedExercises.length > 0 ? '- EVITA o REEMPLAZA ejercicios que el usuario frecuentemente salta' : ''}
 `.trim();
+}
+
+/**
+ * Genera instrucciones de adaptación basadas en feedback
+ */
+function generateAdaptationInstructions(feedback: WorkoutFeedback): string {
+  const instructions: string[] = [];
+
+  // Adaptación por dificultad
+  if (feedback.avgDifficulty < 2.5) {
+    instructions.push('1. AUMENTAR intensidad general en 15-20% (dificultad muy baja)');
+    instructions.push('   - Aumentar peso o repeticiones en ejercicios principales');
+    instructions.push('   - Reducir tiempos de descanso en 10-15%');
+    instructions.push('   - Agregar 1-2 ejercicios adicionales por sesión');
+  } else if (feedback.avgDifficulty > 4) {
+    instructions.push('1. REDUCIR intensidad o volumen (dificultad muy alta)');
+    instructions.push('   - Reducir peso o repeticiones en ejercicios principales');
+    instructions.push('   - Aumentar tiempos de descanso en 15-20%');
+    instructions.push('   - Simplificar ejercicios complejos o usar variaciones más accesibles');
+  } else {
+    instructions.push('1. Mantener nivel de dificultad similar (está bien calibrado)');
+  }
+
+  // Adaptación por ejercicios completados
+  if (feedback.completedExercises.length > 0) {
+    instructions.push(`2. PRIORIZAR ejercicios que el usuario completa consistentemente: ${feedback.completedExercises.slice(0, 5).join(', ')}`);
+    instructions.push('   - Incluir estos ejercicios en múltiples días de la semana');
+    instructions.push('   - Usarlos como base del plan');
+  }
+
+  // Adaptación por ejercicios saltados
+  if (feedback.skippedExercises.length > 0) {
+    instructions.push(`3. EVITAR o REEMPLAZAR ejercicios frecuentemente saltados: ${feedback.skippedExercises.slice(0, 5).join(', ')}`);
+    instructions.push('   - Buscar alternativas que trabajen los mismos grupos musculares');
+    instructions.push('   - Si es necesario incluirlos, usar variaciones más accesibles');
+  }
+
+  // Adaptación por notas
+  if (feedback.commonNotes) {
+    instructions.push('4. Considerar feedback del usuario en las notas proporcionadas');
+  }
+
+  return instructions.join('\n');
 }
 
 /**

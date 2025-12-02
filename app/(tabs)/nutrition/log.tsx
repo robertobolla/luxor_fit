@@ -19,7 +19,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { logMeal, logWater, calculateFoodMacros } from '../../../src/services/nutrition';
-import { useRetry } from '../../../src/hooks/useRetry';
+import { LoadingOverlay } from '../../../src/components/LoadingOverlay';
 
 export default function MealLogScreen() {
   const { user } = useUser();
@@ -35,41 +35,7 @@ export default function MealLogScreen() {
   const [waterAmount, setWaterAmount] = useState('');
   const [isCalculating, setIsCalculating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  // Hook para retry en guardado de comida
-  const logMealWithRetry = useRetry(
-    async () => {
-      if (!user?.id) {
-        throw new Error('Usuario no autenticado');
-      }
-
-      if (!mealName.trim() || !calories || !protein || !carbs || !fats) {
-        throw new Error('Completa todos los campos');
-      }
-
-      const result = await logMeal(
-        user.id,
-        { name: mealName, weight_grams: parseInt(weightGrams) || 0 },
-        {
-          calories: parseInt(calories),
-          protein_g: parseInt(protein),
-          carbs_g: parseInt(carbs),
-          fats_g: parseInt(fats),
-        }
-      );
-
-      if (!result.success) {
-        throw new Error(result.error || 'No se pudo registrar la comida');
-      }
-
-      return result;
-    },
-    {
-      maxRetries: 2,
-      retryDelay: 2000,
-      showAlert: true,
-    }
-  );
+  const [isRetrying, setIsRetrying] = useState(false);
 
   const handleCalculateWithAI = async () => {
     if (!mealName.trim() || !weightGrams) {
@@ -112,12 +78,69 @@ export default function MealLogScreen() {
       return;
     }
 
-    const result = await logMealWithRetry.executeWithRetry();
+    setIsSaving(true);
     
-    if (result) {
-      Alert.alert('¡Guardado!', 'Comida registrada correctamente.', [
-        { text: 'OK', onPress: () => router.back() },
-      ]);
+    // Lógica de retry manual para capturar valores actuales
+    const maxRetries = 2;
+    let lastError: Error | null = null;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        setIsRetrying(attempt > 0);
+        
+        const result = await logMeal(
+          user.id,
+          { name: mealName, weight_grams: parseInt(weightGrams) || 0 },
+          {
+            calories: parseInt(calories),
+            protein_g: parseInt(protein),
+            carbs_g: parseInt(carbs),
+            fats_g: parseInt(fats),
+          }
+        );
+
+        if (!result.success) {
+          throw new Error(result.error || 'No se pudo registrar la comida');
+        }
+
+        // Éxito
+        setIsSaving(false);
+        setIsRetrying(false);
+        Alert.alert('¡Guardado!', 'Comida registrada correctamente.', [
+          { text: 'OK', onPress: () => router.back() },
+        ]);
+        return;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        // Si no es el último intento, esperar antes de reintentar
+        if (attempt < maxRetries) {
+          const delay = 2000 * Math.pow(2, attempt); // Exponential backoff
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    // Todos los intentos fallaron
+    setIsSaving(false);
+    setIsRetrying(false);
+    
+    // Mostrar mensaje de error más específico
+    const errorMessage = lastError?.message || 'Error desconocido';
+    const isNetworkError = errorMessage.includes('Network') || errorMessage.includes('fetch') || errorMessage.includes('timeout');
+    
+    if (isNetworkError) {
+      Alert.alert(
+        'Error de conexión',
+        'No se pudo conectar al servidor. Verifica tu conexión a internet e intenta nuevamente.',
+        [{ text: 'OK' }]
+      );
+    } else {
+      Alert.alert(
+        'Error',
+        `No se pudo registrar la comida: ${errorMessage}`,
+        [{ text: 'OK' }]
+      );
     }
   };
 
@@ -153,6 +176,7 @@ export default function MealLogScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
+        <LoadingOverlay visible={isSaving} message="Guardando agua..." />
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
             <TouchableOpacity 
@@ -205,11 +229,18 @@ export default function MealLogScreen() {
           </View>
 
           <TouchableOpacity
-            style={styles.saveButton}
+            style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
             onPress={handleLogWater}
+            disabled={isSaving}
           >
-            <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
-            <Text style={styles.saveButtonText}>Registrar Agua</Text>
+            {isSaving ? (
+              <ActivityIndicator size="small" color="#1a1a1a" />
+            ) : (
+              <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
+            )}
+            <Text style={styles.saveButtonText}>
+              {isSaving ? 'Guardando...' : 'Registrar Agua'}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -219,6 +250,7 @@ export default function MealLogScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      <LoadingOverlay visible={isSaving || isRetrying} message="Guardando comida..." />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -335,12 +367,15 @@ export default function MealLogScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.saveButton, logMealWithRetry.isRetrying && styles.saveButtonDisabled]}
+          style={[styles.saveButton, (isSaving || isRetrying) && styles.saveButtonDisabled]}
           onPress={handleLogMeal}
-          disabled={logMealWithRetry.isRetrying}
+          disabled={isSaving || isRetrying}
         >
-          {logMealWithRetry.isRetrying ? (
-            <Text style={styles.saveButtonText}>Guardando...</Text>
+          {(isSaving || isRetrying) ? (
+            <>
+              <ActivityIndicator size="small" color="#1a1a1a" />
+              <Text style={styles.saveButtonText}>Guardando...</Text>
+            </>
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />

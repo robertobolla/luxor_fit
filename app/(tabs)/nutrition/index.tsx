@@ -882,6 +882,7 @@ export default function NutritionHomeScreen() {
       const profile = await getNutritionProfile(user.id);
       if (!profile) {
         // Redirigir a settings para configurar
+        setLoading(false);
         Alert.alert(
           'Configuración Requerida',
           'Necesitas configurar tu perfil nutricional primero.',
@@ -892,7 +893,6 @@ export default function NutritionHomeScreen() {
             },
           ]
         );
-        setLoading(false);
         return;
       }
 
@@ -909,17 +909,21 @@ export default function NutritionHomeScreen() {
       }
 
       if (!targetData) {
-        // No hay target, inicializar
+        // No hay target, inicializar (pero no bloquear la UI)
+        setLoading(false); // Quitar loading antes de inicializar para que no se quede cargando
         await initializeWeek();
+        // Recargar datos después de inicializar
+        await loadTodayData();
+        return;
       } else {
         setTodayTarget(targetData as NutritionTarget);
         
         // Verificar si existe plan de comidas para esta semana
-        const today = new Date();
-        const dayOfWeek = today.getDay();
+        const todayDate = new Date();
+        const dayOfWeek = todayDate.getDay();
         const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        const monday = new Date(today);
-        monday.setDate(today.getDate() + diff);
+        const monday = new Date(todayDate);
+        monday.setDate(todayDate.getDate() + diff);
         const mondayStr = monday.toISOString().split('T')[0];
         
         const { data: planData, error: planError } = await supabase
@@ -934,9 +938,12 @@ export default function NutritionHomeScreen() {
         }
         
         if (!planData) {
-          // No hay plan, generarlo
+          // No hay plan, generarlo en segundo plano (no bloquear)
           console.log('📋 No se encontró plan de comidas, generando...');
-          await createOrUpdateMealPlan(user.id, mondayStr);
+          // Generar plan sin bloquear la UI
+          createOrUpdateMealPlan(user.id, mondayStr).catch((err) => {
+            console.error('Error generating meal plan:', err);
+          });
         }
       }
 
@@ -966,6 +973,7 @@ export default function NutritionHomeScreen() {
       setTodayWater(waterData?.water_ml || 0);
     } catch (err) {
       console.error('Error loading nutrition data:', err);
+      Alert.alert('Error', 'No se pudieron cargar los datos de nutrición. Intenta nuevamente.');
     } finally {
       setLoading(false);
     }

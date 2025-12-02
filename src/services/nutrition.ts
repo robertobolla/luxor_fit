@@ -1980,12 +1980,30 @@ export async function logMeal(
   userId: string,
   itemJson: any,
   macros: { calories: number; protein_g: number; carbs_g: number; fats_g: number },
-  photoUrl?: string
+  photoUrl?: string,
+  mealType?: 'breakfast' | 'lunch' | 'dinner' | 'snack'
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Determinar meal_type automáticamente si no se proporciona
+    let finalMealType: 'breakfast' | 'lunch' | 'dinner' | 'snack' = mealType || 'snack';
+    
+    if (!mealType) {
+      const hour = new Date().getHours();
+      if (hour >= 5 && hour < 11) {
+        finalMealType = 'breakfast';
+      } else if (hour >= 11 && hour < 16) {
+        finalMealType = 'lunch';
+      } else if (hour >= 16 && hour < 22) {
+        finalMealType = 'dinner';
+      } else {
+        finalMealType = 'snack';
+      }
+    }
+
     const { error } = await supabase.from('meal_logs').insert({
       user_id: userId,
       datetime: new Date().toISOString(),
+      meal_type: finalMealType,
       item_json: itemJson,
       ...macros,
       photo_url: photoUrl,

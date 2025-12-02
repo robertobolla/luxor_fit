@@ -7,12 +7,20 @@ import { ClerkProviderWrapper } from '../src/clerk.tsx';
 import { useUser, useAuth } from '@clerk/clerk-expo';
 import { setupUserNotifications, setupNotificationListeners } from '../src/services/notificationService';
 import { useSubscription } from '../src/hooks/useSubscription';
+import { useChatNotifications } from '../src/hooks/useChatNotifications';
+import { useFriendRequestNotifications } from '../src/hooks/useFriendRequestNotifications';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { SplashScreen } from '../src/components/SplashScreen';
 
 function NotificationSetup() {
   const { user } = useUser();
   const router = useRouter();
+  
+  // Configurar notificaciones de chat y entrenamientos compartidos
+  useChatNotifications();
+  
+  // Configurar notificaciones de solicitudes de amistad
+  useFriendRequestNotifications();
 
   useEffect(() => {
     if (user?.id) {
@@ -34,6 +42,20 @@ function NotificationSetup() {
       } else if (data.type === 'achievement') {
         // Futuro: navegar a pantalla de logros
         router.push('/(tabs)/profile');
+      } else if (data.type === 'new_message' || data.type === 'workout_shared' || data.type === 'workout_accepted' || data.type === 'workout_rejected') {
+        // Navegar al chat cuando se hace clic en notificación de mensaje o entrenamiento
+        if (data.chatId) {
+          router.push({
+            pathname: '/chat',
+            params: {
+              chatId: data.chatId,
+              otherUserId: data.senderId || data.receiverId,
+            },
+          } as any);
+        }
+      } else if (data.type === 'friend_request') {
+        // Navegar a pantalla de amigos cuando se hace clic en solicitud de amistad
+        router.push('/(tabs)/friends' as any);
       }
     });
 

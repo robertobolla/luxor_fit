@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -22,6 +22,7 @@ import {
   deleteProgressPhoto,
 } from '@/services/progressPhotos';
 import { ProgressPhoto, PhotoType, PhotoReminder } from '@/types/progressPhotos';
+import { useRetry } from '@/hooks/useRetry';
 
 const { width } = Dimensions.get('window');
 const photoSize = (width - 48) / 2; // 2 columnas con padding
@@ -38,6 +39,36 @@ export default function ProgressPhotosScreen() {
   const [currentSession, setCurrentSession] = useState<{ front?: ProgressPhoto; back?: ProgressPhoto; side?: ProgressPhoto }>({});
   const [sessionUploading, setSessionUploading] = useState<{ [K in PhotoType]?: boolean }>({});
   const requiredViews: PhotoType[] = ['front', 'side', 'back'];
+  const uploadParamsRef = useRef<{ uri: string; type: PhotoType; notes?: string } | null>(null);
+
+  // Hook para retry en subida de fotos
+  const uploadPhotoWithRetry = useRetry(
+    async () => {
+      if (!user?.id || !uploadParamsRef.current) {
+        throw new Error('Usuario no autenticado o parámetros faltantes');
+      }
+
+      const params = uploadParamsRef.current;
+      const result = await uploadProgressPhoto(
+        user.id,
+        params.uri,
+        params.type,
+        undefined,
+        params.notes
+      );
+
+      if (!result.success) {
+        throw new Error(result.error || 'No se pudo subir la foto');
+      }
+
+      return result;
+    },
+    {
+      maxRetries: 2,
+      retryDelay: 2000,
+      showAlert: true,
+    }
+  );
 
   // Cargar fotos y verificar recordatorio
   const loadData = async () => {
@@ -135,25 +166,26 @@ export default function ProgressPhotosScreen() {
           text: 'Subir',
           onPress: async (notes) => {
             setUploading(true);
-            const result = await uploadProgressPhoto(
-              user.id,
-              uri,
-              type,
-              undefined,
-              notes
-            );
+            try {
+              // Configurar parámetros en ref para el hook
+              uploadParamsRef.current = { uri, type, notes };
+              
+              const result = await uploadPhotoWithRetry.executeWithRetry();
 
-            setUploading(false);
-
-            if (result.success) {
-              Alert.alert('✅ Éxito', 'Foto subida correctamente');
-              // Actualizar estado de sesión si está abierta
-              if (sessionModalVisible && result.photo) {
-                setCurrentSession((prev) => ({ ...prev, [type]: result.photo! }));
+              if (result) {
+                Alert.alert('✅ Éxito', 'Foto subida correctamente');
+                // Actualizar estado de sesión si está abierta
+                if (sessionModalVisible && result.photo) {
+                  setCurrentSession((prev) => ({ ...prev, [type]: result.photo! }));
+                }
+                loadData();
               }
-              loadData();
-            } else {
-              Alert.alert('❌ Error', result.error || 'No se pudo subir la foto');
+            } catch (err) {
+              // El error ya se maneja en useRetry con showAlert
+              console.error('Error uploading photo:', err);
+            } finally {
+              setUploading(false);
+              uploadParamsRef.current = null;
             }
           },
         },

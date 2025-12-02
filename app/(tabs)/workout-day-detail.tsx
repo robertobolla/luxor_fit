@@ -146,6 +146,46 @@ export default function WorkoutDayDetailScreen() {
       
       console.log('✅ Entrenamiento guardado correctamente:', data);
       
+      // Guardar entrenamiento en Apple Health / Google Fit
+      if (duration) {
+        const durationMinutes = parseInt(duration);
+        // Calcular calorías estimadas basadas en duración y dificultad
+        // Estimación: 5-8 calorías por minuto según dificultad
+        const baseCaloriesPerMin = 6;
+        const difficultyMultiplier = difficulty ? (difficulty / 3) : 1;
+        const estimatedCalories = Math.round(durationMinutes * baseCaloriesPerMin * difficultyMultiplier);
+        
+        // Determinar tipo de entrenamiento basado en el plan
+        const workoutType = dayData.focus?.toLowerCase().includes('cardio') ? 'Cardio' :
+                          dayData.focus?.toLowerCase().includes('hiit') ? 'HIIT' :
+                          dayData.focus?.toLowerCase().includes('yoga') ? 'Yoga' :
+                          'Traditional Strength Training';
+        
+        try {
+          const { saveWorkoutToAppleHealth, saveWorkoutToGoogleFit } = await import('../../src/services/healthService');
+          const Platform = require('react-native').Platform;
+          
+          if (Platform.OS === 'ios') {
+            await saveWorkoutToAppleHealth(
+              durationMinutes,
+              estimatedCalories,
+              undefined, // distancia (opcional)
+              workoutType
+            );
+          } else if (Platform.OS === 'android') {
+            await saveWorkoutToGoogleFit(
+              durationMinutes,
+              estimatedCalories,
+              undefined, // distancia (opcional)
+              workoutType
+            );
+          }
+        } catch (error) {
+          console.error('⚠️ Error guardando entrenamiento en app de salud:', error);
+          // No fallar el guardado si hay error con la app de salud
+        }
+      }
+      
       // Enviar notificación inmediata de entrenamiento completado
       await smartNotificationService.sendImmediateNotification(
         user.id,

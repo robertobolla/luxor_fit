@@ -7,8 +7,8 @@ const Features = () => {
           <path d="M24 16L28 22H32L26 30L24 34L22 30L16 22H20L24 16Z" stroke="#F7931E" strokeWidth="2" fill="none"/>
         </svg>
       ),
-      title: "Planes con IA",
-      description: "Nuestra IA crea planes de entrenamiento personalizados basados en tus objetivos, nivel de condición física y preferencias."
+      title: "Planes con IA Avanzada",
+      description: "Nuestra IA utiliza ChatGPT para crear planes de entrenamiento completamente personalizados basados en tus objetivos, nivel de condición física, disponibilidad y equipamiento disponible. Cada plan se adapta específicamente a ti."
     },
     {
       icon: (
@@ -18,8 +18,8 @@ const Features = () => {
           <path d="M24 16V24L28 28" stroke="#F7931E" strokeWidth="2" strokeLinecap="round"/>
         </svg>
       ),
-      title: "Seguimiento de Progreso",
-      description: "Integración con Apple Health y Google Fit para monitorear pasos, calorías, distancia y más métricas importantes."
+      title: "Integración con Health",
+      description: "Conecta automáticamente con Apple Health y Google Fit para monitorear pasos, calorías, distancia, sueño, glucosa y más. Todos tus datos de salud en un solo lugar."
     },
     {
       icon: (
@@ -29,8 +29,8 @@ const Features = () => {
           <path d="M18 20H30M18 24H26M18 28H30" stroke="#F7931E" strokeWidth="2" strokeLinecap="round"/>
         </svg>
       ),
-      title: "Nutrición Inteligente",
-      description: "Planes nutricionales adaptados a tu cuerpo y objetivos. Calcula macros, calorías y recibe recomendaciones personalizadas."
+      title: "Nutrición Completa",
+      description: "Planes nutricionales semanales con cálculo automático de macros, calorías y TDEE. Lista de compras automática, log de comidas y ajustes semanales basados en tu progreso."
     },
     {
       icon: (
@@ -41,7 +41,7 @@ const Features = () => {
         </svg>
       ),
       title: "Fotos de Progreso",
-      description: "Documenta tu transformación con fotos de frente, lado y espalda. Compara tu progreso semana a semana visualmente."
+      description: "Documenta tu transformación con fotos de frente, lado y espalda. Compara tu progreso semana a semana, mes a mes, y visualiza tu evolución completa."
     },
     {
       icon: (
@@ -51,8 +51,8 @@ const Features = () => {
           <rect x="14" y="12" width="20" height="24" rx="2" stroke="#F7931E" strokeWidth="2" fill="none"/>
         </svg>
       ),
-      title: "Adaptación Continua",
-      description: "La IA analiza tu progreso y adapta automáticamente tu plan de entrenamiento para maximizar resultados."
+      title: "Adaptación Inteligente",
+      description: "La IA analiza tu progreso, feedback y resultados para adaptar automáticamente tu plan. Si un ejercicio no funciona, la IA lo reemplaza con alternativas efectivas."
     },
     {
       icon: (
@@ -63,7 +63,40 @@ const Features = () => {
         </svg>
       ),
       title: "Videos de Ejercicios",
-      description: "Biblioteca completa de ejercicios con videos explicativos. Aprende la técnica correcta para cada movimiento."
+      description: "Biblioteca completa con más de 500 ejercicios, cada uno con videos explicativos en alta calidad. Aprende la técnica correcta y evita lesiones."
+    },
+    {
+      icon: (
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <rect width="48" height="48" rx="12" fill="rgba(247, 147, 30, 0.1)"/>
+          <path d="M24 20C24 18.8954 24.8954 18 26 18H30C31.1046 18 32 18.8954 32 20V28C32 29.1046 31.1046 30 30 30H26C24.8954 30 24 29.1046 24 28V20Z" stroke="#F7931E" strokeWidth="2" fill="none"/>
+          <path d="M16 24H20M16 28H20" stroke="#F7931E" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      ),
+      title: "Chat en Tiempo Real",
+      description: "Conecta con amigos, comparte entrenamientos y motívate mutuamente. Sistema de chat en tiempo real con notificaciones instantáneas."
+    },
+    {
+      icon: (
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <rect width="48" height="48" rx="12" fill="rgba(247, 147, 30, 0.1)"/>
+          <path d="M24 12V36M12 24H36" stroke="#F7931E" strokeWidth="2" strokeLinecap="round"/>
+          <circle cx="24" cy="24" r="8" stroke="#F7931E" strokeWidth="2" fill="none"/>
+        </svg>
+      ),
+      title: "Métricas Corporales",
+      description: "Registra peso, grasa corporal, músculo, cintura y más. Visualiza gráficos de progreso y compara diferentes períodos de tiempo."
+    },
+    {
+      icon: (
+        <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+          <rect width="48" height="48" rx="12" fill="rgba(247, 147, 30, 0.1)"/>
+          <path d="M24 16C20.6863 16 18 18.6863 18 22C18 25.3137 20.6863 28 24 28C27.3137 28 30 25.3137 30 22C30 18.6863 27.3137 16 24 16Z" stroke="#F7931E" strokeWidth="2" fill="none"/>
+          <path d="M24 32V36" stroke="#F7931E" strokeWidth="2" strokeLinecap="round"/>
+        </svg>
+      ),
+      title: "Records Personales",
+      description: "Registra tus PRs (personal records) en cada ejercicio. Haz seguimiento de tus mejores marcas y motívate a superarlas."
     }
   ];
 

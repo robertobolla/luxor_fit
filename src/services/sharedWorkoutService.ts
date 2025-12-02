@@ -266,23 +266,63 @@ export async function getReceivedSharedWorkouts(userId: string): Promise<{
   error?: string;
 }> {
   try {
-    const { data, error } = await supabase
+    // Primero obtener los shared_workouts
+    const { data: sharedWorkouts, error: sharedError } = await supabase
       .from('shared_workouts')
-      .select(`
-        *,
-        workout_plan:workout_plans(id, plan_name, description, plan_data),
-        sender_profile:user_profiles!shared_workouts_sender_id_fkey(user_id, username, name, profile_photo_url)
-      `)
+      .select('*')
       .eq('receiver_id', userId)
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error getting shared workouts:', error);
-      return { success: false, error: error.message };
+    if (sharedError) {
+      console.error('Error getting shared workouts:', sharedError);
+      return { success: false, error: sharedError.message };
     }
 
-    return { success: true, data: data || [] };
+    if (!sharedWorkouts || sharedWorkouts.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    // Obtener los workout_plans asociados
+    const workoutPlanIds = sharedWorkouts
+      .map(sw => sw.workout_plan_id)
+      .filter(Boolean) as string[];
+
+    const { data: workoutPlans } = await supabase
+      .from('workout_plans')
+      .select('id, plan_name, description, plan_data')
+      .in('id', workoutPlanIds);
+
+    // Obtener los perfiles de los remitentes
+    const senderIds = [...new Set(sharedWorkouts.map(sw => sw.sender_id).filter(Boolean))] as string[];
+    
+    const { data: senderProfiles } = await supabase
+      .from('user_profiles')
+      .select('user_id, username, name, profile_photo_url')
+      .in('user_id', senderIds);
+
+    // Combinar los datos
+    const enrichedData: SharedWorkout[] = sharedWorkouts.map(sw => {
+      const workoutPlan = workoutPlans?.find(wp => wp.id === sw.workout_plan_id);
+      const senderProfile = senderProfiles?.find(sp => sp.user_id === sw.sender_id);
+
+      return {
+        ...sw,
+        workout_plan: workoutPlan ? {
+          id: workoutPlan.id,
+          plan_name: workoutPlan.plan_name,
+          description: workoutPlan.description || undefined,
+          plan_data: workoutPlan.plan_data,
+        } : undefined,
+        sender_profile: senderProfile ? {
+          username: senderProfile.username || '',
+          name: senderProfile.name || '',
+          profile_photo_url: senderProfile.profile_photo_url || undefined,
+        } : undefined,
+      };
+    });
+
+    return { success: true, data: enrichedData };
   } catch (error: any) {
     console.error('Error getting shared workouts:', error);
     return { success: false, error: error.message };

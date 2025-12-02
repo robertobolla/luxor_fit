@@ -488,9 +488,7 @@ export default function ProgressScreen() {
   if (isCheckingOnboarding) {
     return (
       <View style={styles.container}>
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-          <SkeletonProgress />
-        </ScrollView>
+        <LoadingOverlay visible={true} message="Verificando perfil..." fullScreen />
       </View>
     );
   }

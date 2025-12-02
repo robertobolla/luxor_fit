@@ -22,6 +22,7 @@ import {
   type PRHistoryItem
 } from '@/services/personalRecords';
 import { smartNotificationService } from '@/services/smartNotifications';
+import { useRetry } from '@/hooks/useRetry';
 
 interface PersonalRecordModalProps {
   visible: boolean;
@@ -78,19 +79,20 @@ export default function PersonalRecordModal({
     }
   };
 
-  const handleSaveRecord = async () => {
-    if (!user?.id) return;
+  // Hook para retry en guardado de record personal
+  const saveRecordWithRetry = useRetry(
+    async () => {
+      if (!user?.id) {
+        throw new Error('Usuario no autenticado');
+      }
 
-    const weightNum = parseFloat(weight);
-    const repsNum = parseInt(reps);
+      const weightNum = parseFloat(weight);
+      const repsNum = parseInt(reps);
 
-    if (isNaN(weightNum) || isNaN(repsNum) || weightNum <= 0 || repsNum <= 0) {
-      Alert.alert('Error', 'Por favor ingresa valores válidos para peso y repeticiones');
-      return;
-    }
+      if (isNaN(weightNum) || isNaN(repsNum) || weightNum <= 0 || repsNum <= 0) {
+        throw new Error('Por favor ingresa valores válidos para peso y repeticiones');
+      }
 
-    setIsLoading(true);
-    try {
       const result = await savePersonalRecord({
         user_id: user.id,
         exercise_name: exerciseName,
@@ -103,7 +105,27 @@ export default function PersonalRecordModal({
         notes: notes.trim() || undefined,
       });
 
-      if (result.success) {
+      if (!result.success) {
+        throw new Error(result.error || 'No se pudo guardar el record');
+      }
+
+      return result;
+    },
+    {
+      maxRetries: 2,
+      retryDelay: 2000,
+      showAlert: true,
+    }
+  );
+
+  const handleSaveRecord = async () => {
+    if (!user?.id) return;
+
+    setIsLoading(true);
+    try {
+      const result = await saveRecordWithRetry.executeWithRetry();
+
+      if (result && result.success) {
         // Enviar notificación si es un nuevo PR
         if (result.data?.is_pr) {
           await smartNotificationService.sendImmediateNotification(
@@ -125,12 +147,10 @@ export default function PersonalRecordModal({
             loadHistory();
           }}]
         );
-      } else {
-        Alert.alert('Error', result.error || 'No se pudo guardar el record');
       }
     } catch (error) {
+      // El error ya se maneja en useRetry con showAlert
       console.error('Error guardando record:', error);
-      Alert.alert('Error', 'Error inesperado al guardar el record');
     } finally {
       setIsLoading(false);
     }

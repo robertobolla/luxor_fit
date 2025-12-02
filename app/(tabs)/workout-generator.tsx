@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Alert,
   Modal,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../src/services/supabase';
@@ -84,6 +84,20 @@ export default function WorkoutGeneratorScreen() {
     loadUserProfile();
   }, [user]);
 
+  // Limpiar estado del plan generado cuando la pantalla recibe foco
+  // Esto asegura que si el usuario borra un plan y vuelve, no vea el plan anterior
+  useFocusEffect(
+    useCallback(() => {
+      // Solo limpiar si no estamos generando un plan actualmente
+      if (!isGenerating && !showForm) {
+        setGeneratedPlan(null);
+        setNewPlanId(null);
+        setShowActivateModal(false);
+        setError('');
+      }
+    }, [isGenerating, showForm])
+  );
+
   // NO mostrar modal automáticamente - solo cuando se hace clic en el botón
 
   const loadUserProfile = async () => {
@@ -128,6 +142,21 @@ export default function WorkoutGeneratorScreen() {
       Alert.alert('Error', 'No se pudo cargar tu perfil');
       return;
     }
+    // Limpiar estado del plan anterior
+    setGeneratedPlan(null);
+    setNewPlanId(null);
+    setShowActivateModal(false);
+    setError('');
+    setFormStep(0);
+    // Resetear formulario a valores por defecto
+    setFormData({
+      fitness_level: FitnessLevel.BEGINNER,
+      goals: [],
+      activity_types: [],
+      available_days: 3,
+      session_duration: 30,
+      equipment: [],
+    });
     // Mostrar formulario directamente (ya se seleccionó IA desde el modal anterior)
     setShowForm(true);
   };
@@ -218,8 +247,8 @@ export default function WorkoutGeneratorScreen() {
         equipment: formData.equipment,
       };
 
-      // Generar plan con retry automático
-      const result = await generateWorkoutPlan(workoutData);
+      // Generar plan con retry automático (pasar userId para análisis de feedback)
+      const result = await generateWorkoutPlan(workoutData, user?.id);
       
       if (!result.success || !result.plan) {
         throw new Error(result.error || 'No se pudo generar el plan');
@@ -716,19 +745,60 @@ export default function WorkoutGeneratorScreen() {
                     {day.exercises.map((exercise: any, idx: number) => {
                       // Soporte para formato antiguo (string) y nuevo (objeto)
                       const exerciseName = typeof exercise === 'string' ? exercise : exercise.name;
-                      const sets = typeof exercise === 'object' ? exercise.sets : null;
-                      const reps = typeof exercise === 'object' ? exercise.reps : null;
+                      
+                      // Intentar obtener información de series/reps del nuevo formato
+                      let sets = null;
+                      let reps = null;
+                      let rest = null;
+                      let rir = null;
+                      
+                      if (typeof exercise === 'object') {
+                        // Formato nuevo con working_sets
+                        if (exercise.working_sets && exercise.working_sets.length > 0) {
+                          sets = exercise.working_sets.length;
+                          const firstSet = exercise.working_sets[0];
+                          reps = firstSet.reps || exercise.reps;
+                          rest = firstSet.rest || exercise.rest;
+                          rir = firstSet.rir;
+                        } else {
+                          // Formato simplificado
+                          sets = exercise.sets;
+                          reps = exercise.reps;
+                          rest = exercise.rest;
+                        }
+                      }
                       
                       return (
                         <View key={idx} style={styles.exerciseItemContainer}>
-                          <Text style={styles.exerciseItem}>
-                            • {exerciseName}
-                          </Text>
-                          {sets && reps && (
-                            <Text style={styles.exerciseDetails}>
-                              {sets} × {reps}
+                          <View style={styles.exerciseInfoContainer}>
+                            <Text style={styles.exerciseItem}>
+                              • {exerciseName}
                             </Text>
-                          )}
+                            {(sets || reps) && (
+                              <View style={styles.exerciseDetailsContainer}>
+                                {sets && (
+                                  <Text style={styles.exerciseDetails}>
+                                    {sets} series
+                                  </Text>
+                                )}
+                                {reps && (
+                                  <Text style={styles.exerciseDetails}>
+                                    {typeof reps === 'string' ? reps : `${reps} reps`}
+                                  </Text>
+                                )}
+                                {rir && (
+                                  <Text style={styles.rirIndicator}>
+                                    RIR {rir}
+                                  </Text>
+                                )}
+                                {rest && (
+                                  <Text style={styles.restIndicator}>
+                                    {rest} descanso
+                                  </Text>
+                                )}
+                              </View>
+                            )}
+                          </View>
                         </View>
                       );
                     })}
@@ -1145,21 +1215,44 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   exerciseItemContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  exerciseInfoContainer: {
+    flex: 1,
   },
   exerciseItem: {
-    fontSize: 13,
-    color: '#888',
-    flex: 1,
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  exerciseDetailsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
   },
   exerciseDetails: {
     fontSize: 12,
     color: '#ffb300',
     fontWeight: '600',
-    marginLeft: 8,
+  },
+  rirIndicator: {
+    fontSize: 11,
+    color: '#4CAF50',
+    fontWeight: '600',
+    backgroundColor: '#1a3a1a',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  restIndicator: {
+    fontSize: 11,
+    color: '#888',
+    fontStyle: 'italic',
   },
   principlesCard: {
     backgroundColor: '#2a2a2a',

@@ -23,8 +23,9 @@ export interface Message {
   sender_id: string;
   receiver_id: string;
   message_text: string;
-  message_type: 'text' | 'workout_share' | 'workout_accepted' | 'workout_rejected';
+  message_type: 'text' | 'workout_share' | 'workout_accepted' | 'workout_rejected' | 'image';
   workout_plan_id?: string;
+  image_url?: string;
   is_read: boolean;
   created_at: string;
 }
@@ -175,8 +176,9 @@ export async function sendMessage(
   senderId: string,
   receiverId: string,
   messageText: string,
-  messageType: 'text' | 'workout_share' | 'workout_accepted' | 'workout_rejected' = 'text',
-  workoutPlanId?: string
+  messageType: 'text' | 'workout_share' | 'workout_accepted' | 'workout_rejected' | 'image' = 'text',
+  workoutPlanId?: string,
+  imageUrl?: string
 ): Promise<{
   success: boolean;
   data?: Message;
@@ -192,6 +194,7 @@ export async function sendMessage(
         message_text: messageText,
         message_type: messageType,
         workout_plan_id: workoutPlanId,
+        image_url: imageUrl,
         is_read: false,
       })
       .select()
@@ -289,6 +292,74 @@ export function subscribeToChats(
 }
 
 /**
+ * Suscribirse a todos los mensajes nuevos del usuario para notificaciones
+ */
+export function subscribeToAllUserMessages(
+  userId: string,
+  onNewMessage: (message: Message) => void
+): RealtimeChannel {
+  console.log('💬 Creando suscripción Realtime para usuario:', userId);
+  
+  const channel = supabase
+    .channel(`user_messages:${userId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `receiver_id=eq.${userId}`,
+      },
+      (payload) => {
+        console.log('💬 Evento Realtime recibido - payload completo:', JSON.stringify(payload, null, 2));
+        console.log('💬 Tipo de evento:', payload.eventType);
+        console.log('💬 Nueva fila (payload.new):', payload.new);
+        console.log('💬 Schema:', payload.schema);
+        console.log('💬 Tabla:', payload.table);
+        
+        try {
+          if (!payload.new) {
+            console.error('💬 Error: payload.new es null o undefined');
+            return;
+          }
+          
+          const message = payload.new as Message;
+          console.log('💬 Mensaje parseado:', {
+            id: message.id,
+            chat_id: message.chat_id,
+            sender_id: message.sender_id,
+            receiver_id: message.receiver_id,
+            message_type: message.message_type,
+            message_text: message.message_text?.substring(0, 50),
+          });
+          
+          onNewMessage(message);
+        } catch (error) {
+          console.error('💬 Error procesando mensaje Realtime:', error);
+          console.error('💬 Stack trace:', error instanceof Error ? error.stack : 'No stack available');
+        }
+      }
+    )
+    .subscribe();
+
+  // Verificar el estado de la suscripción después de un breve delay
+  setTimeout(() => {
+    const state = channel.state;
+    if (state === 'joined') {
+      console.log('✅ Suscripción Realtime establecida correctamente para:', userId);
+    } else if (state === 'errored') {
+      console.error('❌ Error en canal Realtime - estado: errored');
+    } else if (state === 'closed') {
+      console.warn('⚠️ Canal Realtime cerrado');
+    } else {
+      console.log('💬 Estado de suscripción Realtime:', state);
+    }
+  }, 1000);
+
+  return channel;
+}
+
+/**
  * Helper para obtener perfil de usuario
  */
 async function getUserProfile(userId: string) {
@@ -313,5 +384,101 @@ async function getUnreadMessageCount(chatId: string, userId: string): Promise<nu
     .eq('is_read', false);
   
   return count || 0;
+}
+
+/**
+ * Establecer indicador de escritura
+ */
+export async function setTypingIndicator(
+  chatId: string,
+  userId: string,
+  isTyping: boolean
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from('typing_indicators')
+      .upsert({
+        chat_id: chatId,
+        user_id: userId,
+        is_typing: isTyping,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'chat_id,user_id'
+      });
+
+    if (error) {
+      console.error('Error setting typing indicator:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error setting typing indicator:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Suscribirse a indicadores de escritura
+ */
+export function subscribeToTypingIndicators(
+  chatId: string,
+  onTypingChange: (userId: string, isTyping: boolean) => void
+): RealtimeChannel {
+  const channel = supabase
+    .channel(`typing:${chatId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'typing_indicators',
+        filter: `chat_id=eq.${chatId}`,
+      },
+      (payload) => {
+        const indicator = payload.new as any;
+        onTypingChange(indicator.user_id, indicator.is_typing);
+      }
+    )
+    .subscribe();
+
+  return channel;
+}
+
+/**
+ * Buscar mensajes en un chat
+ */
+export async function searchMessages(
+  chatId: string,
+  searchQuery: string,
+  limit: number = 50
+): Promise<{
+  success: boolean;
+  data?: Message[];
+  error?: string;
+}> {
+  try {
+    if (!searchQuery.trim()) {
+      return { success: false, error: 'Query de búsqueda vacío' };
+    }
+
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('chat_id', chatId)
+      .ilike('message_text', `%${searchQuery}%`)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('Error searching messages:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true, data: (data || []).reverse() };
+  } catch (error: any) {
+    console.error('Error searching messages:', error);
+    return { success: false, error: error.message };
+  }
 }
 

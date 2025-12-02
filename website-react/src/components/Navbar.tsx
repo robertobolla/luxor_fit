@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import Logo from './Logo';
+import logoImage from '../assets/luxor-logo.png';
 
 const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -22,13 +22,14 @@ const Navbar = () => {
       <div className="container">
         <div className="nav-content">
           <a href="/" className="logo" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-            <Logo />
+            <img src={logoImage} alt="Luxor Fitness" width="40" height="40" />
             <span className="logo-text">Luxor Fitness</span>
           </a>
           <ul className="nav-links">
             <li><a href="#features" onClick={(e) => { e.preventDefault(); scrollToSection('features'); }}>Características</a></li>
-            <li><a href="#benefits" onClick={(e) => { e.preventDefault(); scrollToSection('benefits'); }}>Beneficios</a></li>
+            <li><a href="#how-it-works" onClick={(e) => { e.preventDefault(); scrollToSection('how-it-works'); }}>Cómo Funciona</a></li>
             <li><a href="#pricing" onClick={(e) => { e.preventDefault(); scrollToSection('pricing'); }}>Precios</a></li>
+            <li><a href="#faq" onClick={(e) => { e.preventDefault(); scrollToSection('faq'); }}>FAQ</a></li>
             <li><a href="#contact" onClick={(e) => { e.preventDefault(); scrollToSection('contact'); }}>Contacto</a></li>
           </ul>
           <button className="btn btn-primary nav-cta" onClick={() => scrollToSection('pricing')}>
@@ -48,11 +49,12 @@ const Navbar = () => {
       <div className={`mobile-menu ${mobileMenuOpen ? 'active' : ''}`}>
         <ul>
           <li><a href="#features" onClick={(e) => { e.preventDefault(); scrollToSection('features'); }}>Características</a></li>
-          <li><a href="#benefits" onClick={(e) => { e.preventDefault(); scrollToSection('benefits'); }}>Beneficios</a></li>
+          <li><a href="#how-it-works" onClick={(e) => { e.preventDefault(); scrollToSection('how-it-works'); }}>Cómo Funciona</a></li>
           <li><a href="#pricing" onClick={(e) => { e.preventDefault(); scrollToSection('pricing'); }}>Precios</a></li>
+          <li><a href="#faq" onClick={(e) => { e.preventDefault(); scrollToSection('faq'); }}>FAQ</a></li>
           <li><a href="#contact" onClick={(e) => { e.preventDefault(); scrollToSection('contact'); }}>Contacto</a></li>
           <li>
-            <button className="btn btn-primary btn-block" onClick={() => scrollToSection('pricing')}>
+            <button className="btn btn-primary btn-block" onClick={() => scrollToSection('download')}>
               Descargar App
             </button>
           </li>

@@ -192,6 +192,47 @@ export async function checkAndSendSmartReminders(userId: string) {
 }
 
 // ============================================================================
+// NOTIFICACIÓN DE CHECK-IN SEMANAL
+// ============================================================================
+
+/**
+ * Programa notificación de recordatorio para check-in semanal
+ * Se envía cada lunes a las 9:00 AM
+ */
+export async function scheduleWeeklyCheckinNotification() {
+  try {
+    // Cancelar notificaciones anteriores del mismo tipo
+    const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
+    for (const notification of scheduledNotifications) {
+      if (notification.content.data?.type === 'weekly_checkin') {
+        await Notifications.cancelScheduledNotificationAsync(notification.identifier);
+      }
+    }
+
+    // Programar nueva notificación semanal (Lunes a las 9:00 AM)
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '📊 Check-in Semanal',
+        body: 'Es hora de registrar tu peso y ajustar tu plan de nutrición',
+        data: { type: 'weekly_checkin' },
+      },
+      trigger: {
+        weekday: 2, // Lunes (1=Domingo, 2=Lunes, ...)
+        hour: 9,
+        minute: 0,
+        repeats: true,
+      },
+    });
+
+    console.log('✅ Notificación de check-in semanal programada:', id);
+    return id;
+  } catch (error) {
+    console.error('Error programando notificación de check-in:', error);
+    return null;
+  }
+}
+
+// ============================================================================
 // NOTIFICACIÓN DE LOGRO (para futuro)
 // ============================================================================
 
@@ -230,6 +271,9 @@ export async function setupUserNotifications(userId: string) {
     // Programar recordatorios diarios
     await scheduleWorkoutReminderNotification(userId);
     await scheduleLunchReminderNotification(userId);
+    
+    // Programar recordatorio semanal de check-in
+    await scheduleWeeklyCheckinNotification();
 
     console.log('✅ Notificaciones configuradas para el usuario:', userId);
     return true;
@@ -237,6 +281,143 @@ export async function setupUserNotifications(userId: string) {
     console.error('❌ Error configurando notificaciones:', error);
     return false;
   }
+}
+
+// ============================================================================
+// NOTIFICACIÓN: NUEVO MENSAJE
+// ============================================================================
+
+export async function sendMessageNotification(
+  senderName: string,
+  messageText: string,
+  chatId: string,
+  senderId: string
+) {
+  try {
+    // Verificar permisos antes de enviar
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    
+    if (existingStatus !== 'granted') {
+      console.warn('💬 Permisos de notificación no concedidos:', existingStatus);
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') {
+      console.error('💬 No se pueden enviar notificaciones - permisos denegados');
+      return;
+    }
+
+    const notificationId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: `💬 Nuevo mensaje de ${senderName}`,
+        body: messageText.length > 50 ? `${messageText.substring(0, 50)}...` : messageText,
+        data: { 
+          type: 'new_message', 
+          chatId,
+          senderId 
+        },
+        sound: true,
+        badge: 1,
+      },
+      trigger: null, // Enviar inmediatamente
+    });
+
+    console.log('💬 Notificación de mensaje enviada:', notificationId);
+  } catch (error: any) {
+    console.error('💬 Error enviando notificación de mensaje:', error);
+  }
+}
+
+// ============================================================================
+// NOTIFICACIÓN: ENTRENAMIENTO COMPARTIDO
+// ============================================================================
+
+export async function sendWorkoutSharedNotification(
+  senderName: string,
+  workoutPlanName: string,
+  chatId: string,
+  senderId: string,
+  workoutPlanId: string
+) {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: `💪 ${senderName} te compartió un entrenamiento`,
+      body: workoutPlanName,
+      data: { 
+        type: 'workout_shared', 
+        chatId,
+        senderId,
+        workoutPlanId
+      },
+      sound: true,
+      badge: 1,
+    },
+    trigger: null, // Enviar inmediatamente
+  });
+
+  console.log('💪 Notificación de entrenamiento compartido enviada');
+}
+
+// ============================================================================
+// NOTIFICACIÓN: ENTRENAMIENTO ACEPTADO/RECHAZADO
+// ============================================================================
+
+export async function sendWorkoutResponseNotification(
+  receiverName: string,
+  accepted: boolean,
+  chatId: string,
+  receiverId: string
+) {
+  const title = accepted 
+    ? `✅ ${receiverName} aceptó tu entrenamiento`
+    : `❌ ${receiverName} rechazó tu entrenamiento`;
+  
+  const body = accepted
+    ? 'Tu entrenamiento compartido fue aceptado'
+    : 'Tu entrenamiento compartido fue rechazado';
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body,
+      data: { 
+        type: accepted ? 'workout_accepted' : 'workout_rejected', 
+        chatId,
+        receiverId 
+      },
+      sound: true,
+    },
+    trigger: null, // Enviar inmediatamente
+  });
+
+  console.log(`💪 Notificación de respuesta de entrenamiento enviada: ${accepted ? 'aceptado' : 'rechazado'}`);
+}
+
+// ============================================================================
+// NOTIFICACIÓN: SOLICITUD DE AMISTAD
+// ============================================================================
+
+export async function sendFriendRequestNotification(
+  senderName: string,
+  senderId: string
+) {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: `👋 ${senderName} te envió una solicitud de amistad`,
+      body: 'Toca para ver y responder',
+      data: { 
+        type: 'friend_request', 
+        senderId 
+      },
+      sound: true,
+      badge: 1,
+    },
+    trigger: null, // Enviar inmediatamente
+  });
+
+  console.log('👋 Notificación de solicitud de amistad enviada');
 }
 
 // ============================================================================

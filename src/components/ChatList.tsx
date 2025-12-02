@@ -97,20 +97,25 @@ export default function ChatList({ onNavigateToChat, onNavigateToFriends }: Chat
     }
   };
 
-  const formatTime = (dateString?: string) => {
+  const formatTime = (dateString?: string): string => {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '';
+      const now = new Date();
+      const diff = now.getTime() - date.getTime();
+      const minutes = Math.floor(diff / 60000);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
 
-    if (minutes < 1) return 'Ahora';
-    if (minutes < 60) return `${minutes}m`;
-    if (hours < 24) return `${hours}h`;
-    if (days < 7) return `${days}d`;
-    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+      if (minutes < 1) return 'Ahora';
+      if (minutes < 60) return `${minutes}m`;
+      if (hours < 24) return `${hours}h`;
+      if (days < 7) return `${days}d`;
+      return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+    } catch (error) {
+      return '';
+    }
   };
 
   if (isLoading) {
@@ -139,7 +144,9 @@ export default function ChatList({ onNavigateToChat, onNavigateToFriends }: Chat
           <Ionicons name="people" size={20} color="#ffb300" />
           {pendingRequests > 0 && (
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>{pendingRequests}</Text>
+              <Text style={styles.badgeText}>
+                {String(pendingRequests)}
+              </Text>
             </View>
           )}
         </TouchableOpacity>
@@ -156,48 +163,61 @@ export default function ChatList({ onNavigateToChat, onNavigateToFriends }: Chat
         <FlatList
           data={chats}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.chatItem}
-              onPress={() => handleChatPress(item)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.avatarContainer}>
-                {item.other_user?.profile_photo_url ? (
-                  <Image
-                    source={{ uri: item.other_user.profile_photo_url }}
-                    style={styles.avatar}
-                  />
-                ) : (
-                  <View style={styles.avatarPlaceholder}>
-                    <Text style={styles.avatarText}>
-                      {item.other_user?.name?.charAt(0) || 'U'}
-                    </Text>
-                  </View>
-                )}
-                {item.unread_count && item.unread_count > 0 && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadText}>{item.unread_count}</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.chatContent}>
-                <View style={styles.chatHeader}>
-                  <Text style={styles.chatName} numberOfLines={1}>
-                    {item.other_user?.name || 'Usuario'}
-                  </Text>
-                  {item.last_message_at && (
-                    <Text style={styles.chatTime}>{formatTime(item.last_message_at)}</Text>
+          renderItem={({ item }) => {
+            const otherUser = item.other_user;
+            const userName = otherUser?.name || otherUser?.username || 'Usuario';
+            const userInitial = otherUser?.name?.charAt(0) || otherUser?.username?.charAt(0) || 'U';
+            const unreadCount = item.unread_count || 0;
+            const lastMessageTime = item.last_message_at ? formatTime(item.last_message_at) : '';
+            const lastMessageText = item.last_message_text || '';
+
+            return (
+              <TouchableOpacity
+                style={styles.chatItem}
+                onPress={() => handleChatPress(item)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.avatarContainer}>
+                  {otherUser?.profile_photo_url ? (
+                    <Image
+                      source={{ uri: otherUser.profile_photo_url }}
+                      style={styles.avatar}
+                    />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Text style={styles.avatarText}>
+                        {String(userInitial)}
+                      </Text>
+                    </View>
+                  )}
+                  {unreadCount > 0 && (
+                    <View style={styles.unreadBadge}>
+                      <Text style={styles.unreadText}>
+                        {String(unreadCount)}
+                      </Text>
+                    </View>
                   )}
                 </View>
-                {item.last_message_text && (
-                  <Text style={styles.chatPreview} numberOfLines={1}>
-                    {item.last_message_text}
-                  </Text>
-                )}
-              </View>
-            </TouchableOpacity>
-          )}
+                <View style={styles.chatContent}>
+                  <View style={styles.chatHeader}>
+                    <Text style={styles.chatName} numberOfLines={1}>
+                      {String(userName)}
+                    </Text>
+                    {lastMessageTime ? (
+                      <Text style={styles.chatTime}>
+                        {String(lastMessageTime)}
+                      </Text>
+                    ) : null}
+                  </View>
+                  {lastMessageText ? (
+                    <Text style={styles.chatPreview} numberOfLines={1}>
+                      {String(lastMessageText)}
+                    </Text>
+                  ) : null}
+                </View>
+              </TouchableOpacity>
+            );
+          }}
           scrollEnabled={false}
         />
       )}

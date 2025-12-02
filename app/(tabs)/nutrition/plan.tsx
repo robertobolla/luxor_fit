@@ -16,7 +16,6 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +25,7 @@ import { supabase } from '../../../src/services/supabase';
 import { WeekPlan, DayPlan, MealOption } from '../../../src/types/nutrition';
 import { LoadingOverlay } from '../../../src/components/LoadingOverlay';
 import { useLoadingState } from '../../../src/hooks/useLoadingState';
+import { useRetry } from '../../../src/hooks/useRetry';
 import { EmptyNutrition } from '../../../src/components/EmptyStates';
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -194,18 +194,13 @@ export default function MealPlanScreen() {
     }
   };
 
-  const handleAIAdjustment = async () => {
-    if (!user?.id) return;
-    
-    if (!aiPrompt.trim()) {
-      Alert.alert('Error', 'Por favor escribe una instrucción para la IA.');
-      return;
-    }
+  // Hook para retry en regeneración de plan nutricional
+  const regeneratePlanWithRetry = useRetry(
+    async () => {
+      if (!user?.id) {
+        throw new Error('Usuario no autenticado');
+      }
 
-    setShowAIModal(false);
-    setIsLoading(true);
-
-    try {
       // Obtener perfil actual
       const { getNutritionProfile, upsertNutritionProfile, computeAndSaveTargets, createOrUpdateMealPlan, clearNutritionCache } = await import('../../../src/services/nutrition');
       const { supabase } = await import('../../../src/services/supabase');
@@ -216,9 +211,7 @@ export default function MealPlanScreen() {
       const currentProfile = await getNutritionProfile(user.id);
       
       if (!currentProfile) {
-        Alert.alert('Error', 'No se pudo cargar tu perfil de nutrición.');
-        setIsLoading(false);
-        return;
+        throw new Error('No se pudo cargar tu perfil de nutrición.');
       }
 
       const updatedPrompts = [...(currentProfile.custom_prompts || []), aiPrompt.trim()];
@@ -277,21 +270,46 @@ export default function MealPlanScreen() {
       await Promise.all(targetPromises);
       console.log('✅ Targets regenerados exitosamente');
 
-      // Regenerar plan con el nuevo prompt
+      // Regenerar plan con el nuevo prompt (operación crítica con retry)
       await createOrUpdateMealPlan(user.id, mondayStr);
 
       // Recargar el plan
       const plan = await import('../../../src/services/nutrition').then(m => m.getMealPlan(user.id, mondayStr));
-      setWeekPlan(plan);
+      
+      return { plan, mondayStr };
+    },
+    {
+      maxRetries: 2,
+      retryDelay: 2000,
+      showAlert: true,
+    }
+  );
 
-      Alert.alert(
-        '¡Plan actualizado!', 
-        'Tu plan de comidas ha sido regenerado con tus nuevas preferencias.'
-      );
-      setAiPrompt('');
+  const handleAIAdjustment = async () => {
+    if (!user?.id) return;
+    
+    if (!aiPrompt.trim()) {
+      Alert.alert('Error', 'Por favor escribe una instrucción para la IA.');
+      return;
+    }
+
+    setShowAIModal(false);
+    setIsLoading(true);
+
+    try {
+      const result = await regeneratePlanWithRetry.executeWithRetry();
+
+      if (result) {
+        setWeekPlan(result.plan);
+        Alert.alert(
+          '¡Plan actualizado!', 
+          'Tu plan de comidas ha sido regenerado con tus nuevas preferencias.'
+        );
+        setAiPrompt('');
+      }
     } catch (err: any) {
       console.error('Error adjusting plan:', err);
-      Alert.alert('Error', 'No se pudo ajustar el plan. Intenta nuevamente.');
+      // El error ya se maneja en useRetry con showAlert
     } finally {
       setIsLoading(false);
     }
@@ -396,10 +414,9 @@ export default function MealPlanScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <ActivityIndicator size="large" color="#ffb300" />
-        <Text style={styles.loadingText}>Cargando plan...</Text>
+        <LoadingOverlay visible={true} message="Cargando plan..." fullScreen />
       </SafeAreaView>
     );
   }
