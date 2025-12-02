@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS body_measurements (
 CREATE INDEX IF NOT EXISTS idx_body_measurements_user_date 
   ON body_measurements(user_id, measured_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_body_measurements_user_week 
-  ON body_measurements(user_id, DATE_TRUNC('week', measured_at));
+-- Nota: No creamos índice con DATE_TRUNC porque no es IMMUTABLE con TIMESTAMPTZ
+-- El índice por user_id y measured_at es suficiente para queries eficientes
 
 -- RLS (Row Level Security)
 ALTER TABLE body_measurements ENABLE ROW LEVEL SECURITY;
