@@ -1,4 +1,6 @@
-import { Platform } from 'react-native';
+import { Platform, Alert } from 'react-native';
+import { Pedometer } from 'expo-sensors';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Importar condicionalmente las librerías nativas
 let AppleHealthKit: any = null;
@@ -7,15 +9,25 @@ let GoogleFit: any = null;
 try {
   // Solo importar si estamos en un Development Build
   AppleHealthKit = require('react-native-health').default;
+  console.log('✅ react-native-health cargado correctamente');
 } catch (e) {
-  console.log('⚠️ react-native-health no disponible (Expo Go)');
+  console.log('⚠️ react-native-health no disponible (probablemente Expo Go o build sin la librería)');
 }
 
 try {
   GoogleFit = require('react-native-google-fit').default;
+  console.log('✅ react-native-google-fit cargado correctamente');
 } catch (e) {
-  console.log('⚠️ react-native-google-fit no disponible (Expo Go)');
+  console.log('⚠️ react-native-google-fit no disponible (probablemente Expo Go o build sin la librería)');
 }
+
+// Diagnóstico del estado actual
+const HEALTH_DIAGNOSTICS = {
+  isExpoGo: !AppleHealthKit && !GoogleFit,
+  hasAppleHealth: !!AppleHealthKit,
+  hasGoogleFit: !!GoogleFit,
+  platform: Platform.OS,
+};
 
 /**
  * Servicio para integrar con Apple Health (iOS) y Google Fit (Android)
@@ -35,6 +47,137 @@ export interface HealthData {
   glucose?: number;
   water?: number; // en ml
   food?: number; // calorías consumidas
+  source?: 'apple_health' | 'google_fit' | 'expo_pedometer' | 'none';
+}
+
+export interface HealthDiagnostics {
+  isExpoGo: boolean;
+  hasAppleHealth: boolean;
+  hasGoogleFit: boolean;
+  hasPedometerAccess: boolean;
+  platform: string;
+  message: string;
+  recommendation: string;
+}
+
+/**
+ * Obtiene diagnóstico del estado actual del servicio de salud
+ */
+export async function getHealthDiagnostics(): Promise<HealthDiagnostics> {
+  const hasPedometerAccess = await Pedometer.isAvailableAsync();
+  
+  let message = '';
+  let recommendation = '';
+  
+  if (HEALTH_DIAGNOSTICS.isExpoGo) {
+    message = '⚠️ Estás usando Expo Go - Las librerías nativas de salud no están disponibles';
+    recommendation = Platform.OS === 'ios' 
+      ? 'Para ver tus pasos reales de Apple Health, necesitas crear un Development Build:\n\n1. Ejecuta: npm run build:dev:ios\n2. Instala el build en tu dispositivo\n3. La app podrá leer datos de Apple Health'
+      : 'Para ver tus pasos reales de Google Fit, necesitas crear un Development Build:\n\n1. Ejecuta: npm run build:dev:android\n2. Instala el APK en tu dispositivo\n3. Conecta Google Fit en la app';
+  } else if (Platform.OS === 'ios' && HEALTH_DIAGNOSTICS.hasAppleHealth) {
+    message = '✅ Apple Health está disponible';
+    recommendation = 'Asegúrate de dar permisos en: Configuración → Privacidad y seguridad → Salud → Luxor Fitness';
+  } else if (Platform.OS === 'android' && HEALTH_DIAGNOSTICS.hasGoogleFit) {
+    message = '✅ Google Fit está disponible';
+    recommendation = 'Asegúrate de tener Google Fit instalado y conectado en la app';
+  } else {
+    message = '❓ No se detectó fuente de datos de salud';
+    recommendation = 'Verifica que tienes un Development Build instalado correctamente';
+  }
+  
+  return {
+    ...HEALTH_DIAGNOSTICS,
+    hasPedometerAccess,
+    message,
+    recommendation,
+  };
+}
+
+/**
+ * Muestra alerta con diagnóstico de salud al usuario
+ */
+export async function showHealthDiagnosticsAlert(): Promise<void> {
+  const diagnostics = await getHealthDiagnostics();
+  
+  Alert.alert(
+    'Estado de Datos de Salud',
+    `${diagnostics.message}\n\n📱 Plataforma: ${diagnostics.platform.toUpperCase()}\n🏃 Pedómetro disponible: ${diagnostics.hasPedometerAccess ? 'Sí' : 'No'}\n\n💡 ${diagnostics.recommendation}`,
+    [{ text: 'Entendido' }]
+  );
+}
+
+// Cache para pasos del pedómetro de Expo
+const PEDOMETER_STEPS_KEY = 'expo_pedometer_steps';
+
+/**
+ * Obtiene pasos usando Expo Pedometer (alternativa cuando no hay Health APIs)
+ */
+async function getExpoPedometerSteps(date: Date): Promise<number> {
+  try {
+    const isAvailable = await Pedometer.isAvailableAsync();
+    if (!isAvailable) {
+      console.log('⚠️ Pedómetro de Expo no disponible en este dispositivo');
+      return 0;
+    }
+    
+    const startDate = new Date(date);
+    startDate.setHours(0, 0, 0, 0);
+    const endDate = new Date(date);
+    endDate.setHours(23, 59, 59, 999);
+    
+    // Si la fecha es hoy, usar el rango hasta ahora
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const actualEndDate = isToday ? now : endDate;
+    
+    const result = await Pedometer.getStepCountAsync(startDate, actualEndDate);
+    
+    if (result && result.steps > 0) {
+      console.log('✅ Pasos obtenidos de Expo Pedometer:', result.steps);
+      return result.steps;
+    }
+    
+    // Si es un día pasado, intentar obtener de cache
+    if (!isToday) {
+      const cached = await getCachedPedometerSteps(date);
+      if (cached > 0) {
+        console.log('✅ Pasos obtenidos de cache:', cached);
+        return cached;
+      }
+    }
+    
+    return 0;
+  } catch (error) {
+    console.error('❌ Error obteniendo pasos de Expo Pedometer:', error);
+    return 0;
+  }
+}
+
+/**
+ * Guarda pasos del pedómetro en cache local
+ */
+async function cachePedometerSteps(date: Date, steps: number): Promise<void> {
+  try {
+    const dateKey = date.toISOString().split('T')[0];
+    const cacheKey = `${PEDOMETER_STEPS_KEY}_${dateKey}`;
+    await AsyncStorage.setItem(cacheKey, steps.toString());
+  } catch (error) {
+    console.error('Error guardando pasos en cache:', error);
+  }
+}
+
+/**
+ * Obtiene pasos del cache local
+ */
+async function getCachedPedometerSteps(date: Date): Promise<number> {
+  try {
+    const dateKey = date.toISOString().split('T')[0];
+    const cacheKey = `${PEDOMETER_STEPS_KEY}_${dateKey}`;
+    const cached = await AsyncStorage.getItem(cacheKey);
+    return cached ? parseInt(cached, 10) : 0;
+  } catch (error) {
+    return 0;
+  }
 }
 
 /**
@@ -45,10 +188,17 @@ export async function requestHealthPermissions(): Promise<boolean> {
     if (Platform.OS === 'ios') {
       // Verificar si AppleHealthKit está disponible
       if (!AppleHealthKit) {
-        console.log('⚠️ Apple Health no disponible. Usando datos simulados.');
-        console.log('💡 Para usar datos reales, instala un Development Build.');
-        return true; // Retornar true para continuar con datos simulados
+        console.error('❌ CRÍTICO: AppleHealthKit no está disponible');
+        console.error('   Esto puede significar:');
+        console.error('   1. Estás usando Expo Go (no tiene acceso a APIs nativas)');
+        console.error('   2. El build no incluye react-native-health');
+        console.error('   3. Hay un error al importar el módulo nativo');
+        console.error('💡 Para usar datos reales, necesitas un Development Build o Production Build');
+        console.error('   Ejecuta: npm run build:dev:ios o eas build --profile production --platform ios');
+        return false; // Retornar false para que el usuario sepa que no hay acceso
       }
+
+      console.log('📱 AppleHealthKit disponible, solicitando permisos...');
 
       const permissions = {
         permissions: {
@@ -66,18 +216,23 @@ export async function requestHealthPermissions(): Promise<boolean> {
           write: [
             AppleHealthKit.Constants.Permissions.Steps,
             AppleHealthKit.Constants.Permissions.ActiveEnergyBurned,
+            AppleHealthKit.Constants.Permissions.Workout,
+            AppleHealthKit.Constants.Permissions.DistanceWalkingRunning,
           ],
         },
       };
 
       return new Promise((resolve) => {
+        console.log('📱 Inicializando HealthKit con permisos...');
         AppleHealthKit.initHealthKit(permissions, (err: any) => {
           if (err) {
-            console.error('❌ Error inicializando HealthKit:', err);
+            console.error('❌ Error inicializando HealthKit:', JSON.stringify(err, null, 2));
+            console.error('💡 El usuario puede haber denegado los permisos o hay un problema de configuración');
             resolve(false);
             return;
           }
           console.log('✅ Apple Health conectado correctamente');
+          console.log('✅ Permisos otorgados. Ahora puedes leer datos de Apple Health.');
           resolve(true);
         });
       });
@@ -127,6 +282,45 @@ let hasPermissionsCache: boolean | null = null;
  */
 export async function getHealthDataForDate(date: Date): Promise<HealthData> {
   try {
+    console.log('📊 ══════════════════════════════════════');
+    console.log('📊 Obteniendo datos de salud para:', date.toISOString().split('T')[0]);
+    console.log('📊 Plataforma:', Platform.OS);
+    console.log('📊 AppleHealthKit disponible:', !!AppleHealthKit);
+    console.log('📊 GoogleFit disponible:', !!GoogleFit);
+    console.log('📊 ══════════════════════════════════════');
+    
+    // Si estamos en Expo Go (sin librerías nativas), usar Pedometer como fallback
+    if (HEALTH_DIAGNOSTICS.isExpoGo) {
+      console.log('📱 Modo Expo Go detectado - Usando Expo Pedometer como alternativa');
+      const steps = await getExpoPedometerSteps(date);
+      
+      // Calcular distancia y calorías estimadas basadas en pasos
+      const distanceKm = (steps * 0.0008); // ~80cm por paso promedio
+      const caloriesEstimated = Math.round(steps * 0.04); // ~0.04 cal por paso
+      
+      if (steps > 0) {
+        // Guardar en cache si es hoy
+        const isToday = date.toDateString() === new Date().toDateString();
+        if (isToday) {
+          await cachePedometerSteps(date, steps);
+        }
+        
+        console.log('✅ Datos obtenidos de Expo Pedometer:', { steps, distanceKm, caloriesEstimated });
+      } else {
+        console.warn('⚠️ No hay datos de pasos disponibles');
+        console.log('💡 El pedómetro de Expo solo puede contar pasos cuando la app está activa');
+        console.log('💡 Para datos históricos reales, necesitas un Development Build con Apple Health/Google Fit');
+      }
+      
+      return {
+        steps,
+        distance: distanceKm,
+        calories: caloriesEstimated,
+        sleep: 0,
+        source: steps > 0 ? 'expo_pedometer' : 'none',
+      };
+    }
+    
     // Verificar permisos solo si no se han verificado antes
     if (!permissionsRequested) {
       console.log('🔐 Verificando permisos de salud...');
@@ -134,53 +328,148 @@ export async function getHealthDataForDate(date: Date): Promise<HealthData> {
       permissionsRequested = true;
       
       if (!hasPermissionsCache) {
-        console.warn('⚠️ No se otorgaron permisos de salud. Retornando datos vacíos.');
-        // Retornar datos vacíos en lugar de simulados
+        console.warn('⚠️ No se otorgaron permisos de salud.');
+        console.log('💡 Para otorgar permisos:');
+        if (Platform.OS === 'ios') {
+          console.log('   iOS: Configuración > Privacidad y seguridad > Salud > Luxor Fitness');
+        } else {
+          console.log('   Android: Configuración > Apps > Luxor Fitness > Permisos');
+        }
+        
+        // Intentar con Expo Pedometer como fallback
+        console.log('📱 Intentando con Expo Pedometer como alternativa...');
+        const pedometerSteps = await getExpoPedometerSteps(date);
+        if (pedometerSteps > 0) {
+          return {
+            steps: pedometerSteps,
+            distance: pedometerSteps * 0.0008,
+            calories: Math.round(pedometerSteps * 0.04),
+            sleep: 0,
+            source: 'expo_pedometer',
+          };
+        }
+        
         return {
           steps: 0,
           distance: 0,
           calories: 0,
           sleep: 0,
+          source: 'none',
         };
       }
     } else if (hasPermissionsCache === false) {
-      // Si ya sabemos que no hay permisos, retornar datos vacíos
-      console.warn('⚠️ No hay permisos de salud. Retornando datos vacíos.');
+      console.warn('⚠️ No hay permisos de salud (desde cache).');
+      
+      // Intentar con Expo Pedometer
+      const pedometerSteps = await getExpoPedometerSteps(date);
+      if (pedometerSteps > 0) {
+        return {
+          steps: pedometerSteps,
+          distance: pedometerSteps * 0.0008,
+          calories: Math.round(pedometerSteps * 0.04),
+          sleep: 0,
+          source: 'expo_pedometer',
+        };
+      }
+      
       return {
         steps: 0,
         distance: 0,
         calories: 0,
         sleep: 0,
+        source: 'none',
       };
     }
     
-    // Intentar obtener datos reales
-    if (Platform.OS === 'ios') {
-      const data = await getAppleHealthData(date);
-      // Verificar si realmente obtuvo datos o si son simulados
-      // Si todos los valores principales son 0, es probable que no haya datos reales
-      if (data.steps === 0 && data.distance === 0 && data.calories === 0) {
-        console.warn('⚠️ No se encontraron datos en Apple Health para esta fecha.');
+    // Verificar permisos nuevamente antes de leer (por si el usuario los cambió)
+    if (Platform.OS === 'ios' && AppleHealthKit) {
+      const currentPermissions = await new Promise<boolean>((resolve) => {
+        AppleHealthKit.getAuthStatus(
+          {
+            permissions: {
+              read: [AppleHealthKit.Constants.Permissions.Steps],
+            },
+          },
+          (err: any, results: any) => {
+            if (err) {
+              resolve(false);
+              return;
+            }
+            const hasPermission = Object.values(results).some(
+              (status: any) => status === AppleHealthKit.Constants.Permissions.Authorized
+            );
+            resolve(hasPermission);
+          }
+        );
+      });
+      
+      if (!currentPermissions) {
+        console.warn('⚠️ Los permisos de salud fueron revocados. Reseteando cache...');
+        permissionsRequested = false;
+        hasPermissionsCache = null;
+        return {
+          steps: 0,
+          distance: 0,
+          calories: 0,
+          sleep: 0,
+          source: 'none',
+        };
       }
-      return data;
-    } else if (Platform.OS === 'android') {
-      const data = await getGoogleFitData(date);
-      // Verificar si realmente obtuvo datos o si son simulados
-      if (data.steps === 0 && data.distance === 0 && data.calories === 0) {
-        console.warn('⚠️ No se encontraron datos en Google Fit para esta fecha.');
-      }
-      return data;
     }
     
-    throw new Error('Plataforma no soportada');
+    // Intentar obtener datos reales de las APIs nativas
+    if (Platform.OS === 'ios' && AppleHealthKit) {
+      const data = await getAppleHealthData(date);
+      if (data.steps === 0 && data.distance === 0 && data.calories === 0) {
+        console.warn('⚠️ No se encontraron datos en Apple Health para esta fecha.');
+        console.log('💡 Verifica que hay datos en la app Salud para esta fecha');
+      } else {
+        console.log('✅ Datos de Apple Health obtenidos correctamente');
+      }
+      return { ...data, source: data.steps > 0 ? 'apple_health' : 'none' };
+    } else if (Platform.OS === 'android' && GoogleFit) {
+      const data = await getGoogleFitData(date);
+      if (data.steps === 0 && data.distance === 0 && data.calories === 0) {
+        console.warn('⚠️ No se encontraron datos en Google Fit para esta fecha.');
+      } else {
+        console.log('✅ Datos de Google Fit obtenidos correctamente');
+      }
+      return { ...data, source: data.steps > 0 ? 'google_fit' : 'none' };
+    }
+    
+    // Fallback final: Expo Pedometer
+    console.log('📱 Ninguna API de salud disponible - Usando Expo Pedometer');
+    const fallbackSteps = await getExpoPedometerSteps(date);
+    return {
+      steps: fallbackSteps,
+      distance: fallbackSteps * 0.0008,
+      calories: Math.round(fallbackSteps * 0.04),
+      sleep: 0,
+      source: fallbackSteps > 0 ? 'expo_pedometer' : 'none',
+    };
   } catch (error) {
     console.error('❌ Error obteniendo datos de salud:', error);
-    // Retornar datos vacíos en lugar de simulados cuando hay error
+    
+    // Último intento con Expo Pedometer
+    try {
+      const emergencySteps = await getExpoPedometerSteps(date);
+      if (emergencySteps > 0) {
+        return {
+          steps: emergencySteps,
+          distance: emergencySteps * 0.0008,
+          calories: Math.round(emergencySteps * 0.04),
+          sleep: 0,
+          source: 'expo_pedometer',
+        };
+      }
+    } catch {}
+    
     return {
       steps: 0,
       distance: 0,
       calories: 0,
       sleep: 0,
+      source: 'none',
     };
   }
 }
@@ -191,8 +480,14 @@ export async function getHealthDataForDate(date: Date): Promise<HealthData> {
 async function getAppleHealthData(date: Date): Promise<HealthData> {
   // Si AppleHealthKit no está disponible, retornar datos vacíos
   if (!AppleHealthKit) {
-    console.log('📱 Apple Health no disponible (probablemente Expo Go). Retornando datos vacíos.');
-    console.log('💡 Para usar datos reales, crea un Development Build con: npm run build:dev:ios');
+    console.error('❌ CRÍTICO: AppleHealthKit es null');
+    console.error('   Esto significa que:');
+    console.error('   1. Estás usando Expo Go (no tiene acceso a APIs nativas)');
+    console.error('   2. O el build no incluye react-native-health');
+    console.error('   3. O hay un error al importar el módulo nativo');
+    console.error('💡 SOLUCIÓN: Necesitas un Development Build o Production Build');
+    console.error('   - Development: npm run build:dev:ios');
+    console.error('   - Production: eas build --profile production --platform ios');
     return {
       steps: 0,
       distance: 0,
@@ -200,6 +495,8 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
       sleep: 0,
     };
   }
+  
+  console.log('📱 AppleHealthKit disponible, obteniendo datos...');
 
   try {
     // Verificar permisos antes de intentar obtener datos
@@ -237,7 +534,14 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
     });
 
     if (!hasPermissions) {
-      console.warn('⚠️ No se tienen permisos para leer datos de Apple Health');
+      console.error('❌ No se tienen permisos para leer datos de Apple Health');
+      console.error('💡 INSTRUCCIONES PARA EL USUARIO:');
+      console.error('   1. Ve a Configuración en tu iPhone');
+      console.error('   2. Toca "Privacidad y seguridad"');
+      console.error('   3. Toca "Salud"');
+      console.error('   4. Toca "Luxor Fitness"');
+      console.error('   5. Activa los permisos para: Pasos, Distancia, Calorías activas');
+      console.error('   6. Vuelve a la app y recarga');
       return {
         steps: 0,
         distance: 0,
@@ -245,6 +549,8 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
         sleep: 0,
       };
     }
+    
+    console.log('✅ Permisos verificados correctamente');
 
     const startDate = new Date(date);
     startDate.setHours(0, 0, 0, 0);
@@ -257,52 +563,122 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
     };
 
     console.log('📱 Obteniendo datos de Apple Health para:', date.toISOString().split('T')[0]);
+    console.log('📱 Rango de fechas:', {
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+    });
 
-    // Obtener pasos usando getDailyStepCountSamples para obtener todos los datos agregados del día
-    // Este método devuelve el total agregado del día, que coincide con la app de Salud
+    // Obtener pasos - intentar múltiples métodos para asegurar que obtenemos los datos
     const steps = await new Promise<number>((resolve) => {
-      // Primero intentar con getDailyStepCountSamples (método recomendado)
-      if (AppleHealthKit.getDailyStepCountSamples) {
-        AppleHealthKit.getDailyStepCountSamples(options, (err: any, results: any) => {
-          if (err || !results || results.length === 0) {
-            // Fallback a getStepCount si getDailyStepCountSamples falla
-            console.log('⚠️ getDailyStepCountSamples no devolvió datos, usando getStepCount como fallback');
-            AppleHealthKit.getStepCount(options, (fallbackErr: any, fallbackResults: any) => {
-              if (fallbackErr || !fallbackResults || fallbackResults.value === undefined) {
-                console.warn('⚠️ No hay datos de pasos disponibles');
-                console.log('💡 Verifica que la app tenga permisos en Configuración > Privacidad y seguridad > Salud');
-                resolve(0);
-                return;
-              }
-              console.log('✅ Pasos obtenidos de Apple Health (getStepCount):', fallbackResults.value);
-              console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
-              resolve(fallbackResults.value);
-            });
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      // Método 1: Intentar con getStepCount primero (método más confiable)
+      const tryGetStepCount = () => {
+        console.log('📱 Intentando obtener pasos con getStepCount...');
+        AppleHealthKit.getStepCount(options, (err: any, results: any) => {
+          if (err) {
+            console.log('⚠️ Error en getStepCount:', JSON.stringify(err, null, 2));
+            attempts++;
+            if (attempts < maxAttempts) {
+              // Intentar con getDailyStepCountSamples como fallback
+              tryGetDailyStepCountSamples();
+            } else {
+              console.warn('⚠️ No se pudieron obtener datos de pasos después de múltiples intentos');
+              resolve(0);
+            }
             return;
           }
-          // Sumar todos los pasos del día (puede haber múltiples muestras de diferentes fuentes)
-          const totalSteps = results.reduce((total: number, sample: any) => {
-            return total + (sample.value || 0);
-          }, 0);
-          console.log('✅ Pasos obtenidos de Apple Health (getDailyStepCountSamples):', totalSteps);
-          console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
-          console.log('📊 Muestras encontradas:', results.length);
-          resolve(totalSteps);
-        });
-      } else {
-        // Si getDailyStepCountSamples no está disponible, usar getStepCount directamente
-        AppleHealthKit.getStepCount(options, (err: any, results: any) => {
-          if (err || !results || results.value === undefined) {
+          
+          console.log('📱 Resultado de getStepCount:', JSON.stringify(results, null, 2));
+          
+          if (results && results.value !== undefined && results.value !== null) {
+            const stepValue = Math.round(results.value);
+            console.log('✅ Pasos obtenidos de Apple Health (getStepCount):', stepValue);
+            console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
+            resolve(stepValue);
+            return;
+          }
+          
+          console.log('⚠️ getStepCount no devolvió un valor válido. Resultado:', results);
+          
+          // Si no hay valor, intentar con getDailyStepCountSamples
+          attempts++;
+          if (attempts < maxAttempts) {
+            tryGetDailyStepCountSamples();
+          } else {
             console.warn('⚠️ No hay datos de pasos disponibles');
             console.log('💡 Verifica que la app tenga permisos en Configuración > Privacidad y seguridad > Salud');
             resolve(0);
-            return;
           }
-          console.log('✅ Pasos obtenidos de Apple Health (getStepCount):', results.value);
-          console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
-          resolve(results.value);
         });
-      }
+      };
+      
+      // Método 2: Intentar con getDailyStepCountSamples
+      const tryGetDailyStepCountSamples = () => {
+        if (AppleHealthKit.getDailyStepCountSamples) {
+          console.log('📱 Intentando obtener pasos con getDailyStepCountSamples...');
+          AppleHealthKit.getDailyStepCountSamples(options, (err: any, results: any) => {
+            if (err) {
+              console.log('⚠️ Error en getDailyStepCountSamples:', JSON.stringify(err, null, 2));
+              attempts++;
+              if (attempts >= maxAttempts) {
+                console.warn('⚠️ No se pudieron obtener datos de pasos');
+                resolve(0);
+              }
+              return;
+            }
+            
+            console.log('📱 Resultado de getDailyStepCountSamples:', {
+              esArray: Array.isArray(results),
+              longitud: results?.length,
+              primerElemento: results?.[0],
+            });
+            
+            if (results && Array.isArray(results) && results.length > 0) {
+              // Sumar todos los pasos del día (puede haber múltiples muestras de diferentes fuentes)
+              const totalSteps = results.reduce((total: number, sample: any) => {
+                const value = sample.value || sample.count || 0;
+                console.log('📊 Muestra de pasos:', { value, sample: JSON.stringify(sample) });
+                return total + value;
+              }, 0);
+              
+              if (totalSteps > 0) {
+                console.log('✅ Pasos obtenidos de Apple Health (getDailyStepCountSamples):', totalSteps);
+                console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
+                console.log('📊 Muestras encontradas:', results.length);
+                resolve(Math.round(totalSteps));
+                return;
+              } else {
+                console.warn('⚠️ getDailyStepCountSamples devolvió muestras pero la suma es 0');
+              }
+            } else {
+              console.warn('⚠️ getDailyStepCountSamples no devolvió muestras válidas');
+            }
+            
+            // Si llegamos aquí, no hay datos
+            attempts++;
+            if (attempts >= maxAttempts) {
+              console.warn('⚠️ No hay datos de pasos disponibles en Apple Health');
+              console.log('💡 Verifica que:');
+              console.log('   1. La app tenga permisos en Configuración > Privacidad y seguridad > Salud');
+              console.log('   2. Haya datos de pasos en la app de Salud para esta fecha');
+              console.log('   3. Los permisos incluyan "Pasos" en la lista de datos compartidos');
+              resolve(0);
+            }
+          });
+        } else {
+          console.warn('⚠️ getDailyStepCountSamples no está disponible en esta versión');
+          // Si getDailyStepCountSamples no está disponible, solo usar getStepCount
+          if (attempts >= maxAttempts) {
+            console.warn('⚠️ No se pudieron obtener datos de pasos');
+            resolve(0);
+          }
+        }
+      };
+      
+      // Comenzar con getStepCount
+      tryGetStepCount();
     });
 
     // Obtener distancia (incluye datos de Apple Watch y otras fuentes)
@@ -709,6 +1085,237 @@ export async function saveHealthData(
     console.error('Error saving health data:', error);
     return false;
   }
+}
+
+/**
+ * Escribe datos de entrenamiento a Apple Health
+ */
+export async function saveWorkoutToAppleHealth(
+  durationMinutes: number,
+  caloriesBurned?: number,
+  distanceKm?: number,
+  workoutType: string = 'Traditional Strength Training'
+): Promise<boolean> {
+  if (Platform.OS !== 'ios' || !AppleHealthKit) {
+    console.log('⚠️ Apple Health no disponible para escribir datos');
+    return false;
+  }
+
+  try {
+    // Verificar permisos de escritura
+    const hasWritePermissions = await new Promise<boolean>((resolve) => {
+      AppleHealthKit.getAuthStatus(
+        {
+          permissions: {
+            write: [
+              AppleHealthKit.Constants.Permissions.ActiveEnergyBurned,
+            ],
+          },
+        },
+        (err: any, results: any) => {
+          if (err) {
+            console.error('❌ Error verificando permisos de escritura:', err);
+            resolve(false);
+            return;
+          }
+          
+          const hasPermission = Object.values(results).some(
+            (status: any) => status === AppleHealthKit.Constants.Permissions.Authorized
+          );
+          resolve(hasPermission);
+        }
+      );
+    });
+
+    if (!hasWritePermissions) {
+      console.warn('⚠️ No hay permisos de escritura para Apple Health');
+      console.log('💡 Ve a Configuración > Privacidad y seguridad > Salud > Luxor Fitness y activa los permisos de escritura');
+      return false;
+    }
+
+    const now = new Date();
+    const startDate = new Date(now.getTime() - durationMinutes * 60 * 1000);
+    const endDate = now;
+
+    // Calcular calorías si no se proporcionan (estimación básica)
+    let finalCalories = caloriesBurned;
+    if (!finalCalories) {
+      // Estimación: ~5-8 calorías por minuto de entrenamiento de fuerza
+      finalCalories = Math.round(durationMinutes * 6.5);
+    }
+
+    // Escribir calorías activas quemadas
+    let caloriesSaved = false;
+    try {
+      // Verificar si el método existe
+      if (AppleHealthKit.saveActiveEnergyBurned) {
+        caloriesSaved = await new Promise<boolean>((resolve) => {
+          AppleHealthKit.saveActiveEnergyBurned(
+            {
+              value: finalCalories,
+              startDate: startDate.toISOString(),
+              endDate: endDate.toISOString(),
+            },
+            (err: any) => {
+              if (err) {
+                console.error('❌ Error guardando calorías en Apple Health:', err);
+                resolve(false);
+                return;
+              }
+              console.log(`✅ Calorías guardadas en Apple Health: ${finalCalories} kcal`);
+              resolve(true);
+            }
+          );
+        });
+      } else {
+        console.warn('⚠️ saveActiveEnergyBurned no disponible. Intentando con saveWorkout...');
+        // Si no existe saveActiveEnergyBurned, intentar guardar solo el workout
+        caloriesSaved = true; // Asumir éxito si guardamos el workout
+      }
+    } catch (error) {
+      console.error('❌ Error al intentar guardar calorías:', error);
+      caloriesSaved = false;
+    }
+
+    // Escribir distancia si se proporciona
+    if (distanceKm && distanceKm > 0) {
+      const distanceSaved = await new Promise<boolean>((resolve) => {
+        // Necesitamos permiso de escritura para distancia
+        // Por ahora solo leemos, pero podemos agregar escritura si es necesario
+        console.log(`📏 Distancia del entrenamiento: ${distanceKm.toFixed(2)} km (no se guarda en Apple Health - requiere permiso adicional)`);
+        resolve(true);
+      });
+    }
+
+    // Escribir sesión de entrenamiento (workout)
+    let workoutSaved = true; // Por defecto true si no hay error
+    try {
+      // Mapear tipo de entrenamiento a constantes de Apple Health
+      const workoutActivityType = mapWorkoutTypeToAppleHealth(workoutType);
+
+      // Verificar si saveWorkout existe (puede no estar disponible en todas las versiones)
+      if (AppleHealthKit.saveWorkout) {
+        workoutSaved = await new Promise<boolean>((resolve) => {
+          AppleHealthKit.saveWorkout(
+            {
+              type: workoutActivityType,
+              startDate: startDate.toISOString(),
+              endDate: endDate.toISOString(),
+              energyBurned: finalCalories,
+              energyBurnedUnit: 'kilocalorie',
+              distance: distanceKm ? distanceKm * 1000 : undefined, // en metros
+              distanceUnit: 'meter',
+            },
+            (err: any) => {
+              if (err) {
+                console.error('❌ Error guardando sesión de entrenamiento en Apple Health:', err);
+                resolve(false);
+                return;
+              }
+              console.log(`✅ Sesión de entrenamiento guardada en Apple Health: ${workoutType} (${durationMinutes} min)`);
+              resolve(true);
+            }
+          );
+        });
+      } else {
+        console.log('⚠️ saveWorkout no disponible en esta versión de react-native-health. Solo se guardaron las calorías.');
+      }
+    } catch (error) {
+      console.error('❌ Error al intentar guardar workout:', error);
+      workoutSaved = false;
+    }
+
+    return caloriesSaved && workoutSaved;
+  } catch (error) {
+    console.error('❌ Error escribiendo datos a Apple Health:', error);
+    return false;
+  }
+}
+
+/**
+ * Mapea tipos de entrenamiento a constantes de Apple Health
+ */
+function mapWorkoutTypeToAppleHealth(workoutType: string): string {
+  const typeMap: { [key: string]: string } = {
+    'Traditional Strength Training': AppleHealthKit?.Constants.WorkoutType?.TraditionalStrengthTraining || 'TraditionalStrengthTraining',
+    'Cardio': AppleHealthKit?.Constants.WorkoutType?.Running || 'Running',
+    'HIIT': AppleHealthKit?.Constants.WorkoutType?.HighIntensityIntervalTraining || 'HighIntensityIntervalTraining',
+    'Yoga': AppleHealthKit?.Constants.WorkoutType?.Yoga || 'Yoga',
+    'Cross Training': AppleHealthKit?.Constants.WorkoutType?.CrossTraining || 'CrossTraining',
+    'Functional Strength Training': AppleHealthKit?.Constants.WorkoutType?.FunctionalStrengthTraining || 'FunctionalStrengthTraining',
+  };
+
+  return typeMap[workoutType] || typeMap['Traditional Strength Training'];
+}
+
+/**
+ * Escribe datos de entrenamiento a Google Fit
+ */
+export async function saveWorkoutToGoogleFit(
+  durationMinutes: number,
+  caloriesBurned?: number,
+  distanceKm?: number,
+  workoutType: string = 'Traditional Strength Training'
+): Promise<boolean> {
+  if (Platform.OS !== 'android' || !GoogleFit) {
+    console.log('⚠️ Google Fit no disponible para escribir datos');
+    return false;
+  }
+
+  try {
+    const now = new Date();
+    const startDate = new Date(now.getTime() - durationMinutes * 60 * 1000);
+    const endDate = now;
+
+    // Calcular calorías si no se proporcionan
+    let finalCalories = caloriesBurned;
+    if (!finalCalories) {
+      finalCalories = Math.round(durationMinutes * 6.5);
+    }
+
+    // Mapear tipo de entrenamiento a constantes de Google Fit
+    const activityType = mapWorkoutTypeToGoogleFit(workoutType);
+
+    // Guardar sesión de entrenamiento
+    const workoutData = {
+      name: workoutType,
+      startTime: startDate.toISOString(),
+      endTime: endDate.toISOString(),
+      activityType: activityType,
+      calories: finalCalories,
+      distance: distanceKm ? distanceKm * 1000 : undefined, // en metros
+    };
+
+    const result = await GoogleFit.saveWorkout(workoutData);
+    
+    if (result) {
+      console.log(`✅ Sesión de entrenamiento guardada en Google Fit: ${workoutType} (${durationMinutes} min)`);
+      return true;
+    } else {
+      console.error('❌ Error guardando sesión de entrenamiento en Google Fit');
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error escribiendo datos a Google Fit:', error);
+    return false;
+  }
+}
+
+/**
+ * Mapea tipos de entrenamiento a constantes de Google Fit
+ */
+function mapWorkoutTypeToGoogleFit(workoutType: string): number {
+  // Códigos de actividad de Google Fit
+  const typeMap: { [key: string]: number } = {
+    'Traditional Strength Training': 80, // WEIGHT_TRAINING
+    'Cardio': 8, // RUNNING
+    'HIIT': 93, // HIGH_INTENSITY_INTERVAL_TRAINING
+    'Yoga': 84, // YOGA
+    'Cross Training': 91, // CROSSFIT
+    'Functional Strength Training': 80, // WEIGHT_TRAINING
+  };
+
+  return typeMap[workoutType] || 80; // Default: WEIGHT_TRAINING
 }
 
 /**

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Luxor Fitness",
     "slug": "fitmind",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.luxorfitness.app",
-      "buildNumber": "9",
+      "buildNumber": "16",
       "infoPlist": {
         "NSHealthShareUsageDescription": "Luxor Fitness necesita acceso a tus datos de salud para mostrarte estadísticas personalizadas de pasos, calorías, distancia y sueño.",
         "NSHealthUpdateUsageDescription": "Luxor Fitness puede actualizar tus datos de salud cuando registres entrenamientos.",
@@ -70,6 +70,23 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#ffb300"
+        }
+      ],
+      [
+        "react-native-health",
+        {
+          "healthSharePermission": "Luxor Fitness necesita acceso a tus datos de salud para mostrarte estadísticas personalizadas de pasos, calorías, distancia y sueño.",
+          "healthUpdatePermission": "Luxor Fitness puede actualizar tus datos de salud cuando registres entrenamientos."
+        }
+      ],
+      [
+        "react-native-google-fit",
+        {}
+      ],
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "Luxor Fitness necesita acceso a los sensores de movimiento para contar tus pasos."
         }
       ]
     ],

@@ -24,7 +24,7 @@ export default function Index() {
         console.log('🔍 Verificando perfil para usuario:', user.id);
         const { data, error } = await supabase
           .from('user_profiles')
-          .select('id, name, fitness_level')
+          .select('id, name, username')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -34,7 +34,9 @@ export default function Index() {
           console.log('📊 Datos del perfil:', data);
         }
 
-        const hasProfile = !!data && !!(data as any).name && !!(data as any).fitness_level;
+        // El onboarding simplificado solo requiere name y username
+        // fitness_level se recopila más tarde al generar un plan
+        const hasProfile = !!data && !!(data as any).name && !!(data as any).username;
         console.log('✅ Usuario tiene perfil completo:', hasProfile);
 
         if (hasProfile) {

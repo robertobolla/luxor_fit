@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser, useAuth } from '@clerk/clerk-expo';
 import Svg, { Circle } from 'react-native-svg';
 import { supabase } from '@/services/supabase';
-import { getHealthDataForDate, requestHealthPermissions, hasHealthPermissions, resetPermissionsCache } from '@/services/healthService';
+import { getHealthDataForDate, requestHealthPermissions, hasHealthPermissions, resetPermissionsCache, showHealthDiagnosticsAlert, getHealthDiagnostics, HealthData } from '@/services/healthService';
 import { getExerciseDaysThisWeek, getGymDaysThisWeek } from '@/services/exerciseService';
 import DashboardCustomizationModal from '@/components/DashboardCustomizationModal';
 import { DashboardConfig, MetricType, AVAILABLE_METRICS, PRESET_PRIORITIES } from '@/types/dashboard';
@@ -90,7 +90,7 @@ export default function DashboardScreen() {
   const { isLoading: isCheckingOnboarding, setLoading: setIsCheckingOnboarding, executeAsync } = useLoadingState(true);
   const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
 
-  // Datos de ejemplo
+  // Datos de salud
   const [stats, setStats] = useState({
     steps: 0,
     stepsGoal: 10000,
@@ -110,6 +110,9 @@ export default function DashboardScreen() {
     water: 0,
     waterGoal: 2000,
   });
+  
+  // Fuente de datos de salud
+  const [healthDataSource, setHealthDataSource] = useState<'apple_health' | 'google_fit' | 'expo_pedometer' | 'none'>('none');
 
   // Verificar si el usuario completó el onboarding
   useEffect(() => {
@@ -122,7 +125,7 @@ export default function DashboardScreen() {
         await executeAsync(async () => {
           const { data, error } = await supabase
             .from('user_profiles')
-            .select('id, name, fitness_level')
+            .select('id, name, username')
             .eq('user_id', user.id)
             .maybeSingle();
 
@@ -130,7 +133,9 @@ export default function DashboardScreen() {
             console.error('Error al verificar onboarding:', error);
           }
 
-          const hasProfile = !!data && !!data.name && !!data.fitness_level;
+          // El onboarding simplificado solo requiere name y username
+          // fitness_level se recopila más tarde al generar un plan
+          const hasProfile = !!data && !!data.name && !!data.username;
 
           if (!hasProfile) {
             // Redirigir al onboarding si no tiene perfil
@@ -214,8 +219,11 @@ export default function DashboardScreen() {
     try {
       if (!user?.id) return;
       
-      // Obtener datos de Apple Health o Google Fit
+      // Obtener datos de Apple Health, Google Fit o Expo Pedometer
       const healthData = await getHealthDataForDate(selectedDate);
+      
+      // Guardar la fuente de datos
+      setHealthDataSource(healthData.source || 'none');
       
       // Obtener días de ejercicio de la semana actual (incluye ejercicios libres y entrenamientos)
       const exerciseDays = await getExerciseDaysThisWeek(user.id);
@@ -235,6 +243,16 @@ export default function DashboardScreen() {
       } else {
         setProfilePhotoUrl(null);
       }
+      
+      // Log para debugging
+      console.log('📊 Datos de salud obtenidos:', {
+        pasos: healthData.steps,
+        distancia: healthData.distance,
+        calorías: healthData.calories,
+        sueño: healthData.sleep,
+        fuente: healthData.source,
+        fecha: selectedDate.toISOString().split('T')[0],
+      });
       
       // Actualizar estados con los datos obtenidos
       setStats({
@@ -258,10 +276,21 @@ export default function DashboardScreen() {
       });
     } catch (error) {
       console.error('Error cargando datos de salud:', error);
-      Alert.alert(
-        'Error',
-        'No se pudieron cargar los datos de salud. Asegúrate de haber dado permisos a la app.'
-      );
+      setHealthDataSource('none');
+    }
+  };
+  
+  // Función para obtener el texto de la fuente de datos
+  const getHealthSourceLabel = () => {
+    switch (healthDataSource) {
+      case 'apple_health':
+        return '🍎 Apple Health';
+      case 'google_fit':
+        return '💚 Google Fit';
+      case 'expo_pedometer':
+        return '📱 Pedómetro del dispositivo';
+      default:
+        return '⚠️ Sin fuente de datos';
     }
   };
 
@@ -426,13 +455,11 @@ export default function DashboardScreen() {
   const weekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
   const completedDays = [false, false, false, false, false, true, false]; // Ejemplo
 
-  // Mostrar skeleton mientras se verifica el onboarding
+  // Mostrar loading mientras se verifica el onboarding
   if (isCheckingOnboarding) {
     return (
       <View style={styles.container}>
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
-          <SkeletonDashboard />
-        </ScrollView>
+        <LoadingOverlay visible={true} message="Verificando perfil..." fullScreen />
       </View>
     );
   }
@@ -632,12 +659,16 @@ export default function DashboardScreen() {
           <TouchableOpacity 
             style={styles.card}
             onPress={() => router.push('/(tabs)/steps-detail')}
+            onLongPress={() => showHealthDiagnosticsAlert()}
           >
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>Pasos</Text>
                 <Text style={styles.cardValue}>{stats.steps.toLocaleString('es-ES')}</Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
+                <Text style={[styles.cardSubtitle, { fontSize: 11, marginTop: 4, color: healthDataSource === 'none' ? '#ff6b6b' : '#4ecdc4' }]}>
+                  {getHealthSourceLabel()}
+                </Text>
               </View>
               <ProgressCircle
                 size={70}
@@ -648,6 +679,15 @@ export default function DashboardScreen() {
                 iconSize={20}
               />
             </View>
+            {healthDataSource === 'none' && (
+              <TouchableOpacity 
+                style={styles.diagnosticButton}
+                onPress={() => showHealthDiagnosticsAlert()}
+              >
+                <Ionicons name="help-circle-outline" size={16} color="#ffb300" />
+                <Text style={styles.diagnosticButtonText}>¿Por qué no veo mis pasos?</Text>
+              </TouchableOpacity>
+            )}
           </TouchableOpacity>
 
           <TouchableOpacity 
@@ -1031,5 +1071,20 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
+  },
+  diagnosticButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#3a3a3a',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 12,
+    gap: 6,
+  },
+  diagnosticButtonText: {
+    color: '#ffb300',
+    fontSize: 12,
+    fontWeight: '500',
   },
 });

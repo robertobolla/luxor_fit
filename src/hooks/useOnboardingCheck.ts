@@ -23,7 +23,7 @@ export function useOnboardingCheck() {
         // Verificar si el usuario ya completó el onboarding
         const { data, error } = await supabase
           .from('user_profiles')
-          .select('id, name, fitness_level')
+          .select('id, name, username')
           .eq('user_id', user.id)
           .single();
 
@@ -32,7 +32,9 @@ export function useOnboardingCheck() {
           console.error('Error al verificar onboarding:', error);
         }
 
-        const hasProfile = !!data && !!data.name && !!data.fitness_level;
+        // El onboarding simplificado solo requiere name y username
+        // fitness_level se recopila más tarde al generar un plan
+        const hasProfile = !!data && !!data.name && !!data.username;
         setHasCompletedOnboarding(hasProfile);
 
         // Si el usuario no ha completado el onboarding y no está en la ruta de onboarding

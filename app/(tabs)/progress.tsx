@@ -139,7 +139,7 @@ export default function ProgressScreen() {
       await executeAsync(async () => {
         const { data, error } = await supabase
           .from('user_profiles')
-          .select('id, name, fitness_level')
+          .select('id, name, username')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -147,7 +147,9 @@ export default function ProgressScreen() {
           console.error('Error al verificar onboarding:', error);
         }
 
-        const hasProfile = !!data && !!data.name && !!data.fitness_level;
+        // El onboarding simplificado solo requiere name y username
+        // fitness_level se recopila más tarde al generar un plan
+        const hasProfile = !!data && !!data.name && !!data.username;
 
         if (!hasProfile) {
           // Redirigir al onboarding si no tiene perfil
