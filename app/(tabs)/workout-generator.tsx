@@ -371,8 +371,21 @@ export default function WorkoutGeneratorScreen() {
       }
     }
 
-    // Redirigir a la pantalla de entrenamientos
-    router.replace('/(tabs)/workout');
+    // Limpiar estados antes de navegar
+    setGeneratedPlan(null);
+    setNewPlanId(null);
+    setShowForm(false);
+    setFormStep(0);
+    setError('');
+
+    // Pequeño delay para asegurar que los estados se limpien antes de navegar
+    setTimeout(() => {
+      // Navegar al detalle del plan recién creado para que lo vea inmediatamente
+      router.replace({
+        pathname: '/(tabs)/workout-plan-detail',
+        params: { planId: newPlanId }
+      } as any);
+    }, 100);
   };
 
   const handleUsePlan = () => {
