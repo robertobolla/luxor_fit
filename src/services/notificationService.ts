@@ -1,10 +1,16 @@
 // ============================================================================
-// NOTIFICATION SERVICE
+// NOTIFICATION SERVICE - Sistema de Notificaciones Inteligente
 // ============================================================================
 
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Keys para AsyncStorage
+const NOTIFICATIONS_SETUP_KEY = 'notifications_setup_done';
+const LAST_WORKOUT_CHECK_KEY = 'last_workout_notification_check';
+const LAST_LUNCH_CHECK_KEY = 'last_lunch_notification_check';
 
 // Configurar cómo se muestran las notificaciones cuando la app está abierta
 Notifications.setNotificationHandler({
@@ -66,139 +72,83 @@ export async function cancelAllNotifications() {
 }
 
 // ============================================================================
-// NOTIFICACIÓN: RECORDAR MARCAR ENTRENAMIENTO
+// NOTIFICACIÓN: RECORDAR MARCAR ENTRENAMIENTO (8 PM)
 // ============================================================================
 
 export async function scheduleWorkoutReminderNotification(userId: string) {
-  // Cancelar notificaciones anteriores de este tipo
-  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-  for (const notif of scheduled) {
-    if (notif.content.data?.type === 'workout_reminder') {
-      await Notifications.cancelScheduledNotificationAsync(notif.identifier);
+  try {
+    // Cancelar notificaciones anteriores de este tipo
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const notif of scheduled) {
+      if (notif.content.data?.type === 'workout_reminder') {
+        await Notifications.cancelScheduledNotificationAsync(notif.identifier);
+      }
     }
+
+    // Programar notificación para las 8:00 PM todos los días
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '💪 ¿Entrenaste hoy?',
+        body: 'No olvides marcar tu entrenamiento como completado',
+        data: { type: 'workout_reminder', userId },
+        sound: true,
+      },
+      trigger: {
+        hour: 20,
+        minute: 0,
+        repeats: true,
+      },
+    });
+
+    console.log('📅 Notificación de entrenamiento programada para 8:00 PM:', id);
+    return id;
+  } catch (error) {
+    console.error('Error programando notificación de entrenamiento:', error);
+    return null;
   }
-
-  // Programar notificación para las 8:00 PM todos los días
-  const trigger: Notifications.DailyNotificationTrigger = {
-    hour: 20,
-    minute: 0,
-    repeats: true,
-  };
-
-  const id = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: '💪 ¿Entrenaste hoy?',
-      body: 'No olvides marcar tu entrenamiento como completado',
-      data: { type: 'workout_reminder', userId },
-      sound: true,
-    },
-    trigger,
-  });
-
-  console.log('📅 Notificación de entrenamiento programada:', id);
-  return id;
 }
 
 // ============================================================================
-// NOTIFICACIÓN: RECORDAR REGISTRAR ALMUERZO
+// NOTIFICACIÓN: RECORDAR REGISTRAR ALMUERZO (2 PM)
 // ============================================================================
 
 export async function scheduleLunchReminderNotification(userId: string) {
-  // Cancelar notificaciones anteriores de este tipo
-  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-  for (const notif of scheduled) {
-    if (notif.content.data?.type === 'lunch_reminder') {
-      await Notifications.cancelScheduledNotificationAsync(notif.identifier);
+  try {
+    // Cancelar notificaciones anteriores de este tipo
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const notif of scheduled) {
+      if (notif.content.data?.type === 'lunch_reminder') {
+        await Notifications.cancelScheduledNotificationAsync(notif.identifier);
+      }
     }
-  }
 
-  // Programar notificación para las 2:00 PM todos los días
-  const trigger: Notifications.DailyNotificationTrigger = {
-    hour: 14,
-    minute: 0,
-    repeats: true,
-  };
+    // Programar notificación para las 2:00 PM todos los días
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '🍽️ ¿Ya almorzaste?',
+        body: 'Registra tu almuerzo para llevar un mejor control de tu nutrición',
+        data: { type: 'lunch_reminder', userId },
+        sound: true,
+      },
+      trigger: {
+        hour: 14,
+        minute: 0,
+        repeats: true,
+      },
+    });
 
-  const id = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: '🍽️ ¿Ya almorzaste?',
-      body: 'Registra tu almuerzo para llevar un mejor control de tu nutrición',
-      data: { type: 'lunch_reminder', userId },
-      sound: true,
-    },
-    trigger,
-  });
-
-  console.log('📅 Notificación de almuerzo programada:', id);
-  return id;
-}
-
-// ============================================================================
-// VERIFICAR Y ENVIAR RECORDATORIOS INTELIGENTES
-// ============================================================================
-
-export async function checkAndSendSmartReminders(userId: string) {
-  const today = new Date().toISOString().split('T')[0];
-  const currentHour = new Date().getHours();
-
-  // Solo verificar después de las 8 PM para el entrenamiento
-  if (currentHour >= 20) {
-    // Verificar si entrenó hoy
-    const { data: completions } = await supabase
-      .from('workout_completions')
-      .select('id')
-      .eq('user_id', userId)
-      .gte('completed_at', `${today}T00:00:00`)
-      .lte('completed_at', `${today}T23:59:59`)
-      .limit(1);
-
-    if (!completions || completions.length === 0) {
-      // No ha entrenado, enviar notificación
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '💪 ¿Entrenaste hoy?',
-          body: 'No olvides marcar tu entrenamiento como completado',
-          data: { type: 'workout_reminder_smart', userId },
-        },
-        trigger: null, // Enviar inmediatamente
-      });
-    }
-  }
-
-  // Solo verificar después de las 2 PM para el almuerzo
-  if (currentHour >= 14) {
-    // Verificar si registró almuerzo hoy
-    const { data: logs } = await supabase
-      .from('meal_logs')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('meal_type', 'lunch')
-      .gte('datetime', `${today}T00:00:00`)
-      .lte('datetime', `${today}T23:59:59`)
-      .limit(1);
-
-    if (!logs || logs.length === 0) {
-      // No ha registrado almuerzo, enviar notificación
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '🍽️ ¿Ya almorzaste?',
-          body: 'Registra tu almuerzo para llevar un mejor control',
-          data: { type: 'lunch_reminder_smart', userId },
-        },
-        trigger: null, // Enviar inmediatamente
-      });
-    }
+    console.log('📅 Notificación de almuerzo programada para 2:00 PM:', id);
+    return id;
+  } catch (error) {
+    console.error('Error programando notificación de almuerzo:', error);
+    return null;
   }
 }
 
 // ============================================================================
-// NOTIFICACIÓN DE CHECK-IN SEMANAL
+// NOTIFICACIÓN DE CHECK-IN SEMANAL (Lunes 9 AM)
 // ============================================================================
 
-/**
- * Programa notificación de recordatorio para check-in semanal
- * Se envía cada lunes a las 9:00 AM
- */
 export async function scheduleWeeklyCheckinNotification() {
   try {
     // Cancelar notificaciones anteriores del mismo tipo
@@ -224,7 +174,7 @@ export async function scheduleWeeklyCheckinNotification() {
       },
     });
 
-    console.log('✅ Notificación de check-in semanal programada:', id);
+    console.log('✅ Notificación de check-in semanal programada para Lunes 9:00 AM:', id);
     return id;
   } catch (error) {
     console.error('Error programando notificación de check-in:', error);
@@ -233,7 +183,74 @@ export async function scheduleWeeklyCheckinNotification() {
 }
 
 // ============================================================================
-// NOTIFICACIÓN DE LOGRO (para futuro)
+// CONFIGURAR TODAS LAS NOTIFICACIONES DEL USUARIO (SOLO UNA VEZ)
+// ============================================================================
+
+export async function setupUserNotifications(userId: string) {
+  try {
+    // Verificar si ya se configuraron las notificaciones
+    const setupDone = await AsyncStorage.getItem(NOTIFICATIONS_SETUP_KEY);
+    
+    // Solicitar permisos
+    const token = await registerForPushNotificationsAsync();
+    
+    if (!token) {
+      console.log('⚠️ No se pudieron configurar notificaciones (sin permisos)');
+      return false;
+    }
+
+    // Solo programar notificaciones si no se han configurado antes
+    // o si es un nuevo día (para asegurar que estén activas)
+    if (!setupDone) {
+      console.log('📅 Configurando notificaciones por primera vez...');
+      
+      // Programar recordatorios diarios (solo a sus horas específicas)
+      await scheduleWorkoutReminderNotification(userId);
+      await scheduleLunchReminderNotification(userId);
+      
+      // Programar recordatorio semanal de check-in
+      await scheduleWeeklyCheckinNotification();
+
+      // Marcar como configurado
+      await AsyncStorage.setItem(NOTIFICATIONS_SETUP_KEY, new Date().toISOString());
+      
+      console.log('✅ Notificaciones configuradas correctamente');
+    } else {
+      console.log('✅ Notificaciones ya estaban configuradas');
+    }
+
+    return true;
+  } catch (error) {
+    console.error('❌ Error configurando notificaciones:', error);
+    return false;
+  }
+}
+
+// ============================================================================
+// FORZAR RECONFIGURACIÓN DE NOTIFICACIONES
+// ============================================================================
+
+export async function forceReconfigureNotifications(userId: string) {
+  try {
+    // Limpiar el flag de configuración
+    await AsyncStorage.removeItem(NOTIFICATIONS_SETUP_KEY);
+    
+    // Cancelar todas las notificaciones existentes
+    await cancelAllNotifications();
+    
+    // Reconfigurar
+    await setupUserNotifications(userId);
+    
+    console.log('🔄 Notificaciones reconfiguradas');
+    return true;
+  } catch (error) {
+    console.error('Error reconfigurando notificaciones:', error);
+    return false;
+  }
+}
+
+// ============================================================================
+// NOTIFICACIÓN DE LOGRO
 // ============================================================================
 
 export async function sendAchievementNotification(
@@ -255,36 +272,7 @@ export async function sendAchievementNotification(
 }
 
 // ============================================================================
-// CONFIGURAR TODAS LAS NOTIFICACIONES DEL USUARIO
-// ============================================================================
-
-export async function setupUserNotifications(userId: string) {
-  try {
-    // Solicitar permisos
-    const token = await registerForPushNotificationsAsync();
-    
-    if (!token) {
-      console.log('⚠️ No se pudieron configurar notificaciones');
-      return false;
-    }
-
-    // Programar recordatorios diarios
-    await scheduleWorkoutReminderNotification(userId);
-    await scheduleLunchReminderNotification(userId);
-    
-    // Programar recordatorio semanal de check-in
-    await scheduleWeeklyCheckinNotification();
-
-    console.log('✅ Notificaciones configuradas para el usuario:', userId);
-    return true;
-  } catch (error) {
-    console.error('❌ Error configurando notificaciones:', error);
-    return false;
-  }
-}
-
-// ============================================================================
-// NOTIFICACIÓN: NUEVO MENSAJE
+// NOTIFICACIÓN: NUEVO MENSAJE (Solo para mensajes de chat)
 // ============================================================================
 
 export async function sendMessageNotification(
@@ -321,7 +309,7 @@ export async function sendMessageNotification(
         sound: true,
         badge: 1,
       },
-      trigger: null, // Enviar inmediatamente
+      trigger: null, // Enviar inmediatamente (es un mensaje real)
     });
 
     console.log('💬 Notificación de mensaje enviada:', notificationId);
@@ -430,14 +418,14 @@ export function setupNotificationListeners(
   // Cuando se recibe una notificación mientras la app está abierta
   const receivedSubscription = Notifications.addNotificationReceivedListener(
     (notification) => {
-      console.log('📬 Notificación recibida:', notification);
+      console.log('📬 Notificación recibida:', notification.request.content.title);
     }
   );
 
   // Cuando el usuario hace clic en una notificación
   const responseSubscription = Notifications.addNotificationResponseReceivedListener(
     (response) => {
-      console.log('👆 Usuario hizo clic en notificación:', response);
+      console.log('👆 Usuario hizo clic en notificación:', response.notification.request.content.title);
       const data = response.notification.request.content.data;
       onNotificationPress(data);
     }
@@ -450,3 +438,16 @@ export function setupNotificationListeners(
   };
 }
 
+// ============================================================================
+// DEBUG: Ver notificaciones programadas
+// ============================================================================
+
+export async function debugScheduledNotifications() {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  console.log('📋 Notificaciones programadas:');
+  scheduled.forEach((notif, index) => {
+    console.log(`  ${index + 1}. ${notif.content.title} - Type: ${notif.content.data?.type}`);
+    console.log(`     Trigger:`, notif.trigger);
+  });
+  return scheduled;
+}
