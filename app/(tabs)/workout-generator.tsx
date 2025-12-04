@@ -277,10 +277,56 @@ export default function WorkoutGeneratorScreen() {
           }
         }
 
-        // Si se guardó exitosamente, mostrar modal para activar
+        // Si se guardó exitosamente, preguntar si quiere activarlo
         if (saved && planId) {
-          setNewPlanId(planId);
-          setShowActivateModal(true);
+          setGeneratedPlan(null); // Limpiar el plan generado para no mostrar la vista de detalle
+          
+          // Mostrar alerta para activar el plan
+          Alert.alert(
+            '¡Plan Creado!',
+            '¿Quieres activar este plan de entrenamiento ahora?',
+            [
+              {
+                text: 'No, ver después',
+                style: 'cancel',
+                onPress: () => {
+                  // Limpiar estados y navegar a la pestaña Entrenar
+                  setNewPlanId(null);
+                  setShowForm(false);
+                  setFormStep(0);
+                  setError('');
+                  router.replace('/(tabs)/workout' as any);
+                },
+              },
+              {
+                text: 'Sí, activar',
+                onPress: async () => {
+                  try {
+                    // Activar el plan
+                    const { error: rpcError } = await supabase.rpc('activate_workout_plan', {
+                      p_user_id: user.id,
+                      p_plan_id: planId,
+                    });
+
+                    if (rpcError) {
+                      console.error('Error activando plan:', rpcError);
+                      Alert.alert('Error', 'No se pudo activar el plan, pero puedes activarlo manualmente desde la pestaña Entrenar.');
+                    }
+                    
+                    // Limpiar estados y navegar a la pestaña Entrenar
+                    setNewPlanId(null);
+                    setShowForm(false);
+                    setFormStep(0);
+                    setError('');
+                    router.replace('/(tabs)/workout' as any);
+                  } catch (err) {
+                    console.error('Error activando plan:', err);
+                    Alert.alert('Error', 'No se pudo activar el plan.');
+                  }
+                },
+              },
+            ]
+          );
         }
       } else {
         setError('No se pudo generar el plan después de varios intentos');
@@ -680,9 +726,9 @@ export default function WorkoutGeneratorScreen() {
         <StatusBar barStyle="light-content" />
         <View style={styles.generatingContainer}>
           <Ionicons name="fitness" size={80} color="#ffb300" />
-          <LoadingOverlay visible={true} message="Generando tu plan personalizado..." />
+          <LoadingOverlay visible={true} message="Generando plan con IA..." />
           <Text style={styles.generatingTitle}>
-            Generando tu plan personalizado...
+            Generando plan con IA...
           </Text>
           <Text style={styles.generatingSubtext}>
             Analizando tus objetivos, nivel de fitness y disponibilidad

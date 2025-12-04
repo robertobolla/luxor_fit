@@ -700,7 +700,7 @@ export default function CustomPlanDayDetailScreen() {
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-            style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}
+            style={{ flex: 1, justifyContent: 'center', alignItems: 'center', width: '100%' }}
           >
             <TouchableOpacity
               activeOpacity={1}
@@ -1096,9 +1096,9 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: '#2a2a2a',
     borderRadius: 20,
-    padding: 24,
-    width: '100%',
-    maxWidth: 500,
+    padding: 20,
+    width: '95%',
+    maxWidth: 420,
     maxHeight: '90%',
   },
   modalScrollContent: {
@@ -1132,8 +1132,8 @@ const styles = StyleSheet.create({
   repInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    gap: 12,
+    marginBottom: 14,
+    gap: 10,
   },
   addSetButtonBottom: {
     flexDirection: 'row',
@@ -1172,11 +1172,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1a1a1a',
     borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 18,
+    fontWeight: '600',
     color: '#ffffff',
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: '#444',
+    textAlign: 'center',
+    minHeight: 50,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -1206,16 +1210,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   setTypeButton: {
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 8,
-    minWidth: 55,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 10,
+    minWidth: 56,
+    minHeight: 50,
     alignItems: 'center',
     justifyContent: 'center',
   },
   setTypeButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
+    color: '#1a1a1a',
+    fontSize: 18,
     fontWeight: 'bold',
   },
   repInputDisabled: {

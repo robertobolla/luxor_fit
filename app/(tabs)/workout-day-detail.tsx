@@ -482,10 +482,11 @@ export default function WorkoutDayDetailScreen() {
             const sets = isOldFormat ? null : exercise.sets;
             const reps = isOldFormat ? null : exercise.reps;
             const rest = isOldFormat ? null : exercise.rest;
+            const setTypes = isOldFormat ? null : exercise.setTypes;
             const exerciseTips = getExerciseTips(exerciseName);
 
             // Debug log
-            console.log('Exercise:', { isOldFormat, exercise, sets, reps, rest });
+            console.log('Exercise:', { isOldFormat, exercise, sets, reps, rest, setTypes });
 
             const isExpanded = expandedExercises[exerciseName] || false;
 
@@ -553,17 +554,72 @@ export default function WorkoutDayDetailScreen() {
                 )}
 
                 {!isExpanded && !isOldFormat && sets && reps && (
-                  <View style={styles.exerciseStats}>
-                    <View style={styles.statBadge}>
-                      <Ionicons name="repeat" size={16} color="#ffb300" />
-                      <Text style={styles.statBadgeText}>{sets} series</Text>
-                    </View>
-                    <View style={styles.statBadge}>
-                      <Ionicons name="fitness" size={16} color="#ffb300" />
-                      <Text style={styles.statBadgeText}>
-                        {Array.isArray(reps) ? reps.join('-') : reps} reps
-                      </Text>
-                    </View>
+                  <View style={styles.seriesDetailContainer}>
+                    {(() => {
+                      // Convertir reps a array si no lo es
+                      const repsArray = Array.isArray(reps) ? reps : Array(sets).fill(reps);
+                      
+                      // Generar array de series con sus tipos
+                      const seriesData = [];
+                      let normalSeriesCount = 0;
+                      
+                      for (let i = 0; i < sets; i++) {
+                        const setType = setTypes?.[i]?.type || 'normal';
+                        const setReps = repsArray[i] || reps;
+                        
+                        let label = '';
+                        let color = '#ffb300';
+                        let typeText = '';
+                        
+                        switch (setType) {
+                          case 'warmup':
+                            label = 'C';
+                            color = '#4CAF50';
+                            typeText = ' (Calentamiento)';
+                            break;
+                          case 'failure':
+                            label = 'F';
+                            color = '#F44336';
+                            typeText = ' (Al Fallo)';
+                            break;
+                          case 'drop':
+                            label = 'D';
+                            color = '#9C27B0';
+                            typeText = ' (Drop)';
+                            break;
+                          case 'rir':
+                            label = 'R';
+                            color = '#2196F3';
+                            typeText = ' (RIR)';
+                            break;
+                          case 'normal':
+                          default:
+                            normalSeriesCount++;
+                            label = normalSeriesCount.toString();
+                            color = '#ffb300';
+                            typeText = '';
+                        }
+                        
+                        seriesData.push({
+                          label,
+                          reps: setReps,
+                          color,
+                          typeText,
+                        });
+                      }
+                      
+                      return seriesData.map((serie, idx) => (
+                        <View key={idx} style={styles.serieDetailItem}>
+                          <View style={[styles.serieLabel, { backgroundColor: serie.color }]}>
+                            <Text style={styles.serieLabelText}>{serie.label}</Text>
+                          </View>
+                          <Text style={styles.serieDetailText}>
+                            {serie.reps} {typeof serie.reps === 'string' && serie.reps.toLowerCase() === 'al fallo' ? '' : 'reps'}
+                            <Text style={styles.serieTypeText}>{serie.typeText}</Text>
+                          </Text>
+                        </View>
+                      ));
+                    })()}
                   </View>
                 )}
 
@@ -993,6 +1049,40 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     marginBottom: 16,
     gap: 8,
+  },
+  seriesDetailContainer: {
+    flexDirection: 'column',
+    gap: 8,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  serieDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  serieLabel: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  serieLabelText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+  },
+  serieDetailText: {
+    fontSize: 14,
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  serieTypeText: {
+    fontSize: 12,
+    color: '#999',
+    fontWeight: 'normal',
+    fontStyle: 'italic',
   },
   completionSection: {
     paddingHorizontal: 20,

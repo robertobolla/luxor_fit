@@ -414,6 +414,34 @@ export async function generateWorkoutPlan(
     try {
       const plan = parsePlanSafely(planText);
       if (plan) {
+        // Validar que el plan tenga el número correcto de días
+        const requestedDays = userData.available_days;
+        const actualDays = plan.weekly_structure?.length || 0;
+        
+        if (actualDays !== requestedDays) {
+          console.warn(`⚠️ IA generó ${actualDays} días pero se solicitaron ${requestedDays}. Ajustando...`);
+          
+          // Ajustar el plan para tener el número correcto de días
+          if (actualDays < requestedDays) {
+            // Agregar días faltantes duplicando días existentes
+            const daysToAdd = requestedDays - actualDays;
+            for (let i = 0; i < daysToAdd; i++) {
+              const dayIndex = i % actualDays;
+              const dayToCopy = plan.weekly_structure[dayIndex];
+              plan.weekly_structure.push({
+                ...JSON.parse(JSON.stringify(dayToCopy)),
+                day: `Día ${actualDays + i + 1}`,
+              });
+            }
+          } else if (actualDays > requestedDays) {
+            // Reducir al número solicitado
+            plan.weekly_structure = plan.weekly_structure.slice(0, requestedDays);
+          }
+          
+          // Actualizar days_per_week
+          plan.days_per_week = plan.weekly_structure.length;
+        }
+        
         return { success: true, plan };
       }
       console.warn('⚠️ Plan inválido tras intentos de limpieza. Usando plan por defecto.');
@@ -714,12 +742,16 @@ INSTRUCCIONES CRÍTICAS:
    - Incluye referencias a estudios si es relevante
 
 FORMATO JSON REQUERIDO:
+
+⚠️ CRÍTICO: "weekly_structure" DEBE contener EXACTAMENTE ${userData.available_days} días. NO menos, NO más.
+
 {
   "name": "Nombre específico y motivador",
   "description": "Descripción detallada del enfoque y beneficios esperados",
   "duration_weeks": número (8-16 semanas),
   "days_per_week": ${userData.available_days},
   "weekly_structure": [
+    // INCLUIR EXACTAMENTE ${userData.available_days} DÍAS AQUÍ
     {
       "day": "Día 1",
       "focus": "Enfoque específico (ej: Fuerza de tren superior - Empuje)",
@@ -1068,7 +1100,37 @@ function generateDefaultWorkoutPlan(userData: UserProfile): any {
     },
   };
 
-  return plans[userData.fitness_level as keyof typeof plans] || plans.intermediate;
+  // Obtener el plan base según nivel
+  const basePlan = plans[userData.fitness_level as keyof typeof plans] || plans.intermediate;
+  
+  // Asegurar que el número de días en weekly_structure coincida con days_per_week
+  const planCopy = JSON.parse(JSON.stringify(basePlan)); // Deep copy
+  const currentDays = planCopy.weekly_structure.length;
+  const requestedDays = daysPerWeek;
+  
+  if (currentDays < requestedDays) {
+    // Necesitamos agregar más días
+    const daysToAdd = requestedDays - currentDays;
+    
+    // Duplicar días existentes según sea necesario
+    for (let i = 0; i < daysToAdd; i++) {
+      const dayIndex = i % currentDays; // Rotar entre los días existentes
+      const dayToCopy = planCopy.weekly_structure[dayIndex];
+      
+      planCopy.weekly_structure.push({
+        ...dayToCopy,
+        day: `Día ${currentDays + i + 1}`,
+      });
+    }
+  } else if (currentDays > requestedDays) {
+    // Necesitamos menos días de los que tenemos
+    planCopy.weekly_structure = planCopy.weekly_structure.slice(0, requestedDays);
+  }
+  
+  // Actualizar days_per_week para que coincida
+  planCopy.days_per_week = planCopy.weekly_structure.length;
+  
+  return planCopy;
 }
 
 /**

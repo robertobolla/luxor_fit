@@ -142,13 +142,17 @@ export default function WorkoutScreen() {
           {workoutPlans.map((plan) => {
             const planData = plan.plan_data;
             
+            // Verificar si es un plan personalizado (no de IA)
+            const isCustomPlan = plan.description?.toLowerCase().includes('plan personalizado') || false;
+            
             // Verificar si el plan está completo (todos los días tienen ejercicios)
             const totalDays = planData.days_per_week;
             const weeklyStructure = planData.weekly_structure || [];
             const completedDays = weeklyStructure.filter((day: any) => 
               day.exercises && day.exercises.length > 0
             ).length;
-            const isPartialPlan = completedDays < totalDays && completedDays > 0;
+            // Solo considerar parcial si es un plan personalizado Y está incompleto
+            const isPartialPlan = isCustomPlan && completedDays < totalDays && completedDays > 0;
             
             return (
               <View key={plan.id} style={styles.planCard}>
