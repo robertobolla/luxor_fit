@@ -172,6 +172,7 @@ export default function CustomPlanDayDetailScreen() {
   };
 
   const handleSetTypeClick = (index: number) => {
+    console.log('🔘 Click en botón de tipo de serie, índice:', index);
     setSelectedSetIndex(index);
     setShowSetTypeModal(true);
   };
@@ -665,9 +666,10 @@ export default function CustomPlanDayDetailScreen() {
               style={styles.modalContent}
             >
               <ScrollView
-                keyboardShouldPersistTaps="handled"
+                keyboardShouldPersistTaps="always"
                 contentContainerStyle={styles.modalScrollContent}
                 showsVerticalScrollIndicator={false}
+                nestedScrollEnabled={true}
               >
                 <Text style={styles.modalTitle}>
                   Configurar {editingExercise?.name}
@@ -696,7 +698,12 @@ export default function CustomPlanDayDetailScreen() {
                         <View key={idx} style={styles.repInputRow}>
                           <TouchableOpacity
                             style={styles.setTypeButton}
-                            onPress={() => handleSetTypeClick(idx)}
+                            onPress={() => {
+                              console.log('👆 Tocando botón serie', idx);
+                              handleSetTypeClick(idx);
+                            }}
+                            activeOpacity={0.7}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                           >
                             <Text style={styles.setTypeButtonText}>{setLabel}</Text>
                           </TouchableOpacity>
@@ -746,7 +753,11 @@ export default function CustomPlanDayDetailScreen() {
         visible={showSetTypeModal}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowSetTypeModal(false)}
+        onRequestClose={() => {
+          console.log('⛔ Cerrando modal de tipo de serie');
+          setShowSetTypeModal(false);
+        }}
+        onShow={() => console.log('✅ Modal de tipo de serie mostrado, índice:', selectedSetIndex)}
       >
         <TouchableOpacity
           style={styles.setTypeModalOverlay}
@@ -996,7 +1007,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 24,
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 500,
     maxHeight: '90%',
   },
   modalScrollContent: {
@@ -1031,7 +1042,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
-    gap: 8,
+    gap: 12,
   },
   repLabel: {
     fontSize: 14,
@@ -1077,10 +1088,10 @@ const styles = StyleSheet.create({
   },
   setTypeButton: {
     backgroundColor: '#ffb300',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     borderRadius: 8,
-    minWidth: 50,
+    minWidth: 55,
     alignItems: 'center',
     justifyContent: 'center',
   },
