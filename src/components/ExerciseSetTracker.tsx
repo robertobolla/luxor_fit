@@ -59,9 +59,51 @@ export function ExerciseSetTracker({
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
-    initializeSets();
+    loadTodaySetsOrInitialize();
     loadPreviousSets();
   }, [defaultSets, exerciseId]);
+
+  // Cargar las series de hoy (si existen) o inicializar vacías
+  const loadTodaySetsOrInitialize = async () => {
+    try {
+      // Intentar cargar las series guardadas hoy
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      const { data, error } = await supabase
+        .from('exercise_sets')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('exercise_id', exerciseId)
+        .gte('created_at', `${today}T00:00:00`)
+        .lte('created_at', `${today}T23:59:59`)
+        .order('set_number', { ascending: true });
+
+      if (error) {
+        console.error('Error loading today sets:', error);
+        initializeSets();
+        return;
+      }
+
+      if (data && data.length > 0) {
+        // Hay series guardadas hoy, cargarlas
+        const loadedSets: ExerciseSet[] = data.map(set => ({
+          set_number: set.set_number,
+          reps: set.reps,
+          weight_kg: set.weight_kg,
+          duration_seconds: set.duration_seconds,
+        }));
+        setSets(loadedSets);
+        onSetsChange?.(loadedSets);
+        console.log('✅ Series de hoy cargadas:', loadedSets.length);
+      } else {
+        // No hay series guardadas hoy, inicializar vacías
+        initializeSets();
+      }
+    } catch (err) {
+      console.error('Error loading today sets:', err);
+      initializeSets();
+    }
+  };
 
   // Inicializar las series con la cantidad por defecto
   const initializeSets = () => {
@@ -175,7 +217,23 @@ export function ExerciseSetTracker({
         return;
       }
 
-      // Preparar los datos para insertar
+      // 1. Primero, eliminar las series existentes de hoy para este ejercicio
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      const { error: deleteError } = await supabase
+        .from('exercise_sets')
+        .delete()
+        .eq('user_id', userId)
+        .eq('exercise_id', exerciseId)
+        .gte('created_at', `${today}T00:00:00`)
+        .lte('created_at', `${today}T23:59:59`);
+
+      if (deleteError) {
+        console.error('Error eliminando series anteriores:', deleteError);
+        // Continuar de todos modos, puede que no hayan series previas
+      }
+
+      // 2. Preparar los datos para insertar
       const setsData = setsToSave.map(set => ({
         user_id: userId,
         workout_session_id: sessionId || null,
@@ -190,6 +248,7 @@ export function ExerciseSetTracker({
 
       console.log('💾 Guardando series:', setsData);
 
+      // 3. Insertar las nuevas series
       const { error } = await supabase
         .from('exercise_sets')
         .insert(setsData);
