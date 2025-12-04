@@ -248,7 +248,7 @@ export default function WorkoutPlanDetailScreen() {
               }
 
               Alert.alert('Éxito', 'Plan eliminado correctamente');
-              router.back();
+              router.push('/(tabs)/workout' as any);
             } catch (err) {
               console.error('Error inesperado:', err);
               Alert.alert('Error', 'Ocurrió un error inesperado');
@@ -319,8 +319,8 @@ export default function WorkoutPlanDetailScreen() {
         <View style={[styles.container, styles.centerContent]}>
           <Ionicons name="alert-circle-outline" size={64} color="#FF5722" />
           <Text style={styles.errorText}>{error || 'Plan no encontrado'}</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Volver</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(tabs)/workout' as any)}>
+            <Text style={styles.backButtonText}>Volver a Entrenar</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -411,16 +411,8 @@ export default function WorkoutPlanDetailScreen() {
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => {
-              try {
-                if (router.canGoBack && router.canGoBack()) {
-                  router.back();
-                } else {
-                  throw new Error('Cannot go back');
-                }
-              } catch (error) {
-                // Si no hay pantalla anterior, navegar a workout
-                router.push('/(tabs)/workout' as any);
-              }
+              // Siempre volver a la pestaña de Entrenar
+              router.push('/(tabs)/workout' as any);
             }} 
             style={styles.backIconButton}
           >

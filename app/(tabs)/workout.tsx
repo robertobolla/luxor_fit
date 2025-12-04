@@ -141,6 +141,15 @@ export default function WorkoutScreen() {
           <Text style={styles.sectionTitle}>📋 Mis Planes de Entrenamiento</Text>
           {workoutPlans.map((plan) => {
             const planData = plan.plan_data;
+            
+            // Verificar si el plan está completo (todos los días tienen ejercicios)
+            const totalDays = planData.days_per_week;
+            const weeklyStructure = planData.weekly_structure || [];
+            const completedDays = weeklyStructure.filter((day: any) => 
+              day.exercises && day.exercises.length > 0
+            ).length;
+            const isPartialPlan = completedDays < totalDays && completedDays > 0;
+            
             return (
               <View key={plan.id} style={styles.planCard}>
                 <View style={styles.planHeader}>
@@ -148,14 +157,31 @@ export default function WorkoutScreen() {
                     <Ionicons name="fitness" size={24} color="#ffb300" />
                     <Text style={styles.planName}>{plan.plan_name}</Text>
                   </View>
-                  {plan.is_active && (
-                    <View style={styles.activeBadge}>
-                      <Text style={styles.activeBadgeText}>Activo</Text>
-                    </View>
-                  )}
+                  <View style={styles.badgesContainer}>
+                    {plan.is_active && (
+                      <View style={styles.activeBadge}>
+                        <Text style={styles.activeBadgeText}>Activo</Text>
+                      </View>
+                    )}
+                    {isPartialPlan && (
+                      <View style={styles.draftBadge}>
+                        <Ionicons name="create-outline" size={10} color="#1a1a1a" />
+                        <Text style={styles.draftBadgeText}>Borrador</Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
                 
                 <Text style={styles.planDescription}>{plan.description}</Text>
+                
+                {isPartialPlan && (
+                  <View style={styles.progressInfo}>
+                    <Ionicons name="information-circle-outline" size={14} color="#ff9800" />
+                    <Text style={styles.progressText}>
+                      {completedDays} de {totalDays} días completados
+                    </Text>
+                  </View>
+                )}
                 
                 <View style={styles.planStats}>
                   <View style={styles.stat}>
@@ -175,12 +201,30 @@ export default function WorkoutScreen() {
                 </View>
 
                 <View style={styles.planActions}>
+                  {isPartialPlan && (
+                    <TouchableOpacity
+                      style={styles.continueEditButton}
+                      onPress={() => router.push({
+                        pathname: '/(tabs)/workout/custom-plan-days',
+                        params: {
+                          planId: plan.id,
+                          daysPerWeek: totalDays,
+                          equipment: JSON.stringify([]),
+                        }
+                      } as any)}
+                    >
+                      <Ionicons name="create-outline" size={16} color="#1a1a1a" />
+                      <Text style={styles.continueEditButtonText}>Continuar Editando</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
-                    style={styles.viewPlanButton}
+                    style={[styles.viewPlanButton, isPartialPlan && styles.viewPlanButtonSecondary]}
                     onPress={() => router.push(`/(tabs)/workout-plan-detail?planId=${plan.id}` as any)}
                   >
-                    <Ionicons name="eye" size={16} color="#ffffff" />
-                    <Text style={styles.viewPlanButtonText}>Ver Plan Completo</Text>
+                    <Ionicons name="eye" size={16} color={isPartialPlan ? "#ffb300" : "#ffffff"} />
+                    <Text style={[styles.viewPlanButtonText, isPartialPlan && styles.viewPlanButtonTextSecondary]}>
+                      Ver Plan
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
@@ -599,6 +643,10 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     flex: 1,
   },
+  badgesContainer: {
+    flexDirection: 'row',
+    gap: 6,
+  },
   activeBadge: {
     backgroundColor: '#ffb300',
     paddingHorizontal: 10,
@@ -609,6 +657,37 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     fontSize: 12,
     fontWeight: '600',
+  },
+  draftBadge: {
+    backgroundColor: '#ff9800',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  draftBadgeText: {
+    color: '#1a1a1a',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  progressInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 152, 0, 0.3)',
+  },
+  progressText: {
+    color: '#ff9800',
+    fontSize: 12,
+    fontWeight: '500',
   },
   planDescription: {
     fontSize: 14,
@@ -623,6 +702,21 @@ const styles = StyleSheet.create({
   },
   planActions: {
     marginBottom: 12,
+    gap: 8,
+  },
+  continueEditButton: {
+    backgroundColor: '#ff9800',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  continueEditButtonText: {
+    color: '#1a1a1a',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
   },
   viewPlanButton: {
     backgroundColor: '#ffb300',
@@ -632,11 +726,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
   },
+  viewPlanButtonSecondary: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#ffb300',
+  },
   viewPlanButtonText: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
     marginLeft: 6,
+  },
+  viewPlanButtonTextSecondary: {
+    color: '#ffb300',
   },
   planDate: {
     fontSize: 12,

@@ -249,8 +249,8 @@ export default function WorkoutDayDetailScreen() {
         <View style={[styles.container, styles.centerContent]}>
           <Ionicons name="alert-circle-outline" size={64} color="#FF5722" />
           <Text style={styles.errorText}>No se encontraron datos del día</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Volver</Text>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(tabs)/workout' as any)}>
+            <Text style={styles.backButtonText}>Volver a Entrenar</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -394,21 +394,12 @@ export default function WorkoutDayDetailScreen() {
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => {
-              // Intentar volver atrás primero
-              try {
-                if (router.canGoBack && router.canGoBack()) {
-                  router.back();
-                } else {
-                  throw new Error('Cannot go back');
-                }
-              } catch (error) {
-                // Si no hay pantalla anterior, navegar según el planId
-                const planId = params.planId;
-                if (planId) {
-                  router.push(`/(tabs)/workout-plan-detail?planId=${planId}` as any);
-                } else {
-                  router.push('/(tabs)/workout' as any);
-                }
+              // Volver al plan o a la pestaña de entrenar
+              const planId = params.planId;
+              if (planId) {
+                router.push(`/(tabs)/workout-plan-detail?planId=${planId}` as any);
+              } else {
+                router.push('/(tabs)/workout' as any);
               }
             }} 
             style={styles.backIconButton}

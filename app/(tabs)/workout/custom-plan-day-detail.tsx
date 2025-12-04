@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   SafeAreaView,
   StatusBar,
   TextInput,
@@ -54,6 +55,7 @@ export default function CustomPlanDayDetailScreen() {
     }
   };
 
+  const weekNumber = parseDayNumber(params.weekNumber as string);
   const dayNumber = parseDayNumber(params.dayNumber as string);
   const equipment = parseSafeJSON(params.equipment as string, []);
   const dayData = parseSafeJSON(params.dayData as string, { exercises: [] });
@@ -71,6 +73,11 @@ export default function CustomPlanDayDetailScreen() {
   const [showSetTypeModal, setShowSetTypeModal] = useState(false);
   const [selectedSetIndex, setSelectedSetIndex] = useState<number>(-1);
 
+  // Debug: Verificar estado del modal en cada render
+  useEffect(() => {
+    console.log('🔍 Estado modal cambió:', { showSetTypeModal, selectedSetIndex });
+  }, [showSetTypeModal, selectedSetIndex]);
+
   // Resetear estado cuando cambia el dayNumber
   useEffect(() => {
     setExercises([]);
@@ -83,22 +90,34 @@ export default function CustomPlanDayDetailScreen() {
 
   useEffect(() => {
     if (editingExercise) {
-      setSets(editingExercise.sets.toString());
-      setReps(editingExercise.reps.map(r => r.toString()));
+      // Resetear modal de tipos al abrir configuración
+      setShowSetTypeModal(false);
+      setSelectedSetIndex(-1);
+      
+      // Si no hay series configuradas, crear 3 por defecto
+      const hasReps = editingExercise.reps && editingExercise.reps.length > 0;
+      const initialReps = hasReps ? editingExercise.reps.map(r => r.toString()) : ['', '', ''];
+      const initialSets = hasReps ? editingExercise.sets : 3;
+      
+      setSets(initialSets.toString());
+      setReps(initialReps);
       
       // Cargar tipos de series o crear por defecto
       if (editingExercise.setTypes && editingExercise.setTypes.length > 0) {
         setSetTypes(editingExercise.setTypes);
       } else {
         // Crear tipos de series por defecto (todas normales)
-        const defaultSetTypes: SetInfo[] = editingExercise.reps.map((rep, idx) => ({
+        const defaultSetTypes: SetInfo[] = initialReps.map((rep) => ({
           type: 'normal',
-          reps: rep,
+          reps: parseInt(rep) || null,
         }));
         setSetTypes(defaultSetTypes);
       }
     } else {
+      // Cuando se cierra el modal principal, resetear todo
       setSetTypes([]);
+      setShowSetTypeModal(false);
+      setSelectedSetIndex(-1);
     }
   }, [editingExercise]);
 
@@ -114,29 +133,31 @@ export default function CustomPlanDayDetailScreen() {
     });
   };
 
-  const handleSetsChange = (text: string) => {
-    const numSets = parseInt(text) || 0;
-    setSets(text);
+  const handleAddSet = () => {
+    const newReps = [...reps, ''];
+    const newSetTypes = [...setTypes, { type: 'normal', reps: null }];
     
-    // Ajustar array de reps
-    const newReps = [...reps];
-    while (newReps.length < numSets) {
-      newReps.push('');
-    }
-    while (newReps.length > numSets) {
-      newReps.pop();
-    }
     setReps(newReps);
-    
-    // Ajustar array de tipos de series
-    const newSetTypes = [...setTypes];
-    while (newSetTypes.length < numSets) {
-      newSetTypes.push({ type: 'normal', reps: null });
-    }
-    while (newSetTypes.length > numSets) {
-      newSetTypes.pop();
-    }
     setSetTypes(newSetTypes);
+    setSets(newSetTypes.length.toString());
+    
+    console.log('➕ Serie agregada, total:', newSetTypes.length);
+  };
+
+  const handleRemoveSet = (index: number) => {
+    if (setTypes.length <= 1) {
+      Alert.alert('Error', 'Debe haber al menos 1 serie');
+      return;
+    }
+    
+    const newReps = reps.filter((_, i) => i !== index);
+    const newSetTypes = setTypes.filter((_, i) => i !== index);
+    
+    setReps(newReps);
+    setSetTypes(newSetTypes);
+    setSets(newSetTypes.length.toString());
+    
+    console.log('➖ Serie eliminada, total:', newSetTypes.length);
   };
 
   const handleRepsChange = (index: number, text: string) => {
@@ -156,33 +177,37 @@ export default function CustomPlanDayDetailScreen() {
   };
 
   const getSetLabel = (setType: SetInfo, index: number): string => {
-    switch (setType.type) {
-      case 'warmup':
-        return 'C';
-      case 'failure':
-        return 'F';
-      case 'drop':
-        return 'D';
-      case 'rir':
-        return `${index + 1}`;
-      case 'normal':
-      default:
-        return `${index + 1}`;
+    // Si no es normal, devolver la letra directamente
+    if (setType.type === 'warmup') return 'C';
+    if (setType.type === 'failure') return 'F';
+    if (setType.type === 'drop') return 'D';
+    if (setType.type === 'rir') return 'R';
+    
+    // Solo para series normales: contar cuántas hay antes
+    let normalCount = 0;
+    for (let i = 0; i <= index; i++) {
+      const type = setTypes[i]?.type || 'normal';
+      if (type === 'normal') {
+        normalCount++;
+      }
     }
+    return `${normalCount}`;
   };
 
-  const handleSetTypeClick = (index: number) => {
-    console.log('🔘 Click en botón de tipo de serie, índice:', index);
-    console.log('📊 setTypes length:', setTypes.length);
-    console.log('📊 setTypes[index]:', setTypes[index]);
-    console.log('📊 Abriendo modal...');
-    setSelectedSetIndex(index);
-    setShowSetTypeModal(true);
-    
-    // Forzar actualización después de un tick
-    setTimeout(() => {
-      console.log('📊 Estado showSetTypeModal después:', showSetTypeModal);
-    }, 100);
+  const getSetButtonColor = (setType: SetInfo): string => {
+    switch (setType.type) {
+      case 'warmup':
+        return '#4CAF50'; // Verde
+      case 'failure':
+        return '#ff4444'; // Rojo
+      case 'drop':
+        return '#9C27B0'; // Morado
+      case 'rir':
+        return '#2196F3'; // Azul
+      case 'normal':
+      default:
+        return '#ffb300'; // Amarillo
+    }
   };
 
   const handleChangeSetType = (newType: SetType) => {
@@ -212,21 +237,7 @@ export default function CustomPlanDayDetailScreen() {
       setReps(newReps);
     }
     
-    setShowSetTypeModal(false);
-    setSelectedSetIndex(-1);
-  };
-
-  const handleRemoveSet = () => {
-    if (selectedSetIndex === -1) return;
-    
-    // Eliminar la serie del índice seleccionado
-    const newReps = reps.filter((_, idx) => idx !== selectedSetIndex);
-    const newSetTypes = setTypes.filter((_, idx) => idx !== selectedSetIndex);
-    
-    setReps(newReps);
-    setSetTypes(newSetTypes);
-    setSets(newReps.length.toString());
-    
+    // Cerrar modal
     setShowSetTypeModal(false);
     setSelectedSetIndex(-1);
   };
@@ -234,9 +245,13 @@ export default function CustomPlanDayDetailScreen() {
   const handleSaveExercise = () => {
     if (!editingExercise) return;
     
-    const numSets = parseInt(sets) || 0;
+    // Cerrar modal de tipos si está abierto
+    setShowSetTypeModal(false);
+    setSelectedSetIndex(-1);
+    
+    const numSets = setTypes.length;
     if (numSets === 0) {
-      Alert.alert('Error', 'Debes ingresar al menos 1 serie');
+      Alert.alert('Error', 'Debes agregar al menos 1 serie');
       return;
     }
 
@@ -298,7 +313,7 @@ export default function CustomPlanDayDetailScreen() {
         name: dayName,
         exercises,
       };
-      await AsyncStorage.setItem(`day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
+      await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
       
       // Navegar de vuelta a la pantalla de días
       router.push({
@@ -340,7 +355,7 @@ export default function CustomPlanDayDetailScreen() {
           }
           
           // Luego cargar desde AsyncStorage (sobrescribe si existe)
-          const dayDataStr = await AsyncStorage.getItem(`day_${dayNumber}_data`);
+          const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
           if (dayDataStr) {
             const savedDayData = parseSafeJSON(dayDataStr, {});
             // Verificar que los datos guardados correspondan al día correcto
@@ -403,7 +418,7 @@ export default function CustomPlanDayDetailScreen() {
                   name: currentDayName,
                   exercises: updatedExercises,
                 };
-                await AsyncStorage.setItem(`day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
+                await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
               } catch (error) {
                 console.error('Error saving updated day data:', error);
               }
@@ -440,7 +455,7 @@ export default function CustomPlanDayDetailScreen() {
           }
           
           // Luego cargar desde AsyncStorage (sobrescribe si existe)
-          const dayDataStr = await AsyncStorage.getItem(`day_${dayNumber}_data`);
+          const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
           if (dayDataStr) {
             const savedDayData = parseSafeJSON(dayDataStr, {});
             // Verificar que los datos guardados correspondan al día correcto
@@ -522,7 +537,7 @@ export default function CustomPlanDayDetailScreen() {
               setIsEditingDayName(false);
               // Guardar el nombre del día en AsyncStorage cuando se sale del campo
               try {
-                const dayDataStr = await AsyncStorage.getItem(`day_${dayNumber}_data`);
+                const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
                 if (dayDataStr) {
                   const dayData = parseSafeJSON(dayDataStr, { dayNumber, exercises: [] });
                   dayData.name = dayName.trim() || `Día ${dayNumber}`;
@@ -534,7 +549,7 @@ export default function CustomPlanDayDetailScreen() {
                     name: dayName.trim() || `Día ${dayNumber}`,
                     exercises: exercises,
                   };
-                  await AsyncStorage.setItem(`day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
+                  await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
                 }
               } catch (error) {
                 console.error('Error saving day name:', error);
@@ -544,7 +559,7 @@ export default function CustomPlanDayDetailScreen() {
               setIsEditingDayName(false);
               // Guardar el nombre del día en AsyncStorage cuando se presiona Enter
               try {
-                const dayDataStr = await AsyncStorage.getItem(`day_${dayNumber}_data`);
+                const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
                 if (dayDataStr) {
                   const dayData = parseSafeJSON(dayDataStr, { dayNumber, exercises: [] });
                   dayData.name = dayName.trim() || `Día ${dayNumber}`;
@@ -556,7 +571,7 @@ export default function CustomPlanDayDetailScreen() {
                     name: dayName.trim() || `Día ${dayNumber}`,
                     exercises: exercises,
                   };
-                  await AsyncStorage.setItem(`day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
+                  await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
                 }
               } catch (error) {
                 console.error('Error saving day name:', error);
@@ -625,8 +640,18 @@ export default function CustomPlanDayDetailScreen() {
                           case 'warmup': return 'C';
                           case 'failure': return 'F';
                           case 'drop': return 'D';
-                          case 'rir': return `${idx + 1} RIR`;
-                          default: return `${idx + 1}`;
+                          case 'rir': return 'R';
+                          case 'normal':
+                          default:
+                            // Contar cuántas series normales hay antes de esta
+                            let normalCount = 0;
+                            for (let i = 0; i <= idx; i++) {
+                              const type = (exercise.setTypes || [])[i]?.type || 'normal';
+                              if (type === 'normal') {
+                                normalCount++;
+                              }
+                            }
+                            return `${normalCount}`;
                         }
                       })();
                       
@@ -693,46 +718,32 @@ export default function CustomPlanDayDetailScreen() {
                 </Text>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Número de series</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={sets}
-                    onChangeText={handleSetsChange}
-                    keyboardType="number-pad"
-                    placeholder="Ej: 3"
-                  />
-                </View>
-
-                {parseInt(sets) > 0 && (
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Repeticiones por serie</Text>
-                    {Array.from({ length: parseInt(sets) || 0 }).map((_, idx) => {
-                      // Asegurar que existe un setType para este índice
-                      if (!setTypes[idx]) {
-                        const tempSetTypes = [...setTypes];
-                        tempSetTypes[idx] = { type: 'normal', reps: null };
-                        setSetTypes(tempSetTypes);
-                      }
-                      
-                      const setType = setTypes[idx] || { type: 'normal', reps: null };
+                  <Text style={styles.label}>Series</Text>
+                  
+                  {setTypes.length > 0 ? (
+                    setTypes.map((setType, idx) => {
                       const isFailure = setType.type === 'failure';
                       const setLabel = getSetLabel(setType, idx);
+                      const buttonColor = getSetButtonColor(setType);
                       
                       return (
                         <View key={idx} style={styles.repInputRow}>
-                          <TouchableOpacity
-                            style={styles.setTypeButton}
+                          <Pressable
+                            style={[styles.setTypeButton, { backgroundColor: buttonColor }]}
                             onPress={() => {
-                              console.log('👆 Tocando botón serie', idx, 'setType:', setType);
-                              console.log('📊 Estado actual setTypes:', setTypes);
-                              console.log('📊 Estado actual showSetTypeModal:', showSetTypeModal);
-                              handleSetTypeClick(idx);
+                              console.log('✅ PRESS detectado para serie', idx);
+                              setSelectedSetIndex(idx);
+                              setShowSetTypeModal(true);
                             }}
-                            activeOpacity={0.7}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            onPressIn={() => console.log('👆 PRESS IN detectado')}
+                            onPressOut={() => console.log('👆 PRESS OUT detectado')}
                           >
-                            <Text style={styles.setTypeButtonText}>{setLabel}</Text>
-                          </TouchableOpacity>
+                            {({ pressed }) => (
+                              <Text style={[styles.setTypeButtonText, pressed && { opacity: 0.7 }]}>
+                                {setLabel}
+                              </Text>
+                            )}
+                          </Pressable>
                           <TextInput
                             style={[styles.repInput, isFailure && styles.repInputDisabled]}
                             value={isFailure ? 'Al fallo' : (reps[idx] || '')}
@@ -744,11 +755,32 @@ export default function CustomPlanDayDetailScreen() {
                           <Text style={styles.repLabel}>
                             {setType.type === 'rir' ? 'RIR' : 'reps'}
                           </Text>
+                          <TouchableOpacity
+                            style={styles.removeSetButton}
+                            onPress={() => handleRemoveSet(idx)}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          >
+                            <Ionicons name="trash-outline" size={20} color="#ff4444" />
+                          </TouchableOpacity>
                         </View>
                       );
-                    })}
-                  </View>
-                )}
+                    })
+                  ) : (
+                    <Text style={styles.emptySeriesText}>
+                      Agrega series para este ejercicio
+                    </Text>
+                  )}
+                  
+                  {/* Botón Agregar Serie abajo */}
+                  <TouchableOpacity
+                    style={styles.addSetButtonBottom}
+                    onPress={handleAddSet}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="add-circle" size={22} color="#ffb300" />
+                    <Text style={styles.addSetButtonText}>Agregar Serie</Text>
+                  </TouchableOpacity>
+                </View>
 
                 <View style={styles.modalButtons}>
                   <TouchableOpacity
@@ -772,145 +804,142 @@ export default function CustomPlanDayDetailScreen() {
             </TouchableOpacity>
           </KeyboardAvoidingView>
         </TouchableOpacity>
-      </Modal>
 
-      {/* Modal para seleccionar tipo de serie */}
-      <Modal
-        visible={showSetTypeModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => {
-          console.log('⛔ Cerrando modal de tipo de serie');
-          setShowSetTypeModal(false);
-          setSelectedSetIndex(-1);
-        }}
-        onShow={() => {
-          console.log('✅ Modal de tipo de serie mostrado');
-          console.log('📊 Índice seleccionado:', selectedSetIndex);
-          console.log('📊 Visible:', showSetTypeModal);
-        }}
-      >
-        <TouchableOpacity
+        {/* Modal ANIDADO para seleccionar tipo de serie */}
+        <Modal
+          key={`setTypeModal-${selectedSetIndex}`}
+          visible={showSetTypeModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => {
+            console.log('⛔ Cerrando modal de tipo de serie');
+            setShowSetTypeModal(false);
+            setSelectedSetIndex(-1);
+          }}
+          onShow={() => {
+            console.log('✅ Modal de tipo de serie MOSTRADO');
+            console.log('📊 selectedSetIndex:', selectedSetIndex);
+          }}
+        >
+        <Pressable
           style={styles.setTypeModalOverlay}
-          activeOpacity={1}
           onPress={() => {
-            console.log('🚪 Click en overlay para cerrar');
+            console.log('🚪 Click en overlay - cerrando modal');
             setShowSetTypeModal(false);
             setSelectedSetIndex(-1);
           }}
         >
-          <TouchableOpacity
-            activeOpacity={1}
+          <Pressable
+            style={styles.setTypeModalContent}
             onPress={(e) => {
               e.stopPropagation();
-              console.log('🛑 Deteniendo propagación en contenido modal');
+              console.log('🛑 Click dentro del contenido - no cerrar');
             }}
-            style={styles.setTypeModalContent}
           >
             <Text style={styles.setTypeModalTitle}>Seleccionar Tipo de Serie</Text>
             
-            <TouchableOpacity
-              style={styles.setTypeOption}
-              onPress={() => {
-                console.log('🟡 Seleccionado: Calentamiento');
-                handleChangeSetType('warmup');
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.setTypeIcon, styles.setTypeIconWarmup]}>
-                <Text style={styles.setTypeIconText}>C</Text>
-              </View>
-              <View style={styles.setTypeInfo}>
-                <Text style={styles.setTypeOptionText}>Serie de Calentamiento</Text>
-                <Text style={styles.setTypeOptionDesc}>Peso ligero para activar músculos</Text>
-              </View>
-              <Ionicons name="information-circle-outline" size={20} color="#888" />
-            </TouchableOpacity>
+            <View style={styles.setTypeOptionsContainer}>
+              <TouchableOpacity
+                style={styles.setTypeOption}
+                onPress={() => {
+                  console.log('🟡 Seleccionado: Calentamiento');
+                  handleChangeSetType('warmup');
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.setTypeIconLarge, styles.setTypeIconWarmup]}>
+                  <Text style={styles.setTypeIconTextLarge}>C</Text>
+                </View>
+                <View style={styles.setTypeInfo}>
+                  <Text style={styles.setTypeOptionText}>Calentamiento</Text>
+                  <Text style={styles.setTypeOptionDesc}>Peso ligero para activar músculos</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.setTypeOption}
+                onPress={() => {
+                  console.log('🟢 Seleccionado: Normal');
+                  handleChangeSetType('normal');
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.setTypeIconLarge, styles.setTypeIconNormal]}>
+                  <Text style={styles.setTypeIconTextLarge}>1</Text>
+                </View>
+                <View style={styles.setTypeInfo}>
+                  <Text style={styles.setTypeOptionText}>Normal</Text>
+                  <Text style={styles.setTypeOptionDesc}>Serie estándar con repeticiones</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.setTypeOption}
+                onPress={() => {
+                  console.log('🔴 Seleccionado: Al Fallo');
+                  handleChangeSetType('failure');
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.setTypeIconLarge, styles.setTypeIconFailure]}>
+                  <Text style={styles.setTypeIconTextLarge}>F</Text>
+                </View>
+                <View style={styles.setTypeInfo}>
+                  <Text style={styles.setTypeOptionText}>Al Fallo</Text>
+                  <Text style={styles.setTypeOptionDesc}>Hasta no poder más</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.setTypeOption}
+                onPress={() => {
+                  console.log('🟣 Seleccionado: Drop');
+                  handleChangeSetType('drop');
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.setTypeIconLarge, styles.setTypeIconDrop]}>
+                  <Text style={styles.setTypeIconTextLarge}>D</Text>
+                </View>
+                <View style={styles.setTypeInfo}>
+                  <Text style={styles.setTypeOptionText}>Drop</Text>
+                  <Text style={styles.setTypeOptionDesc}>Reducir peso y continuar</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.setTypeOption}
+                onPress={() => {
+                  console.log('🔵 Seleccionado: RIR');
+                  handleChangeSetType('rir');
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.setTypeIconLarge, styles.setTypeIconRIR]}>
+                  <Text style={styles.setTypeIconTextLarge}>R</Text>
+                </View>
+                <View style={styles.setTypeInfo}>
+                  <Text style={styles.setTypeOptionText}>RIR (Reps In Reserve)</Text>
+                  <Text style={styles.setTypeOptionDesc}>Reps que faltan para el fallo</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
-              style={styles.setTypeOption}
+              style={styles.setTypeModalCloseButton}
               onPress={() => {
-                console.log('🟢 Seleccionado: Normal');
-                handleChangeSetType('normal');
+                console.log('❌ Cancelar presionado');
+                setShowSetTypeModal(false);
+                setSelectedSetIndex(-1);
               }}
-              activeOpacity={0.7}
             >
-              <View style={[styles.setTypeIcon, styles.setTypeIconNormal]}>
-                <Text style={styles.setTypeIconText}>1</Text>
-              </View>
-              <View style={styles.setTypeInfo}>
-                <Text style={styles.setTypeOptionText}>Serie Normal</Text>
-                <Text style={styles.setTypeOptionDesc}>Serie estándar con repeticiones</Text>
-              </View>
+              <Text style={styles.setTypeModalCloseText}>Cancelar</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.setTypeOption}
-              onPress={() => {
-                console.log('🔴 Seleccionado: Al Fallo');
-                handleChangeSetType('failure');
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.setTypeIcon, styles.setTypeIconFailure]}>
-                <Text style={styles.setTypeIconText}>F</Text>
-              </View>
-              <View style={styles.setTypeInfo}>
-                <Text style={styles.setTypeOptionText}>Serie al Fallo</Text>
-                <Text style={styles.setTypeOptionDesc}>Hasta no poder más</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.setTypeOption}
-              onPress={() => {
-                console.log('🟣 Seleccionado: Drop');
-                handleChangeSetType('drop');
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.setTypeIcon, styles.setTypeIconDrop]}>
-                <Text style={styles.setTypeIconText}>D</Text>
-              </View>
-              <View style={styles.setTypeInfo}>
-                <Text style={styles.setTypeOptionText}>Serie Drop</Text>
-                <Text style={styles.setTypeOptionDesc}>Reducir peso y continuar</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.setTypeOption}
-              onPress={() => {
-                console.log('🔵 Seleccionado: RIR');
-                handleChangeSetType('rir');
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.setTypeIcon, styles.setTypeIconRIR]}>
-                <Text style={styles.setTypeIconText}>R</Text>
-              </View>
-              <View style={styles.setTypeInfo}>
-                <Text style={styles.setTypeOptionText}>RIR (Reps In Reserve)</Text>
-                <Text style={styles.setTypeOptionDesc}>Reps que faltan para el fallo</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.setTypeOption, styles.setTypeOptionDelete]}
-              onPress={() => {
-                console.log('🗑️ Eliminando serie');
-                handleRemoveSet();
-              }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="trash-outline" size={24} color="#ff4444" />
-              <Text style={[styles.setTypeOptionText, styles.setTypeOptionTextDelete]}>
-                Eliminar Serie
-              </Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+        </Modal>
       </Modal>
+
     </SafeAreaView>
   );
 }
@@ -1106,6 +1135,34 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     gap: 12,
   },
+  addSetButtonBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'transparent',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffb300',
+    marginTop: 8,
+  },
+  addSetButtonText: {
+    color: '#ffb300',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  removeSetButton: {
+    padding: 4,
+  },
+  emptySeriesText: {
+    fontSize: 14,
+    color: '#888',
+    textAlign: 'center',
+    paddingVertical: 20,
+    fontStyle: 'italic',
+  },
   repLabel: {
     fontSize: 14,
     color: '#ccc',
@@ -1149,7 +1206,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   setTypeButton: {
-    backgroundColor: '#ffb300',
     paddingHorizontal: 18,
     paddingVertical: 12,
     borderRadius: 8,
@@ -1158,7 +1214,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   setTypeButtonText: {
-    color: '#1a1a1a',
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: 'bold',
   },
@@ -1188,11 +1244,13 @@ const styles = StyleSheet.create({
   setTypeOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-    gap: 12,
+    backgroundColor: '#2a2a2a',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 8,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#333',
   },
   setTypeIcon: {
     width: 40,
@@ -1202,10 +1260,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   setTypeIconWarmup: {
-    backgroundColor: '#ffb300',
+    backgroundColor: '#4CAF50',
   },
   setTypeIconNormal: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#ffb300',
   },
   setTypeIconFailure: {
     backgroundColor: '#ff4444',
@@ -1225,13 +1283,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   setTypeOptionText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#ffffff',
     marginBottom: 2,
   },
   setTypeOptionDesc: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#888',
   },
   setTypeOptionDelete: {
@@ -1244,6 +1302,64 @@ const styles = StyleSheet.create({
   setTypeOptionTextDelete: {
     color: '#ff4444',
     flex: 0,
+  },
+  // Estilos para modal de tipo de serie (compacto)
+  setTypeModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)', // Más oscuro para destacar
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  setTypeModalContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400, // Más compacto
+    borderWidth: 2,
+    borderColor: '#ffb300',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  setTypeModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffb300',
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  setTypeOptionsContainer: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  setTypeIconLarge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setTypeIconTextLarge: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  setTypeModalCloseButton: {
+    backgroundColor: '#333',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  setTypeModalCloseText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
 

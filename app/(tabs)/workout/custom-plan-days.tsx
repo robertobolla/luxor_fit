@@ -23,6 +23,11 @@ interface DayData {
   exercises: any[];
 }
 
+interface WeekData {
+  weekNumber: number;
+  days: DayData[];
+}
+
 export default function CustomPlanDaysScreen() {
   const { user } = useUser();
   const router = useRouter();
@@ -31,13 +36,17 @@ export default function CustomPlanDaysScreen() {
   const equipment = JSON.parse((params.equipment as string) || '[]');
   const editingPlanId = params.planId as string | undefined;
 
-  const [days, setDays] = useState<DayData[]>([]);
+  const [weeks, setWeeks] = useState<WeekData[]>([]);
+  const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [planName, setPlanName] = useState<string>('');
   const [isEditingPlanName, setIsEditingPlanName] = useState(false);
+  
+  // Días de la semana actual
+  const currentWeekDays = weeks[currentWeekIndex]?.days || [];
 
   useEffect(() => {
-    // Inicializar días vacíos
+    // Inicializar primera semana con días vacíos
     const initialDays: DayData[] = [];
     for (let i = 1; i <= daysPerWeek; i++) {
       initialDays.push({
@@ -45,7 +54,14 @@ export default function CustomPlanDaysScreen() {
         exercises: [],
       });
     }
-    setDays(initialDays);
+    
+    const initialWeek: WeekData = {
+      weekNumber: 1,
+      days: initialDays,
+    };
+    
+    setWeeks([initialWeek]);
+    setCurrentWeekIndex(0);
     
     // Cargar nombre del plan y planId desde AsyncStorage
     const loadPlanData = async () => {
@@ -55,6 +71,30 @@ export default function CustomPlanDaysScreen() {
           setPlanName(savedPlanName);
         } else {
           setPlanName(`Plan Personalizado - ${new Date().toLocaleDateString()}`);
+        }
+        
+        // Cargar número de semanas guardadas
+        const savedWeeksCount = await AsyncStorage.getItem('custom_plan_weeks_count');
+        if (savedWeeksCount) {
+          const weeksCount = parseInt(savedWeeksCount);
+          if (weeksCount > 1) {
+            // Cargar múltiples semanas
+            const loadedWeeks: WeekData[] = [];
+            for (let w = 1; w <= weeksCount; w++) {
+              const weekDays: DayData[] = [];
+              for (let d = 1; d <= daysPerWeek; d++) {
+                weekDays.push({
+                  dayNumber: d,
+                  exercises: [],
+                });
+              }
+              loadedWeeks.push({
+                weekNumber: w,
+                days: weekDays,
+              });
+            }
+            setWeeks(loadedWeeks);
+          }
         }
         
         // Si hay un planId en AsyncStorage pero no en params, usarlo
@@ -76,37 +116,47 @@ export default function CustomPlanDaysScreen() {
   // Recargar datos cuando se regresa de la pantalla de detalle del día
   useFocusEffect(
     useCallback(() => {
-      const loadDayData = async () => {
+      const loadWeekData = async () => {
         try {
-          // Limpiar datos de días que no corresponden al plan actual (días > daysPerWeek)
-          for (let i = daysPerWeek + 1; i <= 7; i++) {
-            await AsyncStorage.removeItem(`day_${i}_data`);
-          }
+          // Cargar número de semanas guardadas
+          const savedWeeksCount = await AsyncStorage.getItem('custom_plan_weeks_count');
+          const totalWeeks = savedWeeksCount ? parseInt(savedWeeksCount) : 1;
           
-          const updatedDays: DayData[] = [];
-          for (let i = 1; i <= daysPerWeek; i++) {
-            const dayDataStr = await AsyncStorage.getItem(`day_${i}_data`);
-            if (dayDataStr) {
-              const dayData = JSON.parse(dayDataStr);
-              // Verificar que el día corresponde al número correcto
-              if (dayData.dayNumber === i) {
-                updatedDays.push(dayData);
+          const loadedWeeks: WeekData[] = [];
+          
+          for (let weekNum = 1; weekNum <= totalWeeks; weekNum++) {
+            const weekDays: DayData[] = [];
+            
+            for (let dayNum = 1; dayNum <= daysPerWeek; dayNum++) {
+              const key = `week_${weekNum}_day_${dayNum}_data`;
+              const dayDataStr = await AsyncStorage.getItem(key);
+              
+              if (dayDataStr) {
+                try {
+                  const dayData = JSON.parse(dayDataStr);
+                  weekDays.push(dayData);
+                } catch (parseError) {
+                  console.error('Error parsing day data:', parseError);
+                  weekDays.push({
+                    dayNumber: dayNum,
+                    exercises: [],
+                  });
+                }
               } else {
-                // Si no coincide, limpiar y crear día vacío
-                await AsyncStorage.removeItem(`day_${i}_data`);
-                updatedDays.push({
-                  dayNumber: i,
+                weekDays.push({
+                  dayNumber: dayNum,
                   exercises: [],
                 });
               }
-            } else {
-              updatedDays.push({
-                dayNumber: i,
-                exercises: [],
-              });
             }
+            
+            loadedWeeks.push({
+              weekNumber: weekNum,
+              days: weekDays,
+            });
           }
-          setDays(updatedDays);
+          
+          setWeeks(loadedWeeks);
           
           // Cargar nombre del plan desde AsyncStorage
           const savedPlanName = await AsyncStorage.getItem('custom_plan_name');
@@ -114,54 +164,115 @@ export default function CustomPlanDaysScreen() {
             setPlanName(savedPlanName);
           }
         } catch (error) {
-          console.error('Error loading day data:', error);
+          console.error('Error loading week data:', error);
         }
       };
       
-      loadDayData();
+      loadWeekData();
     }, [daysPerWeek])
   );
 
   const handleDayPress = (dayNumber: number) => {
+    const currentWeek = weeks[currentWeekIndex];
+    const dayData = currentWeek.days.find(d => d.dayNumber === dayNumber) || { dayNumber, exercises: [] };
+    
     router.push({
       pathname: '/(tabs)/workout/custom-plan-day-detail',
       params: {
+        weekNumber: currentWeek.weekNumber.toString(),
         dayNumber: dayNumber.toString(),
         daysPerWeek: daysPerWeek.toString(),
         equipment: JSON.stringify(equipment),
-        dayData: JSON.stringify(days.find(d => d.dayNumber === dayNumber) || { dayNumber, exercises: [] }),
+        dayData: JSON.stringify(dayData),
       },
     });
   };
+  
+  const handleAddWeek = async () => {
+    const newWeekNumber = weeks.length + 1;
+    const newWeekDays: DayData[] = [];
+    
+    for (let i = 1; i <= daysPerWeek; i++) {
+      newWeekDays.push({
+        dayNumber: i,
+        exercises: [],
+      });
+    }
+    
+    const newWeek: WeekData = {
+      weekNumber: newWeekNumber,
+      days: newWeekDays,
+    };
+    
+    const updatedWeeks = [...weeks, newWeek];
+    setWeeks(updatedWeeks);
+    setCurrentWeekIndex(updatedWeeks.length - 1); // Ir a la nueva semana
+    
+    // Guardar el número de semanas
+    try {
+      await AsyncStorage.setItem('custom_plan_weeks_count', updatedWeeks.length.toString());
+    } catch (error) {
+      console.error('Error saving weeks count:', error);
+    }
+  };
 
   const handleSavePlan = () => {
-    // Verificar que todos los días tengan al menos un ejercicio
-    const hasEmptyDays = days.some(day => day.exercises.length === 0);
-    if (hasEmptyDays) {
+    // Verificar que al menos un día de alguna semana tenga ejercicios
+    const hasAnyExercises = weeks.some(week => 
+      week.days.some(day => day.exercises.length > 0)
+    );
+    
+    if (!hasAnyExercises) {
       Alert.alert(
-        'Plan incompleto',
-        'Todos los días deben tener al menos un ejercicio. Por favor completa todos los días antes de guardar.',
+        'Plan vacío',
+        'Debes agregar al menos un ejercicio a algún día para guardar el plan.',
         [{ text: 'OK' }]
       );
       return;
     }
 
-    // Preguntar si quiere activar el plan
-    Alert.alert(
-      '¿Activar este plan?',
-      '¿Quieres que este sea tu plan de entrenamiento activo?',
-      [
-        {
-          text: 'No',
-          style: 'cancel',
-          onPress: () => savePlanToDatabase(false),
-        },
-        {
-          text: 'Sí',
-          onPress: () => savePlanToDatabase(true),
-        },
-      ]
+    // Contar días completados en todas las semanas
+    const totalDays = weeks.length * daysPerWeek;
+    const completedDays = weeks.reduce((count, week) => 
+      count + week.days.filter(day => day.exercises.length > 0).length, 0
     );
+    
+    const hasEmptyDays = completedDays < totalDays;
+    
+    if (hasEmptyDays) {
+      // Plan parcial - preguntar si quiere guardarlo así
+      Alert.alert(
+        'Plan parcial',
+        `Has completado ${completedDays} de ${totalDays} días en ${weeks.length} ${weeks.length === 1 ? 'semana' : 'semanas'}. ¿Quieres guardar el plan parcial? Podrás continuar editándolo después.`,
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel',
+          },
+          {
+            text: 'Guardar como Borrador',
+            onPress: () => savePlanToDatabase(false),
+          },
+        ]
+      );
+    } else {
+      // Plan completo - preguntar si quiere activarlo
+      Alert.alert(
+        '¿Activar este plan?',
+        '¿Quieres que este sea tu plan de entrenamiento activo?',
+        [
+          {
+            text: 'No',
+            style: 'cancel',
+            onPress: () => savePlanToDatabase(false),
+          },
+          {
+            text: 'Sí',
+            onPress: () => savePlanToDatabase(true),
+          },
+        ]
+      );
+    }
   };
 
   const savePlanToDatabase = async (isActive: boolean) => {
@@ -172,40 +283,74 @@ export default function CustomPlanDaysScreen() {
 
     setIsSaving(true);
     try {
-      // Cargar todos los días desde AsyncStorage
-      const allDaysData: DayData[] = [];
-      for (let i = 1; i <= daysPerWeek; i++) {
-        const dayDataStr = await AsyncStorage.getItem(`day_${i}_data`);
-        if (dayDataStr) {
-          const dayData = JSON.parse(dayDataStr);
-          if (dayData.dayNumber === i && dayData.exercises && dayData.exercises.length > 0) {
-            allDaysData.push(dayData);
+      // Cargar todas las semanas desde AsyncStorage
+      const totalWeeks = weeks.length;
+      const allWeeksData: WeekData[] = [];
+      
+      for (let weekNum = 1; weekNum <= totalWeeks; weekNum++) {
+        const weekDays: DayData[] = [];
+        
+        for (let dayNum = 1; dayNum <= daysPerWeek; dayNum++) {
+          const key = `week_${weekNum}_day_${dayNum}_data`;
+          const dayDataStr = await AsyncStorage.getItem(key);
+          
+          if (dayDataStr) {
+            const dayData = JSON.parse(dayDataStr);
+            if (dayData.exercises && dayData.exercises.length > 0) {
+              weekDays.push(dayData);
+            }
           }
+        }
+        
+        if (weekDays.length > 0) {
+          allWeeksData.push({
+            weekNumber: weekNum,
+            days: weekDays,
+          });
         }
       }
 
-      if (allDaysData.length === 0) {
+      if (allWeeksData.length === 0) {
         Alert.alert('Error', 'No hay días con ejercicios para guardar');
         setIsSaving(false);
         return;
       }
 
-      // Formatear el plan en la estructura esperada (compatible con la estructura de planes generados por IA)
+      // Formatear el plan con estructura multi-semana
       const planData = {
-        weekly_structure: allDaysData.map(day => ({
+        // Estructura multi-semana (nueva)
+        multi_week_structure: allWeeksData.map(week => ({
+          week_number: week.weekNumber,
+          days: week.days.map(day => ({
+            day: day.name || `Día ${day.dayNumber}`,
+            focus: day.name || `Día ${day.dayNumber}`,
+            exercises: day.exercises.map((ex: any) => ({
+              name: ex.name,
+              sets: ex.sets,
+              reps: ex.reps,
+              rest_seconds: 60,
+              setTypes: ex.setTypes || [], // Incluir tipos de series
+            })),
+            duration: 45,
+          })),
+        })),
+        // Mantener weekly_structure para compatibilidad (primera semana)
+        weekly_structure: allWeeksData[0]?.days.map(day => ({
           day: day.name || `Día ${day.dayNumber}`,
           focus: day.name || `Día ${day.dayNumber}`,
           exercises: day.exercises.map((ex: any) => ({
             name: ex.name,
             sets: ex.sets,
             reps: ex.reps,
-            rest_seconds: 60, // Valor por defecto
+            rest_seconds: 60,
+            setTypes: ex.setTypes || [],
           })),
-          duration: 45, // Valor por defecto
-        })),
+          duration: 45,
+        })) || [],
         days_per_week: daysPerWeek,
         equipment: equipment,
-        duration_weeks: Math.ceil(daysPerWeek / 7) || 1,
+        duration_weeks: totalWeeks,
+        total_weeks: totalWeeks,
       };
 
       // Si se va a activar, desactivar otros planes primero
@@ -231,7 +376,7 @@ export default function CustomPlanDaysScreen() {
           .from('workout_plans')
           .update({
             plan_name: finalPlanName,
-            description: `Plan personalizado de ${daysPerWeek} días por semana`,
+            description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}, ${daysPerWeek} días por semana`,
             duration_weeks: planData.duration_weeks,
             plan_data: planData,
             is_active: isActive,
@@ -249,10 +394,13 @@ export default function CustomPlanDaysScreen() {
         }
 
         // Limpiar AsyncStorage después de actualizar
-        for (let i = 1; i <= daysPerWeek; i++) {
-          await AsyncStorage.removeItem(`day_${i}_data`);
+        for (let weekNum = 1; weekNum <= totalWeeks; weekNum++) {
+          for (let dayNum = 1; dayNum <= daysPerWeek; dayNum++) {
+            await AsyncStorage.removeItem(`week_${weekNum}_day_${dayNum}_data`);
+          }
         }
         await AsyncStorage.removeItem('custom_plan_name');
+        await AsyncStorage.removeItem('custom_plan_weeks_count');
         await AsyncStorage.removeItem('editing_plan_id');
 
         Alert.alert(
@@ -279,7 +427,7 @@ export default function CustomPlanDaysScreen() {
         .insert({
           user_id: user.id,
           plan_name: finalPlanName,
-          description: `Plan personalizado de ${daysPerWeek} días por semana`,
+          description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}, ${daysPerWeek} días por semana`,
           duration_weeks: planData.duration_weeks,
           plan_data: planData,
           is_active: isActive,
@@ -296,10 +444,13 @@ export default function CustomPlanDaysScreen() {
       }
 
       // Limpiar AsyncStorage después de guardar
-      for (let i = 1; i <= daysPerWeek; i++) {
-        await AsyncStorage.removeItem(`day_${i}_data`);
+      for (let weekNum = 1; weekNum <= totalWeeks; weekNum++) {
+        for (let dayNum = 1; dayNum <= daysPerWeek; dayNum++) {
+          await AsyncStorage.removeItem(`week_${weekNum}_day_${dayNum}_data`);
+        }
       }
       await AsyncStorage.removeItem('custom_plan_name');
+      await AsyncStorage.removeItem('custom_plan_weeks_count');
       await AsyncStorage.removeItem('editing_plan_id');
 
       Alert.alert(
@@ -415,12 +566,45 @@ export default function CustomPlanDaysScreen() {
           )}
         </View>
 
-        <Text style={styles.description}>
-          Selecciona cada día para agregar ejercicios. Todos los días deben tener al menos un ejercicio antes de guardar.
-        </Text>
+        {/* Navegación de semanas */}
+        {weeks.length > 1 && (
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            style={styles.weeksNav}
+            contentContainerStyle={styles.weeksNavContent}
+          >
+            {weeks.map((week, index) => (
+              <TouchableOpacity
+                key={week.weekNumber}
+                style={[
+                  styles.weekTab,
+                  currentWeekIndex === index && styles.weekTabActive
+                ]}
+                onPress={() => setCurrentWeekIndex(index)}
+              >
+                <Text style={[
+                  styles.weekTabText,
+                  currentWeekIndex === index && styles.weekTabTextActive
+                ]}>
+                  Semana {week.weekNumber}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+
+        <View style={styles.weekInfo}>
+          <Text style={styles.weekTitle}>
+            Semana {weeks[currentWeekIndex]?.weekNumber || 1}
+          </Text>
+          <Text style={styles.description}>
+            Selecciona cada día para agregar ejercicios
+          </Text>
+        </View>
 
         <View style={styles.daysList}>
-          {days.map((day) => (
+          {currentWeekDays.map((day) => (
             <TouchableOpacity
               key={day.dayNumber}
               style={styles.dayCard}
@@ -461,6 +645,16 @@ export default function CustomPlanDaysScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* Botón Agregar Semana */}
+        <TouchableOpacity
+          style={styles.addWeekButton}
+          onPress={handleAddWeek}
+          disabled={isSaving}
+        >
+          <Ionicons name="add-circle-outline" size={24} color="#ffb300" />
+          <Text style={styles.addWeekButtonText}>Agregar Semana</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
@@ -632,6 +826,61 @@ const styles = StyleSheet.create({
   },
   planNameSaveButton: {
     padding: 4,
+  },
+  weeksNav: {
+    marginBottom: 16,
+    maxHeight: 50,
+  },
+  weeksNavContent: {
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  weekTab: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: '#2a2a2a',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  weekTabActive: {
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
+  },
+  weekTabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#999',
+  },
+  weekTabTextActive: {
+    color: '#1a1a1a',
+  },
+  weekInfo: {
+    marginBottom: 16,
+  },
+  weekTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+  },
+  addWeekButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#ffb300',
+    borderStyle: 'dashed',
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginTop: 8,
+    gap: 8,
+  },
+  addWeekButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffb300',
   },
 });
 
