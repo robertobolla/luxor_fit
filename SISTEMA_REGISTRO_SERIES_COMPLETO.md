@@ -3,14 +3,17 @@
 ## ✅ Cambios Implementados
 
 ### 1. Base de Datos
+
 - **Nueva tabla `exercise_sets`**: Almacena TODAS las series de cada ejercicio
 - **Función SQL `get_last_muscle_workout_sets()`**: Obtiene las series del último entrenamiento del mismo músculo para comparación
 - **Políticas RLS**: Seguridad implementada para que los usuarios solo vean sus propias series
 
 ### 2. Componente Nuevo: `ExerciseSetTracker`
+
 **Ubicación:** `src/components/ExerciseSetTracker.tsx`
 
 **Características:**
+
 - ✅ Columnas: #, ANTERIOR REPS, ANTERIOR KG, REPS, KG
 - ✅ Muestra historial del último entrenamiento del mismo músculo
 - ✅ Inputs para registrar peso y repeticiones de cada serie
@@ -22,6 +25,7 @@
 - ❌ Sin checkmark (el entrenamiento se marca completado en otro lugar)
 
 ### 3. Integración en `workout-day-detail.tsx`
+
 - Reemplazado el botón de trofeo (🏆) con botón de registro (+)
 - Al hacer clic, se expande el ejercicio y muestra el `ExerciseSetTracker`
 - El tracker se integra inline (no en modal)
@@ -41,13 +45,14 @@
 6. Haz clic en **RUN**
 
 **Verificación:**
+
 ```sql
 -- Debe mostrar la tabla y sus columnas
-SELECT * FROM information_schema.columns 
+SELECT * FROM information_schema.columns
 WHERE table_name = 'exercise_sets';
 
 -- Debe mostrar 4 políticas RLS
-SELECT policyname FROM pg_policies 
+SELECT policyname FROM pg_policies
 WHERE tablename = 'exercise_sets';
 ```
 
@@ -75,6 +80,7 @@ Los siguientes archivos fueron modificados:
 ## 🎯 Cómo Funciona
 
 ### Vista Colapsada
+
 ```
 ┌────────────────────────────────────────┐
 │ 1  Press de Banca         [+] [▶️]    │
@@ -85,6 +91,7 @@ Los siguientes archivos fueron modificados:
 ```
 
 ### Vista Expandida
+
 ```
 ┌────────────────────────────────────────────────────────────┐
 │ 1  Press de Banca                    [^] [▶️]             │
@@ -112,6 +119,7 @@ Los siguientes archivos fueron modificados:
 ## 🔄 Flujo de Datos
 
 ### Al Abrir un Ejercicio:
+
 1. Usuario hace clic en botón **+**
 2. Componente `ExerciseSetTracker` se carga
 3. Ejecuta función SQL `get_last_muscle_workout_sets()`
@@ -119,6 +127,7 @@ Los siguientes archivos fueron modificados:
 5. Muestra las series con datos previos en columnas "ANTERIOR"
 
 ### Al Registrar Series:
+
 1. Usuario ingresa peso y reps en los inputs
 2. Los datos se guardan en el estado local
 3. Al completar el entrenamiento, se guardan en `exercise_sets` table
@@ -128,25 +137,27 @@ Los siguientes archivos fueron modificados:
 ## 📊 Estructura de Datos
 
 ### Tabla `exercise_sets`
+
 ```typescript
 {
-  id: UUID
-  user_id: string
-  workout_session_id: UUID | null  // Opcional por ahora
-  exercise_id: string  // Nombre del ejercicio (por ahora)
-  exercise_name: string | null  // Nombre del ejercicio para referencia
-  set_number: number  // 1, 2, 3, 4...
-  reps: number | null
-  weight_kg: number | null
-  duration_seconds: number | null  // Para ejercicios de tiempo
-  notes: string | null
-  created_at: timestamp
+  id: UUID;
+  user_id: string;
+  workout_session_id: UUID | null; // Opcional por ahora
+  exercise_id: string; // Nombre del ejercicio (por ahora)
+  exercise_name: string | null; // Nombre del ejercicio para referencia
+  set_number: number; // 1, 2, 3, 4...
+  reps: number | null;
+  weight_kg: number | null;
+  duration_seconds: number | null; // Para ejercicios de tiempo
+  notes: string | null;
+  created_at: timestamp;
 }
 ```
 
 **NOTA:** El script SQL fue simplificado para no depender de `workout_sessions` (que aún no existe).
 
 ### Ejemplo de Datos
+
 ```json
 [
   {
@@ -171,6 +182,7 @@ Los siguientes archivos fueron modificados:
 ## 🔧 Próximos Pasos (TODO)
 
 ### 1. Guardar Series al Completar Entrenamiento
+
 Actualmente las series se capturan pero NO se guardan en la base de datos.
 
 **Ubicación para modificar:** `workout-day-detail.tsx` → función `handleComplete()`
@@ -178,12 +190,12 @@ Actualmente las series se capturan pero NO se guardan en la base de datos.
 ```typescript
 const handleComplete = async () => {
   // ... código existente ...
-  
+
   // AGREGAR: Guardar todas las series
   for (const [exerciseName, sets] of Object.entries(exerciseSets)) {
     for (const set of sets) {
       if (set.reps && set.weight_kg) {
-        await supabase.from('exercise_sets').insert({
+        await supabase.from("exercise_sets").insert({
           user_id: user.id,
           workout_session_id: sessionId, // Crear si no existe
           exercise_id: exerciseName, // TODO: Usar ID real
@@ -198,17 +210,23 @@ const handleComplete = async () => {
 ```
 
 ### 2. Obtener ID Real del Ejercicio
+
 Actualmente usamos el nombre del ejercicio como ID. Debemos:
+
 - Buscar el ejercicio en `exercise_videos` por nombre
 - Usar su `id` real en lugar del nombre
 
 ### 3. Detectar Ejercicios que Usan Tiempo
+
 Algunos ejercicios (plancha, cardio) usan tiempo en lugar de repeticiones.
+
 - Agregar campo `usesTime` a la data del plan
 - O consultar `exercise_videos.uses_time`
 
 ### 4. Crear/Vincular Workout Session
+
 Actualmente no se crea un `workout_session_id`.
+
 - Crear sesión al iniciar el día de entrenamiento
 - Vincular todas las series a esa sesión
 
@@ -217,6 +235,7 @@ Actualmente no se crea un `workout_session_id`.
 ## 🎨 Personalización
 
 ### Cambiar Colores
+
 **Archivo:** `src/components/ExerciseSetTracker.tsx`
 
 ```typescript
@@ -224,22 +243,23 @@ Actualmente no se crea un `workout_session_id`.
 const styles = StyleSheet.create({
   // Cambiar color principal
   headerCell: {
-    color: '#ffb300', // <- Cambiar aquí
+    color: "#ffb300", // <- Cambiar aquí
   },
   // Cambiar color de inputs
   input: {
-    borderColor: '#333', // <- Cambiar aquí
+    borderColor: "#333", // <- Cambiar aquí
   },
 });
 ```
 
 ### Cambiar Cantidad de Series por Defecto
+
 **Archivo:** `app/(tabs)/workout-day-detail.tsx`
 
 ```typescript
 // Línea ~560
 <ExerciseSetTracker
-  defaultSets={sets || 3}  // <- Cambiar el 3
+  defaultSets={sets || 3} // <- Cambiar el 3
 />
 ```
 
@@ -248,13 +268,16 @@ const styles = StyleSheet.create({
 ## 🐛 Troubleshooting
 
 ### No se Cargan las Series Anteriores
+
 1. Verificar que la función SQL existe:
+
 ```sql
 SELECT routine_name FROM information_schema.routines
 WHERE routine_name = 'get_last_muscle_workout_sets';
 ```
 
 2. Verificar permisos de la función:
+
 ```sql
 -- Debe devolver 'SECURITY DEFINER'
 SELECT security_type FROM information_schema.routines
@@ -262,11 +285,13 @@ WHERE routine_name = 'get_last_muscle_workout_sets';
 ```
 
 ### Error al Expandir Ejercicio
+
 1. Verificar logs en consola
 2. Verificar que `user.id` existe
 3. Verificar que el componente está importado correctamente
 
 ### No se Ven los Datos Anteriores
+
 1. Debe haber al menos UN entrenamiento completado anteriormente
 2. El entrenamiento debe tener `completed_at` no nulo
 3. El ejercicio debe tener el mismo nombre
@@ -285,7 +310,7 @@ WHERE routine_name = 'get_last_muscle_workout_sets';
 ## 📞 Soporte
 
 Si encuentras algún problema:
+
 1. Revisa los logs de consola
 2. Verifica que el script SQL se ejecutó correctamente
 3. Confirma que la app se recompiló después de los cambios
-

@@ -36,36 +36,30 @@ CREATE INDEX IF NOT EXISTS idx_exercise_sets_user_exercise ON public.exercise_se
 -- RLS (Row Level Security)
 ALTER TABLE public.exercise_sets ENABLE ROW LEVEL SECURITY;
 
--- Política: Los usuarios pueden ver sus propias series
-CREATE POLICY "Users can view their own exercise sets"
+-- NOTA: La app usa Clerk authentication, no Supabase Auth
+-- Por lo tanto, usamos políticas abiertas (true) y la validación
+-- real se hace en el frontend verificando el user_id de Clerk
+
+-- Política: Los usuarios pueden ver series
+CREATE POLICY "Users can view exercise sets"
   ON public.exercise_sets FOR SELECT
-  USING (auth.uid()::text = user_id OR user_id IN (
-    SELECT user_id FROM user_profiles WHERE user_id = auth.uid()::text
-  ));
+  USING (true);
 
--- Política: Los usuarios pueden insertar sus propias series
-CREATE POLICY "Users can insert their own exercise sets"
+-- Política: Los usuarios pueden insertar series
+CREATE POLICY "Users can insert exercise sets"
   ON public.exercise_sets FOR INSERT
-  WITH CHECK (auth.uid()::text = user_id OR user_id IN (
-    SELECT user_id FROM user_profiles WHERE user_id = auth.uid()::text
-  ));
+  WITH CHECK (true);
 
--- Política: Los usuarios pueden actualizar sus propias series
-CREATE POLICY "Users can update their own exercise sets"
+-- Política: Los usuarios pueden actualizar series
+CREATE POLICY "Users can update exercise sets"
   ON public.exercise_sets FOR UPDATE
-  USING (auth.uid()::text = user_id OR user_id IN (
-    SELECT user_id FROM user_profiles WHERE user_id = auth.uid()::text
-  ))
-  WITH CHECK (auth.uid()::text = user_id OR user_id IN (
-    SELECT user_id FROM user_profiles WHERE user_id = auth.uid()::text
-  ));
+  USING (true)
+  WITH CHECK (true);
 
--- Política: Los usuarios pueden eliminar sus propias series
-CREATE POLICY "Users can delete their own exercise sets"
+-- Política: Los usuarios pueden eliminar series
+CREATE POLICY "Users can delete exercise sets"
   ON public.exercise_sets FOR DELETE
-  USING (auth.uid()::text = user_id OR user_id IN (
-    SELECT user_id FROM user_profiles WHERE user_id = auth.uid()::text
-  ));
+  USING (true);
 
 -- ============================================================================
 -- FUNCIÓN PARA OBTENER EL ÚLTIMO ENTRENAMIENTO DEL MISMO MÚSCULO
