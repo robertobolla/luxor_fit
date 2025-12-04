@@ -44,6 +44,10 @@ CREATE POLICY "Users can update typing indicators"
   USING (true)
   WITH CHECK (true);
 
+CREATE POLICY "Users can delete typing indicators"
+  ON public.typing_indicators FOR DELETE
+  USING (true);
+
 -- Función para limpiar typing indicators antiguos (más de 5 segundos)
 CREATE OR REPLACE FUNCTION cleanup_old_typing_indicators()
 RETURNS void AS $$
