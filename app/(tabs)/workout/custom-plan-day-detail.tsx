@@ -18,11 +18,19 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../../src/services/supabase';
 
+type SetType = 'warmup' | 'normal' | 'failure' | 'drop' | 'rir';
+
+interface SetInfo {
+  type: SetType;
+  reps: number | null; // null para series al fallo
+}
+
 interface Exercise {
   id: string;
   name: string;
   sets: number;
-  reps: number[];
+  reps: number[]; // Mantener para compatibilidad
+  setTypes?: SetInfo[]; // Nuevo campo para tipos de series
 }
 
 export default function CustomPlanDayDetailScreen() {
@@ -57,6 +65,11 @@ export default function CustomPlanDayDetailScreen() {
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [sets, setSets] = useState('');
   const [reps, setReps] = useState<string[]>([]);
+  const [setTypes, setSetTypes] = useState<SetInfo[]>([]);
+  
+  // Estados para el modal de cambio de tipo de serie
+  const [showSetTypeModal, setShowSetTypeModal] = useState(false);
+  const [selectedSetIndex, setSelectedSetIndex] = useState<number>(-1);
 
   // Resetear estado cuando cambia el dayNumber
   useEffect(() => {
@@ -72,6 +85,20 @@ export default function CustomPlanDayDetailScreen() {
     if (editingExercise) {
       setSets(editingExercise.sets.toString());
       setReps(editingExercise.reps.map(r => r.toString()));
+      
+      // Cargar tipos de series o crear por defecto
+      if (editingExercise.setTypes && editingExercise.setTypes.length > 0) {
+        setSetTypes(editingExercise.setTypes);
+      } else {
+        // Crear tipos de series por defecto (todas normales)
+        const defaultSetTypes: SetInfo[] = editingExercise.reps.map((rep, idx) => ({
+          type: 'normal',
+          reps: rep,
+        }));
+        setSetTypes(defaultSetTypes);
+      }
+    } else {
+      setSetTypes([]);
     }
   }, [editingExercise]);
 
@@ -90,6 +117,7 @@ export default function CustomPlanDayDetailScreen() {
   const handleSetsChange = (text: string) => {
     const numSets = parseInt(text) || 0;
     setSets(text);
+    
     // Ajustar array de reps
     const newReps = [...reps];
     while (newReps.length < numSets) {
@@ -99,12 +127,90 @@ export default function CustomPlanDayDetailScreen() {
       newReps.pop();
     }
     setReps(newReps);
+    
+    // Ajustar array de tipos de series
+    const newSetTypes = [...setTypes];
+    while (newSetTypes.length < numSets) {
+      newSetTypes.push({ type: 'normal', reps: null });
+    }
+    while (newSetTypes.length > numSets) {
+      newSetTypes.pop();
+    }
+    setSetTypes(newSetTypes);
   };
 
   const handleRepsChange = (index: number, text: string) => {
     const newReps = [...reps];
     newReps[index] = text;
     setReps(newReps);
+    
+    // Actualizar también el tipo de serie
+    const newSetTypes = [...setTypes];
+    if (newSetTypes[index]) {
+      newSetTypes[index] = {
+        ...newSetTypes[index],
+        reps: parseInt(text) || null,
+      };
+      setSetTypes(newSetTypes);
+    }
+  };
+
+  const getSetLabel = (setType: SetInfo, index: number): string => {
+    switch (setType.type) {
+      case 'warmup':
+        return 'W';
+      case 'failure':
+        return 'F';
+      case 'drop':
+        return 'D';
+      case 'rir':
+        return `${index + 1}`;
+      case 'normal':
+      default:
+        return `${index + 1}`;
+    }
+  };
+
+  const handleSetTypeClick = (index: number) => {
+    setSelectedSetIndex(index);
+    setShowSetTypeModal(true);
+  };
+
+  const handleChangeSetType = (newType: SetType) => {
+    const newSetTypes = [...setTypes];
+    const currentReps = newSetTypes[selectedSetIndex]?.reps || null;
+    
+    newSetTypes[selectedSetIndex] = {
+      type: newType,
+      reps: newType === 'failure' ? null : currentReps,
+    };
+    
+    setSetTypes(newSetTypes);
+    
+    // Si es al fallo, limpiar las reps en el input
+    if (newType === 'failure') {
+      const newReps = [...reps];
+      newReps[selectedSetIndex] = '';
+      setReps(newReps);
+    }
+    
+    setShowSetTypeModal(false);
+    setSelectedSetIndex(-1);
+  };
+
+  const handleRemoveSet = () => {
+    if (selectedSetIndex === -1) return;
+    
+    // Eliminar la serie del índice seleccionado
+    const newReps = reps.filter((_, idx) => idx !== selectedSetIndex);
+    const newSetTypes = setTypes.filter((_, idx) => idx !== selectedSetIndex);
+    
+    setReps(newReps);
+    setSetTypes(newSetTypes);
+    setSets(newReps.length.toString());
+    
+    setShowSetTypeModal(false);
+    setSelectedSetIndex(-1);
   };
 
   const handleSaveExercise = () => {
@@ -116,21 +222,37 @@ export default function CustomPlanDayDetailScreen() {
       return;
     }
 
-    const repsArray = reps.map(r => parseInt(r) || 0).filter(r => r > 0);
-    if (repsArray.length !== numSets) {
-      Alert.alert('Error', 'Debes ingresar repeticiones para todas las series');
-      return;
+    // Validar que todas las series tengan reps (excepto las de fallo)
+    for (let i = 0; i < setTypes.length; i++) {
+      const setType = setTypes[i];
+      if (setType.type !== 'failure') {
+        const repsValue = parseInt(reps[i]);
+        if (!repsValue || repsValue === 0) {
+          Alert.alert('Error', `Debes ingresar repeticiones para la serie ${i + 1}`);
+          return;
+        }
+      }
     }
+
+    // Actualizar setTypes con las reps finales
+    const finalSetTypes = setTypes.map((st, idx) => ({
+      type: st.type,
+      reps: st.type === 'failure' ? null : (parseInt(reps[idx]) || 0),
+    }));
+
+    // Mantener compatibilidad con repsArray
+    const repsArray = finalSetTypes.map(st => st.reps || 0);
 
     const updatedExercises = exercises.map(ex =>
       ex.id === editingExercise.id
-        ? { ...ex, sets: numSets, reps: repsArray }
+        ? { ...ex, sets: numSets, reps: repsArray, setTypes: finalSetTypes }
         : ex
     );
     setExercises(updatedExercises);
     setEditingExercise(null);
     setSets('');
     setReps([]);
+    setSetTypes([]);
   };
 
   const handleDeleteExercise = (exerciseId: string) => {
@@ -479,11 +601,29 @@ export default function CustomPlanDayDetailScreen() {
                     {exercise.sets} series
                   </Text>
                   <View style={styles.repsContainer}>
-                    {exercise.reps.map((rep, idx) => (
-                      <Text key={idx} style={styles.repText}>
-                        Serie {idx + 1}: {rep} reps
-                      </Text>
-                    ))}
+                    {(exercise.setTypes || []).map((setInfo, idx) => {
+                      const label = (() => {
+                        switch (setInfo.type) {
+                          case 'warmup': return 'W';
+                          case 'failure': return 'F';
+                          case 'drop': return 'D';
+                          case 'rir': return `${idx + 1} RIR`;
+                          default: return `${idx + 1}`;
+                        }
+                      })();
+                      
+                      const repsText = setInfo.type === 'failure' 
+                        ? 'al fallo' 
+                        : setInfo.type === 'rir'
+                        ? `${setInfo.reps || 0} RIR`
+                        : `${setInfo.reps || 0} reps`;
+                      
+                      return (
+                        <Text key={idx} style={styles.repText}>
+                          {label}: {repsText}
+                        </Text>
+                      );
+                    })}
                   </View>
                 </View>
               </View>
@@ -547,19 +687,33 @@ export default function CustomPlanDayDetailScreen() {
                 {parseInt(sets) > 0 && (
                   <View style={styles.inputGroup}>
                     <Text style={styles.label}>Repeticiones por serie</Text>
-                    {Array.from({ length: parseInt(sets) || 0 }).map((_, idx) => (
-                      <View key={idx} style={styles.repInputRow}>
-                        <Text style={styles.repLabel}>Serie {idx + 1}:</Text>
-                        <TextInput
-                          style={styles.repInput}
-                          value={reps[idx] || ''}
-                          onChangeText={(text) => handleRepsChange(idx, text)}
-                          keyboardType="number-pad"
-                          placeholder="0"
-                        />
-                        <Text style={styles.repLabel}>reps</Text>
-                      </View>
-                    ))}
+                    {Array.from({ length: parseInt(sets) || 0 }).map((_, idx) => {
+                      const setType = setTypes[idx];
+                      const isFailure = setType?.type === 'failure';
+                      const setLabel = setType ? getSetLabel(setType, idx) : `${idx + 1}`;
+                      
+                      return (
+                        <View key={idx} style={styles.repInputRow}>
+                          <TouchableOpacity
+                            style={styles.setTypeButton}
+                            onPress={() => handleSetTypeClick(idx)}
+                          >
+                            <Text style={styles.setTypeButtonText}>{setLabel}</Text>
+                          </TouchableOpacity>
+                          <TextInput
+                            style={[styles.repInput, isFailure && styles.repInputDisabled]}
+                            value={isFailure ? 'Al fallo' : (reps[idx] || '')}
+                            onChangeText={(text) => handleRepsChange(idx, text)}
+                            keyboardType="number-pad"
+                            placeholder="0"
+                            editable={!isFailure}
+                          />
+                          <Text style={styles.repLabel}>
+                            {setType?.type === 'rir' ? 'RIR' : 'reps'}
+                          </Text>
+                        </View>
+                      );
+                    })}
                   </View>
                 )}
 
@@ -585,6 +739,104 @@ export default function CustomPlanDayDetailScreen() {
             </TouchableOpacity>
           </TouchableOpacity>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Modal para seleccionar tipo de serie */}
+      <Modal
+        visible={showSetTypeModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSetTypeModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.setTypeModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowSetTypeModal(false)}
+        >
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={(e) => e.stopPropagation()}
+            style={styles.setTypeModalContent}
+          >
+            <Text style={styles.setTypeModalTitle}>Seleccionar Tipo de Serie</Text>
+            
+            <TouchableOpacity
+              style={styles.setTypeOption}
+              onPress={() => handleChangeSetType('warmup')}
+            >
+              <View style={[styles.setTypeIcon, styles.setTypeIconWarmup]}>
+                <Text style={styles.setTypeIconText}>W</Text>
+              </View>
+              <View style={styles.setTypeInfo}>
+                <Text style={styles.setTypeOptionText}>Serie de Calentamiento</Text>
+                <Text style={styles.setTypeOptionDesc}>Peso ligero para activar músculos</Text>
+              </View>
+              <Ionicons name="information-circle-outline" size={20} color="#888" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.setTypeOption}
+              onPress={() => handleChangeSetType('normal')}
+            >
+              <View style={[styles.setTypeIcon, styles.setTypeIconNormal]}>
+                <Text style={styles.setTypeIconText}>1</Text>
+              </View>
+              <View style={styles.setTypeInfo}>
+                <Text style={styles.setTypeOptionText}>Serie Normal</Text>
+                <Text style={styles.setTypeOptionDesc}>Serie estándar con repeticiones</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.setTypeOption}
+              onPress={() => handleChangeSetType('failure')}
+            >
+              <View style={[styles.setTypeIcon, styles.setTypeIconFailure]}>
+                <Text style={styles.setTypeIconText}>F</Text>
+              </View>
+              <View style={styles.setTypeInfo}>
+                <Text style={styles.setTypeOptionText}>Serie al Fallo</Text>
+                <Text style={styles.setTypeOptionDesc}>Hasta no poder más</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.setTypeOption}
+              onPress={() => handleChangeSetType('drop')}
+            >
+              <View style={[styles.setTypeIcon, styles.setTypeIconDrop]}>
+                <Text style={styles.setTypeIconText}>D</Text>
+              </View>
+              <View style={styles.setTypeInfo}>
+                <Text style={styles.setTypeOptionText}>Serie Drop</Text>
+                <Text style={styles.setTypeOptionDesc}>Reducir peso y continuar</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.setTypeOption}
+              onPress={() => handleChangeSetType('rir')}
+            >
+              <View style={[styles.setTypeIcon, styles.setTypeIconRIR]}>
+                <Text style={styles.setTypeIconText}>R</Text>
+              </View>
+              <View style={styles.setTypeInfo}>
+                <Text style={styles.setTypeOptionText}>RIR (Reps In Reserve)</Text>
+                <Text style={styles.setTypeOptionDesc}>Reps que faltan para el fallo</Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.setTypeOption, styles.setTypeOptionDelete]}
+              onPress={handleRemoveSet}
+            >
+              <Ionicons name="trash-outline" size={24} color="#ff4444" />
+              <Text style={[styles.setTypeOptionText, styles.setTypeOptionTextDelete]}>
+                Eliminar Serie
+              </Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </SafeAreaView>
   );
@@ -822,6 +1074,103 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     fontSize: 16,
     fontWeight: '700',
+  },
+  setTypeButton: {
+    backgroundColor: '#ffb300',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    minWidth: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setTypeButtonText: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  repInputDisabled: {
+    backgroundColor: '#333',
+    color: '#888',
+  },
+  setTypeModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'flex-end',
+  },
+  setTypeModalContent: {
+    backgroundColor: '#2a2a2a',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  setTypeModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  setTypeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    gap: 12,
+  },
+  setTypeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setTypeIconWarmup: {
+    backgroundColor: '#ffb300',
+  },
+  setTypeIconNormal: {
+    backgroundColor: '#4CAF50',
+  },
+  setTypeIconFailure: {
+    backgroundColor: '#ff4444',
+  },
+  setTypeIconDrop: {
+    backgroundColor: '#9C27B0',
+  },
+  setTypeIconRIR: {
+    backgroundColor: '#2196F3',
+  },
+  setTypeIconText: {
+    color: '#1a1a1a',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  setTypeInfo: {
+    flex: 1,
+  },
+  setTypeOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 2,
+  },
+  setTypeOptionDesc: {
+    fontSize: 13,
+    color: '#888',
+  },
+  setTypeOptionDelete: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#ff4444',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  setTypeOptionTextDelete: {
+    color: '#ff4444',
+    flex: 0,
   },
 });
 
