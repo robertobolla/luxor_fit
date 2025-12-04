@@ -175,17 +175,23 @@ export function ExerciseSetTracker({
       <View style={styles.table}>
         {/* Encabezado de columnas */}
         <View style={styles.tableHeader}>
-          <Text style={[styles.headerCell, styles.setNumberCell]}>#</Text>
-          <Text style={[styles.headerCell, styles.previousCell]}>
-            ANTERIOR{'\n'}REPS
-          </Text>
-          <Text style={[styles.headerCell, styles.previousCell]}>
-            ANTERIOR{'\n'}KG
-          </Text>
-          <Text style={[styles.headerCell, styles.inputCell]}>
-            {usesTime ? 'SEG' : 'REPS'}
-          </Text>
-          <Text style={[styles.headerCell, styles.inputCell]}>KG</Text>
+          <View style={[styles.headerCell, styles.setNumberCell]}>
+            <Text style={styles.headerText}>#</Text>
+          </View>
+          <View style={[styles.headerCell, styles.previousCell]}>
+            <Text style={styles.headerText}>ANT.</Text>
+            <Text style={styles.headerText}>REPS</Text>
+          </View>
+          <View style={[styles.headerCell, styles.previousCell]}>
+            <Text style={styles.headerText}>ANT.</Text>
+            <Text style={styles.headerText}>KG</Text>
+          </View>
+          <View style={[styles.headerCell, styles.inputCell]}>
+            <Text style={styles.headerText}>{usesTime ? 'SEG' : 'REPS'}</Text>
+          </View>
+          <View style={[styles.headerCell, styles.inputCell]}>
+            <Text style={styles.headerText}>KG</Text>
+          </View>
           <View style={[styles.headerCell, styles.actionCell]} />
         </View>
 
@@ -328,19 +334,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerCell: {
-    fontSize: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerText: {
+    fontSize: 10,
     fontWeight: 'bold',
     color: '#ffb300',
     textAlign: 'center',
+    lineHeight: 13,
   },
   setNumberCell: {
-    width: 40,
+    width: 35,
   },
   previousCell: {
-    flex: 1,
+    width: 55,
   },
   inputCell: {
-    flex: 1.2,
+    flex: 1,
   },
   actionCell: {
     width: 40,
