@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../services/supabase';
@@ -38,6 +39,7 @@ interface ExerciseSetTrackerProps {
   usesTime?: boolean; // Si el ejercicio usa tiempo en lugar de reps
   sessionId?: string; // ID de la sesión actual
   onSetsChange?: (sets: ExerciseSet[]) => void;
+  onSave?: () => void; // Callback cuando se guardan los sets
 }
 
 export function ExerciseSetTracker({
@@ -48,10 +50,13 @@ export function ExerciseSetTracker({
   usesTime = false,
   sessionId,
   onSetsChange,
+  onSave,
 }: ExerciseSetTrackerProps) {
   const [sets, setSets] = useState<ExerciseSet[]>([]);
   const [previousSets, setPreviousSets] = useState<PreviousSet[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     initializeSets();
@@ -152,6 +157,66 @@ export function ExerciseSetTracker({
     const previousSet = previousSets.find(s => s.set_number === setNumber);
     if (!previousSet || previousSet[field] === null) return '-';
     return previousSet[field]!.toString();
+  };
+
+  // Guardar todas las series en la base de datos
+  const saveSets = async () => {
+    try {
+      setSaving(true);
+      setSaveSuccess(false);
+
+      // Filtrar solo los sets que tienen datos (reps o weight)
+      const setsToSave = sets.filter(set => 
+        set.reps !== null || set.weight_kg !== null || set.duration_seconds !== null
+      );
+
+      if (setsToSave.length === 0) {
+        Alert.alert('Sin datos', 'No hay datos para guardar. Ingresa al menos una serie con reps o peso.');
+        return;
+      }
+
+      // Preparar los datos para insertar
+      const setsData = setsToSave.map(set => ({
+        user_id: userId,
+        workout_session_id: sessionId || null,
+        exercise_id: exerciseId,
+        exercise_name: exerciseName,
+        set_number: set.set_number,
+        reps: set.reps,
+        weight_kg: set.weight_kg,
+        duration_seconds: set.duration_seconds,
+        notes: null,
+      }));
+
+      console.log('💾 Guardando series:', setsData);
+
+      const { error } = await supabase
+        .from('exercise_sets')
+        .insert(setsData);
+
+      if (error) {
+        console.error('Error guardando series:', error);
+        Alert.alert('Error', 'Error al guardar las series. Por favor intenta de nuevo.');
+        return;
+      }
+
+      console.log('✅ Series guardadas correctamente');
+      setSaveSuccess(true);
+      
+      // Ocultar el mensaje de éxito después de 3 segundos
+      setTimeout(() => {
+        setSaveSuccess(false);
+      }, 3000);
+
+      // Llamar al callback si existe
+      onSave?.();
+      
+    } catch (err) {
+      console.error('Error guardando series:', err);
+      Alert.alert('Error', 'Error al guardar las series. Por favor intenta de nuevo.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -266,11 +331,40 @@ export function ExerciseSetTracker({
         </ScrollView>
       </View>
 
-      {/* Botón agregar serie */}
-      <TouchableOpacity style={styles.addButton} onPress={addSet}>
-        <Ionicons name="add-circle-outline" size={24} color="#ffb300" />
-        <Text style={styles.addButtonText}>Agregar Serie</Text>
-      </TouchableOpacity>
+      {/* Botones de acciones */}
+      <View style={styles.actionsContainer}>
+        <TouchableOpacity style={styles.addButton} onPress={addSet}>
+          <Ionicons name="add-circle-outline" size={20} color="#ffb300" />
+          <Text style={styles.addButtonText}>Agregar Serie</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[
+            styles.saveButton, 
+            saving && styles.saveButtonDisabled,
+            saveSuccess && styles.saveButtonSuccess
+          ]} 
+          onPress={saveSets}
+          disabled={saving}
+        >
+          {saving ? (
+            <>
+              <ActivityIndicator size="small" color="#1a1a1a" />
+              <Text style={styles.saveButtonText}>Guardando...</Text>
+            </>
+          ) : saveSuccess ? (
+            <>
+              <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
+              <Text style={[styles.saveButtonText, styles.saveButtonTextSuccess]}>¡Guardado!</Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="save-outline" size={20} color="#1a1a1a" />
+              <Text style={styles.saveButtonText}>Guardar Series</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -379,7 +473,13 @@ const styles = StyleSheet.create({
   deleteButton: {
     padding: 4,
   },
+  actionsContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
   addButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -392,9 +492,33 @@ const styles = StyleSheet.create({
   },
   addButtonText: {
     color: '#ffb300',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    marginLeft: 8,
+    marginLeft: 6,
+  },
+  saveButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffb300',
+    borderRadius: 8,
+    padding: 12,
+  },
+  saveButtonDisabled: {
+    backgroundColor: '#555',
+  },
+  saveButtonSuccess: {
+    backgroundColor: '#4CAF50',
+  },
+  saveButtonText: {
+    color: '#1a1a1a',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
+  },
+  saveButtonTextSuccess: {
+    color: '#ffffff',
   },
 });
 
