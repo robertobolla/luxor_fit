@@ -132,8 +132,9 @@ Los siguientes archivos fueron modificados:
 {
   id: UUID
   user_id: string
-  workout_session_id: UUID (opcional)
-  exercise_id: UUID
+  workout_session_id: UUID | null  // Opcional por ahora
+  exercise_id: string  // Nombre del ejercicio (por ahora)
+  exercise_name: string | null  // Nombre del ejercicio para referencia
   set_number: number  // 1, 2, 3, 4...
   reps: number | null
   weight_kg: number | null
@@ -142,6 +143,8 @@ Los siguientes archivos fueron modificados:
   created_at: timestamp
 }
 ```
+
+**NOTA:** El script SQL fue simplificado para no depender de `workout_sessions` (que aún no existe).
 
 ### Ejemplo de Datos
 ```json

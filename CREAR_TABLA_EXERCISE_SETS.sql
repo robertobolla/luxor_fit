@@ -9,8 +9,9 @@
 CREATE TABLE IF NOT EXISTS public.exercise_sets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id TEXT NOT NULL,
-  workout_session_id UUID REFERENCES public.workout_sessions(id) ON DELETE CASCADE,
-  exercise_id UUID NOT NULL REFERENCES public.exercise_videos(id) ON DELETE CASCADE,
+  workout_session_id UUID, -- Opcional por ahora, sin FK constraint
+  exercise_id TEXT NOT NULL, -- Por ahora usamos nombre del ejercicio (UUID cuando tengamos IDs reales)
+  exercise_name TEXT, -- Nombre del ejercicio para referencia
   set_number INTEGER NOT NULL, -- 1, 2, 3, 4, etc.
   reps INTEGER, -- Repeticiones realizadas (null si usa tiempo)
   weight_kg DECIMAL(6,2), -- Peso usado en kg
@@ -70,11 +71,11 @@ CREATE POLICY "Users can delete their own exercise sets"
 -- FUNCIÓN PARA OBTENER EL ÚLTIMO ENTRENAMIENTO DEL MISMO MÚSCULO
 -- ============================================================================
 -- Esta función devuelve todas las series del último entrenamiento
--- que trabajó el mismo grupo muscular
+-- que trabajó el mismo ejercicio
 
 CREATE OR REPLACE FUNCTION get_last_muscle_workout_sets(
   p_user_id TEXT,
-  p_exercise_id UUID,
+  p_exercise_id TEXT,
   p_current_session_id UUID DEFAULT NULL
 )
 RETURNS TABLE (
@@ -83,7 +84,22 @@ RETURNS TABLE (
   weight_kg DECIMAL(6,2),
   duration_seconds INTEGER
 ) AS $$
+DECLARE
+  last_workout_date TIMESTAMPTZ;
 BEGIN
+  -- Obtener la fecha del último entrenamiento de este ejercicio
+  SELECT MAX(created_at) INTO last_workout_date
+  FROM exercise_sets
+  WHERE user_id = p_user_id
+    AND exercise_id = p_exercise_id
+    AND (p_current_session_id IS NULL OR workout_session_id != p_current_session_id);
+  
+  -- Si no hay entrenamientos previos, retornar vacío
+  IF last_workout_date IS NULL THEN
+    RETURN;
+  END IF;
+  
+  -- Retornar todas las series del último entrenamiento
   RETURN QUERY
   SELECT 
     es.set_number,
@@ -91,14 +107,13 @@ BEGIN
     es.weight_kg,
     es.duration_seconds
   FROM exercise_sets es
-  JOIN workout_sessions ws ON ws.id = es.workout_session_id
   WHERE 
     es.user_id = p_user_id
     AND es.exercise_id = p_exercise_id
-    AND (p_current_session_id IS NULL OR es.workout_session_id != p_current_session_id)
-    AND ws.completed_at IS NOT NULL -- Solo sesiones completadas
-  ORDER BY ws.completed_at DESC, es.set_number ASC
-  LIMIT 20; -- Máximo 20 series del último entrenamiento
+    AND es.created_at >= last_workout_date
+    AND es.created_at < last_workout_date + INTERVAL '5 minutes' -- Series del mismo entrenamiento
+  ORDER BY es.set_number ASC
+  LIMIT 20; -- Máximo 20 series
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -130,5 +145,10 @@ WHERE tablename = 'exercise_sets';
 -- 2. Verifica que no haya errores
 -- 3. La tabla exercise_sets estará lista para usar
 -- 4. El sistema antiguo de PRs (personal_records) puede quedar como backup
+-- 
+-- NOTAS:
+-- - workout_session_id es opcional por ahora (sin FK constraint)
+-- - exercise_id usa el nombre del ejercicio como string por ahora
+-- - En el futuro se puede migrar a UUIDs reales cuando tengamos IDs
 -- ============================================================================
 
