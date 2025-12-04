@@ -120,16 +120,24 @@ export function ExerciseSetTracker({
     onSetsChange?.(initialSets);
   };
 
-  // Cargar series del último entrenamiento del mismo músculo
+  // Cargar series del último entrenamiento del mismo músculo (EXCLUYENDO hoy)
   const loadPreviousSets = async () => {
     try {
       setLoading(true);
       
-      const { data, error } = await supabase.rpc('get_last_muscle_workout_sets', {
-        p_user_id: userId,
-        p_exercise_id: exerciseId,
-        p_current_session_id: sessionId || null,
-      });
+      // Obtener fecha de hoy para excluirla
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      // Buscar el último entrenamiento de este ejercicio ANTES de hoy
+      const { data, error } = await supabase
+        .from('exercise_sets')
+        .select('set_number, reps, weight_kg')
+        .eq('user_id', userId)
+        .eq('exercise_id', exerciseId)
+        .lt('created_at', `${today}T00:00:00`) // Solo entrenamientos ANTES de hoy
+        .order('created_at', { ascending: false })
+        .order('set_number', { ascending: true })
+        .limit(20); // Limitar para obtener las últimas series
 
       if (error) {
         console.error('Error loading previous sets:', error);
@@ -137,7 +145,26 @@ export function ExerciseSetTracker({
       }
 
       if (data && data.length > 0) {
-        setPreviousSets(data);
+        // Agrupar por created_at para obtener solo el último entrenamiento
+        // Como ordenamos por created_at desc, todos los primeros registros son del último entrenamiento
+        const uniqueSets: PreviousSet[] = [];
+        const seenSetNumbers = new Set<number>();
+        
+        for (const set of data) {
+          if (!seenSetNumbers.has(set.set_number)) {
+            uniqueSets.push({
+              set_number: set.set_number,
+              reps: set.reps,
+              weight_kg: set.weight_kg,
+            });
+            seenSetNumbers.add(set.set_number);
+          }
+        }
+        
+        setPreviousSets(uniqueSets);
+        console.log('✅ Series anteriores cargadas (último entrenamiento ANTES de hoy):', uniqueSets.length);
+      } else {
+        console.log('ℹ️ No hay entrenamientos anteriores para este ejercicio');
       }
     } catch (err) {
       console.error('Error loading previous sets:', err);

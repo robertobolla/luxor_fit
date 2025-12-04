@@ -13,17 +13,22 @@ import {
   Modal,
   KeyboardAvoidingView,
   Platform,
+  LogBox,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../../src/services/supabase';
 
-type SetType = 'warmup' | 'normal' | 'failure' | 'drop' | 'rir';
+// Suprimir warning de keys - todas las keys están implementadas correctamente
+LogBox.ignoreLogs(['Each child in a list should have a unique "key" prop']);
+
+type SetType = 'warmup' | 'normal' | 'failure' | 'drop';
 
 interface SetInfo {
   type: SetType;
   reps: number | null; // null para series al fallo
+  rir: number | null; // Reps In Reserve para intensidad (opcional)
 }
 
 interface Exercise {
@@ -67,6 +72,7 @@ export default function CustomPlanDayDetailScreen() {
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [sets, setSets] = useState('');
   const [reps, setReps] = useState<string[]>([]);
+  const [rirValues, setRirValues] = useState<string[]>([]); // RIR para cada serie
   const [setTypes, setSetTypes] = useState<SetInfo[]>([]);
   
   // Estados para el modal de cambio de tipo de serie
@@ -86,6 +92,7 @@ export default function CustomPlanDayDetailScreen() {
     setEditingExercise(null);
     setSets('');
     setReps([]);
+    setRirValues([]);
   }, [dayNumber]);
 
   useEffect(() => {
@@ -105,17 +112,26 @@ export default function CustomPlanDayDetailScreen() {
       // Cargar tipos de series o crear por defecto
       if (editingExercise.setTypes && editingExercise.setTypes.length > 0) {
         setSetTypes(editingExercise.setTypes);
+        // Cargar valores RIR existentes o inicializar vacíos
+        const initialRirValues = editingExercise.setTypes.map(st => 
+          st.rir !== null && st.rir !== undefined ? st.rir.toString() : ''
+        );
+        setRirValues(initialRirValues);
       } else {
         // Crear tipos de series por defecto (todas normales)
         const defaultSetTypes: SetInfo[] = initialReps.map((rep) => ({
           type: 'normal',
           reps: parseInt(rep) || null,
+          rir: null,
         }));
         setSetTypes(defaultSetTypes);
+        // Inicializar RIR vacíos
+        setRirValues(initialReps.map(() => ''));
       }
     } else {
       // Cuando se cierra el modal principal, resetear todo
       setSetTypes([]);
+      setRirValues([]);
       setShowSetTypeModal(false);
       setSelectedSetIndex(-1);
     }
@@ -135,9 +151,11 @@ export default function CustomPlanDayDetailScreen() {
 
   const handleAddSet = () => {
     const newReps = [...reps, ''];
-    const newSetTypes = [...setTypes, { type: 'normal', reps: null }];
+    const newRirValues = [...rirValues, ''];
+    const newSetTypes: SetInfo[] = [...setTypes, { type: 'normal' as SetType, reps: null, rir: null }];
     
     setReps(newReps);
+    setRirValues(newRirValues);
     setSetTypes(newSetTypes);
     setSets(newSetTypes.length.toString());
     
@@ -151,9 +169,11 @@ export default function CustomPlanDayDetailScreen() {
     }
     
     const newReps = reps.filter((_, i) => i !== index);
+    const newRirValues = rirValues.filter((_, i) => i !== index);
     const newSetTypes = setTypes.filter((_, i) => i !== index);
     
     setReps(newReps);
+    setRirValues(newRirValues);
     setSetTypes(newSetTypes);
     setSets(newSetTypes.length.toString());
     
@@ -176,12 +196,56 @@ export default function CustomPlanDayDetailScreen() {
     }
   };
 
+  const handleRirChange = (index: number, text: string) => {
+    const newRirValues = [...rirValues];
+    newRirValues[index] = text;
+    setRirValues(newRirValues);
+    
+    const rirValue = text ? parseInt(text) : null;
+    
+    // Actualizar también el tipo de serie
+    const newSetTypes = [...setTypes];
+    if (newSetTypes[index]) {
+      const currentType = newSetTypes[index].type;
+      
+      // Lógica automática: RIR 0 = al fallo, RIR >= 1 = normal
+      let newType = currentType;
+      if (rirValue === 0) {
+        // Cambiar a "failure" si RIR es 0
+        newType = 'failure';
+      } else if (currentType === 'failure' && rirValue !== null && rirValue > 0) {
+        // Si está al fallo y cambias RIR a >= 1, volver a normal
+        newType = 'normal';
+      }
+      
+      newSetTypes[index] = {
+        ...newSetTypes[index],
+        type: newType,
+        rir: rirValue,
+      };
+      setSetTypes(newSetTypes);
+      
+      console.log(`🔄 RIR cambiado a ${rirValue}, tipo ahora es: ${newType}`);
+    }
+  };
+
   const getSetLabel = (setType: SetInfo, index: number): string => {
-    // Si no es normal, devolver la letra directamente
+    // Para warmup y drop, devolver letra directamente
     if (setType.type === 'warmup') return 'C';
-    if (setType.type === 'failure') return 'F';
     if (setType.type === 'drop') return 'D';
-    if (setType.type === 'rir') return 'R';
+    
+    // Para failure: mostrar número + "F"
+    if (setType.type === 'failure') {
+      // Contar cuántas series normales + failure hay hasta este índice
+      let seriesCount = 0;
+      for (let i = 0; i <= index; i++) {
+        const type = setTypes[i]?.type || 'normal';
+        if (type === 'normal' || type === 'failure') {
+          seriesCount++;
+        }
+      }
+      return `${seriesCount} F`;
+    }
     
     // Solo para series normales: contar cuántas hay antes
     let normalCount = 0;
@@ -202,8 +266,6 @@ export default function CustomPlanDayDetailScreen() {
         return '#ff4444'; // Rojo
       case 'drop':
         return '#9C27B0'; // Morado
-      case 'rir':
-        return '#2196F3'; // Azul
       case 'normal':
       default:
         return '#ffb300'; // Amarillo
@@ -221,21 +283,26 @@ export default function CustomPlanDayDetailScreen() {
     
     const newSetTypes = [...setTypes];
     const currentReps = newSetTypes[selectedSetIndex]?.reps || null;
+    const currentRir = newSetTypes[selectedSetIndex]?.rir || null;
+    
+    // Si cambia a 'failure', actualizar RIR a 0 automáticamente
+    const updatedRir = newType === 'failure' ? 0 : currentRir;
     
     newSetTypes[selectedSetIndex] = {
       type: newType,
-      reps: newType === 'failure' ? null : currentReps,
+      reps: currentReps, // Mantener las reps siempre
+      rir: updatedRir,
     };
+    
+    // Actualizar RIR visual si cambia a failure
+    if (newType === 'failure') {
+      const newRirValues = [...rirValues];
+      newRirValues[selectedSetIndex] = '0';
+      setRirValues(newRirValues);
+    }
     
     console.log('✅ Nuevo array de setTypes:', newSetTypes);
     setSetTypes(newSetTypes);
-    
-    // Si es al fallo, limpiar las reps en el input
-    if (newType === 'failure') {
-      const newReps = [...reps];
-      newReps[selectedSetIndex] = '';
-      setReps(newReps);
-    }
     
     // Cerrar modal
     setShowSetTypeModal(false);
@@ -255,22 +322,20 @@ export default function CustomPlanDayDetailScreen() {
       return;
     }
 
-    // Validar que todas las series tengan reps (excepto las de fallo)
+    // Validar que todas las series tengan reps
     for (let i = 0; i < setTypes.length; i++) {
-      const setType = setTypes[i];
-      if (setType.type !== 'failure') {
-        const repsValue = parseInt(reps[i]);
-        if (!repsValue || repsValue === 0) {
-          Alert.alert('Error', `Debes ingresar repeticiones para la serie ${i + 1}`);
-          return;
-        }
+      const repsValue = parseInt(reps[i]);
+      if (!repsValue || repsValue === 0) {
+        Alert.alert('Error', `Debes ingresar repeticiones para la serie ${i + 1}`);
+        return;
       }
     }
 
-    // Actualizar setTypes con las reps finales
+    // Actualizar setTypes con las reps y RIR finales
     const finalSetTypes = setTypes.map((st, idx) => ({
       type: st.type,
-      reps: st.type === 'failure' ? null : (parseInt(reps[idx]) || 0),
+      reps: parseInt(reps[idx]) || 0,
+      rir: rirValues[idx] ? parseInt(rirValues[idx]) || null : null,
     }));
 
     // Mantener compatibilidad con repsArray
@@ -612,9 +677,9 @@ export default function CustomPlanDayDetailScreen() {
           <View style={styles.exercisesList}>
             {exercises.map((exercise) => (
               <View key={exercise.id} style={styles.exerciseCard}>
-                <View style={styles.exerciseHeader}>
+                <View key={`header-${exercise.id}`} style={styles.exerciseHeader}>
                   <Text style={styles.exerciseName}>{exercise.name}</Text>
-                  <View style={styles.exerciseActions}>
+                  <View key={`actions-${exercise.id}`} style={styles.exerciseActions}>
                     <TouchableOpacity
                       onPress={() => setEditingExercise(exercise)}
                       style={styles.editButton}
@@ -629,18 +694,17 @@ export default function CustomPlanDayDetailScreen() {
                     </TouchableOpacity>
                   </View>
                 </View>
-                <View style={styles.exerciseDetails}>
-                  <Text style={styles.exerciseDetailText}>
+                <View key={`details-${exercise.id}`} style={styles.exerciseDetails}>
+                  <Text key={`sets-text-${exercise.id}`} style={styles.exerciseDetailText}>
                     {exercise.sets} series
                   </Text>
-                  <View style={styles.repsContainer}>
+                  <View key={`reps-container-${exercise.id}`} style={styles.repsContainer}>
                     {(exercise.setTypes || []).map((setInfo, idx) => {
                       const label = (() => {
                         switch (setInfo.type) {
                           case 'warmup': return 'C';
                           case 'failure': return 'F';
                           case 'drop': return 'D';
-                          case 'rir': return 'R';
                           case 'normal':
                           default:
                             // Contar cuántas series normales hay antes de esta
@@ -657,12 +721,10 @@ export default function CustomPlanDayDetailScreen() {
                       
                       const repsText = setInfo.type === 'failure' 
                         ? 'al fallo' 
-                        : setInfo.type === 'rir'
-                        ? `${setInfo.reps || 0} RIR`
                         : `${setInfo.reps || 0} reps`;
                       
                       return (
-                        <Text key={idx} style={styles.repText}>
+                        <Text key={`${exercise.id}_set_${idx}`} style={styles.repText}>
                           {label}: {repsText}
                         </Text>
                       );
@@ -721,50 +783,70 @@ export default function CustomPlanDayDetailScreen() {
                   <Text style={styles.label}>Series</Text>
                   
                   {setTypes.length > 0 ? (
-                    setTypes.map((setType, idx) => {
-                      const isFailure = setType.type === 'failure';
-                      const setLabel = getSetLabel(setType, idx);
-                      const buttonColor = getSetButtonColor(setType);
-                      
-                      return (
-                        <View key={idx} style={styles.repInputRow}>
-                          <Pressable
-                            style={[styles.setTypeButton, { backgroundColor: buttonColor }]}
-                            onPress={() => {
-                              console.log('✅ PRESS detectado para serie', idx);
-                              setSelectedSetIndex(idx);
-                              setShowSetTypeModal(true);
-                            }}
-                            onPressIn={() => console.log('👆 PRESS IN detectado')}
-                            onPressOut={() => console.log('👆 PRESS OUT detectado')}
-                          >
-                            {({ pressed }) => (
-                              <Text style={[styles.setTypeButtonText, pressed && { opacity: 0.7 }]}>
-                                {setLabel}
-                              </Text>
-                            )}
-                          </Pressable>
-                          <TextInput
-                            style={[styles.repInput, isFailure && styles.repInputDisabled]}
-                            value={isFailure ? 'Al fallo' : (reps[idx] || '')}
-                            onChangeText={(text) => handleRepsChange(idx, text)}
-                            keyboardType="number-pad"
-                            placeholder="0"
-                            editable={!isFailure}
-                          />
-                          <Text style={styles.repLabel}>
-                            {setType.type === 'rir' ? 'RIR' : 'reps'}
-                          </Text>
-                          <TouchableOpacity
-                            style={styles.removeSetButton}
-                            onPress={() => handleRemoveSet(idx)}
-                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                          >
-                            <Ionicons name="trash-outline" size={20} color="#ff4444" />
-                          </TouchableOpacity>
+                    <View>
+                      {/* Fila de encabezados */}
+                      <View style={styles.seriesHeaderRow}>
+                        <View style={styles.seriesHeaderCell}>
+                          <Text style={styles.seriesHeaderText}>#</Text>
                         </View>
-                      );
-                    })
+                        <View style={[styles.seriesHeaderCell, styles.seriesHeaderCellReps]}>
+                          <Text style={styles.seriesHeaderText}>REPS</Text>
+                        </View>
+                        <View style={styles.seriesHeaderCell}>
+                          <Text style={styles.seriesHeaderText}>RIR</Text>
+                        </View>
+                        <View style={styles.seriesHeaderCellAction} />
+                      </View>
+                      
+                      {/* Filas de series */}
+                      {setTypes.map((setType, idx) => {
+                        const setLabel = getSetLabel(setType, idx);
+                        const buttonColor = getSetButtonColor(setType);
+                        
+                        return (
+                          <View key={idx} style={styles.repInputRow}>
+                            <Pressable
+                              style={[styles.setTypeButton, { backgroundColor: buttonColor }]}
+                              onPress={() => {
+                                console.log('✅ PRESS detectado para serie', idx);
+                                setSelectedSetIndex(idx);
+                                setShowSetTypeModal(true);
+                              }}
+                              onPressIn={() => console.log('👆 PRESS IN detectado')}
+                              onPressOut={() => console.log('👆 PRESS OUT detectado')}
+                            >
+                              {({ pressed }) => (
+                                <Text style={[styles.setTypeButtonText, pressed && { opacity: 0.7 }]}>
+                                  {setLabel}
+                                </Text>
+                              )}
+                            </Pressable>
+                            <TextInput
+                              style={styles.repInput}
+                              value={reps[idx] || ''}
+                              onChangeText={(text) => handleRepsChange(idx, text)}
+                              keyboardType="number-pad"
+                              placeholder="0"
+                            />
+                            <TextInput
+                              style={styles.rirInput}
+                              value={rirValues[idx] || ''}
+                              onChangeText={(text) => handleRirChange(idx, text)}
+                              keyboardType="number-pad"
+                              placeholder="-"
+                              placeholderTextColor="#666"
+                            />
+                            <TouchableOpacity
+                              style={styles.removeSetButton}
+                              onPress={() => handleRemoveSet(idx)}
+                              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                            >
+                              <Ionicons name="trash-outline" size={20} color="#ff4444" />
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                    </View>
                   ) : (
                     <Text style={styles.emptySeriesText}>
                       Agrega series para este ejercicio
@@ -904,23 +986,6 @@ export default function CustomPlanDayDetailScreen() {
                 <View style={styles.setTypeInfo}>
                   <Text style={styles.setTypeOptionText}>Drop</Text>
                   <Text style={styles.setTypeOptionDesc}>Reducir peso y continuar</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.setTypeOption}
-                onPress={() => {
-                  console.log('🔵 Seleccionado: RIR');
-                  handleChangeSetType('rir');
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.setTypeIconLarge, styles.setTypeIconRIR]}>
-                  <Text style={styles.setTypeIconTextLarge}>R</Text>
-                </View>
-                <View style={styles.setTypeInfo}>
-                  <Text style={styles.setTypeOptionText}>RIR (Reps In Reserve)</Text>
-                  <Text style={styles.setTypeOptionDesc}>Reps que faltan para el fallo</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -1132,8 +1197,8 @@ const styles = StyleSheet.create({
   repInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 14,
-    gap: 10,
+    marginBottom: 12,
+    gap: 8,
   },
   addSetButtonBottom: {
     flexDirection: 'row',
@@ -1163,10 +1228,29 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     fontStyle: 'italic',
   },
-  repLabel: {
-    fontSize: 14,
-    color: '#ccc',
-    minWidth: 70,
+  seriesHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  seriesHeaderCell: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 50,
+  },
+  seriesHeaderCellReps: {
+    flex: 1,
+  },
+  seriesHeaderCellAction: {
+    width: 40,
+  },
+  seriesHeaderText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#ffb300',
+    textTransform: 'uppercase',
   },
   repInput: {
     flex: 1,
@@ -1174,13 +1258,27 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 14,
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: 'bold',
     color: '#ffffff',
     borderWidth: 1,
     borderColor: '#444',
     textAlign: 'center',
-    minHeight: 50,
+    minHeight: 52,
+  },
+  rirInput: {
+    width: 70,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffb300',
+    borderWidth: 1,
+    borderColor: '#ffb300',
+    textAlign: 'center',
+    minHeight: 52,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -1210,41 +1308,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   setTypeButton: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 14,
     borderRadius: 10,
-    minWidth: 56,
-    minHeight: 50,
+    minWidth: 60,
+    minHeight: 52,
     alignItems: 'center',
     justifyContent: 'center',
   },
   setTypeButtonText: {
     color: '#1a1a1a',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  repInputDisabled: {
-    backgroundColor: '#333',
-    color: '#888',
-  },
-  setTypeModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'flex-end',
-  },
-  setTypeModalContent: {
-    backgroundColor: '#2a2a2a',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
-    paddingBottom: 40,
-  },
-  setTypeModalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#ffffff',
-    marginBottom: 24,
-    textAlign: 'center',
   },
   setTypeOption: {
     flexDirection: 'row',
@@ -1275,9 +1350,6 @@ const styles = StyleSheet.create({
   },
   setTypeIconDrop: {
     backgroundColor: '#9C27B0',
-  },
-  setTypeIconRIR: {
-    backgroundColor: '#2196F3',
   },
   setTypeIconText: {
     color: '#1a1a1a',

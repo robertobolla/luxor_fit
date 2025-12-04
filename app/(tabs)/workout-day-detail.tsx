@@ -494,7 +494,7 @@ export default function WorkoutDayDetailScreen() {
               <View key={index} style={styles.exerciseCard}>
                 <View style={styles.exerciseHeader}>
                   <View style={styles.exerciseNumberBadge}>
-                    <Text style={styles.exerciseNumber}>{index + 1}</Text>
+                    <Text style={styles.exerciseNumber}>#{index + 1}</Text>
                   </View>
                   <View style={styles.exerciseTitleContainer}>
                     <Text style={styles.exerciseName}>{exerciseName}</Text>
@@ -586,11 +586,6 @@ export default function WorkoutDayDetailScreen() {
                             label = 'D';
                             color = '#9C27B0';
                             typeText = ' (Drop)';
-                            break;
-                          case 'rir':
-                            label = 'R';
-                            color = '#2196F3';
-                            typeText = ' (RIR)';
                             break;
                           case 'normal':
                           default:
@@ -1010,18 +1005,20 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   exerciseNumberBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#ffb300',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#2a2a2a',
+    borderWidth: 2,
+    borderColor: '#ffb300',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
   exerciseNumber: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
-    color: '#1a1a1a',
+    color: '#ffb300',
   },
   exerciseTitleContainer: {
     flex: 1,
