@@ -560,7 +560,9 @@ export default function WorkoutDayDetailScreen() {
                     </View>
                     <View style={styles.statBadge}>
                       <Ionicons name="fitness" size={16} color="#ffb300" />
-                      <Text style={styles.statBadgeText}>{reps} reps</Text>
+                      <Text style={styles.statBadgeText}>
+                        {Array.isArray(reps) ? reps.join('-') : reps} reps
+                      </Text>
                     </View>
                   </View>
                 )}
