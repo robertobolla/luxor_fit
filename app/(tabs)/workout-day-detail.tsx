@@ -16,8 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../src/services/supabase';
 import { WorkoutCompletion } from '../../src/types';
-import PersonalRecordModal from '../../src/components/PersonalRecordModal';
 import ExerciseVideoModal from '../../src/components/ExerciseVideoModal';
+import { ExerciseSetTracker } from '../../src/components/ExerciseSetTracker';
 import { smartNotificationService } from '../../src/services/smartNotifications';
 import { getExerciseVideoUrl } from '../../src/services/exerciseVideoService';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
@@ -49,9 +49,9 @@ export default function WorkoutDayDetailScreen() {
   const [difficulty, setDifficulty] = useState(3);
   const [notes, setNotes] = useState('');
   
-  // Estados para el modal de records personales
-  const [showPRModal, setShowPRModal] = useState(false);
-  const [selectedExercise, setSelectedExercise] = useState('');
+  // Estados para las series de ejercicios
+  const [exerciseSets, setExerciseSets] = useState<{ [exerciseName: string]: any[] }>({});
+  const [expandedExercises, setExpandedExercises] = useState<{ [exerciseName: string]: boolean }>({});
   
   // Estados para el modal de video
   const [showVideoModal, setShowVideoModal] = useState(false);
@@ -217,9 +217,18 @@ export default function WorkoutDayDetailScreen() {
     }
   };
 
-  const handleOpenPRModal = (exerciseName: string) => {
-    setSelectedExercise(exerciseName);
-    setShowPRModal(true);
+  const toggleExercise = (exerciseName: string) => {
+    setExpandedExercises(prev => ({
+      ...prev,
+      [exerciseName]: !prev[exerciseName],
+    }));
+  };
+
+  const handleSetsChange = (exerciseName: string, sets: any[]) => {
+    setExerciseSets(prev => ({
+      ...prev,
+      [exerciseName]: sets,
+    }));
   };
 
   if (isLoading) {
@@ -487,6 +496,8 @@ export default function WorkoutDayDetailScreen() {
             // Debug log
             console.log('Exercise:', { isOldFormat, exercise, sets, reps, rest });
 
+            const isExpanded = expandedExercises[exerciseName] || false;
+
             return (
               <View key={index} style={styles.exerciseCard}>
                 <View style={styles.exerciseHeader}>
@@ -498,10 +509,14 @@ export default function WorkoutDayDetailScreen() {
                   </View>
                   <View style={styles.exerciseActions}>
                     <TouchableOpacity 
-                      style={styles.prButton}
-                      onPress={() => handleOpenPRModal(exerciseName)}
+                      style={styles.registerButton}
+                      onPress={() => toggleExercise(exerciseName)}
                     >
-                      <Ionicons name="trophy" size={18} color="#FFD700" />
+                      <Ionicons 
+                        name={isExpanded ? "chevron-up-circle" : "add-circle"} 
+                        size={24} 
+                        color="#ffb300" 
+                      />
                     </TouchableOpacity>
                     <TouchableOpacity 
                       style={styles.videoButton}
@@ -534,7 +549,19 @@ export default function WorkoutDayDetailScreen() {
                   </View>
                 </View>
 
-                {!isOldFormat && sets && reps && (
+                {/* Tracker de series */}
+                {isExpanded && user?.id && (
+                  <ExerciseSetTracker
+                    userId={user.id}
+                    exerciseId={exerciseName} // TODO: En el futuro usar el ID real del ejercicio
+                    exerciseName={exerciseName}
+                    defaultSets={sets || 3}
+                    usesTime={false} // TODO: Detectar si el ejercicio usa tiempo
+                    onSetsChange={(sets) => handleSetsChange(exerciseName, sets)}
+                  />
+                )}
+
+                {!isExpanded && !isOldFormat && sets && reps && (
                   <View style={styles.exerciseStats}>
                     <View style={styles.statBadge}>
                       <Ionicons name="repeat" size={16} color="#ffb300" />
@@ -685,15 +712,6 @@ export default function WorkoutDayDetailScreen() {
           </KeyboardAvoidingView>
         </View>
       </Modal>
-
-      {/* Modal de Records Personales */}
-      <PersonalRecordModal
-        visible={showPRModal}
-        onClose={() => setShowPRModal(false)}
-        exerciseName={selectedExercise}
-        workoutPlanId={planId}
-        dayName={dayName}
-      />
 
       {/* Modal de video del ejercicio */}
       <ExerciseVideoModal
@@ -969,12 +987,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  prButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#FFD70020',
-    borderWidth: 1,
-    borderColor: '#FFD700',
+  registerButton: {
+    padding: 4,
   },
   videoButton: {
     padding: 8,

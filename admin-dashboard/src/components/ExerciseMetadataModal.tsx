@@ -189,8 +189,11 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
       };
 
       // Solo actualizar el nombre si cambió
-      if (canonicalName.trim() !== exercise.canonical_name) {
-        updates.canonical_name = canonicalName.trim();
+      // Normalizar: cadena vacía se trata como null para comparación correcta
+      const normalizedCanonicalName = canonicalName.trim() || null;
+      const originalCanonicalName = exercise.canonical_name || null;
+      if (normalizedCanonicalName !== originalCanonicalName) {
+        updates.canonical_name = normalizedCanonicalName;
       }
 
       const { error: updateError } = await supabase
