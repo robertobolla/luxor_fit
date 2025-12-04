@@ -8,11 +8,11 @@ Sistema completo para gestionar diferentes tipos de series en rutinas personaliz
 
 ## Tipos de Series Disponibles
 
-### 🔥 W - Serie de Calentamiento (Warmup)
+### 🔥 C - Serie de Calentamiento
 - **Color:** Amarillo (#ffb300)
 - **Uso:** Peso ligero para activar músculos antes de series principales
 - **Reps:** Editables
-- **Ejemplo:** W: 15 reps
+- **Ejemplo:** C: 15 reps
 
 ### ✅ 1, 2, 3... - Serie Normal
 - **Color:** Verde (#4CAF50)
@@ -69,7 +69,7 @@ Sistema completo para gestionar diferentes tipos de series en rutinas personaliz
 
 **Press de Banca:**
 ```
-W: 15 reps      (Calentamiento)
+C: 15 reps      (Calentamiento)
 1: 10 reps      (Serie normal)
 2: 8 reps       (Serie normal)
 F: al fallo     (Serie al fallo)
@@ -78,7 +78,7 @@ D: 12 reps      (Serie drop)
 
 **Sentadilla:**
 ```
-W: 20 reps      (Calentamiento)
+C: 20 reps      (Calentamiento)
 1: 3 RIR        (Quedan 3 reps para el fallo)
 2: 2 RIR        (Quedan 2 reps para el fallo)
 3: 1 RIR        (Queda 1 rep para el fallo)
@@ -93,7 +93,7 @@ F: al fallo     (Serie al fallo)
 ```
 Press de Banca
 5 series
-W: 15 reps
+C: 15 reps
 1: 10 reps
 2: 8 reps
 F: al fallo
@@ -191,7 +191,7 @@ const colorMap = {
 ### Etiquetas
 ```typescript
 const labelMap = {
-  warmup: 'W',
+  warmup: 'C',          // Calentamiento
   normal: '1,2,3...',   // Número de serie
   failure: 'F',
   drop: 'D',

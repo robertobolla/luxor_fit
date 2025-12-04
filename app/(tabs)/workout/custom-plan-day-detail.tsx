@@ -158,7 +158,7 @@ export default function CustomPlanDayDetailScreen() {
   const getSetLabel = (setType: SetInfo, index: number): string => {
     switch (setType.type) {
       case 'warmup':
-        return 'W';
+        return 'C';
       case 'failure':
         return 'F';
       case 'drop':
@@ -604,7 +604,7 @@ export default function CustomPlanDayDetailScreen() {
                     {(exercise.setTypes || []).map((setInfo, idx) => {
                       const label = (() => {
                         switch (setInfo.type) {
-                          case 'warmup': return 'W';
+                          case 'warmup': return 'C';
                           case 'failure': return 'F';
                           case 'drop': return 'D';
                           case 'rir': return `${idx + 1} RIR`;
@@ -765,7 +765,7 @@ export default function CustomPlanDayDetailScreen() {
               onPress={() => handleChangeSetType('warmup')}
             >
               <View style={[styles.setTypeIcon, styles.setTypeIconWarmup]}>
-                <Text style={styles.setTypeIconText}>W</Text>
+                <Text style={styles.setTypeIconText}>C</Text>
               </View>
               <View style={styles.setTypeInfo}>
                 <Text style={styles.setTypeOptionText}>Serie de Calentamiento</Text>
