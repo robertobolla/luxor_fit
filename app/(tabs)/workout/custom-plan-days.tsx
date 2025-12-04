@@ -46,25 +46,182 @@ export default function CustomPlanDaysScreen() {
   const currentWeekDays = weeks[currentWeekIndex]?.days || [];
 
   useEffect(() => {
-    // Inicializar primera semana con días vacíos
-    const initialDays: DayData[] = [];
-    for (let i = 1; i <= daysPerWeek; i++) {
-      initialDays.push({
-        dayNumber: i,
-        exercises: [],
-      });
-    }
-    
-    const initialWeek: WeekData = {
-      weekNumber: 1,
-      days: initialDays,
+    // Si estamos editando un plan existente, cargarlo desde Supabase
+    const loadExistingPlan = async () => {
+      if (!editingPlanId || !user) {
+        // Si no hay planId, inicializar plan vacío
+        initializeEmptyPlan();
+        return;
+      }
+
+      try {
+        console.log('🔄 Cargando plan existente desde Supabase:', editingPlanId);
+        
+        // Cargar el plan desde Supabase
+        const { data: plan, error } = await supabase
+          .from('workout_plans')
+          .select('*')
+          .eq('id', editingPlanId)
+          .eq('user_id', user.id)
+          .single();
+
+        if (error) {
+          console.error('❌ Error cargando plan:', error);
+          initializeEmptyPlan();
+          return;
+        }
+
+        if (!plan) {
+          console.error('❌ Plan no encontrado');
+          initializeEmptyPlan();
+          return;
+        }
+
+        console.log('✅ Plan cargado:', plan.plan_name);
+
+        // Extraer datos del plan
+        const planData = plan.plan_data;
+        setPlanName(plan.plan_name);
+
+        // Guardar planId en AsyncStorage
+        await AsyncStorage.setItem('editing_plan_id', editingPlanId);
+        await AsyncStorage.setItem('custom_plan_name', plan.plan_name);
+
+        // Cargar estructura multi-semana si existe, sino usar weekly_structure
+        const multiWeekStructure = planData.multi_week_structure;
+        const weeklyStructure = planData.weekly_structure;
+
+        if (multiWeekStructure && multiWeekStructure.length > 0) {
+          // Plan multi-semana
+          console.log('📅 Cargando plan multi-semana:', multiWeekStructure.length, 'semanas');
+          
+          const loadedWeeks: WeekData[] = [];
+          
+          for (const weekData of multiWeekStructure) {
+            const weekDays: DayData[] = [];
+            
+            for (const dayData of weekData.days) {
+              const dayNumber = weekDays.length + 1;
+              const exercises = dayData.exercises.map((ex: any) => ({
+                name: ex.name,
+                sets: ex.sets,
+                reps: ex.reps,
+                setTypes: ex.setTypes || [],
+              }));
+
+              weekDays.push({
+                dayNumber,
+                name: dayData.day,
+                exercises,
+              });
+
+              // Guardar en AsyncStorage
+              const key = `week_${weekData.week_number}_day_${dayNumber}_data`;
+              await AsyncStorage.setItem(key, JSON.stringify({
+                dayNumber,
+                name: dayData.day,
+                exercises,
+              }));
+            }
+
+            loadedWeeks.push({
+              weekNumber: weekData.week_number,
+              days: weekDays,
+            });
+          }
+
+          // Agregar días vacíos si faltan
+          for (const week of loadedWeeks) {
+            while (week.days.length < daysPerWeek) {
+              const dayNumber = week.days.length + 1;
+              week.days.push({
+                dayNumber,
+                exercises: [],
+              });
+            }
+          }
+
+          setWeeks(loadedWeeks);
+          await AsyncStorage.setItem('custom_plan_weeks_count', loadedWeeks.length.toString());
+          
+        } else if (weeklyStructure && weeklyStructure.length > 0) {
+          // Plan de una semana (compatibilidad)
+          console.log('📅 Cargando plan de una semana:', weeklyStructure.length, 'días');
+          
+          const weekDays: DayData[] = [];
+          
+          for (let i = 0; i < weeklyStructure.length; i++) {
+            const dayData = weeklyStructure[i];
+            const dayNumber = i + 1;
+            const exercises = dayData.exercises.map((ex: any) => ({
+              name: ex.name,
+              sets: ex.sets,
+              reps: ex.reps,
+              setTypes: ex.setTypes || [],
+            }));
+
+            weekDays.push({
+              dayNumber,
+              name: dayData.day,
+              exercises,
+            });
+
+            // Guardar en AsyncStorage
+            const key = `week_1_day_${dayNumber}_data`;
+            await AsyncStorage.setItem(key, JSON.stringify({
+              dayNumber,
+              name: dayData.day,
+              exercises,
+            }));
+          }
+
+          // Agregar días vacíos si faltan
+          while (weekDays.length < daysPerWeek) {
+            const dayNumber = weekDays.length + 1;
+            weekDays.push({
+              dayNumber,
+              exercises: [],
+            });
+          }
+
+          setWeeks([{
+            weekNumber: 1,
+            days: weekDays,
+          }]);
+          await AsyncStorage.setItem('custom_plan_weeks_count', '1');
+        } else {
+          // Plan vacío
+          console.log('❌ Plan sin estructura');
+          initializeEmptyPlan();
+        }
+        
+      } catch (error) {
+        console.error('❌ Error cargando plan:', error);
+        initializeEmptyPlan();
+      }
     };
-    
-    setWeeks([initialWeek]);
-    setCurrentWeekIndex(0);
-    
-    // Cargar nombre del plan y planId desde AsyncStorage
-    const loadPlanData = async () => {
+
+    // Función para inicializar un plan vacío
+    const initializeEmptyPlan = async () => {
+      console.log('🆕 Inicializando plan vacío');
+      
+      const initialDays: DayData[] = [];
+      for (let i = 1; i <= daysPerWeek; i++) {
+        initialDays.push({
+          dayNumber: i,
+          exercises: [],
+        });
+      }
+      
+      const initialWeek: WeekData = {
+        weekNumber: 1,
+        days: initialDays,
+      };
+      
+      setWeeks([initialWeek]);
+      setCurrentWeekIndex(0);
+      
+      // Cargar nombre del plan desde AsyncStorage si existe
       try {
         const savedPlanName = await AsyncStorage.getItem('custom_plan_name');
         if (savedPlanName) {
@@ -96,22 +253,14 @@ export default function CustomPlanDaysScreen() {
             setWeeks(loadedWeeks);
           }
         }
-        
-        // Si hay un planId en AsyncStorage pero no en params, usarlo
-        if (!editingPlanId) {
-          const savedPlanId = await AsyncStorage.getItem('editing_plan_id');
-          if (savedPlanId) {
-            // El planId se manejará a través de AsyncStorage
-          }
-        }
       } catch (error) {
-        console.error('Error loading plan data:', error);
+        console.error('Error loading plan data from AsyncStorage:', error);
         setPlanName(`Plan Personalizado - ${new Date().toLocaleDateString()}`);
       }
     };
     
-    loadPlanData();
-  }, [daysPerWeek]);
+    loadExistingPlan();
+  }, [daysPerWeek, editingPlanId, user]);
 
   // Recargar datos cuando se regresa de la pantalla de detalle del día
   useFocusEffect(

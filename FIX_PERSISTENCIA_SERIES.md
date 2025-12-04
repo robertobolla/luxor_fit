@@ -528,3 +528,4 @@ Día 2 - Nuevo entrenamiento:
 - ✅ Funciona correctamente para todos los ejercicios
 - ✅ Al día siguiente comienza limpio con historial visible
 
+

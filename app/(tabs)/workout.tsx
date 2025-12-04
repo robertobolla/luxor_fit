@@ -213,7 +213,7 @@ export default function WorkoutScreen() {
                         params: {
                           planId: plan.id,
                           daysPerWeek: totalDays,
-                          equipment: JSON.stringify([]),
+                          equipment: JSON.stringify(planData.equipment || []),
                         }
                       } as any)}
                     >
