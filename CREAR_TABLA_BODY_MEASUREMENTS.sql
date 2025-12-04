@@ -106,6 +106,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Calcular cambios semanales
+-- NOTA: Retorna NULL para cambios cuando hay menos de 2 mediciones
 CREATE OR REPLACE FUNCTION calculate_weekly_changes(p_user_id TEXT)
 RETURNS TABLE (
   weight_change_kg DECIMAL,
@@ -120,24 +121,39 @@ BEGIN
       weight_kg,
       body_fat_percentage,
       muscle_percentage,
-      measured_at
+      measured_at,
+      ROW_NUMBER() OVER (ORDER BY measured_at DESC) as rn
     FROM body_measurements
     WHERE user_id = p_user_id
       AND measured_at >= NOW() - INTERVAL '8 weeks'
-    ORDER BY measured_at DESC
   ),
   latest AS (
-    SELECT * FROM recent_measurements LIMIT 1
+    SELECT * FROM recent_measurements WHERE rn = 1
   ),
   previous AS (
-    SELECT * FROM recent_measurements OFFSET 1 LIMIT 1
+    SELECT * FROM recent_measurements WHERE rn = 2
+  ),
+  measurement_count AS (
+    SELECT COUNT(*)::INTEGER as total FROM recent_measurements
   )
   SELECT 
-    COALESCE(latest.weight_kg - previous.weight_kg, 0) as weight_change_kg,
-    COALESCE(latest.body_fat_percentage - previous.body_fat_percentage, 0) as body_fat_change,
-    COALESCE(latest.muscle_percentage - previous.muscle_percentage, 0) as muscle_change,
-    (SELECT COUNT(*)::INTEGER FROM recent_measurements) as weeks_tracked
-  FROM latest, previous;
+    -- Retornar NULL si no hay suficientes datos (< 2 mediciones)
+    CASE 
+      WHEN measurement_count.total >= 2 THEN latest.weight_kg - previous.weight_kg
+      ELSE NULL
+    END as weight_change_kg,
+    CASE 
+      WHEN measurement_count.total >= 2 THEN latest.body_fat_percentage - previous.body_fat_percentage
+      ELSE NULL
+    END as body_fat_change,
+    CASE 
+      WHEN measurement_count.total >= 2 THEN latest.muscle_percentage - previous.muscle_percentage
+      ELSE NULL
+    END as muscle_change,
+    measurement_count.total as weeks_tracked
+  FROM latest
+  LEFT JOIN previous ON true
+  CROSS JOIN measurement_count;
 END;
 $$ LANGUAGE plpgsql;
 
