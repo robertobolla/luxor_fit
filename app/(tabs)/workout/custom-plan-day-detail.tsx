@@ -173,11 +173,27 @@ export default function CustomPlanDayDetailScreen() {
 
   const handleSetTypeClick = (index: number) => {
     console.log('🔘 Click en botón de tipo de serie, índice:', index);
+    console.log('📊 setTypes length:', setTypes.length);
+    console.log('📊 setTypes[index]:', setTypes[index]);
+    console.log('📊 Abriendo modal...');
     setSelectedSetIndex(index);
     setShowSetTypeModal(true);
+    
+    // Forzar actualización después de un tick
+    setTimeout(() => {
+      console.log('📊 Estado showSetTypeModal después:', showSetTypeModal);
+    }, 100);
   };
 
   const handleChangeSetType = (newType: SetType) => {
+    console.log('🔄 Cambiando tipo de serie:', { selectedSetIndex, newType });
+    
+    if (selectedSetIndex === -1) {
+      console.error('❌ Índice de serie inválido');
+      setShowSetTypeModal(false);
+      return;
+    }
+    
     const newSetTypes = [...setTypes];
     const currentReps = newSetTypes[selectedSetIndex]?.reps || null;
     
@@ -186,6 +202,7 @@ export default function CustomPlanDayDetailScreen() {
       reps: newType === 'failure' ? null : currentReps,
     };
     
+    console.log('✅ Nuevo array de setTypes:', newSetTypes);
     setSetTypes(newSetTypes);
     
     // Si es al fallo, limpiar las reps en el input
@@ -650,15 +667,15 @@ export default function CustomPlanDayDetailScreen() {
         animationType="slide"
         onRequestClose={() => setEditingExercise(null)}
       >
-        <KeyboardAvoidingView
+        <TouchableOpacity
           style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+          activeOpacity={1}
+          onPress={() => setEditingExercise(null)}
         >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setEditingExercise(null)}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+            style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}
           >
             <TouchableOpacity
               activeOpacity={1}
@@ -690,16 +707,25 @@ export default function CustomPlanDayDetailScreen() {
                   <View style={styles.inputGroup}>
                     <Text style={styles.label}>Repeticiones por serie</Text>
                     {Array.from({ length: parseInt(sets) || 0 }).map((_, idx) => {
-                      const setType = setTypes[idx];
-                      const isFailure = setType?.type === 'failure';
-                      const setLabel = setType ? getSetLabel(setType, idx) : `${idx + 1}`;
+                      // Asegurar que existe un setType para este índice
+                      if (!setTypes[idx]) {
+                        const tempSetTypes = [...setTypes];
+                        tempSetTypes[idx] = { type: 'normal', reps: null };
+                        setSetTypes(tempSetTypes);
+                      }
+                      
+                      const setType = setTypes[idx] || { type: 'normal', reps: null };
+                      const isFailure = setType.type === 'failure';
+                      const setLabel = getSetLabel(setType, idx);
                       
                       return (
                         <View key={idx} style={styles.repInputRow}>
                           <TouchableOpacity
                             style={styles.setTypeButton}
                             onPress={() => {
-                              console.log('👆 Tocando botón serie', idx);
+                              console.log('👆 Tocando botón serie', idx, 'setType:', setType);
+                              console.log('📊 Estado actual setTypes:', setTypes);
+                              console.log('📊 Estado actual showSetTypeModal:', showSetTypeModal);
                               handleSetTypeClick(idx);
                             }}
                             activeOpacity={0.7}
@@ -716,7 +742,7 @@ export default function CustomPlanDayDetailScreen() {
                             editable={!isFailure}
                           />
                           <Text style={styles.repLabel}>
-                            {setType?.type === 'rir' ? 'RIR' : 'reps'}
+                            {setType.type === 'rir' ? 'RIR' : 'reps'}
                           </Text>
                         </View>
                       );
@@ -744,36 +770,52 @@ export default function CustomPlanDayDetailScreen() {
                 </View>
               </ScrollView>
             </TouchableOpacity>
-          </TouchableOpacity>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </TouchableOpacity>
       </Modal>
 
       {/* Modal para seleccionar tipo de serie */}
       <Modal
         visible={showSetTypeModal}
         transparent={true}
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => {
           console.log('⛔ Cerrando modal de tipo de serie');
           setShowSetTypeModal(false);
+          setSelectedSetIndex(-1);
         }}
-        onShow={() => console.log('✅ Modal de tipo de serie mostrado, índice:', selectedSetIndex)}
+        onShow={() => {
+          console.log('✅ Modal de tipo de serie mostrado');
+          console.log('📊 Índice seleccionado:', selectedSetIndex);
+          console.log('📊 Visible:', showSetTypeModal);
+        }}
       >
         <TouchableOpacity
           style={styles.setTypeModalOverlay}
           activeOpacity={1}
-          onPress={() => setShowSetTypeModal(false)}
+          onPress={() => {
+            console.log('🚪 Click en overlay para cerrar');
+            setShowSetTypeModal(false);
+            setSelectedSetIndex(-1);
+          }}
         >
           <TouchableOpacity
             activeOpacity={1}
-            onPress={(e) => e.stopPropagation()}
+            onPress={(e) => {
+              e.stopPropagation();
+              console.log('🛑 Deteniendo propagación en contenido modal');
+            }}
             style={styles.setTypeModalContent}
           >
             <Text style={styles.setTypeModalTitle}>Seleccionar Tipo de Serie</Text>
             
             <TouchableOpacity
               style={styles.setTypeOption}
-              onPress={() => handleChangeSetType('warmup')}
+              onPress={() => {
+                console.log('🟡 Seleccionado: Calentamiento');
+                handleChangeSetType('warmup');
+              }}
+              activeOpacity={0.7}
             >
               <View style={[styles.setTypeIcon, styles.setTypeIconWarmup]}>
                 <Text style={styles.setTypeIconText}>C</Text>
@@ -787,7 +829,11 @@ export default function CustomPlanDayDetailScreen() {
 
             <TouchableOpacity
               style={styles.setTypeOption}
-              onPress={() => handleChangeSetType('normal')}
+              onPress={() => {
+                console.log('🟢 Seleccionado: Normal');
+                handleChangeSetType('normal');
+              }}
+              activeOpacity={0.7}
             >
               <View style={[styles.setTypeIcon, styles.setTypeIconNormal]}>
                 <Text style={styles.setTypeIconText}>1</Text>
@@ -800,7 +846,11 @@ export default function CustomPlanDayDetailScreen() {
 
             <TouchableOpacity
               style={styles.setTypeOption}
-              onPress={() => handleChangeSetType('failure')}
+              onPress={() => {
+                console.log('🔴 Seleccionado: Al Fallo');
+                handleChangeSetType('failure');
+              }}
+              activeOpacity={0.7}
             >
               <View style={[styles.setTypeIcon, styles.setTypeIconFailure]}>
                 <Text style={styles.setTypeIconText}>F</Text>
@@ -813,7 +863,11 @@ export default function CustomPlanDayDetailScreen() {
 
             <TouchableOpacity
               style={styles.setTypeOption}
-              onPress={() => handleChangeSetType('drop')}
+              onPress={() => {
+                console.log('🟣 Seleccionado: Drop');
+                handleChangeSetType('drop');
+              }}
+              activeOpacity={0.7}
             >
               <View style={[styles.setTypeIcon, styles.setTypeIconDrop]}>
                 <Text style={styles.setTypeIconText}>D</Text>
@@ -826,7 +880,11 @@ export default function CustomPlanDayDetailScreen() {
 
             <TouchableOpacity
               style={styles.setTypeOption}
-              onPress={() => handleChangeSetType('rir')}
+              onPress={() => {
+                console.log('🔵 Seleccionado: RIR');
+                handleChangeSetType('rir');
+              }}
+              activeOpacity={0.7}
             >
               <View style={[styles.setTypeIcon, styles.setTypeIconRIR]}>
                 <Text style={styles.setTypeIconText}>R</Text>
@@ -839,7 +897,11 @@ export default function CustomPlanDayDetailScreen() {
 
             <TouchableOpacity
               style={[styles.setTypeOption, styles.setTypeOptionDelete]}
-              onPress={handleRemoveSet}
+              onPress={() => {
+                console.log('🗑️ Eliminando serie');
+                handleRemoveSet();
+              }}
+              activeOpacity={0.7}
             >
               <Ionicons name="trash-outline" size={24} color="#ff4444" />
               <Text style={[styles.setTypeOptionText, styles.setTypeOptionTextDelete]}>
