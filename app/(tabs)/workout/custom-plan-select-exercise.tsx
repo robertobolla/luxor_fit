@@ -208,23 +208,16 @@ export default function CustomPlanSelectExerciseScreen() {
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => {
-              try {
-                if (router.canGoBack && router.canGoBack()) {
-                  router.back();
-                } else {
-                  throw new Error('Cannot go back');
-                }
-              } catch (error) {
-                // Si no hay pantalla anterior, navegar a custom-plan-day-detail
-                router.push({
-                  pathname: '/(tabs)/workout/custom-plan-day-detail',
-                  params: {
-                    dayNumber: dayNumber?.toString() || '',
-                    daysPerWeek: daysPerWeek || '',
-                    equipment: JSON.stringify(equipment),
-                  },
-                });
-              }
+              // Navegar directamente a custom-plan-day-detail con los parámetros correctos
+              router.push({
+                pathname: '/(tabs)/workout/custom-plan-day-detail',
+                params: {
+                  dayNumber: dayNumber?.toString() || '',
+                  weekNumber: weekNumber?.toString() || '1',
+                  daysPerWeek: daysPerWeek || '',
+                  equipment: JSON.stringify(equipment),
+                },
+              } as any);
             }}
           >
             <Ionicons name="arrow-back" size={24} color="#ffffff" />

@@ -84,6 +84,43 @@ export default function CustomPlanDayDetailScreen() {
     console.log('🔍 Estado modal cambió:', { showSetTypeModal, selectedSetIndex });
   }, [showSetTypeModal, selectedSetIndex]);
 
+  // Inicializar estados del modal cuando se abre para editar un ejercicio
+  useEffect(() => {
+    if (editingExercise) {
+      console.log('📝 Inicializando modal con datos del ejercicio:', editingExercise.name);
+      
+      // Copiar profundamente los datos del ejercicio
+      const exerciseSetTypes = editingExercise.setTypes || [];
+      const exerciseReps = exerciseSetTypes.map(st => st.reps?.toString() || '');
+      const exerciseRir = exerciseSetTypes.map(st => st.rir?.toString() || '');
+      
+      // Crear copias profundas para evitar referencias compartidas
+      const copiedSetTypes = exerciseSetTypes.map(st => ({
+        type: st.type,
+        reps: st.reps,
+        rir: st.rir,
+      }));
+      
+      setSetTypes(copiedSetTypes);
+      setReps([...exerciseReps]);
+      setRirValues([...exerciseRir]);
+      setSets(editingExercise.sets?.toString() || '');
+      
+      console.log('✅ Estados inicializados:', {
+        setTypes: copiedSetTypes.length,
+        reps: exerciseReps.length,
+        rir: exerciseRir.length,
+      });
+    } else {
+      // Limpiar estados cuando se cierra el modal
+      console.log('🧹 Limpiando estados del modal');
+      setSetTypes([]);
+      setReps([]);
+      setRirValues([]);
+      setSets('');
+    }
+  }, [editingExercise]);
+
   // Resetear estado cuando cambia el dayNumber
   useEffect(() => {
     setExercises([]);
@@ -234,28 +271,22 @@ export default function CustomPlanDayDetailScreen() {
     if (setType.type === 'warmup') return 'C';
     if (setType.type === 'drop') return 'D';
     
+    // Para series normales y al fallo: contar cuántas series normales + failure hay hasta este índice
+    let seriesCount = 0;
+    for (let i = 0; i <= index; i++) {
+      const type = setTypes[i]?.type || 'normal';
+      if (type === 'normal' || type === 'failure') {
+        seriesCount++;
+      }
+    }
+    
     // Para failure: mostrar número + "F"
     if (setType.type === 'failure') {
-      // Contar cuántas series normales + failure hay hasta este índice
-      let seriesCount = 0;
-      for (let i = 0; i <= index; i++) {
-        const type = setTypes[i]?.type || 'normal';
-        if (type === 'normal' || type === 'failure') {
-          seriesCount++;
-        }
-      }
       return `${seriesCount} F`;
     }
     
-    // Solo para series normales: contar cuántas hay antes
-    let normalCount = 0;
-    for (let i = 0; i <= index; i++) {
-      const type = setTypes[i]?.type || 'normal';
-      if (type === 'normal') {
-        normalCount++;
-      }
-    }
-    return `${normalCount}`;
+    // Para series normales: mostrar solo el número
+    return `${seriesCount}`;
   };
 
   const getSetButtonColor = (setType: SetInfo): string => {
@@ -463,6 +494,7 @@ export default function CustomPlanDayDetailScreen() {
               name: selectedExercise.name,
               sets: selectedExercise.sets || 3,
               reps: selectedExercise.reps || [10, 10, 10],
+              setTypes: selectedExercise.setTypes || [], // Inicializar setTypes vacío
             };
             
             // Verificar que no esté ya agregado usando los ejercicios actuales
@@ -510,40 +542,73 @@ export default function CustomPlanDayDetailScreen() {
         
         // Cargar datos primero
         try {
+          console.log('📥 Iniciando carga de datos para día:', dayNumber, 'semana:', weekNumber);
+          
           // Primero verificar si hay datos pasados por parámetros
           const paramDayData = parseSafeJSON(params.dayData as string, {});
+          console.log('📦 Datos de parámetros:', JSON.stringify(paramDayData, null, 2));
+          
           if (paramDayData.dayNumber === dayNumber && paramDayData.exercises) {
-            loadedExercises = paramDayData.exercises || [];
+            // Hacer copia profunda de ejercicios para evitar referencias compartidas
+            loadedExercises = (paramDayData.exercises || []).map((ex: Exercise) => ({
+              ...ex,
+              reps: [...(ex.reps || [])],
+              setTypes: (ex.setTypes || []).map((st: SetInfo) => ({
+                type: st.type,
+                reps: st.reps,
+                rir: st.rir,
+              })),
+            }));
+            console.log('✅ Cargados', loadedExercises.length, 'ejercicios desde parámetros (copia profunda)');
             if (isMounted && paramDayData.name) {
               setDayName(paramDayData.name);
             }
           }
           
           // Luego cargar desde AsyncStorage (sobrescribe si existe)
-          const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
+          const asyncKey = `week_${weekNumber}_day_${dayNumber}_data`;
+          console.log('🔑 Buscando en AsyncStorage con key:', asyncKey);
+          const dayDataStr = await AsyncStorage.getItem(asyncKey);
+          
           if (dayDataStr) {
+            console.log('📦 Datos encontrados en AsyncStorage');
             const savedDayData = parseSafeJSON(dayDataStr, {});
+            console.log('📦 Datos parseados:', JSON.stringify(savedDayData, null, 2));
+            
             // Verificar que los datos guardados correspondan al día correcto
             if (savedDayData.dayNumber === dayNumber) {
-              loadedExercises = savedDayData.exercises || [];
+              // Hacer copia profunda de ejercicios para evitar referencias compartidas
+              loadedExercises = (savedDayData.exercises || []).map((ex: Exercise) => ({
+                ...ex,
+                reps: [...(ex.reps || [])],
+                setTypes: (ex.setTypes || []).map((st: SetInfo) => ({
+                  type: st.type,
+                  reps: st.reps,
+                  rir: st.rir,
+                })),
+              }));
+              console.log('✅ Cargados', loadedExercises.length, 'ejercicios desde AsyncStorage (copia profunda)');
               if (isMounted) {
                 if (savedDayData.name) {
                   setDayName(savedDayData.name);
-                } else {
-                  setDayName(`Día ${dayNumber}`);
                 }
                 setExercises(loadedExercises);
               }
             }
-          } else if (isMounted && loadedExercises.length === 0) {
-            // Si no hay datos guardados, usar los valores por defecto
-            setDayName(`Día ${dayNumber}`);
-            setExercises([]);
-          } else if (isMounted) {
-            setExercises(loadedExercises);
+          } else {
+            console.log('⚠️ No hay datos en AsyncStorage para esta key');
+            if (isMounted && loadedExercises.length === 0) {
+              // Si no hay datos guardados, usar los valores por defecto
+              console.log('📝 Inicializando día vacío');
+              setDayName(`Día ${dayNumber}`);
+              setExercises([]);
+            } else if (isMounted) {
+              console.log('✅ Usando ejercicios de parámetros:', loadedExercises.length);
+              setExercises(loadedExercises);
+            }
           }
         } catch (error) {
-          console.error('Error loading day data:', error);
+          console.error('❌ Error loading day data:', error);
           // En caso de error, usar valores por defecto
           if (isMounted) {
             setDayName(`Día ${dayNumber}`);
@@ -572,23 +637,16 @@ export default function CustomPlanDayDetailScreen() {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => {
-            // Intentar volver atrás, si falla navegar a custom-plan-days
-            try {
-              if (router.canGoBack && router.canGoBack()) {
-                router.back();
-              } else {
-                throw new Error('Cannot go back');
-              }
-            } catch (error) {
-              // Si no hay pantalla anterior, navegar a custom-plan-days
-              router.push({
-                pathname: '/(tabs)/workout/custom-plan-days',
-                params: {
-                  daysPerWeek: params.daysPerWeek as string || '',
-                  equipment: JSON.stringify(equipment),
-                },
-              });
-            }
+            // Navegar directamente a custom-plan-days con los parámetros correctos
+            router.push({
+              pathname: '/(tabs)/workout/custom-plan-days',
+              params: {
+                daysPerWeek: params.daysPerWeek as string || '',
+                equipment: JSON.stringify(equipment),
+                planId: params.planId as string || '',
+                weekNumber: weekNumber.toString(),
+              },
+            } as any);
           }}
         >
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
@@ -606,7 +664,7 @@ export default function CustomPlanDayDetailScreen() {
                 if (dayDataStr) {
                   const dayData = parseSafeJSON(dayDataStr, { dayNumber, exercises: [] });
                   dayData.name = dayName.trim() || `Día ${dayNumber}`;
-                  await AsyncStorage.setItem(`day_${dayNumber}_data`, JSON.stringify(dayData));
+                  await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayData));
                 } else {
                   // Si no hay datos guardados, crear un nuevo objeto
                   const dayDataToSave = {
@@ -628,7 +686,7 @@ export default function CustomPlanDayDetailScreen() {
                 if (dayDataStr) {
                   const dayData = parseSafeJSON(dayDataStr, { dayNumber, exercises: [] });
                   dayData.name = dayName.trim() || `Día ${dayNumber}`;
-                  await AsyncStorage.setItem(`day_${dayNumber}_data`, JSON.stringify(dayData));
+                  await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayData));
                 } else {
                   // Si no hay datos guardados, crear un nuevo objeto
                   const dayDataToSave = {
@@ -703,19 +761,20 @@ export default function CustomPlanDayDetailScreen() {
                       const label = (() => {
                         switch (setInfo.type) {
                           case 'warmup': return 'C';
-                          case 'failure': return 'F';
                           case 'drop': return 'D';
+                          case 'failure':
                           case 'normal':
                           default:
-                            // Contar cuántas series normales hay antes de esta
-                            let normalCount = 0;
+                            // Contar cuántas series normales + fallo hay hasta este índice
+                            let seriesCount = 0;
                             for (let i = 0; i <= idx; i++) {
                               const type = (exercise.setTypes || [])[i]?.type || 'normal';
-                              if (type === 'normal') {
-                                normalCount++;
+                              if (type === 'normal' || type === 'failure') {
+                                seriesCount++;
                               }
                             }
-                            return `${normalCount}`;
+                            // Para failure, agregar "F" al número
+                            return setInfo.type === 'failure' ? `${seriesCount} F` : `${seriesCount}`;
                         }
                       })();
                       

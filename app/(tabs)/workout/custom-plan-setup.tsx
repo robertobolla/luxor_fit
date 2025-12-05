@@ -96,16 +96,8 @@ export default function CustomPlanSetupScreen() {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => {
-            try {
-              if (router.canGoBack && router.canGoBack()) {
-                router.back();
-              } else {
-                throw new Error('Cannot go back');
-              }
-            } catch (error) {
-              // Si no hay pantalla anterior, navegar a workout
-              router.push('/(tabs)/workout' as any);
-            }
+            // Navegar directamente a la pantalla de workout
+            router.push('/(tabs)/workout' as any);
           }}
         >
           <Ionicons name="arrow-back" size={24} color="#ffffff" />

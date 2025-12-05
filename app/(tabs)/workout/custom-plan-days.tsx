@@ -41,6 +41,7 @@ export default function CustomPlanDaysScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [planName, setPlanName] = useState<string>('');
   const [isEditingPlanName, setIsEditingPlanName] = useState(false);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   
   // Días de la semana actual
   const currentWeekDays = weeks[currentWeekIndex]?.days || [];
@@ -102,11 +103,16 @@ export default function CustomPlanDaysScreen() {
             
             for (const dayData of weekData.days) {
               const dayNumber = weekDays.length + 1;
+              // Hacer copia profunda de ejercicios para evitar referencias compartidas
               const exercises = dayData.exercises.map((ex: any) => ({
                 name: ex.name,
                 sets: ex.sets,
-                reps: ex.reps,
-                setTypes: ex.setTypes || [],
+                reps: Array.isArray(ex.reps) ? [...ex.reps] : ex.reps,
+                setTypes: Array.isArray(ex.setTypes) ? ex.setTypes.map((st: any) => ({
+                  type: st.type,
+                  reps: st.reps,
+                  rir: st.rir,
+                })) : [],
               }));
 
               weekDays.push({
@@ -143,6 +149,7 @@ export default function CustomPlanDaysScreen() {
 
           setWeeks(loadedWeeks);
           await AsyncStorage.setItem('custom_plan_weeks_count', loadedWeeks.length.toString());
+          setInitialLoadComplete(true);
           
         } else if (weeklyStructure && weeklyStructure.length > 0) {
           // Plan de una semana (compatibilidad)
@@ -153,11 +160,16 @@ export default function CustomPlanDaysScreen() {
           for (let i = 0; i < weeklyStructure.length; i++) {
             const dayData = weeklyStructure[i];
             const dayNumber = i + 1;
+            // Hacer copia profunda de ejercicios para evitar referencias compartidas
             const exercises = dayData.exercises.map((ex: any) => ({
               name: ex.name,
               sets: ex.sets,
-              reps: ex.reps,
-              setTypes: ex.setTypes || [],
+              reps: Array.isArray(ex.reps) ? [...ex.reps] : ex.reps,
+              setTypes: Array.isArray(ex.setTypes) ? ex.setTypes.map((st: any) => ({
+                type: st.type,
+                reps: st.reps,
+                rir: st.rir,
+              })) : [],
             }));
 
             weekDays.push({
@@ -189,6 +201,7 @@ export default function CustomPlanDaysScreen() {
             days: weekDays,
           }]);
           await AsyncStorage.setItem('custom_plan_weeks_count', '1');
+          setInitialLoadComplete(true);
         } else {
           // Plan vacío
           console.log('❌ Plan sin estructura');
@@ -257,6 +270,8 @@ export default function CustomPlanDaysScreen() {
         console.error('Error loading plan data from AsyncStorage:', error);
         setPlanName(`Plan Personalizado - ${new Date().toLocaleDateString()}`);
       }
+      
+      setInitialLoadComplete(true);
     };
     
     loadExistingPlan();
@@ -266,6 +281,14 @@ export default function CustomPlanDaysScreen() {
   useFocusEffect(
     useCallback(() => {
       const loadWeekData = async () => {
+        // Solo recargar desde AsyncStorage si ya se completó la carga inicial
+        if (!initialLoadComplete) {
+          console.log('⏭️ Saltando useFocusEffect: carga inicial aún no completada');
+          return;
+        }
+
+        console.log('🔄 useFocusEffect: recargando datos desde AsyncStorage');
+
         try {
           // Cargar número de semanas guardadas
           const savedWeeksCount = await AsyncStorage.getItem('custom_plan_weeks_count');
@@ -292,10 +315,16 @@ export default function CustomPlanDaysScreen() {
                   });
                 }
               } else {
-                weekDays.push({
-                  dayNumber: dayNum,
-                  exercises: [],
-                });
+                // Si no hay datos en AsyncStorage, mantener los datos existentes
+                const existingDay = weeks[weekNum - 1]?.days[dayNum - 1];
+                if (existingDay) {
+                  weekDays.push(existingDay);
+                } else {
+                  weekDays.push({
+                    dayNumber: dayNum,
+                    exercises: [],
+                  });
+                }
               }
             }
             
@@ -318,7 +347,7 @@ export default function CustomPlanDaysScreen() {
       };
       
       loadWeekData();
-    }, [daysPerWeek])
+    }, [daysPerWeek, initialLoadComplete])
   );
 
   const handleDayPress = (dayNumber: number) => {
@@ -632,17 +661,14 @@ export default function CustomPlanDaysScreen() {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => {
-            try {
-              if (router.canGoBack && router.canGoBack()) {
-                router.back();
-              } else {
-                throw new Error('Cannot go back');
-              }
-            } catch (error) {
-              // Si no hay pantalla anterior, navegar a custom-plan-setup
+            // Si estamos editando un plan existente, volver a la lista de planes
+            // Si estamos creando uno nuevo, volver al setup
+            if (editingPlanId) {
+              router.push('/(tabs)/workout' as any);
+            } else {
               router.push({
                 pathname: '/(tabs)/workout/custom-plan-setup',
-              });
+              } as any);
             }
           }}
         >
