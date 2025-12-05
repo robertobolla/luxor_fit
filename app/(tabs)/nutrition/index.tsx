@@ -1078,13 +1078,8 @@ export default function NutritionHomeScreen() {
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => {
-              try {
-                if (router.canGoBack && router.canGoBack()) {
-                  router.back();
-                }
-              } catch (error) {
-                // Si no hay pantalla anterior, no hacer nada (ya estamos en la tab de nutrición)
-              }
+              // Navegar al dashboard
+              router.push('/(tabs)/dashboard' as any);
             }} 
             style={styles.backButton}
           >

@@ -184,7 +184,7 @@ export default function TrackingScreen() {
           style: 'destructive',
           onPress: () => {
             stopGPSTracking();
-            router.back();
+            router.push('/(tabs)/workout' as any);
           },
         },
         {
@@ -213,7 +213,7 @@ export default function TrackingScreen() {
                 Alert.alert(
                   '¡Guardado! ✅',
                   `Entrenamiento de ${activityName.toLowerCase()} guardado correctamente`,
-                  [{ text: 'OK', onPress: () => router.back() }]
+                  [{ text: 'OK', onPress: () => router.push('/(tabs)/workout' as any) }]
                 );
               } else {
                 Alert.alert('Error', 'No se pudo guardar el entrenamiento');

@@ -71,7 +71,7 @@ export default function RegisterWeightScreen() {
     
     if (result) {
       Alert.alert('¡Guardado!', 'Mediciones registradas correctamente.', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => router.push('/(tabs)/dashboard' as any) }
       ]);
     }
   };
@@ -82,7 +82,7 @@ export default function RegisterWeightScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard' as any)}>
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Registrar Medición</Text>

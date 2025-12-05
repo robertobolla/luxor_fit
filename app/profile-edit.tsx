@@ -243,7 +243,7 @@ export default function ProfileEditScreen() {
       }
 
       Alert.alert('¡Guardado!', 'Tu perfil ha sido actualizado.');
-      router.back();
+      router.push('/(tabs)/dashboard' as any);
     } catch (err: any) {
       console.error('Error saving profile:', err);
       const errorMessage = err.message || 'No se pudo guardar el perfil.';
@@ -323,7 +323,7 @@ export default function ProfileEditScreen() {
       await createOrUpdateMealPlan(user.id, mondayStr);
 
       Alert.alert('¡Todo listo!', 'Tu perfil y plan de nutrición han sido actualizados.');
-      router.back();
+      router.push('/(tabs)/dashboard' as any);
     } catch (err: any) {
       console.error('Error saving and adapting:', err);
       const errorMessage = err.message || 'Hubo un problema al actualizar. Intenta nuevamente.';
@@ -352,7 +352,7 @@ export default function ProfileEditScreen() {
             if (hasChanges()) {
               setShowExitConfirm(true);
             } else {
-              router.back();
+              router.push('/(tabs)/dashboard' as any);
             }
           }} 
           style={styles.backButton}
@@ -501,7 +501,7 @@ export default function ProfileEditScreen() {
         confirmText="Descartar"
         cancelText="Cancelar"
         confirmButtonStyle="danger"
-        onConfirm={() => router.back()}
+        onConfirm={() => router.push('/(tabs)/dashboard' as any)}
       />
 
       {/* Modal de confirmación para adaptar nutrición */}

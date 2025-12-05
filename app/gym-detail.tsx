@@ -217,7 +217,7 @@ export default function GymDetailScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard' as any)}>
           <Ionicons name="chevron-back" size={28} color="#ffffff" />
         </TouchableOpacity>
         

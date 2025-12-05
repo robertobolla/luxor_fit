@@ -107,7 +107,7 @@ export default function MealLogScreen() {
         setIsSaving(false);
         setIsRetrying(false);
         Alert.alert('¡Guardado!', 'Comida registrada correctamente.', [
-          { text: 'OK', onPress: () => router.back() },
+          { text: 'OK', onPress: () => router.push('/(tabs)/nutrition' as any) },
         ]);
         return;
       } catch (error) {
@@ -159,7 +159,7 @@ export default function MealLogScreen() {
 
       if (result.success) {
         Alert.alert('¡Guardado!', 'Agua registrada correctamente.', [
-          { text: 'OK', onPress: () => router.back() },
+          { text: 'OK', onPress: () => router.push('/(tabs)/nutrition' as any) },
         ]);
       } else {
         Alert.alert('Error', result.error || 'No se pudo registrar el agua.');
@@ -181,16 +181,8 @@ export default function MealLogScreen() {
           <View style={styles.header}>
             <TouchableOpacity 
               onPress={() => {
-                try {
-                  if (router.canGoBack && router.canGoBack()) {
-                    router.back();
-                  } else {
-                    throw new Error('Cannot go back');
-                  }
-                } catch (error) {
-                  // Si no hay pantalla anterior, navegar a nutrición
-                  router.push('/(tabs)/nutrition' as any);
-                }
+                // Navegar directamente a nutrition
+                router.push('/(tabs)/nutrition' as any);
               }} 
               style={styles.backButton}
             >
@@ -253,7 +245,7 @@ export default function MealLogScreen() {
       <LoadingOverlay visible={isSaving || isRetrying} message="Guardando comida..." />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/nutrition' as any)} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Registrar Comida</Text>

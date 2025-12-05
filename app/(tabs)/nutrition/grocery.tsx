@@ -95,7 +95,7 @@ export default function GroceryListScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backIconButton}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/nutrition' as any)} style={styles.backIconButton}>
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Lista de Compras</Text>

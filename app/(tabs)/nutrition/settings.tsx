@@ -141,7 +141,7 @@ export default function NutritionSettingsScreen() {
                 text: 'Cancelar',
                 style: 'cancel',
                 onPress: () => {
-                  router.back();
+                  router.push('/(tabs)/nutrition' as any);
                 },
               },
               {
@@ -203,7 +203,7 @@ export default function NutritionSettingsScreen() {
                     console.error('Error recalculando targets:', err);
                   }
                   
-                  router.back();
+                  router.push('/(tabs)/nutrition' as any);
                 },
               },
               {
@@ -441,7 +441,7 @@ export default function NutritionSettingsScreen() {
       await createOrUpdateMealPlan(user.id, mondayStr, workoutPlanData);
 
       Alert.alert('¡Listo!', 'Tu nuevo plan de comidas ha sido generado.');
-      router.back();
+      router.push('/(tabs)/nutrition' as any);
     } catch (err: any) {
       console.error('Error regenerating plan:', err);
       Alert.alert('Error', 'No se pudo regenerar el plan. Intenta nuevamente.');
@@ -468,16 +468,8 @@ export default function NutritionSettingsScreen() {
         <View style={styles.header}>
           <TouchableOpacity 
             onPress={() => {
-              try {
-                if (router.canGoBack && router.canGoBack()) {
-                  router.back();
-                } else {
-                  throw new Error('Cannot go back');
-                }
-              } catch (error) {
-                // Si no hay pantalla anterior, navegar a nutrición
-                router.push('/(tabs)/nutrition' as any);
-              }
+              // Navegar directamente a nutrition
+              router.push('/(tabs)/nutrition' as any);
             }} 
             style={styles.backButton}
           >

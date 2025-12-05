@@ -139,7 +139,7 @@ export default function OnboardingScreen() {
         { 
           text: 'Sí, cancelar', 
           style: 'destructive',
-          onPress: () => router.back()
+          onPress: () => router.push('/' as any)
         },
       ]
     );

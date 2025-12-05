@@ -441,7 +441,7 @@ export default function MealPlanScreen() {
           animationType="fade"
           onRequestClose={() => {
             setShowNoPlanModal(false);
-            router.back();
+            router.push('/(tabs)/nutrition' as any);
           }}
         >
           <View style={styles.modalContainer}>
@@ -514,7 +514,7 @@ export default function MealPlanScreen() {
                 style={styles.modalButton}
                 onPress={() => {
                   setShowNoPlanModal(false);
-                  router.back();
+                  router.push('/(tabs)/nutrition' as any);
                 }}
               >
                 <Text style={styles.modalButtonText}>Entendido</Text>
@@ -536,16 +536,8 @@ export default function MealPlanScreen() {
       <View style={styles.header}>
         <TouchableOpacity 
           onPress={() => {
-            try {
-              if (router.canGoBack && router.canGoBack()) {
-                router.back();
-              } else {
-                throw new Error('Cannot go back');
-              }
-            } catch (error) {
-              // Si no hay pantalla anterior, navegar a nutrición
-              router.push('/(tabs)/nutrition' as any);
-            }
+            // Navegar directamente a nutrition
+            router.push('/(tabs)/nutrition' as any);
           }} 
           style={styles.backIconButton}
         >
@@ -745,7 +737,7 @@ export default function MealPlanScreen() {
               style={styles.modalButton}
               onPress={() => {
                 setShowNoPlanModal(false);
-                router.back();
+                router.push('/(tabs)/nutrition' as any);
               }}
             >
               <Text style={styles.modalButtonText}>Entendido</Text>
