@@ -23,7 +23,7 @@ WHERE email = 'andresgonzalezgandolfo@gmail.com';
 -- Actualizar si ya existe
 UPDATE admin_roles
 SET
-  role_type = 'admin',
+  role_type = 'admin',  
   is_active = true,
   name = COALESCE(name, 'Andrés González'),
   updated_at = NOW()
@@ -125,4 +125,5 @@ SELECT * FROM admin_roles WHERE email = 'andresgonzalezgandolfo@gmail.com';
 -- - Clerk vincula automáticamente por email coincidente
 -- - Si el problema persiste, puede haber un issue en Clerk
 -- ============================================================================
+
 
