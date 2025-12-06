@@ -6,6 +6,7 @@ import Users from './pages/Users';
 import UserDetail from './pages/UserDetail';
 import Stats from './pages/Stats';
 import Settings from './pages/Settings';
+import CreateUser from './pages/CreateUser';
 import Partners from './pages/Partners';
 import Exercises from './pages/Exercises';
 import PartnerReferrals from './pages/PartnerReferrals';
@@ -31,6 +32,7 @@ function App() {
           <Route path="empresarios/:empresarioId" element={<EmpresarioUsers />} />
           <Route path="stats" element={<Stats />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="create-user" element={<CreateUser />} />
           <Route path="partner-referrals" element={<PartnerReferrals />} />
           <Route path="empresario-users" element={<EmpresarioUsers />} />
         </Route>

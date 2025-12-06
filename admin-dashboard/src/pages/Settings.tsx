@@ -57,17 +57,37 @@ export default function Settings() {
     let name: string;
 
     if (addMode === 'direct') {
-      // Modo directo: usar email y nombre proporcionados
+      // Modo directo: PRIMERO buscar el usuario por email
       if (!adminEmail.trim()) {
         alert('El email es requerido');
         return;
       }
       
       email = adminEmail.trim();
-      name = adminName.trim() || email.split('@')[0];
       
-      // Generar user_id temporal (se actualizará cuando el usuario se registre en Clerk)
-      userId = `temp_${Date.now()}_${email.replace(/[@.]/g, '_')}`;
+      try {
+        setAddingAdmin(true);
+        
+        // Buscar el usuario por email
+        const results = await searchUsers(email);
+        const foundUser = results.find(u => u.email?.toLowerCase() === email.toLowerCase());
+        
+        if (!foundUser) {
+          alert('❌ No se encontró ningún usuario con ese email.\n\nEl usuario debe registrarse en la app primero antes de ser promovido a administrador.');
+          setAddingAdmin(false);
+          return;
+        }
+        
+        // Usar el user_id REAL de Clerk del usuario encontrado
+        userId = foundUser.user_id;
+        name = adminName.trim() || foundUser.name || email.split('@')[0];
+        
+      } catch (error: any) {
+        console.error('Error buscando usuario:', error);
+        alert('Error al buscar usuario. Intenta nuevamente.');
+        setAddingAdmin(false);
+        return;
+      }
     } else {
       // Modo búsqueda: usar usuario seleccionado
       if (!selectedUser) {
@@ -81,7 +101,6 @@ export default function Settings() {
     }
 
     try {
-      setAddingAdmin(true);
       await addAdmin({
         user_id: userId,
         email,
@@ -89,7 +108,7 @@ export default function Settings() {
         created_by: user.id,
       });
       
-      alert('Administrador agregado exitosamente');
+      alert(`✅ Usuario promovido a administrador exitosamente.\n\nCuando ${name || email} cierre y vuelva a abrir la app, tendrá acceso completo sin necesidad de pagar.`);
       setShowAddAdminModal(false);
       setSearchQuery('');
       setSearchResults([]);
@@ -181,7 +200,7 @@ export default function Settings() {
                   fontWeight: addMode === 'direct' ? '600' : '400',
                 }}
               >
-                Agregar Directamente
+                Por Email
               </button>
               <button
                 type="button"
@@ -216,7 +235,7 @@ export default function Settings() {
                     style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginTop: '8px' }}
                   />
                   <p style={{ color: '#999', fontSize: '12px', marginTop: '4px', marginBottom: 0 }}>
-                    El usuario recibirá acceso de administrador cuando se registre en Clerk con este email.
+                    Ingresa el email del usuario registrado. El sistema verificará que existe antes de promoverlo.
                   </p>
                 </div>
 
@@ -231,9 +250,12 @@ export default function Settings() {
                   />
                 </div>
 
-                <div style={{ background: '#1a1a1a', padding: '12px', borderRadius: '6px', marginTop: '20px' }}>
-                  <p style={{ color: '#FF9800', fontSize: '14px', margin: 0 }}>
-                    ⚠️ Se creará un registro temporal. El user_id se actualizará automáticamente cuando el usuario se registre en Clerk.
+                <div style={{ background: '#1a4d1a', padding: '12px', borderRadius: '6px', marginTop: '20px' }}>
+                  <p style={{ color: '#4caf50', fontSize: '14px', margin: '0 0 8px 0', fontWeight: '600' }}>
+                    ✅ El usuario debe estar registrado en la app
+                  </p>
+                  <p style={{ color: '#e0e0e0', fontSize: '13px', margin: 0 }}>
+                    Se verificará que el usuario existe antes de promoverlo a administrador. Tendrá acceso inmediato al cerrar y volver a abrir la app.
                   </p>
                 </div>
 

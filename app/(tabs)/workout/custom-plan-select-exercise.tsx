@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../../src/services/supabase';
@@ -69,6 +69,15 @@ export default function CustomPlanSelectExerciseScreen() {
   const [videoModalVisible, setVideoModalVisible] = useState(false);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
   const [selectedExerciseName, setSelectedExerciseName] = useState<string>('');
+
+  // Resetear el músculo seleccionado cada vez que la pantalla recibe el foco
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 Pantalla de selección de ejercicio enfocada, reseteando músculo');
+      setSelectedMuscle(null);
+      setExercises([]);
+    }, [])
+  );
 
   // Resetear el músculo seleccionado cuando cambia el día
   useEffect(() => {

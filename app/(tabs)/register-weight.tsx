@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  Alert,
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
@@ -15,9 +14,11 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../src/services/supabase';
+import { useCustomAlert } from '../../src/components/CustomAlert';
 
 export default function RegisterWeightScreen() {
   const { user } = useUser();
+  const { showAlert, AlertComponent } = useCustomAlert();
   const params = useLocalSearchParams();
   const defaultDate = params.date ? new Date(params.date as string).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
   
@@ -70,12 +71,20 @@ export default function RegisterWeightScreen() {
         console.log('✅ Peso actualizado en perfil');
       }
 
-      Alert.alert('¡Guardado!', 'Mediciones registradas correctamente.', [
-        { text: 'OK', onPress: () => router.push('/(tabs)/nutrition' as any) }
-      ]);
+      showAlert(
+        '¡Guardado!',
+        'Mediciones registradas correctamente.',
+        [{ text: 'OK', onPress: () => router.push('/(tabs)/nutrition' as any) }],
+        { icon: 'checkmark-circle', iconColor: '#4CAF50' }
+      );
     } catch (error: any) {
       console.error('Error saving weight:', error);
-      Alert.alert('Error', error.message || 'No se pudo guardar la medición. Intenta nuevamente.');
+      showAlert(
+        'Error',
+        error.message || 'No se pudo guardar la medición. Intenta nuevamente.',
+        [{ text: 'OK' }],
+        { icon: 'alert-circle', iconColor: '#F44336' }
+      );
     } finally {
       setSaving(false);
     }
@@ -83,7 +92,12 @@ export default function RegisterWeightScreen() {
 
   const handleSave = useCallback(async () => {
     if (!user?.id || !weight) {
-      Alert.alert('Error', 'El peso es requerido');
+      showAlert(
+        'Error',
+        'El peso es requerido',
+        [{ text: 'OK' }],
+        { icon: 'alert-circle', iconColor: '#F44336' }
+      );
       return;
     }
 
@@ -113,7 +127,7 @@ export default function RegisterWeightScreen() {
       if (existingMetric) {
         setSaving(false); // Detener loading mientras esperamos confirmación
         
-        Alert.alert(
+        showAlert(
           'Registro Existente',
           `Ya registraste mediciones para el día ${new Date(date).toLocaleDateString('es-ES', { 
             day: 'numeric', 
@@ -136,7 +150,8 @@ export default function RegisterWeightScreen() {
                 await performSave(bodyMetric, true);
               }
             }
-          ]
+          ],
+          { icon: 'calendar', iconColor: '#ffb300' }
         );
         return;
       }
@@ -146,7 +161,12 @@ export default function RegisterWeightScreen() {
 
     } catch (error: any) {
       console.error('Error checking existing weight:', error);
-      Alert.alert('Error', 'No se pudo verificar la medición. Intenta nuevamente.');
+      showAlert(
+        'Error',
+        'No se pudo verificar la medición. Intenta nuevamente.',
+        [{ text: 'OK' }],
+        { icon: 'alert-circle', iconColor: '#F44336' }
+      );
       setSaving(false);
     }
   }, [user, date, weight, bodyFat, muscle, notes]);
@@ -278,6 +298,8 @@ export default function RegisterWeightScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+
+      <AlertComponent />
     </SafeAreaView>
   );
 }

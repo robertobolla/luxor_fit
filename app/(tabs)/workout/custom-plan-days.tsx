@@ -7,15 +7,16 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
-  Alert,
   ActivityIndicator,
   TextInput,
+  Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../../src/services/supabase';
+import { useCustomAlert } from '../../../src/components/CustomAlert';
 
 interface DayData {
   dayNumber: number;
@@ -34,6 +35,7 @@ export default function CustomPlanDaysScreen() {
   const params = useLocalSearchParams();
   const equipment = JSON.parse((params.equipment as string) || '[]');
   const editingPlanId = params.planId as string | undefined;
+  const { showAlert, AlertComponent } = useCustomAlert();
 
   const [weeks, setWeeks] = useState<WeekData[]>([]);
   const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
@@ -41,6 +43,9 @@ export default function CustomPlanDaysScreen() {
   const [planName, setPlanName] = useState<string>('');
   const [isEditingPlanName, setIsEditingPlanName] = useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [showWeekDropdown, setShowWeekDropdown] = useState(false);
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [isPlanCurrentlyActive, setIsPlanCurrentlyActive] = useState(false);
   
   // Días de la semana actual
   const currentWeekDays = weeks[currentWeekIndex]?.days || [];
@@ -85,6 +90,9 @@ export default function CustomPlanDaysScreen() {
         // Extraer datos del plan
         const planData = plan.plan_data;
         setPlanName(plan.plan_name);
+        
+        // Guardar si el plan es activo actualmente
+        setIsPlanCurrentlyActive(plan.is_active || false);
 
         // Guardar planId en AsyncStorage
         await AsyncStorage.setItem('editing_plan_id', editingPlanId);
@@ -355,6 +363,19 @@ export default function CustomPlanDaysScreen() {
     });
   };
   
+  const toggleDayExpansion = (weekNumber: number, dayNumber: number) => {
+    const key = `${weekNumber}-${dayNumber}`;
+    const newExpanded = new Set(expandedDays);
+    
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    
+    setExpandedDays(newExpanded);
+  };
+
   const handleAddDay = () => {
     const updatedWeeks = [...weeks];
     const currentWeek = updatedWeeks[currentWeekIndex];
@@ -370,7 +391,12 @@ export default function CustomPlanDaysScreen() {
     currentWeek.days.push(newDay);
     setWeeks(updatedWeeks);
     
-    Alert.alert('¡Listo!', `Día ${newDayNumber} agregado a la Semana ${currentWeek.weekNumber}`);
+    showAlert(
+      '¡Listo!',
+      `Día ${newDayNumber} agregado a la Semana ${currentWeek.weekNumber}`,
+      [{ text: 'OK' }],
+      { icon: 'checkmark-circle', iconColor: '#4CAF50' }
+    );
   };
 
   const handleDeleteDay = async (dayNumber: number) => {
@@ -379,10 +405,11 @@ export default function CustomPlanDaysScreen() {
     
     // No permitir eliminar si es el único día
     if (currentWeek.days.length === 1) {
-      Alert.alert(
+      showAlert(
         'No se puede eliminar',
         'Debe haber al menos un día en la semana. Si no quieres este día, elimina la semana completa.',
-        [{ text: 'OK' }]
+        [{ text: 'OK' }],
+        { icon: 'alert-circle', iconColor: '#ffb300' }
       );
       return;
     }
@@ -390,9 +417,9 @@ export default function CustomPlanDaysScreen() {
     const dayToDelete = currentWeek.days.find(d => d.dayNumber === dayNumber);
     const dayName = dayToDelete?.name || `Día ${dayNumber}`;
     
-    Alert.alert(
+    showAlert(
       'Eliminar Día',
-      `¿Estás seguro de que quieres eliminar ${dayName}? Esta acción no se puede deshacer.`,
+      `¿Estás seguro de que quieres eliminar ${dayName}?\n\nEsta acción no se puede deshacer.`,
       [
         {
           text: 'Cancelar',
@@ -421,41 +448,152 @@ export default function CustomPlanDaysScreen() {
               const key = `week_${currentWeek.weekNumber}_day_${dayNumber}_data`;
               await AsyncStorage.removeItem(key);
               
-              Alert.alert('¡Eliminado!', `${dayName} ha sido eliminado.`);
+              showAlert(
+                '¡Eliminado!',
+                `${dayName} ha sido eliminado correctamente.`,
+                [{ text: 'OK' }],
+                { icon: 'checkmark-circle', iconColor: '#4CAF50' }
+              );
             } catch (error) {
               console.error('Error eliminando día:', error);
-              Alert.alert('Error', 'No se pudo eliminar el día. Intenta nuevamente.');
+              showAlert(
+                'Error',
+                'No se pudo eliminar el día. Intenta nuevamente.',
+                [{ text: 'OK' }],
+                { icon: 'alert-circle', iconColor: '#F44336' }
+              );
             }
           },
         },
-      ]
+      ],
+      { icon: 'trash', iconColor: '#F44336' }
     );
   };
   
   const handleAddWeek = async () => {
-    const newWeekNumber = weeks.length + 1;
+    setShowWeekDropdown(false);
     
-    // Nueva semana empieza con 1 día (el usuario puede agregar más)
-    const newWeekDays: DayData[] = [{
-      dayNumber: 1,
-      exercises: [],
-    }];
-    
-    const newWeek: WeekData = {
-      weekNumber: newWeekNumber,
-      days: newWeekDays,
-    };
-    
-    const updatedWeeks = [...weeks, newWeek];
-    setWeeks(updatedWeeks);
-    setCurrentWeekIndex(updatedWeeks.length - 1); // Ir a la nueva semana
-    
-    // Guardar el número de semanas
-    try {
-      await AsyncStorage.setItem('custom_plan_weeks_count', updatedWeeks.length.toString());
-    } catch (error) {
-      console.error('Error saving weeks count:', error);
+    showAlert(
+      'Agregar Semana',
+      '¿Quieres agregar una nueva semana a tu plan de entrenamiento?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Agregar',
+          onPress: async () => {
+            const newWeekNumber = weeks.length + 1;
+            
+            // Nueva semana empieza con 1 día (el usuario puede agregar más)
+            const newWeekDays: DayData[] = [{
+              dayNumber: 1,
+              exercises: [],
+            }];
+            
+            const newWeek: WeekData = {
+              weekNumber: newWeekNumber,
+              days: newWeekDays,
+            };
+            
+            const updatedWeeks = [...weeks, newWeek];
+            setWeeks(updatedWeeks);
+            setCurrentWeekIndex(updatedWeeks.length - 1); // Ir a la nueva semana
+            
+            // Guardar el número de semanas
+            try {
+              await AsyncStorage.setItem('custom_plan_weeks_count', updatedWeeks.length.toString());
+            } catch (error) {
+              console.error('Error saving weeks count:', error);
+            }
+            
+            showAlert(
+              '¡Listo!',
+              `Semana ${newWeekNumber} agregada exitosamente`,
+              [{ text: 'OK' }],
+              { icon: 'checkmark-circle', iconColor: '#4CAF50' }
+            );
+          },
+        },
+      ],
+      { icon: 'add-circle', iconColor: '#ffb300' }
+    );
+  };
+
+  const handleDeleteWeek = async (weekIndex: number) => {
+    if (weeks.length === 1) {
+      showAlert(
+        'No se puede eliminar',
+        'Debe haber al menos una semana en el plan.',
+        [{ text: 'OK' }],
+        { icon: 'alert-circle', iconColor: '#ffb300' }
+      );
+      return;
     }
+
+    const weekToDelete = weeks[weekIndex];
+    
+    showAlert(
+      'Eliminar Semana',
+      `¿Estás seguro de que quieres eliminar la Semana ${weekToDelete.weekNumber}?\n\nSe perderán todos los ejercicios de esta semana.\n\nEsta acción no se puede deshacer.`,
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Eliminar la semana del estado
+              const updatedWeeks = weeks.filter((_, index) => index !== weekIndex);
+              
+              // Renumerar las semanas restantes
+              updatedWeeks.forEach((week, index) => {
+                week.weekNumber = index + 1;
+              });
+              
+              setWeeks(updatedWeeks);
+              
+              // Ajustar el índice de la semana actual
+              if (currentWeekIndex >= updatedWeeks.length) {
+                setCurrentWeekIndex(updatedWeeks.length - 1);
+              } else if (currentWeekIndex > weekIndex) {
+                setCurrentWeekIndex(currentWeekIndex - 1);
+              }
+              
+              // Limpiar AsyncStorage para la semana eliminada
+              const weekNumber = weekToDelete.weekNumber;
+              for (let day = 1; day <= 7; day++) {
+                await AsyncStorage.removeItem(`week_${weekNumber}_day_${day}_data`);
+              }
+              
+              // Actualizar el contador de semanas
+              await AsyncStorage.setItem('custom_plan_weeks_count', updatedWeeks.length.toString());
+              
+              setShowWeekDropdown(false);
+              showAlert(
+                '¡Eliminado!',
+                'Semana eliminada correctamente',
+                [{ text: 'OK' }],
+                { icon: 'checkmark-circle', iconColor: '#4CAF50' }
+              );
+            } catch (error) {
+              console.error('Error deleting week:', error);
+              showAlert(
+                'Error',
+                'No se pudo eliminar la semana',
+                [{ text: 'OK' }],
+                { icon: 'alert-circle', iconColor: '#F44336' }
+              );
+            }
+          },
+        },
+      ],
+      { icon: 'trash', iconColor: '#F44336' }
+    );
   };
 
   const handleSavePlan = () => {
@@ -465,10 +603,11 @@ export default function CustomPlanDaysScreen() {
     );
     
     if (!hasAnyExercises) {
-      Alert.alert(
+      showAlert(
         'Plan vacío',
         'Debes agregar al menos un ejercicio a algún día para guardar el plan.',
-        [{ text: 'OK' }]
+        [{ text: 'OK' }],
+        { icon: 'alert-circle', iconColor: '#ffb300' }
       );
       return;
     }
@@ -483,9 +622,9 @@ export default function CustomPlanDaysScreen() {
     
     if (hasEmptyDays) {
       // Plan parcial - preguntar si quiere guardarlo así
-      Alert.alert(
+      showAlert(
         'Plan parcial',
-        `Has completado ${completedDays} de ${totalDays} días en ${weeks.length} ${weeks.length === 1 ? 'semana' : 'semanas'}. ¿Quieres guardar el plan parcial? Podrás continuar editándolo después.`,
+        `Has completado ${completedDays} de ${totalDays} días en ${weeks.length} ${weeks.length === 1 ? 'semana' : 'semanas'}.\n\n¿Quieres guardar el plan parcial? Podrás continuar editándolo después.`,
         [
           {
             text: 'Cancelar',
@@ -493,33 +632,48 @@ export default function CustomPlanDaysScreen() {
           },
           {
             text: 'Guardar como Borrador',
-            onPress: () => savePlanToDatabase(false),
+            // Si el plan ya es activo, mantenerlo activo
+            onPress: () => savePlanToDatabase(editingPlanId && isPlanCurrentlyActive),
           },
-        ]
+        ],
+        { icon: 'document-text', iconColor: '#ffb300' }
       );
     } else {
-      // Plan completo - preguntar si quiere activarlo
-      Alert.alert(
-        '¿Activar este plan?',
-        '¿Quieres que este sea tu plan de entrenamiento activo?',
-        [
-          {
-            text: 'No',
-            style: 'cancel',
-            onPress: () => savePlanToDatabase(false),
-          },
-          {
-            text: 'Sí',
-            onPress: () => savePlanToDatabase(true),
-          },
-        ]
-      );
+      // Plan completo
+      // Solo preguntar si quiere activarlo si NO es actualmente activo
+      if (editingPlanId && isPlanCurrentlyActive) {
+        // El plan ya es activo, guardar sin preguntar
+        savePlanToDatabase(true);
+      } else {
+        // Plan nuevo o plan existente pero no activo - preguntar si quiere activarlo
+        showAlert(
+          '¿Activar este plan?',
+          '¿Quieres que este sea tu plan de entrenamiento activo?',
+          [
+            {
+              text: 'No',
+              style: 'cancel',
+              onPress: () => savePlanToDatabase(false),
+            },
+            {
+              text: 'Sí',
+              onPress: () => savePlanToDatabase(true),
+            },
+          ],
+          { icon: 'checkmark-done-circle', iconColor: '#4CAF50' }
+        );
+      }
     }
   };
 
   const savePlanToDatabase = async (isActive: boolean) => {
     if (!user) {
-      Alert.alert('Error', 'Usuario no autenticado');
+      showAlert(
+        'Error',
+        'Usuario no autenticado',
+        [{ text: 'OK' }],
+        { icon: 'alert-circle', iconColor: '#F44336' }
+      );
       return;
     }
 
@@ -553,7 +707,12 @@ export default function CustomPlanDaysScreen() {
       }
 
       if (allWeeksData.length === 0) {
-        Alert.alert('Error', 'No hay días con ejercicios para guardar');
+        showAlert(
+          'Error',
+          'No hay días con ejercicios para guardar',
+          [{ text: 'OK' }],
+          { icon: 'alert-circle', iconColor: '#F44336' }
+        );
         setIsSaving(false);
         return;
       }
@@ -630,7 +789,12 @@ export default function CustomPlanDaysScreen() {
 
         if (error) {
           console.error('Error al actualizar plan:', error);
-          Alert.alert('Error', 'No se pudo actualizar el plan. Intenta nuevamente.');
+          showAlert(
+            'Error',
+            'No se pudo actualizar el plan. Intenta nuevamente.',
+            [{ text: 'OK' }],
+            { icon: 'alert-circle', iconColor: '#F44336' }
+          );
           setIsSaving(false);
           return;
         }
@@ -645,8 +809,8 @@ export default function CustomPlanDaysScreen() {
         await AsyncStorage.removeItem('custom_plan_weeks_count');
         await AsyncStorage.removeItem('editing_plan_id');
 
-        Alert.alert(
-          'Éxito',
+        showAlert(
+          '¡Éxito!',
           isActive 
             ? 'Plan actualizado y activado exitosamente' 
             : 'Plan actualizado exitosamente. Puedes activarlo desde "Mis planes de entrenamiento"',
@@ -654,10 +818,12 @@ export default function CustomPlanDaysScreen() {
             {
               text: 'OK',
               onPress: () => {
-                router.push('/(tabs)/workout');
+                // Volver al detalle del plan que estábamos editando
+                router.push(`/(tabs)/workout-plan-detail?planId=${planIdToUpdate}` as any);
               },
             },
-          ]
+          ],
+          { icon: 'checkmark-circle', iconColor: '#4CAF50' }
         );
         setIsSaving(false);
         return;
@@ -680,7 +846,12 @@ export default function CustomPlanDaysScreen() {
 
       if (error) {
         console.error('Error al guardar plan:', error);
-        Alert.alert('Error', 'No se pudo guardar el plan. Intenta nuevamente.');
+        showAlert(
+          'Error',
+          'No se pudo guardar el plan. Intenta nuevamente.',
+          [{ text: 'OK' }],
+          { icon: 'alert-circle', iconColor: '#F44336' }
+        );
         setIsSaving(false);
         return;
       }
@@ -695,8 +866,10 @@ export default function CustomPlanDaysScreen() {
       await AsyncStorage.removeItem('custom_plan_weeks_count');
       await AsyncStorage.removeItem('editing_plan_id');
 
-      Alert.alert(
-        'Éxito',
+      const newPlanId = data?.id;
+      
+      showAlert(
+        '¡Éxito!',
         isActive 
           ? 'Plan guardado y activado exitosamente' 
           : 'Plan guardado exitosamente. Puedes activarlo desde "Mis planes de entrenamiento"',
@@ -704,14 +877,25 @@ export default function CustomPlanDaysScreen() {
           {
             text: 'OK',
             onPress: () => {
-              router.push('/(tabs)/workout');
+              // Volver al detalle del plan recién creado
+              if (newPlanId) {
+                router.push(`/(tabs)/workout-plan-detail?planId=${newPlanId}` as any);
+              } else {
+                router.push('/(tabs)/workout' as any);
+              }
             },
           },
-        ]
+        ],
+        { icon: 'checkmark-circle', iconColor: '#4CAF50' }
       );
     } catch (error) {
       console.error('Error inesperado al guardar plan:', error);
-      Alert.alert('Error', 'Ocurrió un error al guardar el plan');
+      showAlert(
+        'Error',
+        'Ocurrió un error al guardar el plan',
+        [{ text: 'OK' }],
+        { icon: 'alert-circle', iconColor: '#F44336' }
+      );
     } finally {
       setIsSaving(false);
     }
@@ -725,10 +909,10 @@ export default function CustomPlanDaysScreen() {
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => {
-            // Si estamos editando un plan existente, volver a la lista de planes
+            // Si estamos editando un plan existente, volver al detalle de ese plan
             // Si estamos creando uno nuevo, volver al setup
             if (editingPlanId) {
-              router.push('/(tabs)/workout' as any);
+              router.push(`/(tabs)/workout-plan-detail?planId=${editingPlanId}` as any);
             } else {
               router.push({
                 pathname: '/(tabs)/workout/custom-plan-setup',
@@ -805,38 +989,98 @@ export default function CustomPlanDaysScreen() {
           )}
         </View>
 
-        {/* Navegación de semanas */}
-        {weeks.length > 1 && (
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.weeksNav}
-            contentContainerStyle={styles.weeksNavContent}
+        {/* Selector de semana con dropdown personalizado */}
+        <View style={styles.weekSelectorContainer}>
+          <TouchableOpacity 
+            style={styles.weekSelectorButton}
+            onPress={() => setShowWeekDropdown(!showWeekDropdown)}
+            activeOpacity={0.7}
           >
-            {weeks.map((week, index) => (
+            <View style={styles.weekSelectorContent}>
+              <Text style={styles.weekSelectorTitle}>
+                Semana {weeks[currentWeekIndex]?.weekNumber || 1}
+              </Text>
+              <Ionicons 
+                name={showWeekDropdown ? "chevron-up" : "chevron-down"} 
+                size={24} 
+                color="#ffb300" 
+              />
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* Dropdown de semanas */}
+        {showWeekDropdown && (
+          <View style={styles.weekDropdownContainer}>
+            <ScrollView 
+              style={styles.weekDropdownScroll}
+              nestedScrollEnabled={true}
+              showsVerticalScrollIndicator={true}
+            >
+              {weeks.map((week, index) => {
+                const isLastItem = index === weeks.length - 1;
+                return (
+                  <View 
+                    key={week.weekNumber}
+                    style={[
+                      styles.weekDropdownItem,
+                      currentWeekIndex === index && styles.weekDropdownItemActive,
+                      isLastItem && styles.weekDropdownItemLast
+                    ]}
+                  >
+                    <TouchableOpacity
+                      style={styles.weekDropdownItemButton}
+                      onPress={() => {
+                        setCurrentWeekIndex(index);
+                        setShowWeekDropdown(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.weekDropdownItemContent}>
+                        <Ionicons 
+                          name={currentWeekIndex === index ? "checkmark-circle" : "radio-button-off"} 
+                          size={24} 
+                          color={currentWeekIndex === index ? "#ffb300" : "#666"} 
+                        />
+                        <Text style={[
+                          styles.weekDropdownItemText,
+                          currentWeekIndex === index && styles.weekDropdownItemTextActive
+                        ]}>
+                          Semana {week.weekNumber}
+                        </Text>
+                        <Text style={styles.weekDropdownItemDays}>
+                          {week.days.length} {week.days.length === 1 ? 'día' : 'días'}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={styles.weekDropdownDeleteButton}
+                      onPress={() => handleDeleteWeek(index)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#F44336" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+              
+              {/* Botón agregar semana en el dropdown */}
               <TouchableOpacity
-                key={week.weekNumber}
-                style={[
-                  styles.weekTab,
-                  currentWeekIndex === index && styles.weekTabActive
-                ]}
-                onPress={() => setCurrentWeekIndex(index)}
+                style={styles.weekDropdownAddButton}
+                onPress={handleAddWeek}
+                activeOpacity={0.7}
               >
-                <Text style={[
-                  styles.weekTabText,
-                  currentWeekIndex === index && styles.weekTabTextActive
-                ]}>
-                  Semana {week.weekNumber}
+                <Ionicons name="add-circle" size={28} color="#ffb300" />
+                <Text style={styles.weekDropdownAddButtonText}>
+                  Agregar Semana
                 </Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
+            </ScrollView>
+          </View>
         )}
 
         <View style={styles.weekInfo}>
-          <Text style={styles.weekTitle}>
-            Semana {weeks[currentWeekIndex]?.weekNumber || 1}
-          </Text>
           <Text style={styles.description}>
             Selecciona cada día para agregar ejercicios
           </Text>
@@ -869,36 +1113,59 @@ export default function CustomPlanDaysScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-              <TouchableOpacity 
-                style={styles.dayCardContent}
-                onPress={() => handleDayPress(day.dayNumber)}
-                activeOpacity={0.7}
-              >
-                {day.exercises.length > 0 ? (
-                  <View>
+              {day.exercises.length > 0 ? (
+                <View>
+                  <TouchableOpacity
+                    style={styles.exerciseCountContainer}
+                    onPress={() => toggleDayExpansion(weeks[currentWeekIndex].weekNumber, day.dayNumber)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="barbell" size={16} color="#ffb300" />
                     <Text style={styles.exerciseCount}>
                       {day.exercises.length} {day.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}
                     </Text>
+                    <Ionicons 
+                      name={expandedDays.has(`${weeks[currentWeekIndex].weekNumber}-${day.dayNumber}`) ? "chevron-up" : "chevron-down"} 
+                      size={20} 
+                      color="#ffb300" 
+                    />
+                  </TouchableOpacity>
+                  
+                  {expandedDays.has(`${weeks[currentWeekIndex].weekNumber}-${day.dayNumber}`) && (
                     <View style={styles.exercisePreview}>
-                      {day.exercises.slice(0, 3).map((exercise, idx) => (
-                        <Text key={idx} style={styles.exerciseName}>
-                          • {exercise.name}
-                        </Text>
+                      {day.exercises.map((exercise, idx) => (
+                        <View key={idx} style={styles.exerciseItem}>
+                          <View style={styles.exerciseNumberBadge}>
+                            <Text style={styles.exerciseNumberText}>{idx + 1}</Text>
+                          </View>
+                          <View style={styles.exerciseInfo}>
+                            <Text style={styles.exerciseName} numberOfLines={1}>
+                              {exercise.name}
+                            </Text>
+                            <View style={styles.exerciseDetailsRow}>
+                              <View style={styles.exerciseDetailChip}>
+                                <Ionicons name="sync" size={12} color="#999" />
+                                <Text style={styles.exerciseDetailText}>
+                                  {exercise.sets} {exercise.sets === 1 ? 'serie' : 'series'}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
                       ))}
-                      {day.exercises.length > 3 && (
-                        <Text style={styles.moreExercises}>
-                          +{day.exercises.length - 3} más
-                        </Text>
-                      )}
                     </View>
-                  </View>
-                ) : (
-                  <View style={styles.emptyDay}>
-                    <Ionicons name="add-circle-outline" size={32} color="#666" />
-                    <Text style={styles.emptyDayText}>Agregar ejercicios</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                <TouchableOpacity 
+                  style={styles.emptyDay}
+                  onPress={() => handleDayPress(day.dayNumber)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="add-circle-outline" size={32} color="#666" />
+                  <Text style={styles.emptyDayText}>Agregar ejercicios</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ))}
         </View>
@@ -909,18 +1176,8 @@ export default function CustomPlanDaysScreen() {
           onPress={handleAddDay}
           disabled={isSaving}
         >
-          <Ionicons name="add-circle" size={24} color="#ffb300" />
-          <Text style={styles.addDayButtonText}>Agregar Día</Text>
-        </TouchableOpacity>
-
-        {/* Botón Agregar Semana */}
-        <TouchableOpacity
-          style={styles.addWeekButton}
-          onPress={handleAddWeek}
-          disabled={isSaving}
-        >
           <Ionicons name="add-circle-outline" size={24} color="#ffb300" />
-          <Text style={styles.addWeekButtonText}>Agregar Semana</Text>
+          <Text style={styles.addDayButtonText}>Agregar Día</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -943,6 +1200,8 @@ export default function CustomPlanDaysScreen() {
 
         <View style={{ height: 40 }} />
       </ScrollView>
+      
+      <AlertComponent />
     </SafeAreaView>
   );
 }
@@ -1012,23 +1271,87 @@ const styles = StyleSheet.create({
   dayCardContent: {
     minHeight: 60,
   },
+  exerciseCountContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    paddingBottom: 8,
+    paddingHorizontal: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
   exerciseCount: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#ffb300',
     fontWeight: '600',
-    marginBottom: 8,
   },
   exercisePreview: {
+    gap: 8,
+  },
+  exerciseItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1e1e1e',
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  exerciseNumberBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#ffb300',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exerciseNumberText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+  },
+  exerciseInfo: {
+    flex: 1,
     gap: 4,
   },
   exerciseName: {
-    fontSize: 14,
-    color: '#ccc',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  exerciseDetailsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  exerciseDetailChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#2a2a2a',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  exerciseDetailText: {
+    fontSize: 11,
+    color: '#999',
+    fontWeight: '500',
+  },
+  moreExercisesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    marginTop: 4,
   },
   moreExercises: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#999',
-    fontStyle: 'italic',
+    fontWeight: '500',
   },
   emptyDay: {
     alignItems: 'center',
@@ -1140,22 +1463,102 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginBottom: 8,
   },
-  addDayButton: {
+  weekSelectorContainer: {
+    marginBottom: 16,
+  },
+  weekSelectorButton: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#ffb300',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  weekSelectorContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  weekSelectorTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  weekDropdownContainer: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    marginBottom: 20,
+    maxHeight: 350,
+    borderWidth: 2,
+    borderColor: '#ffb300',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    overflow: 'hidden',
+  },
+  weekDropdownScroll: {
+    flexGrow: 0,
+  },
+  weekDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1f1f1f',
+    backgroundColor: '#2a2a2a',
+  },
+  weekDropdownItemActive: {
+    backgroundColor: '#353535',
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffb300',
+  },
+  weekDropdownItemLast: {
+    borderBottomWidth: 0,
+  },
+  weekDropdownItemButton: {
+    flex: 1,
+  },
+  weekDropdownItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  weekDropdownItemText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#999',
+  },
+  weekDropdownItemTextActive: {
+    color: '#ffffff',
+  },
+  weekDropdownItemDays: {
+    fontSize: 13,
+    color: '#666',
+    marginRight: 8,
+  },
+  weekDropdownDeleteButton: {
+    padding: 8,
+  },
+  weekDropdownAddButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffb300',
-    paddingVertical: 16,
-    borderRadius: 16,
-    marginTop: 16,
-    gap: 8,
+    paddingVertical: 18,
+    gap: 10,
+    borderTopWidth: 2,
+    borderTopColor: '#555',
+    backgroundColor: '#1f1f1f',
   },
-  addDayButtonText: {
+  weekDropdownAddButtonText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#1a1a1a',
+    fontWeight: 'bold',
+    color: '#ffb300',
   },
-  addWeekButton: {
+  addDayButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1165,10 +1568,10 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     paddingVertical: 16,
     borderRadius: 16,
-    marginTop: 8,
+    marginTop: 16,
     gap: 8,
   },
-  addWeekButtonText: {
+  addDayButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#ffb300',

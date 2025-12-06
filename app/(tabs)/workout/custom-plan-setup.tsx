@@ -40,16 +40,35 @@ export default function CustomPlanSetupScreen() {
   useEffect(() => {
     const clearPreviousPlanData = async () => {
       try {
-        // Limpiar todos los datos de días (del 1 al 7 por si acaso)
+        console.log('🧹 Limpiando datos de planes anteriores...');
+        
+        // Limpiar datos de días (formato viejo: day_X_data)
         for (let i = 1; i <= 7; i++) {
           await AsyncStorage.removeItem(`day_${i}_data`);
         }
+        
+        // Limpiar datos de días multi-semana (formato nuevo: week_X_day_Y_data)
+        for (let week = 1; week <= 10; week++) {
+          for (let day = 1; day <= 7; day++) {
+            await AsyncStorage.removeItem(`week_${week}_day_${day}_data`);
+          }
+        }
+        
         // Limpiar ejercicio seleccionado si existe
         await AsyncStorage.removeItem('selectedExercise');
+        
         // Limpiar nombre del plan
         await AsyncStorage.removeItem('custom_plan_name');
+        
+        // Limpiar contador de semanas
+        await AsyncStorage.removeItem('custom_plan_weeks_count');
+        
+        // Limpiar ID de plan en edición
+        await AsyncStorage.removeItem('editing_plan_id');
+        
+        console.log('✅ Datos de planes anteriores limpiados');
       } catch (error) {
-        console.error('Error limpiando datos anteriores:', error);
+        console.error('❌ Error limpiando datos anteriores:', error);
       }
     };
     

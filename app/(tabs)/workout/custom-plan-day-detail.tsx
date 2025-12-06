@@ -9,7 +9,6 @@ import {
   SafeAreaView,
   StatusBar,
   TextInput,
-  Alert,
   Modal,
   KeyboardAvoidingView,
   Platform,
@@ -19,9 +18,13 @@ import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../../src/services/supabase';
+import { useCustomAlert } from '../../../src/components/CustomAlert';
 
 // Suprimir warning de keys - todas las keys están implementadas correctamente
-LogBox.ignoreLogs(['Each child in a list should have a unique "key" prop']);
+LogBox.ignoreLogs([
+  'Each child in a list should have a unique "key" prop',
+  /Each child in a list should have a unique/,
+]);
 
 type SetType = 'warmup' | 'normal' | 'failure' | 'drop';
 
@@ -42,6 +45,7 @@ interface Exercise {
 export default function CustomPlanDayDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { showAlert, AlertComponent } = useCustomAlert();
   
   // Parsear parámetros con validación
   const parseDayNumber = (value: string | undefined): number => {
@@ -74,6 +78,17 @@ export default function CustomPlanDayDetailScreen() {
   const [reps, setReps] = useState<string[]>([]);
   const [rirValues, setRirValues] = useState<string[]>([]); // RIR para cada serie
   const [setTypes, setSetTypes] = useState<SetInfo[]>([]);
+  const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
+  
+  // Ref para saber si hay cambios sin guardar (para no sobrescribir con AsyncStorage)
+  const hasLocalChanges = React.useRef(false);
+  // Ref para mantener siempre la referencia actualizada de exercises
+  const exercisesRef = React.useRef<Exercise[]>([]);
+  
+  // Mantener exercisesRef actualizado
+  React.useEffect(() => {
+    exercisesRef.current = exercises;
+  }, [exercises]);
   
   // Estados para el modal de cambio de tipo de serie
   const [showSetTypeModal, setShowSetTypeModal] = useState(false);
@@ -89,28 +104,48 @@ export default function CustomPlanDayDetailScreen() {
     if (editingExercise) {
       console.log('📝 Inicializando modal con datos del ejercicio:', editingExercise.name);
       
-      // Copiar profundamente los datos del ejercicio
+      // Resetear modal de tipos al abrir configuración
+      setShowSetTypeModal(false);
+      setSelectedSetIndex(-1);
+      
+      // Verificar si el ejercicio tiene setTypes configurados
       const exerciseSetTypes = editingExercise.setTypes || [];
-      const exerciseReps = exerciseSetTypes.map(st => st.reps?.toString() || '');
-      const exerciseRir = exerciseSetTypes.map(st => st.rir?.toString() || '');
+      const hasConfiguredSets = exerciseSetTypes.length > 0;
       
-      // Crear copias profundas para evitar referencias compartidas
-      const copiedSetTypes = exerciseSetTypes.map(st => ({
-        type: st.type,
-        reps: st.reps,
-        rir: st.rir,
-      }));
+      if (hasConfiguredSets) {
+        // Ejercicio existente con configuración - copiar profundamente
+        console.log('📋 Cargando configuración existente');
+        const exerciseReps = exerciseSetTypes.map(st => st.reps?.toString() || '');
+        const exerciseRir = exerciseSetTypes.map(st => st.rir?.toString() || '');
+        
+        // Crear copias profundas para evitar referencias compartidas
+        const copiedSetTypes = exerciseSetTypes.map(st => ({
+          type: st.type,
+          reps: st.reps,
+          rir: st.rir,
+        }));
+        
+        setSetTypes(copiedSetTypes);
+        setReps([...exerciseReps]);
+        setRirValues([...exerciseRir]);
+        setSets(editingExercise.sets?.toString() || copiedSetTypes.length.toString());
+      } else {
+        // Ejercicio nuevo sin configurar - crear valores por defecto
+        console.log('✨ Inicializando ejercicio nuevo con valores por defecto');
+        const defaultSets = 3;
+        const defaultSetTypes: SetInfo[] = Array(defaultSets).fill(null).map(() => ({
+          type: 'normal',
+          reps: null,
+          rir: null,
+        }));
+        
+        setSetTypes(defaultSetTypes);
+        setReps(Array(defaultSets).fill(''));
+        setRirValues(Array(defaultSets).fill(''));
+        setSets(defaultSets.toString());
+      }
       
-      setSetTypes(copiedSetTypes);
-      setReps([...exerciseReps]);
-      setRirValues([...exerciseRir]);
-      setSets(editingExercise.sets?.toString() || '');
-      
-      console.log('✅ Estados inicializados:', {
-        setTypes: copiedSetTypes.length,
-        reps: exerciseReps.length,
-        rir: exerciseRir.length,
-      });
+      console.log('✅ Estados inicializados para:', editingExercise.name);
     } else {
       // Limpiar estados cuando se cierra el modal
       console.log('🧹 Limpiando estados del modal');
@@ -118,6 +153,8 @@ export default function CustomPlanDayDetailScreen() {
       setReps([]);
       setRirValues([]);
       setSets('');
+      setShowSetTypeModal(false);
+      setSelectedSetIndex(-1);
     }
   }, [editingExercise]);
 
@@ -132,47 +169,6 @@ export default function CustomPlanDayDetailScreen() {
     setRirValues([]);
   }, [dayNumber]);
 
-  useEffect(() => {
-    if (editingExercise) {
-      // Resetear modal de tipos al abrir configuración
-      setShowSetTypeModal(false);
-      setSelectedSetIndex(-1);
-      
-      // Si no hay series configuradas, crear 3 por defecto
-      const hasReps = editingExercise.reps && editingExercise.reps.length > 0;
-      const initialReps = hasReps ? editingExercise.reps.map(r => r.toString()) : ['', '', ''];
-      const initialSets = hasReps ? editingExercise.sets : 3;
-      
-      setSets(initialSets.toString());
-      setReps(initialReps);
-      
-      // Cargar tipos de series o crear por defecto
-      if (editingExercise.setTypes && editingExercise.setTypes.length > 0) {
-        setSetTypes(editingExercise.setTypes);
-        // Cargar valores RIR existentes o inicializar vacíos
-        const initialRirValues = editingExercise.setTypes.map(st => 
-          st.rir !== null && st.rir !== undefined ? st.rir.toString() : ''
-        );
-        setRirValues(initialRirValues);
-      } else {
-        // Crear tipos de series por defecto (todas normales)
-        const defaultSetTypes: SetInfo[] = initialReps.map((rep) => ({
-          type: 'normal',
-          reps: parseInt(rep) || null,
-          rir: null,
-        }));
-        setSetTypes(defaultSetTypes);
-        // Inicializar RIR vacíos
-        setRirValues(initialReps.map(() => ''));
-      }
-    } else {
-      // Cuando se cierra el modal principal, resetear todo
-      setSetTypes([]);
-      setRirValues([]);
-      setShowSetTypeModal(false);
-      setSelectedSetIndex(-1);
-    }
-  }, [editingExercise]);
 
   const handleAddExercise = () => {
     router.push({
@@ -201,7 +197,12 @@ export default function CustomPlanDayDetailScreen() {
 
   const handleRemoveSet = (index: number) => {
     if (setTypes.length <= 1) {
-      Alert.alert('Error', 'Debe haber al menos 1 serie');
+      showAlert(
+        'Error',
+        'Debe haber al menos 1 serie',
+        [{ text: 'OK' }],
+        { icon: 'alert-circle', iconColor: '#F44336' }
+      );
       return;
     }
     
@@ -359,15 +360,32 @@ export default function CustomPlanDayDetailScreen() {
     
     const numSets = setTypes.length;
     if (numSets === 0) {
-      Alert.alert('Error', 'Debes agregar al menos 1 serie');
+      showAlert(
+        'Error',
+        'Debes agregar al menos 1 serie',
+        [{ text: 'OK' }],
+        { icon: 'alert-circle', iconColor: '#F44336' }
+      );
       return;
     }
 
-    // Validar que todas las series tengan reps
+    // Validar que todas las series (excepto calentamiento) tengan reps
     for (let i = 0; i < setTypes.length; i++) {
+      const setType = setTypes[i].type;
+      
+      // Las series de calentamiento no requieren reps
+      if (setType === 'warmup') {
+        continue;
+      }
+      
       const repsValue = parseInt(reps[i]);
       if (!repsValue || repsValue === 0) {
-        Alert.alert('Error', `Debes ingresar repeticiones para la serie ${i + 1}`);
+        showAlert(
+          'Error',
+          `Debes ingresar repeticiones para la serie ${i + 1}`,
+          [{ text: 'OK' }],
+          { icon: 'alert-circle', iconColor: '#F44336' }
+        );
         return;
       }
     }
@@ -375,8 +393,9 @@ export default function CustomPlanDayDetailScreen() {
     // Actualizar setTypes con las reps y RIR finales
     const finalSetTypes = setTypes.map((st, idx) => ({
       type: st.type,
-      reps: parseInt(reps[idx]) || 0,
-      rir: rirValues[idx] ? parseInt(rirValues[idx]) || null : null,
+      // Las series de calentamiento no tienen reps ni RIR
+      reps: st.type === 'warmup' ? null : (parseInt(reps[idx]) || 0),
+      rir: st.type === 'warmup' ? null : (rirValues[idx] ? parseInt(rirValues[idx]) || null : null),
     }));
 
     // Mantener compatibilidad con repsArray
@@ -388,14 +407,37 @@ export default function CustomPlanDayDetailScreen() {
         : ex
     );
     setExercises(updatedExercises);
+    
+    // Marcar que hay cambios locales sin guardar
+    hasLocalChanges.current = true;
+    console.log('✏️ Ejercicio modificado, marcando cambios locales');
+    
     setEditingExercise(null);
     setSets('');
     setReps([]);
     setSetTypes([]);
   };
 
+  const toggleExerciseExpansion = (exerciseId: string) => {
+    console.log('🔄 Toggle expansion para ejercicio:', exerciseId);
+    console.log('📊 Estado actual de expandedExercises:', Array.from(expandedExercises));
+    
+    const newExpanded = new Set(expandedExercises);
+    
+    if (newExpanded.has(exerciseId)) {
+      console.log('📦 Contrayendo ejercicio:', exerciseId);
+      newExpanded.delete(exerciseId);
+    } else {
+      console.log('📂 Expandiendo ejercicio:', exerciseId);
+      newExpanded.add(exerciseId);
+    }
+    
+    console.log('📊 Nuevo estado de expandedExercises:', Array.from(newExpanded));
+    setExpandedExercises(newExpanded);
+  };
+
   const handleDeleteExercise = (exerciseId: string) => {
-    Alert.alert(
+    showAlert(
       'Eliminar ejercicio',
       '¿Estás seguro de que quieres eliminar este ejercicio?',
       [
@@ -405,15 +447,21 @@ export default function CustomPlanDayDetailScreen() {
           style: 'destructive',
           onPress: () => {
             setExercises(exercises.filter(ex => ex.id !== exerciseId));
+            // Marcar que hay cambios locales sin guardar
+            hasLocalChanges.current = true;
+            console.log('🗑️ Ejercicio eliminado, marcando cambios locales');
           },
         },
-      ]
+      ],
+      { icon: 'trash', iconColor: '#F44336' }
     );
   };
 
   const handleSave = async () => {
     // Guardar los ejercicios del día en AsyncStorage para que la pantalla de días los pueda leer
     try {
+      console.log('💾 Guardando día con ejercicios:', exercises.map(ex => ({ name: ex.name, id: ex.id })));
+      
       const dayDataToSave = {
         dayNumber,
         name: dayName,
@@ -421,12 +469,17 @@ export default function CustomPlanDayDetailScreen() {
       };
       await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
       
+      // Resetear flag de cambios locales después de guardar
+      hasLocalChanges.current = false;
+      console.log('✅ Cambios guardados, reseteando flag de cambios locales');
+      
       // Navegar de vuelta a la pantalla de días
       router.push({
         pathname: '/(tabs)/workout/custom-plan-days',
         params: {
           daysPerWeek: params.daysPerWeek as string || '',
           equipment: JSON.stringify(equipment),
+          planId: params.planId as string || '',
         },
       });
     } catch (error) {
@@ -437,6 +490,7 @@ export default function CustomPlanDayDetailScreen() {
         params: {
           daysPerWeek: params.daysPerWeek as string || '',
           equipment: JSON.stringify(equipment),
+          planId: params.planId as string || '',
         },
       });
     }
@@ -499,13 +553,16 @@ export default function CustomPlanDayDetailScreen() {
             const selectedExercise = parseSafeJSON(selectedExerciseData, null);
             if (!selectedExercise) return;
             // Agregar el ejercicio a la lista con valores por defecto
+            // Generar ID único basado en timestamp + random + nombre para evitar colisiones
+            const uniqueId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}_${selectedExercise.name.replace(/\s/g, '')}`;
             const newExercise: Exercise = {
-              id: selectedExercise.id || `${Date.now()}_${Math.random()}`,
+              id: uniqueId,
               name: selectedExercise.name,
               sets: selectedExercise.sets || 3,
               reps: selectedExercise.reps || [10, 10, 10],
               setTypes: selectedExercise.setTypes || [], // Inicializar setTypes vacío
             };
+            console.log('✨ Nuevo ejercicio creado con ID único:', uniqueId);
             
             // Verificar que no esté ya agregado usando los ejercicios actuales
             const exerciseExists = currentExercises.find(ex => ex.id === newExercise.id && ex.name === newExercise.name);
@@ -515,6 +572,9 @@ export default function CustomPlanDayDetailScreen() {
               // Actualizar el estado
               if (isMounted) {
                 setExercises(updatedExercises);
+                // Marcar que hay cambios locales sin guardar
+                hasLocalChanges.current = true;
+                console.log('✏️ Nuevo ejercicio agregado, marcando cambios locales');
               }
               
               // Guardar inmediatamente en AsyncStorage para evitar pérdida de datos
@@ -550,6 +610,15 @@ export default function CustomPlanDayDetailScreen() {
       const initialize = async () => {
         let loadedExercises: Exercise[] = [];
         
+        // Si hay cambios locales sin guardar, usar el estado actual en lugar de recargar
+        if (hasLocalChanges.current) {
+          console.log('⚠️ Hay cambios locales sin guardar, usando estado actual');
+          console.log('📊 Ejercicios en estado actual:', exercisesRef.current.length);
+          // Verificar si hay ejercicio seleccionado usando los ejercicios actuales
+          await checkSelectedExercise(exercisesRef.current);
+          return;
+        }
+        
         // Cargar datos primero
         try {
           console.log('📥 Iniciando carga de datos para día:', dayNumber, 'semana:', weekNumber);
@@ -560,8 +629,9 @@ export default function CustomPlanDayDetailScreen() {
           
           if (paramDayData.dayNumber === dayNumber && paramDayData.exercises) {
             // Hacer copia profunda de ejercicios para evitar referencias compartidas
-            loadedExercises = (paramDayData.exercises || []).map((ex: Exercise) => ({
+            loadedExercises = (paramDayData.exercises || []).map((ex: Exercise, idx: number) => ({
               ...ex,
+              id: ex.id || `${Date.now()}_${idx}_${Math.random()}`, // Asegurar ID único
               reps: [...(ex.reps || [])],
               setTypes: (ex.setTypes || []).map((st: SetInfo) => ({
                 type: st.type,
@@ -570,6 +640,7 @@ export default function CustomPlanDayDetailScreen() {
               })),
             }));
             console.log('✅ Cargados', loadedExercises.length, 'ejercicios desde parámetros (copia profunda)');
+            console.log('📂 IDs de ejercicios desde params:', loadedExercises.map(ex => ({ name: ex.name, id: ex.id })));
             if (isMounted && paramDayData.name) {
               setDayName(paramDayData.name);
             }
@@ -588,8 +659,9 @@ export default function CustomPlanDayDetailScreen() {
             // Verificar que los datos guardados correspondan al día correcto
             if (savedDayData.dayNumber === dayNumber) {
               // Hacer copia profunda de ejercicios para evitar referencias compartidas
-              loadedExercises = (savedDayData.exercises || []).map((ex: Exercise) => ({
+              loadedExercises = (savedDayData.exercises || []).map((ex: Exercise, idx: number) => ({
                 ...ex,
+                id: ex.id || `${Date.now()}_${idx}_${Math.random()}`, // Asegurar ID único
                 reps: [...(ex.reps || [])],
                 setTypes: (ex.setTypes || []).map((st: SetInfo) => ({
                   type: st.type,
@@ -598,6 +670,7 @@ export default function CustomPlanDayDetailScreen() {
                 })),
               }));
               console.log('✅ Cargados', loadedExercises.length, 'ejercicios desde AsyncStorage (copia profunda)');
+              console.log('📂 IDs de ejercicios cargados:', loadedExercises.map(ex => ({ name: ex.name, id: ex.id })));
               if (isMounted) {
                 if (savedDayData.name) {
                   setDayName(savedDayData.name);
@@ -720,7 +793,9 @@ export default function CustomPlanDayDetailScreen() {
             onPress={() => setIsEditingDayName(true)}
             activeOpacity={0.7}
           >
-            <Text style={styles.headerTitle}>{dayName}</Text>
+            <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">
+              {dayName}
+            </Text>
             <Ionicons name="create-outline" size={16} color="#ffb300" style={styles.editIcon} />
           </TouchableOpacity>
         )}
@@ -743,10 +818,17 @@ export default function CustomPlanDayDetailScreen() {
           </View>
         ) : (
           <View style={styles.exercisesList}>
-            {exercises.map((exercise) => (
+            {exercises.map((exercise, exerciseIdx) => {
+              console.log(`🏋️ Renderizando ejercicio ${exerciseIdx + 1}: ${exercise.name} (ID: ${exercise.id})`);
+              return (
               <View key={exercise.id} style={styles.exerciseCard}>
                 <View style={styles.exerciseHeader}>
-                  <Text style={styles.exerciseName}>{exercise.name}</Text>
+                  <View style={styles.exerciseTitleContainer}>
+                    <View style={styles.exerciseNumberBadge}>
+                      <Text style={styles.exerciseNumberText}>{exerciseIdx + 1}</Text>
+                    </View>
+                    <Text style={styles.exerciseName}>{exercise.name}</Text>
+                  </View>
                   <View style={styles.exerciseActions}>
                     <TouchableOpacity
                       onPress={() => setEditingExercise(exercise)}
@@ -763,11 +845,27 @@ export default function CustomPlanDayDetailScreen() {
                   </View>
                 </View>
                 <View style={styles.exerciseDetails}>
-                  <Text style={styles.exerciseDetailText}>
-                    {exercise.sets} series
-                  </Text>
-                  <View style={styles.repsContainer}>
-                    {(exercise.setTypes || []).map((setInfo, idx) => {
+                  <TouchableOpacity
+                    style={styles.setsHeader}
+                    onPress={() => toggleExerciseExpansion(exercise.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.setsHeaderLeft}>
+                      <Ionicons name="list" size={16} color="#999" />
+                      <Text style={styles.setsHeaderText}>
+                        {exercise.sets} {exercise.sets === 1 ? 'serie' : 'series'}
+                      </Text>
+                      <Ionicons
+                        name={expandedExercises.has(exercise.id) ? "chevron-up" : "chevron-down"}
+                        size={18}
+                        color="#ffb300"
+                      />
+                    </View>
+                  </TouchableOpacity>
+                  {expandedExercises.has(exercise.id) && (
+                    <View style={styles.setsGrid}>
+                      {(exercise.setTypes || []).map((setInfo, idx) => {
+                      // Calcular label de la serie
                       const label = (() => {
                         switch (setInfo.type) {
                           case 'warmup': return 'C';
@@ -775,7 +873,6 @@ export default function CustomPlanDayDetailScreen() {
                           case 'failure':
                           case 'normal':
                           default:
-                            // Contar cuántas series normales + fallo hay hasta este índice
                             let seriesCount = 0;
                             for (let i = 0; i <= idx; i++) {
                               const type = (exercise.setTypes || [])[i]?.type || 'normal';
@@ -783,27 +880,57 @@ export default function CustomPlanDayDetailScreen() {
                                 seriesCount++;
                               }
                             }
-                            // Para failure, agregar "F" al número
-                            return setInfo.type === 'failure' ? `${seriesCount} F` : `${seriesCount}`;
+                            return setInfo.type === 'failure' ? `${seriesCount}` : `${seriesCount}`;
                         }
                       })();
                       
-                      const repsText = setInfo.type === 'warmup'
-                        ? 'calentamiento'
-                        : setInfo.type === 'failure' 
-                        ? 'al fallo' 
-                        : `${setInfo.reps || 0} reps`;
+                      // Determinar color y estilo del badge
+                      const badgeStyle = (() => {
+                        switch (setInfo.type) {
+                          case 'warmup': return styles.setBadgeWarmup;
+                          case 'failure': return styles.setBadgeFailure;
+                          case 'drop': return styles.setBadgeDrop;
+                          default: return styles.setBadgeNormal;
+                        }
+                      })();
                       
-                      return (
-                        <Text key={`${exercise.id}_set_${idx}`} style={styles.repText}>
-                          {label}: {repsText}
-                        </Text>
-                      );
-                    })}
-                  </View>
+                        return (
+                          <View key={`${exercise.id}_set_${idx}`} style={styles.setBadge}>
+                            <View style={[styles.setBadgeNumber, badgeStyle]}>
+                              <Text style={styles.setBadgeNumberText}>
+                                {label}{setInfo.type === 'failure' ? ' F' : ''}
+                              </Text>
+                            </View>
+                            <View style={styles.setBadgeContent}>
+                              {setInfo.type === 'warmup' ? (
+                                <Text style={styles.setBadgeReps}>Calentamiento</Text>
+                              ) : setInfo.type === 'failure' ? (
+                                <View style={styles.setBadgeInfo}>
+                                  <Text style={styles.setBadgeReps}>
+                                    {setInfo.reps || 0} reps
+                                  </Text>
+                                  <Text style={styles.setBadgeFailureText}>al fallo</Text>
+                                </View>
+                              ) : (
+                                <View style={styles.setBadgeInfo}>
+                                  <Text style={styles.setBadgeReps}>
+                                    {setInfo.reps || 0} reps
+                                  </Text>
+                                  {setInfo.rir !== null && setInfo.rir !== undefined && (
+                                    <Text style={styles.setBadgeRir}>RIR {setInfo.rir}</Text>
+                                  )}
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
                 </View>
               </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
@@ -1088,6 +1215,7 @@ export default function CustomPlanDayDetailScreen() {
         </Modal>
       </Modal>
 
+      <AlertComponent />
     </SafeAreaView>
   );
 }
@@ -1105,25 +1233,30 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#2a2a2a',
+    gap: 12,
   },
   backButton: {
     padding: 8,
+    flexShrink: 0,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#ffffff',
+    flex: 1,
   },
   dayNameContainer: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
+    marginHorizontal: 8,
+    maxWidth: '60%',
   },
   dayNameInput: {
     flex: 1,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#ffffff',
     textAlign: 'center',
@@ -1132,16 +1265,19 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 8,
     borderWidth: 1,
+    maxWidth: '60%',
     borderColor: '#ffb300',
   },
   editIcon: {
     marginLeft: 4,
+    flexShrink: 0,
   },
   saveButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     backgroundColor: '#ffb300',
     borderRadius: 8,
+    flexShrink: 0,
   },
   saveButtonText: {
     fontSize: 16,
@@ -1172,21 +1308,45 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   exerciseCard: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: '#1e1e1e',
     borderRadius: 16,
-    padding: 16,
+    padding: 18,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: '#2a2a2a',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   exerciseHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
+  },
+  exerciseTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  exerciseNumberBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#ffb300',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  exerciseNumberText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
   },
   exerciseName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
     color: '#ffffff',
     flex: 1,
   },
@@ -1201,20 +1361,94 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   exerciseDetails: {
+    gap: 0,
+  },
+  setsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  setsHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
-  exerciseDetailText: {
-    fontSize: 14,
-    color: '#ffb300',
+  setsHeaderText: {
+    fontSize: 13,
     fontWeight: '600',
+    color: '#999',
+    textTransform: 'uppercase',
   },
-  repsContainer: {
-    gap: 4,
-    marginTop: 4,
+  setsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  repText: {
+  setBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: '#333',
+    gap: 10,
+  },
+  setBadgeNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  setBadgeWarmup: {
+    backgroundColor: '#4CAF50',
+  },
+  setBadgeNormal: {
+    backgroundColor: '#ffb300',
+  },
+  setBadgeFailure: {
+    backgroundColor: '#F44336',
+  },
+  setBadgeDrop: {
+    backgroundColor: '#9C27B0',
+  },
+  setBadgeNumberText: {
     fontSize: 14,
-    color: '#ccc',
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+  },
+  setBadgeContent: {
+    flexDirection: 'column',
+  },
+  setBadgeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  setBadgeReps: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  setBadgeRir: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ffb300',
+    backgroundColor: '#2a2a2a',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  setBadgeFailureText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#F44336',
+    fontStyle: 'italic',
   },
   addButton: {
     flexDirection: 'row',

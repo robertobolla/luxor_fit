@@ -41,6 +41,7 @@ export default function WorkoutDayDetailScreen() {
   const planName = params.planName as string || 'Plan de Entrenamiento';
   const planId = params.planId as string;
   const dayName = params.dayName as string; // ej: 'day_1'
+  const isCustomPlan = params.isCustomPlan === 'true'; // Si es plan personalizado
   
   const [isCompleted, setIsCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -419,10 +420,13 @@ export default function WorkoutDayDetailScreen() {
             <Ionicons name="fitness" size={28} color="#ffb300" />
             <Text style={styles.focusText}>{dayData.focus}</Text>
           </View>
-          <View style={styles.durationBadge}>
-            <Ionicons name="time-outline" size={18} color="#ffb300" />
-            <Text style={styles.durationText}>{dayData.duration} minutos</Text>
-          </View>
+          {/* Solo mostrar duración en planes de IA (no en personalizados) */}
+          {!isCustomPlan && dayData.duration && (
+            <View style={styles.durationBadge}>
+              <Ionicons name="time-outline" size={18} color="#ffb300" />
+              <Text style={styles.durationText}>{dayData.duration} minutos</Text>
+            </View>
+          )}
         </View>
 
         {/* Tips Generales */}
@@ -561,11 +565,12 @@ export default function WorkoutDayDetailScreen() {
                       
                       // Generar array de series con sus tipos
                       const seriesData = [];
-                      let normalSeriesCount = 0;
+                      let seriesCount = 0; // Contador para series normales y al fallo
                       
                       for (let i = 0; i < sets; i++) {
                         const setType = setTypes?.[i]?.type || 'normal';
                         const setReps = repsArray[i] || reps;
+                        const setRir = setTypes?.[i]?.rir;
                         
                         let label = '';
                         let color = '#ffb300';
@@ -578,7 +583,9 @@ export default function WorkoutDayDetailScreen() {
                             typeText = ' (Calentamiento)';
                             break;
                           case 'failure':
-                            label = 'F';
+                            // Las series al fallo también se numeran secuencialmente
+                            seriesCount++;
+                            label = `${seriesCount} F`;
                             color = '#F44336';
                             typeText = ' (Al Fallo)';
                             break;
@@ -589,8 +596,9 @@ export default function WorkoutDayDetailScreen() {
                             break;
                           case 'normal':
                           default:
-                            normalSeriesCount++;
-                            label = normalSeriesCount.toString();
+                            // Las series normales se numeran secuencialmente
+                            seriesCount++;
+                            label = seriesCount.toString();
                             color = '#ffb300';
                             typeText = '';
                         }
@@ -600,6 +608,8 @@ export default function WorkoutDayDetailScreen() {
                           reps: setReps,
                           color,
                           typeText,
+                          type: setType,
+                          rir: setRir,
                         });
                       }
                       
@@ -609,8 +619,17 @@ export default function WorkoutDayDetailScreen() {
                             <Text style={styles.serieLabelText}>{serie.label}</Text>
                           </View>
                           <Text style={styles.serieDetailText}>
-                            {serie.reps} {typeof serie.reps === 'string' && serie.reps.toLowerCase() === 'al fallo' ? '' : 'reps'}
-                            <Text style={styles.serieTypeText}>{serie.typeText}</Text>
+                            {serie.type === 'warmup' ? (
+                              <Text style={styles.serieTypeText}>{serie.typeText}</Text>
+                            ) : (
+                              <>
+                                {serie.reps} {typeof serie.reps === 'string' && serie.reps.toLowerCase() === 'al fallo' ? '' : 'reps'}
+                                {serie.rir !== null && serie.rir !== undefined && (
+                                  <Text style={styles.serieRirText}> • RIR {serie.rir}</Text>
+                                )}
+                                <Text style={styles.serieTypeText}>{serie.typeText}</Text>
+                              </>
+                            )}
                           </Text>
                         </View>
                       ));
@@ -1080,6 +1099,11 @@ const styles = StyleSheet.create({
     color: '#999',
     fontWeight: 'normal',
     fontStyle: 'italic',
+  },
+  serieRirText: {
+    fontSize: 13,
+    color: '#ffb300',
+    fontWeight: '600',
   },
   completionSection: {
     paddingHorizontal: 20,

@@ -552,6 +552,7 @@ export default function WorkoutPlanDetailScreen() {
                       planName: plan.plan_name,
                       planId: plan.id,
                       dayName: dayKey,
+                      isCustomPlan: plan.description?.toLowerCase().includes('plan personalizado') ? 'true' : 'false',
                     },
                   } as any);
                 }}
@@ -568,16 +569,20 @@ export default function WorkoutPlanDetailScreen() {
                       </View>
                     )}
                   </View>
-                  <View style={styles.dayDuration}>
-                    <Ionicons name="time-outline" size={14} color="#ffb300" />
-                    <Text style={styles.dayDurationText}>{safeDay.duration} min</Text>
-                  </View>
+                  {/* Solo mostrar duración si NO es plan personalizado */}
+                  {!plan.description?.toLowerCase().includes('plan personalizado') && safeDay.duration && (
+                    <View style={styles.dayDuration}>
+                      <Ionicons name="time-outline" size={14} color="#ffb300" />
+                      <Text style={styles.dayDurationText}>{safeDay.duration} min</Text>
+                    </View>
+                  )}
                 </View>
                 <Text style={styles.dayFocus}>{safeDay.focus}</Text>
                 <View style={styles.exercisesContainer}>
                   <Text style={styles.exercisesTitle}>Ejercicios ({safeDay.exercises?.length || 0}):</Text>
                   <View style={styles.exercisesList}>
-                    {safeDay.exercises?.slice(0, 3).map((exercise: any, idx: number) => {
+                    {/* Mostrar todos los ejercicios en planes personalizados */}
+                    {safeDay.exercises?.map((exercise: any, idx: number) => {
                       const isOldFormat = typeof exercise === 'string';
                       const exerciseName = isOldFormat ? exercise : exercise.name;
 
@@ -588,11 +593,6 @@ export default function WorkoutPlanDetailScreen() {
                         </View>
                       );
                     })}
-                    {safeDay.exercises?.length > 3 && (
-                      <Text style={styles.moreExercisesText}>
-                        +{safeDay.exercises.length - 3} más
-                      </Text>
-                    )}
                   </View>
                 </View>
                 <View style={styles.viewDetailsButton}>

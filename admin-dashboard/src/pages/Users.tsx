@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { getUsers, searchUsers, deleteUser, getUserRole, deactivateUserSubscription, activateUserSubscription } from '../services/adminService';
 import type { UserProfile } from '../services/adminService';
@@ -9,6 +9,7 @@ export default function Users() {
   console.log('🚀🚀🚀 COMPONENTE Users.tsx SE ESTÁ RENDERIZANDO');
   
   const { user } = useUser();
+  const navigate = useNavigate();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -219,7 +220,31 @@ export default function Users() {
       <header className="page-header">
         <h1>Usuarios</h1>
         <div className="header-actions">
-          {isAdmin && <span style={{ color: '#4caf50', fontSize: '14px', marginRight: '12px' }}>👤 Eres Admin</span>}
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => navigate('/create-user')}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#FF9800',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  marginRight: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>👤+</span>
+                Crear Usuario
+              </button>
+              <span style={{ color: '#4caf50', fontSize: '14px', marginRight: '12px' }}>👤 Eres Admin</span>
+            </>
+          )}
           <input
             type="text"
             placeholder="Buscar por nombre o email..."
