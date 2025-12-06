@@ -434,8 +434,9 @@ export default function NutritionHomeScreen() {
       if (!profileData) return;
 
       // Crear un hash del perfil relevante para nutrición
+      // NOTA: NO incluimos weight porque cambia frecuentemente con las mediciones
+      // El peso se usa automáticamente al generar el siguiente plan
       const currentProfileHash = JSON.stringify({
-        weight: profileData.weight,
         height: profileData.height,
         goals: profileData.goals,
         activity_types: profileData.activity_types,
@@ -467,7 +468,7 @@ export default function NutritionHomeScreen() {
         
         Alert.alert(
           'Perfil actualizado',
-          'Detectamos cambios en tu perfil (peso, altura, objetivo o nivel de actividad). Es necesario recalcular tus calorías y macros.',
+          'Detectamos cambios importantes en tu perfil (altura, objetivo, nivel de actividad, etc.). Es necesario recalcular tus calorías y macros.',
           [
             {
               text: 'Solo recalcular calorías',
@@ -1097,7 +1098,7 @@ export default function NutritionHomeScreen() {
               onPress={() => router.push('/(tabs)/nutrition/plan' as any)}
             >
               <Ionicons name="restaurant" size={32} color="#ffb300" />
-              <Text style={styles.actionText}>Ver Plan</Text>
+              <Text style={styles.actionText}>Ver Plan Nutricional</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1121,6 +1122,14 @@ export default function NutritionHomeScreen() {
 
             <TouchableOpacity
               style={styles.actionCard}
+              onPress={() => router.push('/(tabs)/register-weight' as any)}
+            >
+              <Ionicons name="body" size={32} color="#ffb300" />
+              <Text style={styles.actionText}>Registrar Medición</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionCard, styles.actionCardWide]}
               onPress={handleGenerateNewPlan}
             >
               <Ionicons name="create" size={32} color="#ffb300" />
@@ -1735,6 +1744,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#ffb300',
+  },
+  actionCardWide: {
+    minWidth: '100%',
+    flex: 0,
   },
   actionText: {
     fontSize: 14,

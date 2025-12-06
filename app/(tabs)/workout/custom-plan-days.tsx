@@ -32,7 +32,6 @@ export default function CustomPlanDaysScreen() {
   const { user } = useUser();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const daysPerWeek = parseInt(params.daysPerWeek as string) || 0;
   const equipment = JSON.parse((params.equipment as string) || '[]');
   const editingPlanId = params.planId as string | undefined;
 
@@ -45,6 +44,9 @@ export default function CustomPlanDaysScreen() {
   
   // Días de la semana actual
   const currentWeekDays = weeks[currentWeekIndex]?.days || [];
+  
+  // Días por semana dinámico basado en la cantidad actual de días
+  const daysPerWeek = currentWeekDays.length;
 
   useEffect(() => {
     // Si estamos editando un plan existente, cargarlo desde Supabase
@@ -136,17 +138,7 @@ export default function CustomPlanDaysScreen() {
             });
           }
 
-          // Agregar días vacíos si faltan
-          for (const week of loadedWeeks) {
-            while (week.days.length < daysPerWeek) {
-              const dayNumber = week.days.length + 1;
-              week.days.push({
-                dayNumber,
-                exercises: [],
-              });
-            }
-          }
-
+          // No agregamos días vacíos - cada semana mantiene su cantidad de días
           setWeeks(loadedWeeks);
           await AsyncStorage.setItem('custom_plan_weeks_count', loadedWeeks.length.toString());
           setInitialLoadComplete(true);
@@ -216,15 +208,13 @@ export default function CustomPlanDaysScreen() {
 
     // Función para inicializar un plan vacío
     const initializeEmptyPlan = async () => {
-      console.log('🆕 Inicializando plan vacío');
+      console.log('🆕 Inicializando plan vacío con 1 día por defecto');
       
-      const initialDays: DayData[] = [];
-      for (let i = 1; i <= daysPerWeek; i++) {
-        initialDays.push({
-          dayNumber: i,
-          exercises: [],
-        });
-      }
+      // Siempre iniciar con 1 día
+      const initialDays: DayData[] = [{
+        dayNumber: 1,
+        exercises: [],
+      }];
       
       const initialWeek: WeekData = {
         weekNumber: 1,
@@ -248,16 +238,14 @@ export default function CustomPlanDaysScreen() {
         if (savedWeeksCount) {
           const weeksCount = parseInt(savedWeeksCount);
           if (weeksCount > 1) {
-            // Cargar múltiples semanas
+            // Cargar múltiples semanas - cada semana puede tener diferente cantidad de días
             const loadedWeeks: WeekData[] = [];
             for (let w = 1; w <= weeksCount; w++) {
-              const weekDays: DayData[] = [];
-              for (let d = 1; d <= daysPerWeek; d++) {
-                weekDays.push({
-                  dayNumber: d,
-                  exercises: [],
-                });
-              }
+              // Por defecto, cada semana tendrá 1 día (el usuario puede agregar más)
+              const weekDays: DayData[] = [{
+                dayNumber: 1,
+                exercises: [],
+              }];
               loadedWeeks.push({
                 weekNumber: w,
                 days: weekDays,
@@ -299,7 +287,11 @@ export default function CustomPlanDaysScreen() {
           for (let weekNum = 1; weekNum <= totalWeeks; weekNum++) {
             const weekDays: DayData[] = [];
             
-            for (let dayNum = 1; dayNum <= daysPerWeek; dayNum++) {
+            // Intentar cargar días hasta que no encontremos más
+            let dayNum = 1;
+            let foundDay = true;
+            
+            while (foundDay) {
               const key = `week_${weekNum}_day_${dayNum}_data`;
               const dayDataStr = await AsyncStorage.getItem(key);
               
@@ -307,25 +299,22 @@ export default function CustomPlanDaysScreen() {
                 try {
                   const dayData = JSON.parse(dayDataStr);
                   weekDays.push(dayData);
+                  dayNum++;
                 } catch (parseError) {
                   console.error('Error parsing day data:', parseError);
-                  weekDays.push({
-                    dayNumber: dayNum,
-                    exercises: [],
-                  });
+                  foundDay = false;
                 }
               } else {
-                // Si no hay datos en AsyncStorage, mantener los datos existentes
-                const existingDay = weeks[weekNum - 1]?.days[dayNum - 1];
-                if (existingDay) {
-                  weekDays.push(existingDay);
-                } else {
-                  weekDays.push({
-                    dayNumber: dayNum,
-                    exercises: [],
-                  });
-                }
+                foundDay = false;
               }
+            }
+            
+            // Si no se encontró ningún día en AsyncStorage, crear al menos el día 1
+            if (weekDays.length === 0) {
+              weekDays.push({
+                dayNumber: 1,
+                exercises: [],
+              });
             }
             
             loadedWeeks.push({
@@ -347,7 +336,7 @@ export default function CustomPlanDaysScreen() {
       };
       
       loadWeekData();
-    }, [daysPerWeek, initialLoadComplete])
+    }, [initialLoadComplete])
   );
 
   const handleDayPress = (dayNumber: number) => {
@@ -366,16 +355,91 @@ export default function CustomPlanDaysScreen() {
     });
   };
   
+  const handleAddDay = () => {
+    const updatedWeeks = [...weeks];
+    const currentWeek = updatedWeeks[currentWeekIndex];
+    
+    if (!currentWeek) return;
+    
+    const newDayNumber = currentWeek.days.length + 1;
+    const newDay: DayData = {
+      dayNumber: newDayNumber,
+      exercises: [],
+    };
+    
+    currentWeek.days.push(newDay);
+    setWeeks(updatedWeeks);
+    
+    Alert.alert('¡Listo!', `Día ${newDayNumber} agregado a la Semana ${currentWeek.weekNumber}`);
+  };
+
+  const handleDeleteDay = async (dayNumber: number) => {
+    const currentWeek = weeks[currentWeekIndex];
+    if (!currentWeek) return;
+    
+    // No permitir eliminar si es el único día
+    if (currentWeek.days.length === 1) {
+      Alert.alert(
+        'No se puede eliminar',
+        'Debe haber al menos un día en la semana. Si no quieres este día, elimina la semana completa.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+    
+    const dayToDelete = currentWeek.days.find(d => d.dayNumber === dayNumber);
+    const dayName = dayToDelete?.name || `Día ${dayNumber}`;
+    
+    Alert.alert(
+      'Eliminar Día',
+      `¿Estás seguro de que quieres eliminar ${dayName}? Esta acción no se puede deshacer.`,
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Eliminar el día del estado
+              const updatedWeeks = [...weeks];
+              const weekToUpdate = updatedWeeks[currentWeekIndex];
+              
+              // Filtrar el día eliminado
+              weekToUpdate.days = weekToUpdate.days.filter(d => d.dayNumber !== dayNumber);
+              
+              // Renumerar los días restantes
+              weekToUpdate.days.forEach((day, index) => {
+                day.dayNumber = index + 1;
+              });
+              
+              setWeeks(updatedWeeks);
+              
+              // Eliminar del AsyncStorage
+              const key = `week_${currentWeek.weekNumber}_day_${dayNumber}_data`;
+              await AsyncStorage.removeItem(key);
+              
+              Alert.alert('¡Eliminado!', `${dayName} ha sido eliminado.`);
+            } catch (error) {
+              console.error('Error eliminando día:', error);
+              Alert.alert('Error', 'No se pudo eliminar el día. Intenta nuevamente.');
+            }
+          },
+        },
+      ]
+    );
+  };
+  
   const handleAddWeek = async () => {
     const newWeekNumber = weeks.length + 1;
-    const newWeekDays: DayData[] = [];
     
-    for (let i = 1; i <= daysPerWeek; i++) {
-      newWeekDays.push({
-        dayNumber: i,
-        exercises: [],
-      });
-    }
+    // Nueva semana empieza con 1 día (el usuario puede agregar más)
+    const newWeekDays: DayData[] = [{
+      dayNumber: 1,
+      exercises: [],
+    }];
     
     const newWeek: WeekData = {
       weekNumber: newWeekNumber,
@@ -410,7 +474,7 @@ export default function CustomPlanDaysScreen() {
     }
 
     // Contar días completados en todas las semanas
-    const totalDays = weeks.length * daysPerWeek;
+    const totalDays = weeks.reduce((count, week) => count + week.days.length, 0);
     const completedDays = weeks.reduce((count, week) => 
       count + week.days.filter(day => day.exercises.length > 0).length, 0
     );
@@ -780,18 +844,36 @@ export default function CustomPlanDaysScreen() {
 
         <View style={styles.daysList}>
           {currentWeekDays.map((day) => (
-            <TouchableOpacity
+            <View
               key={day.dayNumber}
               style={styles.dayCard}
-              onPress={() => handleDayPress(day.dayNumber)}
             >
               <View style={styles.dayCardHeader}>
                 <Text style={styles.dayCardTitle}>
                   {day.name || `Día ${day.dayNumber}`}
                 </Text>
-                <Ionicons name="chevron-forward" size={24} color="#999" />
+                <View style={styles.dayCardActions}>
+                  <TouchableOpacity
+                    style={styles.dayActionButton}
+                    onPress={() => handleDayPress(day.dayNumber)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons name="create-outline" size={22} color="#ffb300" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.dayActionButton}
+                    onPress={() => handleDeleteDay(day.dayNumber)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <Ionicons name="trash-outline" size={22} color="#F44336" />
+                  </TouchableOpacity>
+                </View>
               </View>
-              <View style={styles.dayCardContent}>
+              <TouchableOpacity 
+                style={styles.dayCardContent}
+                onPress={() => handleDayPress(day.dayNumber)}
+                activeOpacity={0.7}
+              >
                 {day.exercises.length > 0 ? (
                   <View>
                     <Text style={styles.exerciseCount}>
@@ -816,10 +898,20 @@ export default function CustomPlanDaysScreen() {
                     <Text style={styles.emptyDayText}>Agregar ejercicios</Text>
                   </View>
                 )}
-              </View>
-            </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
           ))}
         </View>
+
+        {/* Botón Agregar Día */}
+        <TouchableOpacity
+          style={styles.addDayButton}
+          onPress={handleAddDay}
+          disabled={isSaving}
+        >
+          <Ionicons name="add-circle" size={24} color="#ffb300" />
+          <Text style={styles.addDayButtonText}>Agregar Día</Text>
+        </TouchableOpacity>
 
         {/* Botón Agregar Semana */}
         <TouchableOpacity
@@ -907,6 +999,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#ffffff',
+    flex: 1,
+  },
+  dayCardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  dayActionButton: {
+    padding: 4,
   },
   dayCardContent: {
     minHeight: 60,
@@ -1038,6 +1139,21 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 8,
+  },
+  addDayButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffb300',
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginTop: 16,
+    gap: 8,
+  },
+  addDayButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1a1a',
   },
   addWeekButton: {
     flexDirection: 'row',

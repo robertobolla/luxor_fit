@@ -34,7 +34,6 @@ const EQUIPMENT_LABELS_MAP: Record<Equipment, string> = {
 
 export default function CustomPlanSetupScreen() {
   const router = useRouter();
-  const [daysPerWeek, setDaysPerWeek] = useState<number | null>(null);
   const [selectedEquipment, setSelectedEquipment] = useState<Equipment[]>([]);
 
   // Limpiar datos de planes anteriores cuando se monta el componente
@@ -57,10 +56,6 @@ export default function CustomPlanSetupScreen() {
     clearPreviousPlanData();
   }, []);
 
-  const handleDaysSelect = (days: number) => {
-    setDaysPerWeek(days);
-  };
-
   const toggleEquipment = (equipment: Equipment) => {
     setSelectedEquipment(prev =>
       prev.includes(equipment)
@@ -70,19 +65,15 @@ export default function CustomPlanSetupScreen() {
   };
 
   const handleContinue = () => {
-    if (!daysPerWeek) {
-      Alert.alert('Error', 'Por favor selecciona cuántos días a la semana quieres entrenar');
-      return;
-    }
     if (selectedEquipment.length === 0) {
       Alert.alert('Error', 'Por favor selecciona al menos un tipo de equipamiento');
       return;
     }
 
+    // Ya no pasamos daysPerWeek, se iniciará con 1 día por defecto
     router.push({
       pathname: '/(tabs)/workout/custom-plan-days',
       params: {
-        daysPerWeek: daysPerWeek.toString(),
         equipment: JSON.stringify(selectedEquipment),
       },
     });
@@ -107,41 +98,7 @@ export default function CustomPlanSetupScreen() {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* Paso 1: Días por semana */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>¿Cuántos días a la semana quieres entrenar?</Text>
-          <View style={styles.daysGrid}>
-            {[1, 2, 3, 4, 5, 6, 7].map(days => (
-              <TouchableOpacity
-                key={days}
-                style={[
-                  styles.dayButton,
-                  daysPerWeek === days && styles.dayButtonSelected,
-                ]}
-                onPress={() => handleDaysSelect(days)}
-              >
-                <Text
-                  style={[
-                    styles.dayButtonText,
-                    daysPerWeek === days && styles.dayButtonTextSelected,
-                  ]}
-                >
-                  {days}
-                </Text>
-                <Text
-                  style={[
-                    styles.dayButtonLabel,
-                    daysPerWeek === days && styles.dayButtonLabelSelected,
-                  ]}
-                >
-                  {days === 1 ? 'día' : 'días'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Paso 2: Equipamiento */}
+        {/* Equipamiento */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>¿Qué equipamiento tienes disponible?</Text>
           <Text style={styles.sectionSubtitle}>Selecciona todo lo que tengas</Text>
@@ -172,10 +129,10 @@ export default function CustomPlanSetupScreen() {
         <TouchableOpacity
           style={[
             styles.continueButton,
-            (!daysPerWeek || selectedEquipment.length === 0) && styles.continueButtonDisabled,
+            selectedEquipment.length === 0 && styles.continueButtonDisabled,
           ]}
           onPress={handleContinue}
-          disabled={!daysPerWeek || selectedEquipment.length === 0}
+          disabled={selectedEquipment.length === 0}
         >
           <Text style={styles.continueButtonText}>Continuar</Text>
           <Ionicons name="arrow-forward" size={24} color="#1a1a1a" />

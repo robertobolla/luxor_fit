@@ -852,14 +852,6 @@ export default function ProgressScreen() {
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* Botón flotante de agregar */}
-      <TouchableOpacity 
-        style={styles.fab}
-        onPress={() => router.push('/(tabs)/register-weight' as any)}
-      >
-        <Ionicons name="add" size={32} color="#ffffff" />
-      </TouchableOpacity>
-
       {/* Modal de personalización */}
       <DashboardCustomizationModal
         visible={showCustomizationModal}
@@ -1076,21 +1068,5 @@ const styles = StyleSheet.create({
   dayLabel: {
     fontSize: 12,
     color: '#999',
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 90,
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#2a6d5e',
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
   },
 });

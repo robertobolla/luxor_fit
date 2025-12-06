@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,12 @@ import {
   Alert,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../src/services/supabase';
-import { useRetry } from '../../src/hooks/useRetry';
 
 export default function RegisterWeightScreen() {
   const { user } = useUser();
@@ -25,15 +25,70 @@ export default function RegisterWeightScreen() {
   const [weight, setWeight] = useState('');
   const [bodyFat, setBodyFat] = useState('');
   const [muscle, setMuscle] = useState('');
-  const [waist, setWaist] = useState('');
   const [notes, setNotes] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  // Hook para retry en guardado de peso
-  const saveWeightWithRetry = useRetry(
-    async () => {
-      if (!user?.id || !weight) {
-        throw new Error('El peso es requerido');
+  const performSave = async (bodyMetric: any, isUpdate: boolean) => {
+    try {
+      let metricsError;
+      if (isUpdate) {
+        // Actualizar medición existente
+        const { error } = await supabase
+          .from('body_metrics')
+          .update(bodyMetric)
+          .eq('user_id', user!.id)
+          .eq('date', date);
+        metricsError = error;
+      } else {
+        // Insertar nueva medición
+        const { error } = await supabase
+          .from('body_metrics')
+          .insert(bodyMetric);
+        metricsError = error;
       }
+
+      if (metricsError) {
+        console.error('❌ Error guardando medición:', metricsError);
+        throw metricsError;
+      }
+
+      console.log('✅ Medición guardada en historial');
+
+      // 2. Actualizar peso actual en el perfil del usuario
+      const { error: profileError } = await supabase
+        .from('user_profiles')
+        .update({ 
+          weight: parseFloat(weight),
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user!.id);
+
+      if (profileError) {
+        console.error('⚠️ Error actualizando perfil:', profileError);
+        // No lanzamos error aquí para que no falle todo el guardado
+      } else {
+        console.log('✅ Peso actualizado en perfil');
+      }
+
+      Alert.alert('¡Guardado!', 'Mediciones registradas correctamente.', [
+        { text: 'OK', onPress: () => router.push('/(tabs)/nutrition' as any) }
+      ]);
+    } catch (error: any) {
+      console.error('Error saving weight:', error);
+      Alert.alert('Error', error.message || 'No se pudo guardar la medición. Intenta nuevamente.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSave = useCallback(async () => {
+    if (!user?.id || !weight) {
+      Alert.alert('Error', 'El peso es requerido');
+      return;
+    }
+
+    try {
+      setSaving(true);
 
       const bodyMetric = {
         user_id: user.id,
@@ -41,40 +96,60 @@ export default function RegisterWeightScreen() {
         weight_kg: parseFloat(weight),
         body_fat_percentage: bodyFat ? parseFloat(bodyFat) : null,
         muscle_percentage: muscle ? parseFloat(muscle) : null,
-        waist_cm: waist ? parseFloat(waist) : null,
         notes: notes || null,
       };
 
-      const { error } = await supabase
+      console.log('💾 Guardando medición:', bodyMetric);
+
+      // Verificar si ya existe una medición para este día
+      const { data: existingMetric } = await supabase
         .from('body_metrics')
-        .upsert(bodyMetric, {
-          onConflict: 'user_id,date'
-        });
+        .select('id, weight_kg, body_fat_percentage, muscle_percentage')
+        .eq('user_id', user.id)
+        .eq('date', date)
+        .single();
 
-      if (error) throw error;
-      return true;
-    },
-    {
-      maxRetries: 2,
-      retryDelay: 2000,
-      showAlert: true,
-    }
-  );
+      // Si existe, mostrar confirmación antes de sobrescribir
+      if (existingMetric) {
+        setSaving(false); // Detener loading mientras esperamos confirmación
+        
+        Alert.alert(
+          'Registro Existente',
+          `Ya registraste mediciones para el día ${new Date(date).toLocaleDateString('es-ES', { 
+            day: 'numeric', 
+            month: 'long',
+            year: 'numeric'
+          })}.\n\nSi continúas, los valores anteriores serán reemplazados por los nuevos datos.\n\n¿Deseas actualizar la medición?`,
+          [
+            {
+              text: 'Cancelar',
+              style: 'cancel',
+              onPress: () => {
+                console.log('❌ Usuario canceló la actualización');
+              }
+            },
+            {
+              text: 'Actualizar',
+              style: 'default',
+              onPress: async () => {
+                setSaving(true);
+                await performSave(bodyMetric, true);
+              }
+            }
+          ]
+        );
+        return;
+      }
 
-  const handleSave = async () => {
-    if (!user?.id || !weight) {
-      Alert.alert('Error', 'El peso es requerido');
-      return;
-    }
+      // Si no existe, guardar directamente
+      await performSave(bodyMetric, false);
 
-    const result = await saveWeightWithRetry.executeWithRetry();
-    
-    if (result) {
-      Alert.alert('¡Guardado!', 'Mediciones registradas correctamente.', [
-        { text: 'OK', onPress: () => router.push('/(tabs)/dashboard' as any) }
-      ]);
+    } catch (error: any) {
+      console.error('Error checking existing weight:', error);
+      Alert.alert('Error', 'No se pudo verificar la medición. Intenta nuevamente.');
+      setSaving(false);
     }
-  };
+  }, [user, date, weight, bodyFat, muscle, notes]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -82,14 +157,35 @@ export default function RegisterWeightScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard' as any)}>
+        <TouchableOpacity onPress={() => router.push('/(tabs)/nutrition' as any)}>
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Registrar Medición</Text>
-        <View style={{ width: 24 }} />
+        <TouchableOpacity onPress={() => router.push('/body-evolution' as any)}>
+          <Ionicons name="analytics" size={24} color="#ffb300" />
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView}>
+        {/* Botón Ver Evolución */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.evolutionButton}
+            onPress={() => router.push('/body-evolution' as any)}
+          >
+            <View style={styles.evolutionButtonIcon}>
+              <Ionicons name="analytics" size={24} color="#ffb300" />
+            </View>
+            <View style={styles.evolutionButtonContent}>
+              <Text style={styles.evolutionButtonTitle}>Ver Evolución Corporal</Text>
+              <Text style={styles.evolutionButtonSubtitle}>
+                Gráficas de peso, grasa y músculo
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#666" />
+          </TouchableOpacity>
+        </View>
+
         {/* Fecha */}
         <View style={styles.section}>
           <Text style={styles.label}>Fecha de la medición</Text>
@@ -152,20 +248,6 @@ export default function RegisterWeightScreen() {
           </Text>
         </View>
 
-        {/* Cintura */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Cintura (cm)</Text>
-          <Text style={styles.optionalLabel}>Opcional</Text>
-          <TextInput
-            style={styles.input}
-            value={waist}
-            onChangeText={setWaist}
-            placeholder="85"
-            placeholderTextColor="#666"
-            keyboardType="decimal-pad"
-          />
-        </View>
-
         {/* Notas */}
         <View style={styles.section}>
           <Text style={styles.label}>Notas</Text>
@@ -183,13 +265,15 @@ export default function RegisterWeightScreen() {
 
         {/* Botón Guardar */}
         <TouchableOpacity
-          style={[styles.saveButton, saveWeightWithRetry.isRetrying && styles.saveButtonDisabled]}
+          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
           onPress={handleSave}
-          disabled={saveWeightWithRetry.isRetrying}
+          disabled={saving}
         >
-          <Text style={styles.saveButtonText}>
-            {saveWeightWithRetry.isRetrying ? 'Guardando...' : 'Guardar Medición'}
-          </Text>
+          {saving ? (
+            <ActivityIndicator color="#1a1a1a" />
+          ) : (
+            <Text style={styles.saveButtonText}>Guardar Medición</Text>
+          )}
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -273,6 +357,37 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     fontSize: 18,
     fontWeight: '700',
+  },
+  evolutionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+    gap: 12,
+  },
+  evolutionButtonIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2a2a2a',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  evolutionButtonContent: {
+    flex: 1,
+  },
+  evolutionButtonTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  evolutionButtonSubtitle: {
+    fontSize: 12,
+    color: '#999',
   },
 });
 

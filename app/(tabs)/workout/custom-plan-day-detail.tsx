@@ -316,19 +316,29 @@ export default function CustomPlanDayDetailScreen() {
     const currentReps = newSetTypes[selectedSetIndex]?.reps || null;
     const currentRir = newSetTypes[selectedSetIndex]?.rir || null;
     
+    // Si cambia a 'warmup', limpiar reps y RIR (no se necesitan)
     // Si cambia a 'failure', actualizar RIR a 0 automáticamente
-    const updatedRir = newType === 'failure' ? 0 : currentRir;
+    const updatedReps = newType === 'warmup' ? null : currentReps;
+    const updatedRir = newType === 'warmup' ? null : (newType === 'failure' ? 0 : currentRir);
     
     newSetTypes[selectedSetIndex] = {
       type: newType,
-      reps: currentReps, // Mantener las reps siempre
+      reps: updatedReps,
       rir: updatedRir,
     };
     
-    // Actualizar RIR visual si cambia a failure
+    // Actualizar valores visuales
     if (newType === 'failure') {
       const newRirValues = [...rirValues];
       newRirValues[selectedSetIndex] = '0';
+      setRirValues(newRirValues);
+    } else if (newType === 'warmup') {
+      // Limpiar valores visuales para calentamiento
+      const newRepsValues = [...reps];
+      const newRirValues = [...rirValues];
+      newRepsValues[selectedSetIndex] = '';
+      newRirValues[selectedSetIndex] = '';
+      setReps(newRepsValues);
       setRirValues(newRirValues);
     }
     
@@ -735,9 +745,9 @@ export default function CustomPlanDayDetailScreen() {
           <View style={styles.exercisesList}>
             {exercises.map((exercise) => (
               <View key={exercise.id} style={styles.exerciseCard}>
-                <View key={`header-${exercise.id}`} style={styles.exerciseHeader}>
+                <View style={styles.exerciseHeader}>
                   <Text style={styles.exerciseName}>{exercise.name}</Text>
-                  <View key={`actions-${exercise.id}`} style={styles.exerciseActions}>
+                  <View style={styles.exerciseActions}>
                     <TouchableOpacity
                       onPress={() => setEditingExercise(exercise)}
                       style={styles.editButton}
@@ -752,11 +762,11 @@ export default function CustomPlanDayDetailScreen() {
                     </TouchableOpacity>
                   </View>
                 </View>
-                <View key={`details-${exercise.id}`} style={styles.exerciseDetails}>
-                  <Text key={`sets-text-${exercise.id}`} style={styles.exerciseDetailText}>
+                <View style={styles.exerciseDetails}>
+                  <Text style={styles.exerciseDetailText}>
                     {exercise.sets} series
                   </Text>
-                  <View key={`reps-container-${exercise.id}`} style={styles.repsContainer}>
+                  <View style={styles.repsContainer}>
                     {(exercise.setTypes || []).map((setInfo, idx) => {
                       const label = (() => {
                         switch (setInfo.type) {
@@ -778,7 +788,9 @@ export default function CustomPlanDayDetailScreen() {
                         }
                       })();
                       
-                      const repsText = setInfo.type === 'failure' 
+                      const repsText = setInfo.type === 'warmup'
+                        ? 'calentamiento'
+                        : setInfo.type === 'failure' 
                         ? 'al fallo' 
                         : `${setInfo.reps || 0} reps`;
                       
@@ -861,6 +873,7 @@ export default function CustomPlanDayDetailScreen() {
                       {setTypes.map((setType, idx) => {
                         const setLabel = getSetLabel(setType, idx);
                         const buttonColor = getSetButtonColor(setType);
+                        const isWarmup = setType.type === 'warmup';
                         
                         return (
                           <View key={idx} style={styles.repInputRow}>
@@ -880,21 +893,32 @@ export default function CustomPlanDayDetailScreen() {
                                 </Text>
                               )}
                             </Pressable>
-                            <TextInput
-                              style={styles.repInput}
-                              value={reps[idx] || ''}
-                              onChangeText={(text) => handleRepsChange(idx, text)}
-                              keyboardType="number-pad"
-                              placeholder="0"
-                            />
-                            <TextInput
-                              style={styles.rirInput}
-                              value={rirValues[idx] || ''}
-                              onChangeText={(text) => handleRirChange(idx, text)}
-                              keyboardType="number-pad"
-                              placeholder="-"
-                              placeholderTextColor="#666"
-                            />
+                            {isWarmup ? (
+                              // Para calentamiento, mostrar texto informativo en lugar de inputs
+                              <View style={styles.warmupPlaceholder}>
+                                <Text style={styles.warmupPlaceholderText}>
+                                  Peso ligero de activación
+                                </Text>
+                              </View>
+                            ) : (
+                              <>
+                                <TextInput
+                                  style={styles.repInput}
+                                  value={reps[idx] || ''}
+                                  onChangeText={(text) => handleRepsChange(idx, text)}
+                                  keyboardType="number-pad"
+                                  placeholder="0"
+                                />
+                                <TextInput
+                                  style={styles.rirInput}
+                                  value={rirValues[idx] || ''}
+                                  onChangeText={(text) => handleRirChange(idx, text)}
+                                  keyboardType="number-pad"
+                                  placeholder="-"
+                                  placeholderTextColor="#666"
+                                />
+                              </>
+                            )}
                             <TouchableOpacity
                               style={styles.removeSetButton}
                               onPress={() => handleRemoveSet(idx)}
@@ -1338,6 +1362,25 @@ const styles = StyleSheet.create({
     borderColor: '#ffb300',
     textAlign: 'center',
     minHeight: 52,
+  },
+  warmupPlaceholder: {
+    flex: 1,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+    minHeight: 52,
+    marginRight: 8,
+  },
+  warmupPlaceholderText: {
+    fontSize: 13,
+    color: '#4CAF50',
+    fontWeight: '600',
+    fontStyle: 'italic',
   },
   modalButtons: {
     flexDirection: 'row',

@@ -60,6 +60,7 @@ export default function CustomPlanSelectExerciseScreen() {
   const params = useLocalSearchParams();
   const equipment = JSON.parse((params.equipment as string) || '[]');
   const dayNumber = params.dayNumber as string;
+  const weekNumber = params.weekNumber as string;
   const daysPerWeek = params.daysPerWeek as string;
 
   const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
@@ -141,6 +142,7 @@ export default function CustomPlanSelectExerciseScreen() {
           pathname: '/(tabs)/workout/custom-plan-day-detail',
           params: {
             dayNumber: dayNumber,
+            weekNumber: weekNumber || '1',
             daysPerWeek: daysPerWeek,
             equipment: JSON.stringify(equipment),
           },
@@ -157,6 +159,7 @@ export default function CustomPlanSelectExerciseScreen() {
           pathname: '/(tabs)/workout/custom-plan-day-detail',
           params: {
             dayNumber: dayNumber,
+            weekNumber: weekNumber || '1',
             daysPerWeek: daysPerWeek,
             equipment: JSON.stringify(equipment),
           },
