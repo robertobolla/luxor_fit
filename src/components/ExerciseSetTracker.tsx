@@ -31,6 +31,12 @@ interface PreviousSet {
   weight_kg: number | null;
 }
 
+interface SetTypeInfo {
+  type: 'warmup' | 'normal' | 'failure' | 'drop';
+  reps: number | null;
+  rir: number | null;
+}
+
 interface ExerciseSetTrackerProps {
   userId: string;
   exerciseId: string;
@@ -38,6 +44,7 @@ interface ExerciseSetTrackerProps {
   defaultSets: number; // Cantidad de series por defecto del plan
   usesTime?: boolean; // Si el ejercicio usa tiempo en lugar de reps
   sessionId?: string; // ID de la sesión actual
+  setTypes?: SetTypeInfo[]; // Tipos de cada serie (para excluir calentamiento)
   onSetsChange?: (sets: ExerciseSet[]) => void;
   onSave?: () => void; // Callback cuando se guardan los sets
 }
@@ -49,6 +56,7 @@ export function ExerciseSetTracker({
   defaultSets,
   usesTime = false,
   sessionId,
+  setTypes = [],
   onSetsChange,
   onSave,
 }: ExerciseSetTrackerProps) {
@@ -234,10 +242,12 @@ export function ExerciseSetTracker({
       setSaving(true);
       setSaveSuccess(false);
 
-      // Filtrar solo los sets que tienen datos (reps o weight)
-      const setsToSave = sets.filter(set => 
-        set.reps !== null || set.weight_kg !== null || set.duration_seconds !== null
-      );
+      // Filtrar solo los sets que tienen datos (reps o weight) Y NO SON de calentamiento
+      const setsToSave = sets.filter((set, index) => {
+        const hasData = set.reps !== null || set.weight_kg !== null || set.duration_seconds !== null;
+        const isWarmup = setTypes[index]?.type === 'warmup';
+        return hasData && !isWarmup; // Solo guardar si tiene datos Y NO es calentamiento
+      });
 
       if (setsToSave.length === 0) {
         Alert.alert('Sin datos', 'No hay datos para guardar. Ingresa al menos una serie con reps o peso.');
@@ -316,12 +326,6 @@ export function ExerciseSetTracker({
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.exerciseName}>{exerciseName}</Text>
-        <Text style={styles.setsCount}>{sets.length} {sets.length === 1 ? 'serie' : 'series'}</Text>
-      </View>
-
       {/* Tabla de series */}
       <View style={styles.table}>
         {/* Encabezado de columnas */}

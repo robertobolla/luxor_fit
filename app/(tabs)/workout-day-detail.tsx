@@ -515,6 +515,20 @@ export default function WorkoutDayDetailScreen() {
                       />
                     </TouchableOpacity>
                     <TouchableOpacity 
+                      style={styles.statsButton}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/exercise-progress-stats',
+                          params: {
+                            exerciseName: exerciseName,
+                            exerciseId: exerciseName, // TODO: En el futuro usar ID real
+                          },
+                        } as any);
+                      }}
+                    >
+                      <Ionicons name="stats-chart" size={20} color="#ffb300" />
+                    </TouchableOpacity>
+                    <TouchableOpacity 
                       style={styles.videoButton}
                       onPress={async () => {
                         try {
@@ -553,6 +567,7 @@ export default function WorkoutDayDetailScreen() {
                     exerciseName={exerciseName}
                     defaultSets={sets || 3}
                     usesTime={false} // TODO: Detectar si el ejercicio usa tiempo
+                    setTypes={setTypes || []} // Pasar tipos de series para excluir calentamiento
                     onSetsChange={(sets) => handleSetsChange(exerciseName, sets)}
                   />
                 )}
@@ -1151,6 +1166,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#ffb300',
+  },
+  statsButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1a1a1a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#ffb300',
+    marginLeft: 8,
   },
   statBadge: {
     flexDirection: 'row',
