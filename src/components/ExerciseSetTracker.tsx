@@ -93,7 +93,7 @@ export function ExerciseSetTracker({
       }
 
       if (data && data.length > 0) {
-        // Hay series guardadas hoy, cargarlas
+        // Hay series guardadas hoy, cargarlas (ya deberían estar sin calentamiento)
         const loadedSets: ExerciseSet[] = data.map(set => ({
           set_number: set.set_number,
           reps: set.reps,
@@ -104,7 +104,7 @@ export function ExerciseSetTracker({
         onSetsChange?.(loadedSets);
         console.log('✅ Series de hoy cargadas:', loadedSets.length);
       } else {
-        // No hay series guardadas hoy, inicializar vacías
+        // No hay series guardadas hoy, inicializar vacías (sin calentamiento)
         initializeSets();
       }
     } catch (err) {
@@ -113,17 +113,35 @@ export function ExerciseSetTracker({
     }
   };
 
-  // Inicializar las series con la cantidad por defecto
+  // Inicializar las series con la cantidad por defecto (EXCLUYENDO calentamiento)
   const initializeSets = () => {
     const initialSets: ExerciseSet[] = [];
-    for (let i = 1; i <= defaultSets; i++) {
-      initialSets.push({
-        set_number: i,
-        reps: null,
-        weight_kg: null,
-        duration_seconds: null,
+    
+    // Si hay información de tipos de series, filtrar las de calentamiento
+    if (setTypes.length > 0) {
+      // Crear solo sets para las series que NO son de calentamiento
+      setTypes.forEach((setType, index) => {
+        if (setType.type !== 'warmup') {
+          initialSets.push({
+            set_number: index + 1, // Mantener el número de serie original
+            reps: null,
+            weight_kg: null,
+            duration_seconds: null,
+          });
+        }
       });
+    } else {
+      // Si no hay información de tipos, crear todas las series por defecto
+      for (let i = 1; i <= defaultSets; i++) {
+        initialSets.push({
+          set_number: i,
+          reps: null,
+          weight_kg: null,
+          duration_seconds: null,
+        });
+      }
     }
+    
     setSets(initialSets);
     onSetsChange?.(initialSets);
   };
@@ -198,7 +216,10 @@ export function ExerciseSetTracker({
 
   // Agregar una nueva serie
   const addSet = () => {
-    const newSetNumber = sets.length + 1;
+    // Obtener el número de serie máximo actual y agregar 1
+    const maxSetNumber = sets.length > 0 ? Math.max(...sets.map(s => s.set_number)) : 0;
+    const newSetNumber = maxSetNumber + 1;
+    
     const newSet: ExerciseSet = {
       set_number: newSetNumber,
       reps: null,
@@ -218,14 +239,11 @@ export function ExerciseSetTracker({
     if (sets.length <= 1) return; // No permitir eliminar si solo hay una serie
     
     setSets(prevSets => {
+      // Simplemente filtrar la serie eliminada sin renumerar
+      // Los números de serie se mantienen consistentes con el plan original
       const filtered = prevSets.filter(set => set.set_number !== setNumber);
-      // Renumerar las series
-      const renumbered = filtered.map((set, index) => ({
-        ...set,
-        set_number: index + 1,
-      }));
-      onSetsChange?.(renumbered);
-      return renumbered;
+      onSetsChange?.(filtered);
+      return filtered;
     });
   };
 
@@ -243,9 +261,11 @@ export function ExerciseSetTracker({
       setSaveSuccess(false);
 
       // Filtrar solo los sets que tienen datos (reps o weight) Y NO SON de calentamiento
-      const setsToSave = sets.filter((set, index) => {
+      const setsToSave = sets.filter((set) => {
         const hasData = set.reps !== null || set.weight_kg !== null || set.duration_seconds !== null;
-        const isWarmup = setTypes[index]?.type === 'warmup';
+        // Buscar el tipo de serie usando el set_number (no el índice del array)
+        const setTypeInfo = setTypes[set.set_number - 1]; // set_number es 1-indexed
+        const isWarmup = setTypeInfo?.type === 'warmup';
         return hasData && !isWarmup; // Solo guardar si tiene datos Y NO es calentamiento
       });
 
