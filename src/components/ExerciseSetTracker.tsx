@@ -372,11 +372,11 @@ export function ExerciseSetTracker({
 
         {/* Filas de series */}
         <ScrollView style={styles.tableBody}>
-          {sets.map((set) => (
+          {sets.map((set, index) => (
             <View key={set.set_number} style={styles.tableRow}>
-              {/* Número de serie */}
+              {/* Número de serie - Mostrar numeración secuencial (1, 2, 3...) */}
               <View style={[styles.cell, styles.setNumberCell]}>
-                <Text style={styles.setNumberText}>{set.set_number}</Text>
+                <Text style={styles.setNumberText}>{index + 1}</Text>
               </View>
 
               {/* Anterior REPS */}
