@@ -84,12 +84,20 @@ export default function CustomPlanDaysScreen() {
 
         console.log('✅ Plan cargado:', plan.plan_name);
 
+        // Verificar si este plan es el activo actualmente
+        const { data: profile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('active_plan_id')
+          .eq('user_id', user.id)
+          .single();
+
+        const isActive = profile?.active_plan_id === editingPlanId;
+        setIsPlanCurrentlyActive(isActive);
+        console.log('🔍 Plan activo:', isActive);
+
         // Extraer datos del plan
         const planData = plan.plan_data;
         setPlanName(plan.plan_name);
-        
-        // Guardar si el plan es activo actualmente
-        setIsPlanCurrentlyActive(plan.is_active || false);
 
         // Guardar planId en AsyncStorage
         await AsyncStorage.setItem('editing_plan_id', editingPlanId);
@@ -115,6 +123,7 @@ export default function CustomPlanDaysScreen() {
                 name: ex.name,
                 sets: ex.sets,
                 reps: Array.isArray(ex.reps) ? [...ex.reps] : ex.reps,
+                rest_seconds: ex.rest_seconds || 120, // Incluir tiempo de descanso
                 setTypes: Array.isArray(ex.setTypes) ? ex.setTypes.map((st: any) => ({
                   type: st.type,
                   reps: st.reps,
@@ -162,6 +171,7 @@ export default function CustomPlanDaysScreen() {
               name: ex.name,
               sets: ex.sets,
               reps: Array.isArray(ex.reps) ? [...ex.reps] : ex.reps,
+              rest_seconds: ex.rest_seconds || 120, // Incluir tiempo de descanso
               setTypes: Array.isArray(ex.setTypes) ? ex.setTypes.map((st: any) => ({
                 type: st.type,
                 reps: st.reps,
@@ -276,6 +286,19 @@ export default function CustomPlanDaysScreen() {
         console.log('🔄 useFocusEffect: recargando datos desde AsyncStorage');
 
         try {
+          // Si estamos editando un plan existente, recargar is_active desde Supabase
+          if (editingPlanId && user) {
+            const { data: profile } = await supabase
+              .from('user_profiles')
+              .select('active_plan_id')
+              .eq('user_id', user.id)
+              .single();
+            
+            const isActive = profile?.active_plan_id === editingPlanId;
+            setIsPlanCurrentlyActive(isActive);
+            console.log('✅ Estado activo del plan:', isActive);
+          }
+          
           // Cargar número de semanas guardadas
           const savedWeeksCount = await AsyncStorage.getItem('custom_plan_weeks_count');
           const totalWeeks = savedWeeksCount ? parseInt(savedWeeksCount) : 1;
@@ -334,7 +357,7 @@ export default function CustomPlanDaysScreen() {
       };
       
       loadWeekData();
-    }, [initialLoadComplete])
+    }, [initialLoadComplete, editingPlanId, user])
   );
 
   const handleDayPress = (dayNumber: number) => {
@@ -366,7 +389,7 @@ export default function CustomPlanDaysScreen() {
     setExpandedDays(newExpanded);
   };
 
-  const handleAddDay = () => {
+  const handleAddDay = async () => {
     const updatedWeeks = [...weeks];
     const currentWeek = updatedWeeks[currentWeekIndex];
     
@@ -380,6 +403,15 @@ export default function CustomPlanDaysScreen() {
     
     currentWeek.days.push(newDay);
     setWeeks(updatedWeeks);
+    
+    // Guardar el nuevo día vacío en AsyncStorage
+    try {
+      const key = `week_${currentWeek.weekNumber}_day_${newDayNumber}_data`;
+      await AsyncStorage.setItem(key, JSON.stringify(newDay));
+      console.log('✅ Día vacío guardado en AsyncStorage:', key);
+    } catch (error) {
+      console.error('❌ Error guardando día en AsyncStorage:', error);
+    }
     
     showAlert(
       '¡Listo!',
@@ -724,7 +756,7 @@ export default function CustomPlanDaysScreen() {
               name: ex.name,
               sets: ex.sets,
               reps: ex.reps,
-              rest_seconds: 60,
+              rest_seconds: ex.rest_seconds || 120, // Usar valor configurado o 2min por defecto
               setTypes: ex.setTypes || [], // Incluir tipos de series
             })),
             duration: 45,
@@ -738,7 +770,7 @@ export default function CustomPlanDaysScreen() {
             name: ex.name,
             sets: ex.sets,
             reps: ex.reps,
-            rest_seconds: 60,
+            rest_seconds: ex.rest_seconds || 120, // Usar valor configurado o 2min por defecto
             setTypes: ex.setTypes || [],
           })),
           duration: 45,

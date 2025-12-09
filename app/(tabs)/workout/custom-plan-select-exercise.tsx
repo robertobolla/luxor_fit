@@ -70,12 +70,16 @@ export default function CustomPlanSelectExerciseScreen() {
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
   const [selectedExerciseName, setSelectedExerciseName] = useState<string>('');
 
-  // Resetear el músculo seleccionado cada vez que la pantalla recibe el foco
+  // Resetear el músculo seleccionado y limpiar caché cada vez que la pantalla recibe el foco
   useFocusEffect(
     React.useCallback(() => {
-      console.log('🔄 Pantalla de selección de ejercicio enfocada, reseteando músculo');
+      console.log('🔄 Pantalla de selección de ejercicio enfocada, limpiando caché');
       setSelectedMuscle(null);
       setExercises([]);
+      
+      // Limpiar cualquier caché de Supabase forzando una nueva sesión
+      // Esto asegura que siempre obtenemos datos frescos del servidor
+      supabase.removeAllChannels();
     }, [])
   );
 
@@ -94,10 +98,13 @@ export default function CustomPlanSelectExerciseScreen() {
   const loadExercises = async (muscle: string) => {
     setLoading(true);
     try {
-      // Construir query base
+      console.log('🔄 Cargando ejercicios frescos para músculo:', muscle);
+      console.log('🎯 Equipamiento seleccionado:', equipment);
+      
+      // Construir query base - seleccionar updated_at para verificar datos frescos
       let query = supabase
         .from('exercise_videos')
-        .select('id, canonical_name, description, muscles, muscle_zones, equipment, video_url, storage_path, is_storage_video')
+        .select('id, canonical_name, description, muscles, muscle_zones, equipment, video_url, storage_path, is_storage_video, updated_at')
         .or(`video_url.not.is.null,and(is_storage_video.eq.true,storage_path.not.is.null)`);
 
       // Filtrar por músculo (puede estar en muscles o muscle_zones)
@@ -110,7 +117,20 @@ export default function CustomPlanSelectExerciseScreen() {
         query = query.or(equipmentConditions);
       }
 
+      // Ordenar por updated_at DESC para obtener los más recientes primero
+      query = query.order('updated_at', { ascending: false });
+
       const { data, error } = await query;
+      
+      console.log('📊 Ejercicios recibidos:', data?.length || 0);
+      if (data && data.length > 0) {
+        console.log('🔍 Ejemplo de ejercicio:', {
+          name: data[0].canonical_name,
+          muscles: data[0].muscles,
+          muscle_zones: data[0].muscle_zones,
+          updated_at: data[0].updated_at
+        });
+      }
 
       if (error) {
         console.error('Error loading exercises:', error);
@@ -124,10 +144,11 @@ export default function CustomPlanSelectExerciseScreen() {
         return hasVideo;
       });
 
+      console.log(`✅ ${exercisesWithVideo.length} ejercicios cargados para ${muscle}`);
       setExercises(exercisesWithVideo);
     } catch (error) {
-      console.error('Error:', error);
-      Alert.alert('Error', 'Ocurrió un error al cargar los ejercicios');
+      console.error('❌ Error cargando ejercicios:', error);
+      Alert.alert('Error', 'Ocurrió un error al cargar los ejercicios. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -140,6 +161,7 @@ export default function CustomPlanSelectExerciseScreen() {
       name: exercise.canonical_name,
       sets: 3, // Valor por defecto
       reps: [10, 10, 10], // Valores por defecto
+      rest_seconds: 120, // 2 minutos por defecto
     };
     
     try {
@@ -277,7 +299,20 @@ export default function CustomPlanSelectExerciseScreen() {
         <Text style={styles.headerTitle}>
           {MUSCLE_LABELS[selectedMuscle] || selectedMuscle}
         </Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            console.log('🔄 Recargando ejercicios manualmente');
+            loadExercises(selectedMuscle);
+          }}
+          disabled={loading}
+        >
+          <Ionicons 
+            name="reload" 
+            size={24} 
+            color={loading ? "#666" : "#ffb300"} 
+          />
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.content}>

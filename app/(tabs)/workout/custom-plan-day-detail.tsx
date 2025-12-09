@@ -40,6 +40,7 @@ interface Exercise {
   sets: number;
   reps: number[]; // Mantener para compatibilidad
   setTypes?: SetInfo[]; // Nuevo campo para tipos de series
+  rest_seconds?: number; // Tiempo de descanso en segundos
 }
 
 export default function CustomPlanDayDetailScreen() {
@@ -94,10 +95,36 @@ export default function CustomPlanDayDetailScreen() {
   const [showSetTypeModal, setShowSetTypeModal] = useState(false);
   const [selectedSetIndex, setSelectedSetIndex] = useState<number>(-1);
 
+  // Estados para el modal de configuración de tiempo de descanso
+  const [showRestTimerModal, setShowRestTimerModal] = useState(false);
+  const [editingRestExerciseId, setEditingRestExerciseId] = useState<string | null>(null);
+  const [tempRestTime, setTempRestTime] = useState(120); // 2 minutos por defecto
+  const [showRestTimers, setShowRestTimers] = useState(true); // Mostrar temporizadores por defecto
+
   // Debug: Verificar estado del modal en cada render
   useEffect(() => {
     console.log('🔍 Estado modal cambió:', { showSetTypeModal, selectedSetIndex });
   }, [showSetTypeModal, selectedSetIndex]);
+
+  // Guardar automáticamente en AsyncStorage cuando cambian los ejercicios
+  useEffect(() => {
+    if (hasLocalChanges.current && exercises.length > 0) {
+      const saveToStorage = async () => {
+        try {
+          const dayDataToSave = {
+            dayNumber,
+            name: dayName,
+            exercises,
+          };
+          await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
+          console.log('💾 Auto-guardado en AsyncStorage:', { dayNumber, exercisesCount: exercises.length });
+        } catch (error) {
+          console.error('❌ Error auto-guardando:', error);
+        }
+      };
+      saveToStorage();
+    }
+  }, [exercises, dayNumber, weekNumber, dayName]);
 
   // Inicializar estados del modal cuando se abre para editar un ejercicio
   useEffect(() => {
@@ -403,7 +430,14 @@ export default function CustomPlanDayDetailScreen() {
 
     const updatedExercises = exercises.map(ex =>
       ex.id === editingExercise.id
-        ? { ...ex, sets: numSets, reps: repsArray, setTypes: finalSetTypes }
+        ? { 
+            ...ex, 
+            sets: numSets, 
+            reps: repsArray, 
+            setTypes: finalSetTypes,
+            // Mantener rest_seconds si existe
+            rest_seconds: ex.rest_seconds || 120,
+          }
         : ex
     );
     setExercises(updatedExercises);
@@ -455,6 +489,36 @@ export default function CustomPlanDayDetailScreen() {
       ],
       { icon: 'trash', iconColor: '#F44336' }
     );
+  };
+
+  const handleOpenRestTimerModal = (exerciseId: string) => {
+    const exercise = exercises.find(ex => ex.id === exerciseId);
+    if (exercise) {
+      setTempRestTime(exercise.rest_seconds || 120); // Valor actual o 2 min por defecto
+      setEditingRestExerciseId(exerciseId);
+      setShowRestTimerModal(true);
+    }
+  };
+
+  const handleSaveRestTime = () => {
+    if (editingRestExerciseId) {
+      const updatedExercises = exercises.map(ex =>
+        ex.id === editingRestExerciseId
+          ? { ...ex, rest_seconds: tempRestTime }
+          : ex
+      );
+      setExercises(updatedExercises);
+      hasLocalChanges.current = true;
+      console.log('⏱️ Tiempo de descanso guardado:', tempRestTime, 'segundos');
+    }
+    setShowRestTimerModal(false);
+    setEditingRestExerciseId(null);
+  };
+
+  const formatRestTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleSave = async () => {
@@ -560,6 +624,7 @@ export default function CustomPlanDayDetailScreen() {
               name: selectedExercise.name,
               sets: selectedExercise.sets || 3,
               reps: selectedExercise.reps || [10, 10, 10],
+              rest_seconds: selectedExercise.rest_seconds || 120, // 2 minutos por defecto
               setTypes: selectedExercise.setTypes || [], // Inicializar setTypes vacío
             };
             console.log('✨ Nuevo ejercicio creado con ID único:', uniqueId);
@@ -808,6 +873,29 @@ export default function CustomPlanDayDetailScreen() {
       </View>
 
       <ScrollView style={styles.content}>
+        {/* Toggle para mostrar/ocultar temporizadores */}
+        {exercises.length > 0 && (
+          <TouchableOpacity
+            style={styles.restTimerToggleContainer}
+            onPress={() => setShowRestTimers(!showRestTimers)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.restTimerToggleContent}>
+              <Ionicons name="timer-outline" size={20} color="#ffb300" />
+              <Text style={styles.restTimerToggleText}>Activar tiempo de descanso</Text>
+            </View>
+            <View style={[
+              styles.toggleSwitch,
+              showRestTimers && styles.toggleSwitchActive
+            ]}>
+              <View style={[
+                styles.toggleKnob,
+                showRestTimers && styles.toggleKnobActive
+              ]} />
+            </View>
+          </TouchableOpacity>
+        )}
+
         {exercises.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="fitness-outline" size={64} color="#666" />
@@ -844,6 +932,23 @@ export default function CustomPlanDayDetailScreen() {
                     </TouchableOpacity>
                   </View>
                 </View>
+
+                {/* Temporizador de Descanso */}
+                {showRestTimers && (
+                  <TouchableOpacity
+                    style={styles.restTimerContainer}
+                    onPress={() => handleOpenRestTimerModal(exercise.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="timer-outline" size={18} color="#ffb300" />
+                    <Text style={styles.restTimerLabel}>Temporizador de Descanso:</Text>
+                    <Text style={styles.restTimerValue}>
+                      {formatRestTime(exercise.rest_seconds || 120)}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color="#666" />
+                  </TouchableOpacity>
+                )}
+
                 <View style={styles.exerciseDetails}>
                   <TouchableOpacity
                     style={styles.setsHeader}
@@ -1213,6 +1318,68 @@ export default function CustomPlanDayDetailScreen() {
           </Pressable>
         </Pressable>
         </Modal>
+      </Modal>
+
+      {/* Modal de Configuración de Tiempo de Descanso */}
+      <Modal
+        visible={showRestTimerModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRestTimerModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowRestTimerModal(false)}
+        >
+          <Pressable
+            style={styles.restTimerModalContent}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.restTimerModalHeader}>
+              <Ionicons name="settings" size={24} color="#ffb300" />
+              <Text style={styles.restTimerModalTitle}>Temporizador de Descanso</Text>
+            </View>
+
+            {/* Selector de Tiempo */}
+            <View style={styles.timePickerContainer}>
+              <View style={styles.timeDisplay}>
+                <Text style={styles.timeDisplayText}>
+                  {formatRestTime(tempRestTime)}
+                </Text>
+              </View>
+              
+              <View style={styles.timeAdjustButtons}>
+                <TouchableOpacity
+                  style={styles.timeAdjustButton}
+                  onPress={() => setTempRestTime(Math.max(15, tempRestTime - 15))}
+                >
+                  <Text style={styles.timeAdjustButtonText}>-15s</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.timeAdjustButton}
+                  onPress={() => setTempRestTime(tempRestTime + 15)}
+                >
+                  <Text style={styles.timeAdjustButtonText}>+15s</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.restTimerModalActions}>
+              <TouchableOpacity
+                style={styles.restTimerCancelButton}
+                onPress={() => setShowRestTimerModal(false)}
+              >
+                <Text style={styles.restTimerCancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.restTimerSaveButton}
+                onPress={handleSaveRestTime}
+              >
+                <Text style={styles.restTimerSaveButtonText}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       <AlertComponent />
@@ -1773,6 +1940,157 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  // Estilos para el temporizador de descanso
+  restTimerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 2,
+    paddingBottom: 14,
+    gap: 8,
+  },
+  restTimerLabel: {
+    fontSize: 15,
+    color: '#ffb300',
+    fontWeight: '500',
+  },
+  restTimerValue: {
+    fontSize: 15,
+    color: '#ffb300',
+    fontWeight: '600',
+    marginRight: 4,
+  },
+  restTimerModalContent: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 20,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+  },
+  restTimerModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 24,
+  },
+  restTimerModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  timePickerContainer: {
+    alignItems: 'center',
+    gap: 20,
+    marginBottom: 24,
+  },
+  timeDisplay: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 8,
+    borderColor: '#ffb300',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeDisplayText: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  timeAdjustButtons: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  timeAdjustButton: {
+    backgroundColor: '#333',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  timeAdjustButtonText: {
+    color: '#ffb300',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  restTimerModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  restTimerCancelButton: {
+    flex: 1,
+    backgroundColor: '#333',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  restTimerCancelButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  restTimerSaveButton: {
+    flex: 1,
+    backgroundColor: '#ffb300',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  restTimerSaveButtonText: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // Estilos para el toggle de temporizadores
+  restTimerToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#2a2a2a',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  restTimerToggleContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  restTimerToggleText: {
+    fontSize: 15,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  toggleSwitch: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#333',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleSwitchActive: {
+    backgroundColor: '#ffb300',
+  },
+  toggleKnob: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#666',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleKnobActive: {
+    backgroundColor: '#1a1a1a',
+    transform: [{ translateX: 22 }],
   },
 });
 

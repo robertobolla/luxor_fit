@@ -9,7 +9,6 @@ import {
   Dimensions,
   Alert,
   Platform,
-  Image,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +25,7 @@ import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
 import { SkeletonDashboard } from '@/components/SkeletonLoaders';
 import { checkIfNeedsWeeklyCheckin, CheckinStatus, shouldShowCheckinReminder, markCheckinReminderShown } from '@/services/weeklyCheckinService';
+import { getTotalUnreadChatsCount } from '@/services/chatService';
 
 const { width } = Dimensions.get('window');
 
@@ -92,7 +92,7 @@ export default function DashboardScreen() {
   const [checkinStatus, setCheckinStatus] = useState<CheckinStatus | null>(null);
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig | null>(null);
   const { isLoading: isCheckingOnboarding, setLoading: setIsCheckingOnboarding, executeAsync } = useLoadingState(true);
-  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
   // Datos de salud
   const [stats, setStats] = useState({
@@ -276,17 +276,6 @@ export default function DashboardScreen() {
       const gymData = await getGymDaysThisWeek(user.id);
       
       // Cargar foto de perfil
-      const { data: profileData } = await supabase
-        .from('user_profiles')
-        .select('profile_photo_url')
-        .eq('user_id', user.id)
-        .maybeSingle();
-      
-      if (profileData?.profile_photo_url) {
-        setProfilePhotoUrl(profileData.profile_photo_url);
-      } else {
-        setProfilePhotoUrl(null);
-      }
       
       // Log para debugging
       console.log('📊 Datos de salud obtenidos:', {
@@ -318,6 +307,10 @@ export default function DashboardScreen() {
         water: healthData.water || 0,
         waterGoal: 2000,
       });
+
+      // Cargar contador de chats sin leer
+      const unreadCount = await getTotalUnreadChatsCount(user.id);
+      setUnreadChatsCount(unreadCount);
     } catch (error) {
       console.error('Error cargando datos de salud:', error);
       setHealthDataSource('none');
@@ -544,23 +537,17 @@ export default function DashboardScreen() {
               >
                 <Ionicons name="create-outline" size={24} color="#ffffff" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.headerIcon}>
-                <Ionicons name="chatbubble-outline" size={24} color="#ffffff" />
-              </TouchableOpacity>
               <TouchableOpacity 
                 style={styles.headerIcon}
-                onPress={() => router.push('/(tabs)/profile')}
+                onPress={() => {
+                  router.push('/chats');
+                }}
               >
-                {profilePhotoUrl ? (
-                  <Image
-                    source={{ uri: profilePhotoUrl }}
-                    style={styles.avatarImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>
-                      {user?.firstName?.charAt(0) || 'U'}
+                <Ionicons name="paper-plane-outline" size={24} color="#ffffff" />
+                {unreadChatsCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>
+                      {unreadChatsCount > 99 ? '99+' : unreadChatsCount}
                     </Text>
                   </View>
                 )}
@@ -954,27 +941,25 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#ffb300',
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FF3B30',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 4,
     borderWidth: 2,
-    borderColor: '#FF5722',
+    borderColor: '#1a1a1a',
   },
-  avatarImage: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: '#FF5722',
-  },
-  avatarText: {
-    color: '#1a1a1a',
-    fontSize: 16,
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 10,
     fontWeight: 'bold',
   },
   scrollView: {

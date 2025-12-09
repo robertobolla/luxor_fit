@@ -12,7 +12,6 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
-  Image,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,7 +23,7 @@ import { EmptyWorkouts } from '../../src/components/EmptyStates';
 import { CustomRefreshControl } from '../../src/components/CustomRefreshControl';
 import { useRefresh } from '../../src/hooks/useRefresh';
 import { useNetworkStatus, checkNetworkBeforeOperation } from '../../src/hooks/useNetworkStatus';
-import ChatList from '../../src/components/ChatList';
+import { getTotalUnreadChatsCount } from '../../src/services/chatService';
 
 export default function HomeScreen() {
   const { user } = useUser();
@@ -32,7 +31,7 @@ export default function HomeScreen() {
   const [todayWorkout, setTodayWorkout] = useState<any>(null);
   const [todayNutrition, setTodayNutrition] = useState<any>(null);
   const [userName, setUserName] = useState('');
-  const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(null);
+  const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
   // Detectar estado de conexión
   const { isConnected } = useNetworkStatus();
@@ -40,25 +39,7 @@ export default function HomeScreen() {
   // Inicializar notificaciones inteligentes
   useSmartNotifications();
 
-  // Hook para manejar refresh
-  const { refreshing, onRefresh } = useRefresh(loadData);
-
-  useEffect(() => {
-    if (user?.id) {
-      loadData();
-    }
-  }, [user]);
-
-  // Recargar datos cada vez que la pantalla recibe focus
-  useFocusEffect(
-    React.useCallback(() => {
-      if (user?.id) {
-        loadData();
-      }
-    }, [user])
-  );
-
-  const loadData = async () => {
+  const loadData = React.useCallback(async () => {
     if (!user?.id) return;
 
     // Verificar conexión antes de cargar datos
@@ -69,10 +50,10 @@ export default function HomeScreen() {
 
     setIsLoading(true);
     try {
-      // Cargar nombre del usuario y foto de perfil
+      // Cargar nombre del usuario
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
-        .select('name, profile_photo_url')
+        .select('name')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -82,12 +63,6 @@ export default function HomeScreen() {
 
       if (profileData?.name) {
         setUserName(profileData.name);
-      }
-
-      if (profileData?.profile_photo_url) {
-        setProfilePhotoUrl(profileData.profile_photo_url);
-      } else {
-        setProfilePhotoUrl(null);
       }
 
       // Cargar plan de entrenamiento activo
@@ -108,17 +83,38 @@ export default function HomeScreen() {
           return;
         }
         
-        // El plan tiene estructura: weekly_structure es un ARRAY de días
-        const schedule = planData.weekly_structure || planData.weekly_schedule || [];
+        let allDays: any[] = [];
         
-        // Si schedule es un array, buscar el primer día sin completar
-        if (Array.isArray(schedule) && schedule.length > 0) {
+        // Verificar si tiene multi_week_structure (planes personalizados)
+        if (planData.multi_week_structure && planData.multi_week_structure.length > 0) {
+          // Aplanar todas las semanas en un solo array de días
+          planData.multi_week_structure.forEach((week: any, weekIndex: number) => {
+            if (week.days && Array.isArray(week.days)) {
+              week.days.forEach((day: any, dayIndex: number) => {
+                allDays.push({
+                  ...day,
+                  weekNumber: week.week_number || weekIndex + 1,
+                  dayInWeek: dayIndex + 1,
+                });
+              });
+            }
+          });
+        } else {
+          // Plan de una semana (weekly_structure)
+          const schedule = planData.weekly_structure || planData.weekly_schedule || [];
+          allDays = Array.isArray(schedule) ? schedule : [];
+        }
+        
+        // Buscar el primer día sin completar
+        if (allDays.length > 0) {
           let foundDay = null;
 
-          for (let i = 0; i < schedule.length; i++) {
-            const dayData = schedule[i];
+          for (let i = 0; i < allDays.length; i++) {
+            const dayData = allDays[i];
             const dayIndex = i + 1; // day_1, day_2, etc.
-            const dayKey = `day_${dayIndex}`;
+            const dayKey = dayData.weekNumber 
+              ? `week_${dayData.weekNumber}_day_${dayData.dayInWeek}` 
+              : `day_${dayIndex}`;
 
             // Verificar si este día está completado
             const { data: completionData, error: compError } = await supabase
@@ -138,7 +134,7 @@ export default function HomeScreen() {
               // Este día no está completado
               foundDay = {
                 ...dayData,
-                name: dayData.day, // "Día 1", "Día 2", etc.
+                name: dayData.day || `Día ${dayIndex}`,
                 dayKey,
                 planId: activePlan.id,
                 planName: activePlan.plan_name || 'Plan de Entrenamiento',
@@ -151,14 +147,18 @@ export default function HomeScreen() {
             setTodayWorkout(foundDay);
           } else {
             // Todos los días están completados, mostrar el primero
-            const firstDay = {
-              ...schedule[0],
-              name: schedule[0].day,
-              dayKey: 'day_1',
+            const firstDay = allDays[0];
+            const dayKey = firstDay.weekNumber 
+              ? `week_${firstDay.weekNumber}_day_${firstDay.dayInWeek}` 
+              : 'day_1';
+            
+            setTodayWorkout({
+              ...firstDay,
+              name: firstDay.day || 'Día 1',
+              dayKey,
               planId: activePlan.id,
               planName: activePlan.plan_name || 'Plan de Entrenamiento',
-            };
-            setTodayWorkout(firstDay);
+            });
           }
         }
       }
@@ -177,6 +177,10 @@ export default function HomeScreen() {
       }
 
       setTodayNutrition(targetData || null);
+
+      // Cargar contador de chats sin leer
+      const unreadCount = await getTotalUnreadChatsCount(user.id);
+      setUnreadChatsCount(unreadCount);
     } catch (err: any) {
       console.error('Error loading home data:', err);
       
@@ -193,7 +197,25 @@ export default function HomeScreen() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user, isConnected]);
+
+  // Hook para manejar refresh
+  const { refreshing, onRefresh } = useRefresh(loadData);
+
+  useEffect(() => {
+    if (user?.id) {
+      loadData();
+    }
+  }, [user, loadData]);
+
+  // Recargar datos cada vez que la pantalla recibe focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user?.id) {
+        loadData();
+      }
+    }, [user, loadData])
+  );
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -245,17 +267,18 @@ export default function HomeScreen() {
             <Text style={styles.userName}>{userName || 'Usuario'}</Text>
           </View>
           <TouchableOpacity 
-            onPress={() => router.push('/(tabs)/profile')}
+            onPress={() => {
+              router.push('/chats');
+            }}
             style={styles.profileButton}
           >
-            {profilePhotoUrl ? (
-              <Image
-                source={{ uri: profilePhotoUrl }}
-                style={styles.profileImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <Ionicons name="person-circle" size={48} color="#ffb300" />
+            <Ionicons name="paper-plane-outline" size={32} color="#ffb300" />
+            {unreadChatsCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadChatsCount > 99 ? '99+' : unreadChatsCount}
+                </Text>
+              </View>
             )}
           </TouchableOpacity>
         </View>
@@ -382,11 +405,6 @@ export default function HomeScreen() {
             <Ionicons name="chevron-forward" size={24} color="#888888" />
           </TouchableOpacity>
 
-        {/* Sección: Chats */}
-        <View style={{ marginTop: 30 }}>
-          <ChatList />
-        </View>
-
         <View style={{ height: 30 }} />
       </ScrollView>
     </SafeAreaView>
@@ -501,14 +519,28 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
   },
-  profileImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  badge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: '#FF3B30',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 5,
+    borderWidth: 2,
+    borderColor: '#1a1a1a',
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
 });
 

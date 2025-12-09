@@ -60,6 +60,7 @@ export default function ChatScreen() {
   const [showSearch, setShowSearch] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [showImageOptions, setShowImageOptions] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -374,18 +375,73 @@ export default function ChatScreen() {
     }
   }, [chatId, user?.id]);
 
-  // Enviar imagen
+  // Función común para procesar y enviar imagen
+  const processAndSendImage = async (imageUri: string) => {
+    if (!user?.id || !chatId) return;
+    
+    try {
+      setIsUploadingImage(true);
+
+      // Subir imagen
+      const uploadResult = await uploadChatImage(user.id, chatId, imageUri);
+      
+      if (uploadResult.success && uploadResult.imageUrl) {
+        // Enviar mensaje con imagen
+        const messageResult = await sendMessage(
+          chatId,
+          user.id,
+          otherUserId,
+          '📷 Imagen',
+          'image',
+          undefined,
+          uploadResult.imageUrl
+        );
+
+        if (messageResult.success && messageResult.data) {
+          setMessages((prev) => {
+            // Evitar duplicados verificando si el mensaje ya existe
+            const exists = prev.some(msg => msg.id === messageResult.data!.id);
+            if (exists) {
+              return prev;
+            }
+            return [...prev, messageResult.data!];
+          });
+          setTimeout(() => {
+            scrollViewRef.current?.scrollToEnd({ animated: true });
+          }, 100);
+        } else {
+          Alert.alert('Error', 'No se pudo enviar la imagen');
+        }
+      } else {
+        Alert.alert('Error', uploadResult.error || 'No se pudo subir la imagen');
+      }
+    } catch (error: any) {
+      console.error('Error procesando imagen:', error);
+      Alert.alert('Error', error?.message || 'No se pudo procesar la imagen');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  // Seleccionar imagen de galería
   const handlePickImage = async () => {
     if (!user?.id || !chatId) return;
 
     try {
+      console.log('🖼️ Abriendo galería...');
+      
       // Solicitar permisos
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('🖼️ Permisos de galería:', status);
+      
       if (status !== 'granted') {
+        setShowImageOptions(false);
         Alert.alert('Permiso necesario', 'Necesitamos acceso a tu galería para enviar imágenes');
         return;
       }
 
+      console.log('🖼️ Permisos otorgados, lanzando selector...');
+      
       // Abrir selector de imágenes
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
@@ -394,49 +450,61 @@ export default function ChatScreen() {
         quality: 0.8,
       });
 
+      console.log('🖼️ Resultado de galería:', result.canceled, result.assets?.length);
+
+      // Cerrar modal DESPUÉS de que el selector retorne
+      setShowImageOptions(false);
+
       if (!result.canceled && result.assets[0]) {
-        setIsUploadingImage(true);
-        const imageUri = result.assets[0].uri;
-
-        // Subir imagen
-        const uploadResult = await uploadChatImage(user.id, chatId, imageUri);
-        
-        if (uploadResult.success && uploadResult.imageUrl) {
-          // Enviar mensaje con imagen
-          const messageResult = await sendMessage(
-            chatId,
-            user.id,
-            otherUserId,
-            '📷 Imagen',
-            'image',
-            undefined,
-            uploadResult.imageUrl
-          );
-
-          if (messageResult.success && messageResult.data) {
-            setMessages((prev) => {
-              // Evitar duplicados verificando si el mensaje ya existe
-              const exists = prev.some(msg => msg.id === messageResult.data!.id);
-              if (exists) {
-                return prev;
-              }
-              return [...prev, messageResult.data!];
-            });
-            setTimeout(() => {
-              scrollViewRef.current?.scrollToEnd({ animated: true });
-            }, 100);
-          } else {
-            Alert.alert('Error', 'No se pudo enviar la imagen');
-          }
-        } else {
-          Alert.alert('Error', uploadResult.error || 'No se pudo subir la imagen');
-        }
+        console.log('🖼️ Procesando imagen:', result.assets[0].uri);
+        await processAndSendImage(result.assets[0].uri);
       }
     } catch (error: any) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'No se pudo seleccionar la imagen');
-    } finally {
-      setIsUploadingImage(false);
+      console.error('❌ Error seleccionando imagen:', error);
+      setShowImageOptions(false);
+      Alert.alert('Error', error?.message || 'No se pudo seleccionar la imagen');
+    }
+  };
+
+  // Tomar foto con cámara
+  const handleTakePhoto = async () => {
+    if (!user?.id || !chatId) return;
+
+    try {
+      console.log('📸 Abriendo cámara...');
+      
+      // Solicitar permisos de cámara
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      console.log('📸 Permisos de cámara:', status);
+      
+      if (status !== 'granted') {
+        setShowImageOptions(false);
+        Alert.alert('Permiso necesario', 'Necesitamos acceso a tu cámara para tomar fotos');
+        return;
+      }
+
+      console.log('📸 Permisos otorgados, lanzando cámara...');
+      
+      // Abrir cámara
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      console.log('📸 Resultado de cámara:', result.canceled, result.assets?.length);
+
+      // Cerrar modal DESPUÉS de que la cámara retorne
+      setShowImageOptions(false);
+
+      if (!result.canceled && result.assets[0]) {
+        console.log('📸 Procesando imagen:', result.assets[0].uri);
+        await processAndSendImage(result.assets[0].uri);
+      }
+    } catch (error: any) {
+      console.error('❌ Error tomando foto:', error);
+      setShowImageOptions(false);
+      Alert.alert('Error', error?.message || 'No se pudo tomar la foto');
     }
   };
 
@@ -460,7 +528,7 @@ export default function ChatScreen() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/friends' as any)} style={styles.backButton}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <View style={styles.headerUser}>
@@ -623,7 +691,7 @@ export default function ChatScreen() {
         {/* Input */}
         <View style={styles.inputContainer}>
           <TouchableOpacity
-            onPress={handlePickImage}
+            onPress={() => setShowImageOptions(true)}
             style={styles.imageButton}
             disabled={isUploadingImage}
           >
@@ -668,6 +736,47 @@ export default function ChatScreen() {
               style={styles.fullImage}
               resizeMode="contain"
             />
+          </TouchableOpacity>
+        </Modal>
+
+        {/* Modal de opciones de imagen */}
+        <Modal
+          visible={showImageOptions}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowImageOptions(false)}
+        >
+          <TouchableOpacity
+            style={styles.imageOptionsModal}
+            activeOpacity={1}
+            onPress={() => setShowImageOptions(false)}
+          >
+            <View style={styles.imageOptionsContent}>
+              <Text style={styles.imageOptionsTitle}>Enviar imagen</Text>
+              
+              <TouchableOpacity
+                style={styles.imageOption}
+                onPress={handleTakePhoto}
+              >
+                <Ionicons name="camera" size={24} color="#ffb300" />
+                <Text style={styles.imageOptionText}>Tomar foto</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.imageOption}
+                onPress={handlePickImage}
+              >
+                <Ionicons name="image" size={24} color="#ffb300" />
+                <Text style={styles.imageOptionText}>Elegir de galería</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.imageOption, styles.imageOptionCancel]}
+                onPress={() => setShowImageOptions(false)}
+              >
+                <Text style={styles.imageOptionCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
           </TouchableOpacity>
         </Modal>
       </KeyboardAvoidingView>
@@ -843,6 +952,54 @@ const styles = StyleSheet.create({
   fullImage: {
     width: '90%',
     height: '90%',
+  },
+  imageOptionsModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  imageOptionsContent: {
+    backgroundColor: '#2a2a2a',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    width: '100%',
+    paddingTop: 20,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+  },
+  imageOptionsTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  imageOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    marginBottom: 12,
+    gap: 12,
+  },
+  imageOptionText: {
+    fontSize: 16,
+    color: '#ffffff',
+    fontWeight: '500',
+  },
+  imageOptionCancel: {
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    marginTop: 8,
+  },
+  imageOptionCancelText: {
+    fontSize: 16,
+    color: '#ffffff',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   workoutShareCard: {
     backgroundColor: '#ffb30020',
