@@ -49,9 +49,6 @@ export default function CustomPlanDaysScreen() {
   
   // Días de la semana actual
   const currentWeekDays = weeks[currentWeekIndex]?.days || [];
-  
-  // Días por semana dinámico basado en la cantidad actual de días
-  const daysPerWeek = currentWeekDays.length;
 
   useEffect(() => {
     // Si estamos editando un plan existente, cargarlo desde Supabase
@@ -187,14 +184,7 @@ export default function CustomPlanDaysScreen() {
             }));
           }
 
-          // Agregar días vacíos si faltan
-          while (weekDays.length < daysPerWeek) {
-            const dayNumber = weekDays.length + 1;
-            weekDays.push({
-              dayNumber,
-              exercises: [],
-            });
-          }
+          // No agregar días vacíos automáticamente
 
           setWeeks([{
             weekNumber: 1,
@@ -271,7 +261,7 @@ export default function CustomPlanDaysScreen() {
     };
     
     loadExistingPlan();
-  }, [daysPerWeek, editingPlanId, user]);
+  }, [editingPlanId, user]);
 
   // Recargar datos cuando se regresa de la pantalla de detalle del día
   useFocusEffect(
@@ -356,7 +346,7 @@ export default function CustomPlanDaysScreen() {
       params: {
         weekNumber: currentWeek.weekNumber.toString(),
         dayNumber: dayNumber.toString(),
-        daysPerWeek: daysPerWeek.toString(),
+        daysPerWeek: currentWeek.days.length.toString(),
         equipment: JSON.stringify(equipment),
         dayData: JSON.stringify(dayData),
       },
@@ -685,8 +675,10 @@ export default function CustomPlanDaysScreen() {
       
       for (let weekNum = 1; weekNum <= totalWeeks; weekNum++) {
         const weekDays: DayData[] = [];
+        const currentWeekData = weeks.find(w => w.weekNumber === weekNum);
+        const maxDays = currentWeekData?.days.length || 7;
         
-        for (let dayNum = 1; dayNum <= daysPerWeek; dayNum++) {
+        for (let dayNum = 1; dayNum <= maxDays; dayNum++) {
           const key = `week_${weekNum}_day_${dayNum}_data`;
           const dayDataStr = await AsyncStorage.getItem(key);
           
@@ -717,6 +709,9 @@ export default function CustomPlanDaysScreen() {
         return;
       }
 
+      // Calcular el máximo de días por semana
+      const maxDaysInAnyWeek = Math.max(...allWeeksData.map(w => w.days.length));
+      
       // Formatear el plan con estructura multi-semana
       const planData = {
         // Estructura multi-semana (nueva)
@@ -748,7 +743,7 @@ export default function CustomPlanDaysScreen() {
           })),
           duration: 45,
         })) || [],
-        days_per_week: daysPerWeek,
+        days_per_week: maxDaysInAnyWeek,
         equipment: equipment,
         duration_weeks: totalWeeks,
         total_weeks: totalWeeks,
@@ -777,7 +772,7 @@ export default function CustomPlanDaysScreen() {
           .from('workout_plans')
           .update({
             plan_name: finalPlanName,
-            description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}, ${daysPerWeek} días por semana`,
+            description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}`,
             duration_weeks: planData.duration_weeks,
             plan_data: planData,
             is_active: isActive,
@@ -801,7 +796,9 @@ export default function CustomPlanDaysScreen() {
 
         // Limpiar AsyncStorage después de actualizar
         for (let weekNum = 1; weekNum <= totalWeeks; weekNum++) {
-          for (let dayNum = 1; dayNum <= daysPerWeek; dayNum++) {
+          const weekData = weeks.find(w => w.weekNumber === weekNum);
+          const maxDays = weekData?.days.length || 10;
+          for (let dayNum = 1; dayNum <= maxDays; dayNum++) {
             await AsyncStorage.removeItem(`week_${weekNum}_day_${dayNum}_data`);
           }
         }
@@ -835,7 +832,7 @@ export default function CustomPlanDaysScreen() {
         .insert({
           user_id: user.id,
           plan_name: finalPlanName,
-          description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}, ${daysPerWeek} días por semana`,
+          description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}`,
           duration_weeks: planData.duration_weeks,
           plan_data: planData,
           is_active: isActive,
@@ -858,7 +855,9 @@ export default function CustomPlanDaysScreen() {
 
       // Limpiar AsyncStorage después de guardar
       for (let weekNum = 1; weekNum <= totalWeeks; weekNum++) {
-        for (let dayNum = 1; dayNum <= daysPerWeek; dayNum++) {
+        const weekData = weeks.find(w => w.weekNumber === weekNum);
+        const maxDays = weekData?.days.length || 10;
+        for (let dayNum = 1; dayNum <= maxDays; dayNum++) {
           await AsyncStorage.removeItem(`week_${weekNum}_day_${dayNum}_data`);
         }
       }
