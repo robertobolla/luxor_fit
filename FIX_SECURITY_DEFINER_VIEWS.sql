@@ -47,10 +47,10 @@ SELECT
   ar.discount_code,
   ar.annual_fee,
   COUNT(DISTINCT gm.id) AS total_gym_members,
-  COUNT(DISTINCT gm.id) FILTER (WHERE gm.subscription_expiry > NOW()) AS active_gym_members,
-  COUNT(DISTINCT gm.id) FILTER (WHERE gm.subscription_expiry <= NOW() OR gm.subscription_expiry IS NULL) AS expired_gym_members,
+  COUNT(DISTINCT gm.id) FILTER (WHERE gm.is_active = true AND (gm.subscription_expires_at IS NULL OR gm.subscription_expires_at > NOW())) AS active_gym_members,
+  COUNT(DISTINCT gm.id) FILTER (WHERE gm.is_active = false OR (gm.subscription_expires_at IS NOT NULL AND gm.subscription_expires_at <= NOW())) AS expired_gym_members,
   COALESCE(SUM(gm.monthly_amount), 0) AS total_monthly_revenue,
-  COALESCE(SUM(gm.monthly_amount) FILTER (WHERE gm.subscription_expiry > NOW()), 0) AS active_monthly_revenue,
+  COALESCE(SUM(gm.monthly_amount) FILTER (WHERE gm.is_active = true AND (gm.subscription_expires_at IS NULL OR gm.subscription_expires_at > NOW())), 0) AS active_monthly_revenue,
   COALESCE(ar.annual_fee, 0) AS annual_fee_amount
 FROM admin_roles ar
 LEFT JOIN gym_members gm ON gm.empresario_id = ar.user_id
@@ -147,9 +147,9 @@ SELECT
     ELSE false
   END AS has_active_subscription,
   gm.empresario_id,
-  gm.subscription_expiry AS gym_member_expiry,
+  gm.subscription_expires_at AS gym_member_expiry,
   CASE
-    WHEN gm.subscription_expiry IS NOT NULL AND gm.subscription_expiry > NOW() THEN true
+    WHEN gm.is_active = true AND (gm.subscription_expires_at IS NULL OR gm.subscription_expires_at > NOW()) THEN true
     ELSE false
   END AS is_active_gym_member
 FROM user_profiles up
