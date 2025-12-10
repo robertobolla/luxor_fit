@@ -172,43 +172,87 @@ export default function WorkoutPlanDetailScreen() {
 
     try {
       const planData = plan.plan_data;
+      
+      // Verificar si es plan multi-semana o de una sola semana
+      const multiWeekStructure = planData.multi_week_structure;
       const weeklyStructure = planData.weekly_structure || [];
-      const daysPerWeek = planData.days_per_week || weeklyStructure.length;
-      const equipment = planData.equipment || [];
-
+      const isMultiWeek = multiWeekStructure && multiWeekStructure.length > 0;
+      
+      const equipment = planData.equipment || planData.userData?.equipment || [];
+      
       // Limpiar datos anteriores de AsyncStorage
       for (let i = 1; i <= 7; i++) {
         await AsyncStorage.removeItem(`day_${i}_data`);
       }
       await AsyncStorage.removeItem('selectedExercise');
+      await AsyncStorage.removeItem('custom_plan_weeks_count');
 
       // Guardar nombre del plan
       await AsyncStorage.setItem('custom_plan_name', plan.plan_name || `Plan Personalizado - ${new Date().toLocaleDateString()}`);
 
-      // Guardar cada día en AsyncStorage
-      for (let i = 0; i < weeklyStructure.length; i++) {
-        const day = weeklyStructure[i];
-        const dayNumber = i + 1;
+      if (isMultiWeek) {
+        // Plan multi-semana: guardar estructura completa
+        await AsyncStorage.setItem('custom_plan_weeks_count', multiWeekStructure.length.toString());
         
-        // Convertir ejercicios del formato del plan al formato de edición
-        const exercises = (day.exercises || []).map((ex: any) => ({
-          id: `${ex.name}_${dayNumber}_${Date.now()}_${Math.random()}`,
-          name: ex.name,
-          sets: ex.sets || 3,
-          reps: ex.reps || [10, 10, 10],
-        }));
+        let globalDayIndex = 1;
+        for (let weekIndex = 0; weekIndex < multiWeekStructure.length; weekIndex++) {
+          const week = multiWeekStructure[weekIndex];
+          const days = week.days || [];
+          
+          for (let dayIndex = 0; dayIndex < days.length; dayIndex++) {
+            const day = days[dayIndex];
+            
+            // Convertir ejercicios del formato del plan al formato de edición
+            const exercises = (day.exercises || []).map((ex: any) => ({
+              id: `${ex.name}_${globalDayIndex}_${Date.now()}_${Math.random()}`,
+              name: ex.name,
+              sets: ex.sets || 3,
+              reps: ex.reps || [10, 10, 10],
+              rest_seconds: ex.rest_seconds || 120,
+            }));
 
-        const dayData = {
-          dayNumber,
-          name: day.day || day.focus || `Día ${dayNumber}`,
-          exercises,
-        };
+            const dayData = {
+              dayNumber: globalDayIndex,
+              name: day.day || day.focus || `Día ${dayIndex + 1}`,
+              exercises,
+              weekNumber: week.week_number || (weekIndex + 1),
+            };
 
-        await AsyncStorage.setItem(`day_${dayNumber}_data`, JSON.stringify(dayData));
+            await AsyncStorage.setItem(`day_${globalDayIndex}_data`, JSON.stringify(dayData));
+            globalDayIndex++;
+          }
+        }
+      } else {
+        // Plan de una sola semana
+        for (let i = 0; i < weeklyStructure.length; i++) {
+          const day = weeklyStructure[i];
+          const dayNumber = i + 1;
+          
+          // Convertir ejercicios del formato del plan al formato de edición
+          const exercises = (day.exercises || []).map((ex: any) => ({
+            id: `${ex.name}_${dayNumber}_${Date.now()}_${Math.random()}`,
+            name: ex.name,
+            sets: ex.sets || 3,
+            reps: ex.reps || [10, 10, 10],
+            rest_seconds: ex.rest_seconds || 120,
+          }));
+
+          const dayData = {
+            dayNumber,
+            name: day.day || day.focus || `Día ${dayNumber}`,
+            exercises,
+          };
+
+          await AsyncStorage.setItem(`day_${dayNumber}_data`, JSON.stringify(dayData));
+        }
       }
 
       // Guardar el planId para saber que estamos editando
       await AsyncStorage.setItem('editing_plan_id', plan.id.toString());
+
+      const daysPerWeek = isMultiWeek 
+        ? multiWeekStructure[0]?.days?.length || 1
+        : (planData.days_per_week || weeklyStructure.length);
 
       // Navegar a la pantalla de edición
       router.push({
@@ -436,27 +480,28 @@ export default function WorkoutPlanDetailScreen() {
             </View>
           </View>
           
-          {/* Botón de IA o Editar según el tipo de plan */}
-          {plan.description?.toLowerCase().includes('plan personalizado') ? (
-            <TouchableOpacity 
-              style={styles.aiButton}
-              onPress={handleEditPlan}
-              activeOpacity={0.8}
-            >
-              <View style={styles.aiButtonContent}>
-                <View style={styles.aiIconContainer}>
-                  <Ionicons name="create-outline" size={18} color="#ffffff" />
-                </View>
-                <View style={styles.aiTextContainer}>
-                  <Text style={styles.aiButtonTitle}>Editar</Text>
-                  <Text style={styles.aiButtonSubtitle}>Modifica tu plan personalizado</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#ffb300" />
+          {/* Botón de Editar (siempre visible para todos los planes) */}
+          <TouchableOpacity 
+            style={styles.aiButton}
+            onPress={handleEditPlan}
+            activeOpacity={0.8}
+          >
+            <View style={styles.aiButtonContent}>
+              <View style={styles.aiIconContainer}>
+                <Ionicons name="create-outline" size={18} color="#ffffff" />
               </View>
-            </TouchableOpacity>
-          ) : (
+              <View style={styles.aiTextContainer}>
+                <Text style={styles.aiButtonTitle}>Editar Plan</Text>
+                <Text style={styles.aiButtonSubtitle}>Modifica ejercicios, series y más</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#ffb300" />
+            </View>
+          </TouchableOpacity>
+
+          {/* Botón de Adaptar con IA (solo para planes NO personalizados) */}
+          {!plan.description?.toLowerCase().includes('plan personalizado') && (
             <TouchableOpacity 
-              style={styles.aiButton}
+              style={[styles.aiButton, { marginTop: 12 }]}
               onPress={() => setShowAIModal(true)}
               activeOpacity={0.8}
             >
@@ -466,7 +511,7 @@ export default function WorkoutPlanDetailScreen() {
                 </View>
                 <View style={styles.aiTextContainer}>
                   <Text style={styles.aiButtonTitle}>Adaptar con IA</Text>
-                  <Text style={styles.aiButtonSubtitle}>Personaliza tu entrenamiento</Text>
+                  <Text style={styles.aiButtonSubtitle}>Personaliza con inteligencia artificial</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#ffb300" />
               </View>
