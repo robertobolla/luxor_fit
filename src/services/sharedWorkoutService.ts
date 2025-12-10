@@ -133,38 +133,41 @@ export async function acceptSharedWorkout(
       return { success: false, error: updateError.message };
     }
 
-    // Si se debe hacer activo, actualizar el plan activo del usuario
+    // Obtener el plan compartido
+    const { data: originalPlan } = await supabase
+      .from('workout_plans')
+      .select('*')
+      .eq('id', sharedWorkout.workout_plan_id)
+      .single();
+
+    if (!originalPlan) {
+      return { success: false, error: 'Plan de entrenamiento no encontrado' };
+    }
+
+    // SIEMPRE crear una copia del plan para el receptor
+    // Si se debe hacer activo, desactivar otros planes primero
     if (makeActive) {
-      // Desactivar otros planes activos
       await supabase
         .from('workout_plans')
         .update({ is_active: false })
         .eq('user_id', receiverId)
         .eq('is_active', true);
+    }
 
-      // Obtener el plan compartido y crear una copia para el receptor
-      const { data: originalPlan } = await supabase
-        .from('workout_plans')
-        .select('*')
-        .eq('id', sharedWorkout.workout_plan_id)
-        .single();
+    // Crear copia del plan para el receptor
+    const { error: copyError } = await supabase
+      .from('workout_plans')
+      .insert({
+        user_id: receiverId,
+        plan_name: originalPlan.plan_name,
+        description: originalPlan.description || `Compartido por ${originalPlan.user_id}`,
+        plan_data: originalPlan.plan_data,
+        is_active: makeActive, // Solo activo si makeActive es true
+      });
 
-      if (originalPlan) {
-        // Crear copia del plan para el receptor
-        const { error: copyError } = await supabase
-          .from('workout_plans')
-          .insert({
-            user_id: receiverId,
-            plan_name: originalPlan.plan_name,
-            description: originalPlan.description || `Compartido por ${originalPlan.user_id}`,
-            plan_data: originalPlan.plan_data,
-            is_active: true,
-          });
-
-        if (copyError) {
-          console.error('Error creating workout plan copy:', copyError);
-        }
-      }
+    if (copyError) {
+      console.error('Error creating workout plan copy:', copyError);
+      return { success: false, error: 'No se pudo crear la copia del plan' };
     }
 
     // Enviar mensaje de confirmación en el chat
