@@ -10,7 +10,7 @@ import {
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../src/services/supabase';
@@ -29,17 +29,24 @@ interface BodyMetric {
 }
 
 export default function BodyEvolutionScreen() {
+  const params = useLocalSearchParams();
   const { user } = useUser();
+  
+  // Si se pasa userId, es vista de entrenador
+  const targetUserId = (params.userId as string) || user?.id;
+  const targetUserName = (params.userName as string) || '';
+  const isTrainerView = params.isTrainerView === 'true';
+  
   const [loading, setLoading] = useState(true);
   const [metrics, setMetrics] = useState<BodyMetric[]>([]);
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('weight');
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('3months');
 
   useEffect(() => {
-    if (user?.id) {
+    if (targetUserId) {
       loadMetrics();
     }
-  }, [user, selectedPeriod]);
+  }, [targetUserId, selectedPeriod]);
 
   const loadMetrics = async () => {
     try {
@@ -70,7 +77,7 @@ export default function BodyEvolutionScreen() {
       const { data, error } = await supabase
         .from('body_metrics')
         .select('date, weight_kg, body_fat_percentage, muscle_percentage')
-        .eq('user_id', user!.id)
+        .eq('user_id', targetUserId!)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: true });
 
@@ -209,13 +216,21 @@ export default function BodyEvolutionScreen() {
       
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/register-weight' as any)}>
+        <TouchableOpacity onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
+        <View style={styles.headerTitleContainer}>
         <Text style={styles.headerTitle}>Evolución Corporal</Text>
+          {isTrainerView && targetUserName && (
+            <Text style={styles.headerSubtitle}>{targetUserName}</Text>
+          )}
+        </View>
+        {!isTrainerView && (
         <TouchableOpacity onPress={() => router.push('/(tabs)/register-weight' as any)}>
           <Ionicons name="add-circle-outline" size={24} color="#ffb300" />
         </TouchableOpacity>
+        )}
+        {isTrainerView && <View style={{ width: 24 }} />}
       </View>
 
       <ScrollView style={styles.scrollView}>
@@ -530,10 +545,19 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 20,
   },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+  },
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#ffffff',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: '#ffb300',
+    marginTop: 2,
   },
   scrollView: {
     flex: 1,

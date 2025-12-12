@@ -31,6 +31,12 @@ interface PreviousSet {
   weight_kg: number | null;
 }
 
+interface SetTypeInfo {
+  type: 'warmup' | 'normal' | 'failure' | 'drop';
+  reps: number | null;
+  rir: number | null;
+}
+
 interface ExerciseSetTrackerProps {
   userId: string;
   exerciseId: string;
@@ -38,8 +44,11 @@ interface ExerciseSetTrackerProps {
   defaultSets: number; // Cantidad de series por defecto del plan
   usesTime?: boolean; // Si el ejercicio usa tiempo en lugar de reps
   sessionId?: string; // ID de la sesión actual
+  setTypes?: SetTypeInfo[]; // Tipos de cada serie (para excluir calentamiento)
   onSetsChange?: (sets: ExerciseSet[]) => void;
   onSave?: () => void; // Callback cuando se guardan los sets
+  planId?: string; // ID del plan de entrenamiento
+  dayName?: string; // Nombre del día (ej: 'day_1')
 }
 
 export function ExerciseSetTracker({
@@ -49,8 +58,11 @@ export function ExerciseSetTracker({
   defaultSets,
   usesTime = false,
   sessionId,
+  setTypes = [],
   onSetsChange,
   onSave,
+  planId,
+  dayName,
 }: ExerciseSetTrackerProps) {
   const [sets, setSets] = useState<ExerciseSet[]>([]);
   const [previousSets, setPreviousSets] = useState<PreviousSet[]>([]);
@@ -63,29 +75,43 @@ export function ExerciseSetTracker({
     loadPreviousSets();
   }, [defaultSets, exerciseId]);
 
-  // Cargar las series de hoy (si existen) o inicializar vacías
+  // Cargar las series (si existen) o inicializar vacías
   const loadTodaySetsOrInitialize = async () => {
     try {
-      // Intentar cargar las series guardadas hoy
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      console.log('🔍 Cargando series con:', { userId, exerciseId, planId, dayName });
       
-      const { data, error } = await supabase
+      // Construir la query base
+      let query = supabase
         .from('exercise_sets')
         .select('*')
         .eq('user_id', userId)
-        .eq('exercise_id', exerciseId)
-        .gte('created_at', `${today}T00:00:00`)
-        .lte('created_at', `${today}T23:59:59`)
-        .order('set_number', { ascending: true });
+        .eq('exercise_id', exerciseId);
+
+      // Si tenemos planId y dayName, buscar por día de rutina (nuevo comportamiento)
+      if (planId && dayName) {
+        console.log('📋 Modo día de rutina: Buscando por plan+día');
+        query = query
+          .eq('workout_plan_id', planId)
+          .eq('day_name', dayName);
+      } else {
+        // Si no, buscar por fecha (comportamiento original para compatibilidad)
+        console.log('📅 Modo fecha: Buscando por día de calendario');
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        query = query
+          .gte('created_at', `${today}T00:00:00`)
+          .lte('created_at', `${today}T23:59:59`);
+      }
+
+      const { data, error } = await query.order('set_number', { ascending: true });
 
       if (error) {
-        console.error('Error loading today sets:', error);
+        console.error('Error loading sets:', error);
         initializeSets();
         return;
       }
 
       if (data && data.length > 0) {
-        // Hay series guardadas hoy, cargarlas
+        // Hay series guardadas, cargarlas
         const loadedSets: ExerciseSet[] = data.map(set => ({
           set_number: set.set_number,
           reps: set.reps,
@@ -93,48 +119,83 @@ export function ExerciseSetTracker({
           duration_seconds: set.duration_seconds,
         }));
         setSets(loadedSets);
-        onSetsChange?.(loadedSets);
-        console.log('✅ Series de hoy cargadas:', loadedSets.length);
+        // ⚠️ NO llamar onSetsChange aquí para evitar setState durante render
+        // onSetsChange se llamará cuando el usuario modifique algo
+        console.log('✅ Series cargadas:', loadedSets.length);
       } else {
-        // No hay series guardadas hoy, inicializar vacías
+        // No hay series guardadas, inicializar vacías
+        console.log('ℹ️ No hay series guardadas, inicializando vacías');
         initializeSets();
       }
     } catch (err) {
-      console.error('Error loading today sets:', err);
+      console.error('Error loading sets:', err);
       initializeSets();
     }
   };
 
-  // Inicializar las series con la cantidad por defecto
+  // Inicializar las series con la cantidad por defecto (EXCLUYENDO calentamiento)
   const initializeSets = () => {
     const initialSets: ExerciseSet[] = [];
-    for (let i = 1; i <= defaultSets; i++) {
-      initialSets.push({
-        set_number: i,
-        reps: null,
-        weight_kg: null,
-        duration_seconds: null,
+    
+    // Si hay información de tipos de series, filtrar las de calentamiento
+    if (setTypes.length > 0) {
+      // Crear solo sets para las series que NO son de calentamiento
+      setTypes.forEach((setType, index) => {
+        if (setType.type !== 'warmup') {
+          initialSets.push({
+            set_number: index + 1, // Mantener el número de serie original
+            reps: null,
+            weight_kg: null,
+            duration_seconds: null,
+          });
+        }
       });
+    } else {
+      // Si no hay información de tipos, crear todas las series por defecto
+      for (let i = 1; i <= defaultSets; i++) {
+        initialSets.push({
+          set_number: i,
+          reps: null,
+          weight_kg: null,
+          duration_seconds: null,
+        });
+      }
     }
+    
     setSets(initialSets);
-    onSetsChange?.(initialSets);
+    // ⚠️ NO llamar onSetsChange aquí para evitar setState durante render
+    // onSetsChange se llamará cuando el usuario modifique algo
   };
 
-  // Cargar series del último entrenamiento del mismo músculo (EXCLUYENDO hoy)
+  // Cargar series del último entrenamiento anterior de este ejercicio
   const loadPreviousSets = async () => {
     try {
       setLoading(true);
       
-      // Obtener fecha de hoy para excluirla
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      console.log('📊 Cargando valores anteriores para:', { exerciseId, planId, dayName });
       
-      // Buscar el último entrenamiento de este ejercicio ANTES de hoy
-      const { data, error } = await supabase
+      // Construir query base
+      let query = supabase
         .from('exercise_sets')
-        .select('set_number, reps, weight_kg')
+        .select('set_number, reps, weight_kg, created_at, workout_plan_id, day_name')
         .eq('user_id', userId)
-        .eq('exercise_id', exerciseId)
-        .lt('created_at', `${today}T00:00:00`) // Solo entrenamientos ANTES de hoy
+        .eq('exercise_id', exerciseId);
+
+      // Si tenemos planId y dayName, buscar el historial excluyendo el día de rutina actual
+      if (planId && dayName) {
+        console.log('📋 Buscando historial: última vez que hiciste este ejercicio (sin importar cuándo)');
+        
+        // Obtener TODOS los registros y filtrar en el código
+        // (más simple y confiable que hacer OR complejo en la query)
+        // Después filtraremos los que NO sean del día de rutina actual
+      } else {
+        // Si no hay plan/día, buscar entrenamientos ANTES de hoy (comportamiento original)
+        console.log('📅 Buscando historial: antes de hoy');
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        query = query.lt('created_at', `${today}T00:00:00`);
+      }
+
+      const { data, error } = await query
         .order('created_at', { ascending: false })
         .order('set_number', { ascending: true })
         .limit(20); // Limitar para obtener las últimas series
@@ -145,12 +206,34 @@ export function ExerciseSetTracker({
       }
 
       if (data && data.length > 0) {
+        console.log('📦 Datos encontrados:', data.length, 'registros');
+        
+        // Si tenemos plan+día, filtrar para excluir el día de rutina actual
+        let filteredData = data;
+        if (planId && dayName) {
+          filteredData = data.filter(set => {
+            // EXCLUIR explícitamente las series del día actual
+            const isCurrentDay = set.workout_plan_id === planId && set.day_name === dayName;
+            if (isCurrentDay) {
+              console.log('⏭️ Excluyendo serie del día actual:', set.set_number);
+              return false; // ❌ NO incluir en "valores anteriores"
+            }
+            
+            // INCLUIR todas las demás:
+            // 1. No tiene plan_id (registro histórico)
+            // 2. Tiene un plan_id diferente (otro plan)
+            // 3. Tiene el mismo plan pero día diferente
+            return true;
+          });
+          console.log('🔍 Filtrados (excluyendo día actual):', filteredData.length, 'registros de', data.length, 'totales');
+        }
+        
         // Agrupar por created_at para obtener solo el último entrenamiento
         // Como ordenamos por created_at desc, todos los primeros registros son del último entrenamiento
         const uniqueSets: PreviousSet[] = [];
         const seenSetNumbers = new Set<number>();
         
-        for (const set of data) {
+        for (const set of filteredData) {
           if (!seenSetNumbers.has(set.set_number)) {
             uniqueSets.push({
               set_number: set.set_number,
@@ -162,9 +245,22 @@ export function ExerciseSetTracker({
         }
         
         setPreviousSets(uniqueSets);
-        console.log('✅ Series anteriores cargadas (último entrenamiento ANTES de hoy):', uniqueSets.length);
+        
+        // Log mejorado para debugging
+        if (planId && dayName) {
+          console.log(`✅ Valores anteriores cargados: última vez que hiciste "${exerciseId}"`, {
+            series: uniqueSets.length,
+            primeraSerie: uniqueSets[0] ? `${uniqueSets[0].reps} reps @ ${uniqueSets[0].weight_kg}kg` : 'N/A'
+          });
+        } else {
+          console.log('✅ Valores anteriores: último entrenamiento antes de hoy:', uniqueSets.length, 'series');
+        }
       } else {
-        console.log('ℹ️ No hay entrenamientos anteriores para este ejercicio');
+        if (planId && dayName) {
+          console.log('ℹ️ Primera vez haciendo este ejercicio, no hay valores anteriores');
+        } else {
+          console.log('ℹ️ No hay entrenamientos anteriores para este ejercicio');
+        }
       }
     } catch (err) {
       console.error('Error loading previous sets:', err);
@@ -190,7 +286,10 @@ export function ExerciseSetTracker({
 
   // Agregar una nueva serie
   const addSet = () => {
-    const newSetNumber = sets.length + 1;
+    // Obtener el número de serie máximo actual y agregar 1
+    const maxSetNumber = sets.length > 0 ? Math.max(...sets.map(s => s.set_number)) : 0;
+    const newSetNumber = maxSetNumber + 1;
+    
     const newSet: ExerciseSet = {
       set_number: newSetNumber,
       reps: null,
@@ -210,14 +309,11 @@ export function ExerciseSetTracker({
     if (sets.length <= 1) return; // No permitir eliminar si solo hay una serie
     
     setSets(prevSets => {
+      // Simplemente filtrar la serie eliminada sin renumerar
+      // Los números de serie se mantienen consistentes con el plan original
       const filtered = prevSets.filter(set => set.set_number !== setNumber);
-      // Renumerar las series
-      const renumbered = filtered.map((set, index) => ({
-        ...set,
-        set_number: index + 1,
-      }));
-      onSetsChange?.(renumbered);
-      return renumbered;
+      onSetsChange?.(filtered);
+      return filtered;
     });
   };
 
@@ -234,26 +330,45 @@ export function ExerciseSetTracker({
       setSaving(true);
       setSaveSuccess(false);
 
-      // Filtrar solo los sets que tienen datos (reps o weight)
-      const setsToSave = sets.filter(set => 
-        set.reps !== null || set.weight_kg !== null || set.duration_seconds !== null
-      );
+      // Filtrar solo los sets que tienen datos (reps o weight) Y NO SON de calentamiento
+      const setsToSave = sets.filter((set) => {
+        const hasData = set.reps !== null || set.weight_kg !== null || set.duration_seconds !== null;
+        // Buscar el tipo de serie usando el set_number (no el índice del array)
+        const setTypeInfo = setTypes[set.set_number - 1]; // set_number es 1-indexed
+        const isWarmup = setTypeInfo?.type === 'warmup';
+        return hasData && !isWarmup; // Solo guardar si tiene datos Y NO es calentamiento
+      });
 
       if (setsToSave.length === 0) {
         Alert.alert('Sin datos', 'No hay datos para guardar. Ingresa al menos una serie con reps o peso.');
         return;
       }
 
-      // 1. Primero, eliminar las series existentes de hoy para este ejercicio
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+      // 1. Eliminar las series existentes para este ejercicio
+      console.log('🗑️ Eliminando series anteriores...');
       
-      const { error: deleteError } = await supabase
+      let deleteQuery = supabase
         .from('exercise_sets')
         .delete()
         .eq('user_id', userId)
-        .eq('exercise_id', exerciseId)
-        .gte('created_at', `${today}T00:00:00`)
-        .lte('created_at', `${today}T23:59:59`);
+        .eq('exercise_id', exerciseId);
+
+      // Si tenemos planId y dayName, eliminar por día de rutina (nuevo comportamiento)
+      if (planId && dayName) {
+        console.log('📋 Modo día de rutina: Eliminando por plan+día');
+        deleteQuery = deleteQuery
+          .eq('workout_plan_id', planId)
+          .eq('day_name', dayName);
+      } else {
+        // Si no, eliminar solo las de hoy (comportamiento original)
+        console.log('📅 Modo fecha: Eliminando por día de calendario');
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        deleteQuery = deleteQuery
+          .gte('created_at', `${today}T00:00:00`)
+          .lte('created_at', `${today}T23:59:59`);
+      }
+
+      const { error: deleteError } = await deleteQuery;
 
       if (deleteError) {
         console.error('Error eliminando series anteriores:', deleteError);
@@ -264,6 +379,8 @@ export function ExerciseSetTracker({
       const setsData = setsToSave.map(set => ({
         user_id: userId,
         workout_session_id: sessionId || null,
+        workout_plan_id: planId || null, // Agregar plan_id
+        day_name: dayName || null, // Agregar day_name
         exercise_id: exerciseId,
         exercise_name: exerciseName,
         set_number: set.set_number,
@@ -316,12 +433,6 @@ export function ExerciseSetTracker({
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.exerciseName}>{exerciseName}</Text>
-        <Text style={styles.setsCount}>{sets.length} {sets.length === 1 ? 'serie' : 'series'}</Text>
-      </View>
-
       {/* Tabla de series */}
       <View style={styles.table}>
         {/* Encabezado de columnas */}
@@ -348,11 +459,11 @@ export function ExerciseSetTracker({
 
         {/* Filas de series */}
         <ScrollView style={styles.tableBody}>
-          {sets.map((set) => (
+          {sets.map((set, index) => (
             <View key={set.set_number} style={styles.tableRow}>
-              {/* Número de serie */}
+              {/* Número de serie - Mostrar numeración secuencial (1, 2, 3...) */}
               <View style={[styles.cell, styles.setNumberCell]}>
-                <Text style={styles.setNumberText}>{set.set_number}</Text>
+                <Text style={styles.setNumberText}>{index + 1}</Text>
               </View>
 
               {/* Anterior REPS */}

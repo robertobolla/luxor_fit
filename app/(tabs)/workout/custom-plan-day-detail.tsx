@@ -19,6 +19,33 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../../src/services/supabase';
 import { useCustomAlert } from '../../../src/components/CustomAlert';
+import Constants from 'expo-constants';
+
+// ============================================================================
+// 🚀 DRAG & DROP - DETECCIÓN AUTOMÁTICA DE ENTORNO
+// ============================================================================
+// Detectar automáticamente si estamos en Expo Go o en un build nativo
+const isExpoGo = Constants.appOwnership === 'expo';
+const DRAG_DROP_ENABLED = !isExpoGo; // Solo activar si NO es Expo Go
+
+// Imports condicionales - solo cargar si no es Expo Go
+let DraggableFlatList: any;
+let ScaleDecorator: any;
+let GestureHandlerRootView: any;
+
+if (DRAG_DROP_ENABLED) {
+  const draggable = require('react-native-draggable-flatlist');
+  const gesture = require('react-native-gesture-handler');
+  DraggableFlatList = draggable.default;
+  ScaleDecorator = draggable.ScaleDecorator;
+  GestureHandlerRootView = gesture.GestureHandlerRootView;
+}
+
+console.log('🎯 Entorno detectado:', {
+  isExpoGo,
+  DRAG_DROP_ENABLED,
+  appOwnership: Constants.appOwnership
+});
 
 // Suprimir warning de keys - todas las keys están implementadas correctamente
 LogBox.ignoreLogs([
@@ -40,6 +67,7 @@ interface Exercise {
   sets: number;
   reps: number[]; // Mantener para compatibilidad
   setTypes?: SetInfo[]; // Nuevo campo para tipos de series
+  rest_seconds?: number; // Tiempo de descanso en segundos
 }
 
 export default function CustomPlanDayDetailScreen() {
@@ -84,6 +112,10 @@ export default function CustomPlanDayDetailScreen() {
   const hasLocalChanges = React.useRef(false);
   // Ref para mantener siempre la referencia actualizada de exercises
   const exercisesRef = React.useRef<Exercise[]>([]);
+  // Refs para prevenir race conditions en AsyncStorage
+  const isSavingToStorage = React.useRef(false);
+  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const modalTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   
   // Mantener exercisesRef actualizado
   React.useEffect(() => {
@@ -94,10 +126,76 @@ export default function CustomPlanDayDetailScreen() {
   const [showSetTypeModal, setShowSetTypeModal] = useState(false);
   const [selectedSetIndex, setSelectedSetIndex] = useState<number>(-1);
 
+  // Estados para el modal de configuración de tiempo de descanso
+  const [showRestTimerModal, setShowRestTimerModal] = useState(false);
+  const [editingRestExerciseId, setEditingRestExerciseId] = useState<string | null>(null);
+  const [tempRestTime, setTempRestTime] = useState(120); // 2 minutos por defecto
+  const [showRestTimers, setShowRestTimers] = useState(true); // Mostrar temporizadores por defecto
+
   // Debug: Verificar estado del modal en cada render
   useEffect(() => {
     console.log('🔍 Estado modal cambió:', { showSetTypeModal, selectedSetIndex });
   }, [showSetTypeModal, selectedSetIndex]);
+
+  // Cleanup: Limpiar todos los timeouts al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (modalTimeoutRef.current) {
+        clearTimeout(modalTimeoutRef.current);
+        console.log('🧹 Timeout de modal limpiado al desmontar');
+      }
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        console.log('🧹 Timeout de auto-guardado limpiado al desmontar');
+      }
+    };
+  }, []);
+
+  // Guardar automáticamente en AsyncStorage cuando cambian los ejercicios
+  // Con debounce para evitar guardados excesivos y race conditions
+  useEffect(() => {
+    if (hasLocalChanges.current && exercises.length > 0) {
+      // Cancelar guardado anterior si existe
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        console.log('⏸️ Guardado anterior cancelado (debounce)');
+      }
+
+      // Programar nuevo guardado con debounce de 500ms
+      saveTimeoutRef.current = setTimeout(async () => {
+        // Prevenir race condition: no guardar si ya hay guardado en proceso
+        if (isSavingToStorage.current) {
+          console.log('⏳ Ya hay un guardado en proceso, saltando...');
+          return;
+        }
+
+        isSavingToStorage.current = true;
+        try {
+          const dayDataToSave = {
+            dayNumber,
+            name: dayName,
+            exercises,
+          };
+          await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
+          console.log('💾 Auto-guardado en AsyncStorage:', { dayNumber, exercisesCount: exercises.length });
+        } catch (error) {
+          console.error('❌ Error auto-guardando:', error);
+          // No mostrar alert en auto-guardado, es automático y no crítico
+          // El usuario puede guardar manualmente el plan completo
+        } finally {
+          isSavingToStorage.current = false;
+        }
+      }, 500); // Debounce de 500ms
+    }
+
+    // Cleanup: cancelar timeout al desmontar
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        console.log('🧹 Timeout de auto-guardado limpiado');
+      }
+    };
+  }, [exercises, dayNumber, weekNumber, dayName]);
 
   // Inicializar estados del modal cuando se abre para editar un ejercicio
   useEffect(() => {
@@ -403,7 +501,14 @@ export default function CustomPlanDayDetailScreen() {
 
     const updatedExercises = exercises.map(ex =>
       ex.id === editingExercise.id
-        ? { ...ex, sets: numSets, reps: repsArray, setTypes: finalSetTypes }
+        ? { 
+            ...ex, 
+            sets: numSets, 
+            reps: repsArray, 
+            setTypes: finalSetTypes,
+            // Mantener rest_seconds si existe
+            rest_seconds: ex.rest_seconds || 120,
+          }
         : ex
     );
     setExercises(updatedExercises);
@@ -455,6 +560,44 @@ export default function CustomPlanDayDetailScreen() {
       ],
       { icon: 'trash', iconColor: '#F44336' }
     );
+  };
+
+  const handleReorderExercises = (data: Exercise[]) => {
+    console.log('🔄 Reordenando ejercicios');
+    setExercises(data);
+    // Marcar que hay cambios locales sin guardar
+    hasLocalChanges.current = true;
+    console.log('✅ Orden de ejercicios actualizado');
+  };
+
+  const handleOpenRestTimerModal = (exerciseId: string) => {
+    const exercise = exercises.find(ex => ex.id === exerciseId);
+    if (exercise) {
+      setTempRestTime(exercise.rest_seconds || 120); // Valor actual o 2 min por defecto
+      setEditingRestExerciseId(exerciseId);
+      setShowRestTimerModal(true);
+    }
+  };
+
+  const handleSaveRestTime = () => {
+    if (editingRestExerciseId) {
+      const updatedExercises = exercises.map(ex =>
+        ex.id === editingRestExerciseId
+          ? { ...ex, rest_seconds: tempRestTime }
+          : ex
+      );
+      setExercises(updatedExercises);
+      hasLocalChanges.current = true;
+      console.log('⏱️ Tiempo de descanso guardado:', tempRestTime, 'segundos');
+    }
+    setShowRestTimerModal(false);
+    setEditingRestExerciseId(null);
+  };
+
+  const formatRestTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleSave = async () => {
@@ -515,8 +658,12 @@ export default function CustomPlanDayDetailScreen() {
           }
           
           // Luego cargar desde AsyncStorage (sobrescribe si existe)
-          const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
-          if (dayDataStr) {
+          // Prevenir race condition: no cargar si hay guardado en proceso
+          if (isSavingToStorage.current) {
+            console.log('⏳ Guardado en proceso, usando datos de parámetros solamente');
+          } else {
+            const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
+            if (dayDataStr) {
             const savedDayData = parseSafeJSON(dayDataStr, {});
             // Verificar que los datos guardados correspondan al día correcto
             if (savedDayData.dayNumber === dayNumber && isMounted) {
@@ -531,10 +678,11 @@ export default function CustomPlanDayDetailScreen() {
                 setExercises([]);
               }
             }
-          } else if (isMounted) {
-            // Si no hay datos guardados, usar los valores por defecto
-            setDayName(`Día ${dayNumber}`);
-            setExercises([]);
+            } else if (isMounted) {
+              // Si no hay datos guardados, usar los valores por defecto
+              setDayName(`Día ${dayNumber}`);
+              setExercises([]);
+            }
           }
         } catch (error) {
           console.error('Error loading day data:', error);
@@ -560,6 +708,7 @@ export default function CustomPlanDayDetailScreen() {
               name: selectedExercise.name,
               sets: selectedExercise.sets || 3,
               reps: selectedExercise.reps || [10, 10, 10],
+              rest_seconds: selectedExercise.rest_seconds || 120, // 2 minutos por defecto
               setTypes: selectedExercise.setTypes || [], // Inicializar setTypes vacío
             };
             console.log('✨ Nuevo ejercicio creado con ID único:', uniqueId);
@@ -578,22 +727,31 @@ export default function CustomPlanDayDetailScreen() {
               }
               
               // Guardar inmediatamente en AsyncStorage para evitar pérdida de datos
-              try {
-                const currentDayName = dayName || `Día ${dayNumber}`;
-                const dayDataToSave = {
-                  dayNumber,
-                  name: currentDayName,
-                  exercises: updatedExercises,
-                };
-                await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
-              } catch (error) {
-                console.error('Error saving updated day data:', error);
+              // Prevenir race condition
+              if (!isSavingToStorage.current) {
+                isSavingToStorage.current = true;
+                try {
+                  const currentDayName = dayName || `Día ${dayNumber}`;
+                  const dayDataToSave = {
+                    dayNumber,
+                    name: currentDayName,
+                    exercises: updatedExercises,
+                  };
+                  await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
+                  console.log('💾 Ejercicio guardado inmediatamente en AsyncStorage');
+                } catch (error) {
+                  console.error('Error saving updated day data:', error);
+                } finally {
+                  isSavingToStorage.current = false;
+                }
               }
               
               // Abrir modal de edición inmediatamente para configurar series y repeticiones
-              setTimeout(() => {
+              // Guardar referencia del timeout para poder limpiarlo
+              modalTimeoutRef.current = setTimeout(() => {
                 if (isMounted) {
                   setEditingExercise(newExercise);
+                  modalTimeoutRef.current = null; // Limpiar referencia después de ejecutar
                 }
               }, 100);
             }
@@ -712,9 +870,18 @@ export default function CustomPlanDayDetailScreen() {
     }, [dayNumber, params.dayData])
   );
 
+  // Componente wrapper condicional
+  const WrapperComponent = DRAG_DROP_ENABLED && GestureHandlerRootView 
+    ? GestureHandlerRootView 
+    : React.Fragment;
+  const wrapperProps = (DRAG_DROP_ENABLED && GestureHandlerRootView) 
+    ? { style: { flex: 1 } } 
+    : {};
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <WrapperComponent {...wrapperProps}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
         <TouchableOpacity
@@ -808,6 +975,29 @@ export default function CustomPlanDayDetailScreen() {
       </View>
 
       <ScrollView style={styles.content}>
+        {/* Toggle para mostrar/ocultar temporizadores */}
+        {exercises.length > 0 && (
+          <TouchableOpacity
+            style={styles.restTimerToggleContainer}
+            onPress={() => setShowRestTimers(!showRestTimers)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.restTimerToggleContent}>
+              <Ionicons name="timer-outline" size={20} color="#ffb300" />
+              <Text style={styles.restTimerToggleText}>Activar tiempo de descanso</Text>
+            </View>
+            <View style={[
+              styles.toggleSwitch,
+              showRestTimers && styles.toggleSwitchActive
+            ]}>
+              <View style={[
+                styles.toggleKnob,
+                showRestTimers && styles.toggleKnobActive
+              ]} />
+            </View>
+          </TouchableOpacity>
+        )}
+
         {exercises.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="fitness-outline" size={64} color="#666" />
@@ -818,11 +1008,176 @@ export default function CustomPlanDayDetailScreen() {
           </View>
         ) : (
           <View style={styles.exercisesList}>
-            {exercises.map((exercise, exerciseIdx) => {
-              console.log(`🏋️ Renderizando ejercicio ${exerciseIdx + 1}: ${exercise.name} (ID: ${exercise.id})`);
-              return (
-              <View key={exercise.id} style={styles.exerciseCard}>
-                <View style={styles.exerciseHeader}>
+            {DRAG_DROP_ENABLED ? (
+              // ============================================================================
+              // VERSIÓN CON DRAG & DROP (Solo para builds de producción)
+              // ============================================================================
+              <DraggableFlatList
+                data={exercises}
+                onDragEnd={({ data }) => handleReorderExercises(data)}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item: exercise, drag, isActive, getIndex }) => {
+                  const exerciseIdx = getIndex() ?? 0;
+                  console.log(`🏋️ Renderizando ejercicio ${exerciseIdx + 1}: ${exercise.name} (ID: ${exercise.id})`);
+                  return (
+                  <ScaleDecorator>
+                    <View 
+                      key={exercise.id} 
+                      style={[
+                        styles.exerciseCard,
+                        isActive && styles.exerciseCardDragging
+                      ]}
+                    >
+                      <View style={styles.exerciseHeader}>
+                        <TouchableOpacity
+                          onLongPress={drag}
+                          style={styles.dragHandle}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="reorder-three" size={24} color="#666" />
+                        </TouchableOpacity>
+                        <View style={styles.exerciseTitleContainer}>
+                          <View style={styles.exerciseNumberBadge}>
+                            <Text style={styles.exerciseNumberText}>{exerciseIdx + 1}</Text>
+                          </View>
+                          <Text style={styles.exerciseName}>{exercise.name}</Text>
+                        </View>
+                        <View style={styles.exerciseActions}>
+                          <TouchableOpacity
+                            onPress={() => setEditingExercise(exercise)}
+                            style={styles.editButton}
+                          >
+                            <Ionicons name="create-outline" size={20} color="#ffb300" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleDeleteExercise(exercise.id)}
+                            style={styles.deleteButton}
+                          >
+                            <Ionicons name="trash-outline" size={20} color="#F44336" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      {/* Temporizador de Descanso */}
+                      {showRestTimers && (
+                        <TouchableOpacity
+                          style={styles.restTimerContainer}
+                          onPress={() => handleOpenRestTimerModal(exercise.id)}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="timer-outline" size={18} color="#ffb300" />
+                          <Text style={styles.restTimerLabel}>Temporizador de Descanso:</Text>
+                          <Text style={styles.restTimerValue}>
+                            {formatRestTime(exercise.rest_seconds || 120)}
+                          </Text>
+                          <Ionicons name="chevron-forward" size={16} color="#666" />
+                        </TouchableOpacity>
+                      )}
+
+                      <View style={styles.exerciseDetails}>
+                        <TouchableOpacity
+                          style={styles.setsHeader}
+                          onPress={() => toggleExerciseExpansion(exercise.id)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.setsHeaderLeft}>
+                            <Ionicons name="list" size={16} color="#999" />
+                            <Text style={styles.setsHeaderText}>
+                              {exercise.sets} {exercise.sets === 1 ? 'serie' : 'series'}
+                            </Text>
+                            <Ionicons
+                              name={expandedExercises.has(exercise.id) ? "chevron-up" : "chevron-down"}
+                              size={18}
+                              color="#ffb300"
+                            />
+                          </View>
+                        </TouchableOpacity>
+                        {expandedExercises.has(exercise.id) && (
+                          <View style={styles.setsGrid}>
+                            {(exercise.setTypes || []).map((setInfo, idx) => {
+                            // Calcular label de la serie
+                            const label = (() => {
+                              switch (setInfo.type) {
+                                case 'warmup': return 'C';
+                                case 'drop': return 'D';
+                                case 'failure':
+                                case 'normal':
+                                default:
+                                  let seriesCount = 0;
+                                  for (let i = 0; i <= idx; i++) {
+                                    const type = (exercise.setTypes || [])[i]?.type || 'normal';
+                                    if (type === 'normal' || type === 'failure') {
+                                      seriesCount++;
+                                    }
+                                  }
+                                  return setInfo.type === 'failure' ? `${seriesCount}` : `${seriesCount}`;
+                              }
+                            })();
+                            
+                            // Determinar color y estilo del badge
+                            const badgeStyle = (() => {
+                              switch (setInfo.type) {
+                                case 'warmup': return styles.setBadgeWarmup;
+                                case 'failure': return styles.setBadgeFailure;
+                                case 'drop': return styles.setBadgeDrop;
+                                default: return styles.setBadgeNormal;
+                              }
+                            })();
+                            
+                              return (
+                                <View key={`${exercise.id}_set_${idx}`} style={styles.setBadge}>
+                                  <View style={[styles.setBadgeNumber, badgeStyle]}>
+                                    <Text style={styles.setBadgeNumberText}>
+                                      {label}{setInfo.type === 'failure' ? ' F' : ''}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.setBadgeContent}>
+                                    {setInfo.type === 'warmup' ? (
+                                      <Text style={styles.setBadgeReps}>Calentamiento</Text>
+                                    ) : setInfo.type === 'failure' ? (
+                                      <View style={styles.setBadgeInfo}>
+                                        <Text style={styles.setBadgeReps}>
+                                          {setInfo.reps || 0} reps
+                                        </Text>
+                                        <Text style={styles.setBadgeFailureText}>al fallo</Text>
+                                      </View>
+                                    ) : (
+                                      <View style={styles.setBadgeInfo}>
+                                        <Text style={styles.setBadgeReps}>
+                                          {setInfo.reps || 0} reps
+                                        </Text>
+                                        {setInfo.rir !== null && setInfo.rir !== undefined && (
+                                          <Text style={styles.setBadgeRir}>RIR {setInfo.rir}</Text>
+                                        )}
+                                      </View>
+                                    )}
+                                  </View>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </ScaleDecorator>
+                  );
+                }}
+                scrollEnabled={false}
+                containerStyle={{ flexGrow: 0 }}
+              />
+            ) : (
+              // ============================================================================
+              // VERSIÓN SIMPLE (Para desarrollo en Expo Go)
+              // ============================================================================
+              <>
+                {exercises.map((exercise, exerciseIdx) => {
+                  console.log(`🏋️ Renderizando ejercicio ${exerciseIdx + 1}: ${exercise.name} (ID: ${exercise.id})`);
+                  return (
+                    <View 
+                      key={exercise.id} 
+                      style={styles.exerciseCard}
+                    >
+                      <View style={styles.exerciseHeader}>
                   <View style={styles.exerciseTitleContainer}>
                     <View style={styles.exerciseNumberBadge}>
                       <Text style={styles.exerciseNumberText}>{exerciseIdx + 1}</Text>
@@ -844,6 +1199,23 @@ export default function CustomPlanDayDetailScreen() {
                     </TouchableOpacity>
                   </View>
                 </View>
+
+                {/* Temporizador de Descanso */}
+                {showRestTimers && (
+                  <TouchableOpacity
+                    style={styles.restTimerContainer}
+                    onPress={() => handleOpenRestTimerModal(exercise.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="timer-outline" size={18} color="#ffb300" />
+                    <Text style={styles.restTimerLabel}>Temporizador de Descanso:</Text>
+                    <Text style={styles.restTimerValue}>
+                      {formatRestTime(exercise.rest_seconds || 120)}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color="#666" />
+                  </TouchableOpacity>
+                )}
+
                 <View style={styles.exerciseDetails}>
                   <TouchableOpacity
                     style={styles.setsHeader}
@@ -928,9 +1300,11 @@ export default function CustomPlanDayDetailScreen() {
                     </View>
                   )}
                 </View>
-              </View>
-              );
-            })}
+                    </View>
+                  );
+                })}
+              </>
+            )}
           </View>
         )}
 
@@ -1215,8 +1589,71 @@ export default function CustomPlanDayDetailScreen() {
         </Modal>
       </Modal>
 
+      {/* Modal de Configuración de Tiempo de Descanso */}
+      <Modal
+        visible={showRestTimerModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRestTimerModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowRestTimerModal(false)}
+        >
+          <Pressable
+            style={styles.restTimerModalContent}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.restTimerModalHeader}>
+              <Ionicons name="settings" size={24} color="#ffb300" />
+              <Text style={styles.restTimerModalTitle}>Temporizador de Descanso</Text>
+            </View>
+
+            {/* Selector de Tiempo */}
+            <View style={styles.timePickerContainer}>
+              <View style={styles.timeDisplay}>
+                <Text style={styles.timeDisplayText}>
+                  {formatRestTime(tempRestTime)}
+                </Text>
+              </View>
+              
+              <View style={styles.timeAdjustButtons}>
+                <TouchableOpacity
+                  style={styles.timeAdjustButton}
+                  onPress={() => setTempRestTime(Math.max(15, tempRestTime - 15))}
+                >
+                  <Text style={styles.timeAdjustButtonText}>-15s</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.timeAdjustButton}
+                  onPress={() => setTempRestTime(tempRestTime + 15)}
+                >
+                  <Text style={styles.timeAdjustButtonText}>+15s</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={styles.restTimerModalActions}>
+              <TouchableOpacity
+                style={styles.restTimerCancelButton}
+                onPress={() => setShowRestTimerModal(false)}
+              >
+                <Text style={styles.restTimerCancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.restTimerSaveButton}
+                onPress={handleSaveRestTime}
+              >
+                <Text style={styles.restTimerSaveButtonText}>Guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <AlertComponent />
-    </SafeAreaView>
+      </SafeAreaView>
+    </WrapperComponent>
   );
 }
 
@@ -1319,11 +1756,26 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  exerciseCardDragging: {
+    backgroundColor: '#2a2a2a',
+    borderColor: '#ffb300',
+    borderWidth: 2,
+    shadowColor: '#ffb300',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+  },
   exerciseHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  dragHandle: {
+    padding: 8,
+    marginRight: 8,
+    marginLeft: -8,
   },
   exerciseTitleContainer: {
     flexDirection: 'row',
@@ -1773,6 +2225,157 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  // Estilos para el temporizador de descanso
+  restTimerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 2,
+    paddingBottom: 14,
+    gap: 8,
+  },
+  restTimerLabel: {
+    fontSize: 15,
+    color: '#ffb300',
+    fontWeight: '500',
+  },
+  restTimerValue: {
+    fontSize: 15,
+    color: '#ffb300',
+    fontWeight: '600',
+    marginRight: 4,
+  },
+  restTimerModalContent: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 20,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+  },
+  restTimerModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 24,
+  },
+  restTimerModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  timePickerContainer: {
+    alignItems: 'center',
+    gap: 20,
+    marginBottom: 24,
+  },
+  timeDisplay: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 8,
+    borderColor: '#ffb300',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeDisplayText: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  timeAdjustButtons: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  timeAdjustButton: {
+    backgroundColor: '#333',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  timeAdjustButtonText: {
+    color: '#ffb300',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  restTimerModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  restTimerCancelButton: {
+    flex: 1,
+    backgroundColor: '#333',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  restTimerCancelButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  restTimerSaveButton: {
+    flex: 1,
+    backgroundColor: '#ffb300',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  restTimerSaveButtonText: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  // Estilos para el toggle de temporizadores
+  restTimerToggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#2a2a2a',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  restTimerToggleContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  restTimerToggleText: {
+    fontSize: 15,
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  toggleSwitch: {
+    width: 50,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#333',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleSwitchActive: {
+    backgroundColor: '#ffb300',
+  },
+  toggleKnob: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#666',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleKnobActive: {
+    backgroundColor: '#1a1a1a',
+    transform: [{ translateX: 22 }],
   },
 });
 

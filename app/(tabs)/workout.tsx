@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Modal,
+  Alert,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,10 @@ import { useWorkoutStore } from '@/store/workoutStore';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
 import { SkeletonWorkout } from '@/components/SkeletonLoaders';
+import { 
+  getPendingTrainerInvitations, 
+  respondToTrainerInvitation 
+} from '../../src/services/trainerService';
 
 export default function WorkoutScreen() {
   const { user } = useUser();
@@ -31,12 +36,16 @@ export default function WorkoutScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [workoutPlans, setWorkoutPlans] = useState<any[]>([]);
   const [showSelectionModal, setShowSelectionModal] = useState(false);
+  const [trainerInvitations, setTrainerInvitations] = useState<any[]>([]);
+  const [showInvitationsModal, setShowInvitationsModal] = useState(false);
+  const [isRespondingInvitation, setIsRespondingInvitation] = useState(false);
 
   // Cargar datos cuando se monta el componente
   useEffect(() => {
     loadWorkouts();
     loadSessions();
     loadWorkoutPlans();
+    loadTrainerInvitations();
   }, [user]);
 
   // Recargar planes automáticamente cuando la pantalla recibe foco
@@ -46,6 +55,7 @@ export default function WorkoutScreen() {
       loadWorkoutPlans();
       loadWorkouts();
       loadSessions();
+      loadTrainerInvitations();
     }, [user])
   );
 
@@ -70,6 +80,68 @@ export default function WorkoutScreen() {
       console.error('Error inesperado:', err);
     } finally {
       setLoadingPlans(false);
+    }
+  };
+
+  const loadTrainerInvitations = async () => {
+    if (!user) {
+      console.log('🔴 loadTrainerInvitations: No hay usuario');
+      return;
+    }
+
+    console.log('🔵 loadTrainerInvitations - Cargando invitaciones para:', user.id);
+    try {
+      const result = await getPendingTrainerInvitations(user.id);
+      console.log('📊 Resultado de getPendingTrainerInvitations:', result);
+      
+      if (result.success && result.data) {
+        console.log('📬 Invitaciones encontradas:', result.data.length);
+        if (result.data.length > 0) {
+          console.log('✅ Mostrando modal de invitaciones');
+          console.log('📋 Invitaciones:', JSON.stringify(result.data, null, 2));
+          setTrainerInvitations(result.data);
+          setShowInvitationsModal(true);
+        } else {
+          console.log('ℹ️ No hay invitaciones pendientes');
+        }
+      } else {
+        console.log('❌ Error al cargar invitaciones:', result.error);
+      }
+    } catch (error) {
+      console.error('💥 Excepción en loadTrainerInvitations:', error);
+    }
+  };
+
+  const handleRespondInvitation = async (invitationId: string, accept: boolean, trainerName: string) => {
+    if (!user) return;
+
+    setIsRespondingInvitation(true);
+    try {
+      const result = await respondToTrainerInvitation(user.id, invitationId, accept);
+      
+      if (result.success) {
+        Alert.alert(
+          accept ? '✅ Invitación Aceptada' : '❌ Invitación Rechazada',
+          accept
+            ? `Ahora ${trainerName} es tu entrenador y puede ver tus estadísticas. También son amigos para chatear.`
+            : `Has rechazado la invitación de ${trainerName}.`,
+          [{ text: 'OK' }]
+        );
+        
+        // Remover la invitación de la lista
+        setTrainerInvitations(prev => prev.filter(inv => inv.id !== invitationId));
+        
+        // Si no quedan más invitaciones, cerrar el modal
+        if (trainerInvitations.length <= 1) {
+          setShowInvitationsModal(false);
+        }
+      } else {
+        Alert.alert('Error', result.error || 'No se pudo procesar la invitación');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Ocurrió un error al procesar la invitación');
+    } finally {
+      setIsRespondingInvitation(false);
     }
   };
 
@@ -98,7 +170,7 @@ export default function WorkoutScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadWorkouts(), loadSessions(), loadWorkoutPlans()]);
+    await Promise.all([loadWorkouts(), loadSessions(), loadWorkoutPlans(), loadTrainerInvitations()]);
     setRefreshing(false);
   };
 
@@ -122,15 +194,26 @@ export default function WorkoutScreen() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
-      <View style={styles.header}>
+      <View style={styles.headerContainer}>
         <Text style={styles.title}>Entrenamientos</Text>
+        <View style={styles.buttonsRow}>
         <TouchableOpacity
           style={styles.generateButton}
           onPress={() => setShowSelectionModal(true)}
         >
           <Ionicons name="add" size={20} color="#1a1a1a" />
-          <Text style={styles.generateButtonText}>Generar</Text>
+            <Text style={styles.generateButtonText}>Crear Entrenamiento</Text>
+          </TouchableOpacity>
+
+          {/* Botón Modo Entrenador */}
+          <TouchableOpacity
+            style={styles.trainerModeButton}
+            onPress={() => router.push('/trainer-mode' as any)}
+          >
+            <Ionicons name="people" size={20} color="#ffffff" />
+            <Text style={styles.trainerModeButtonText}>Modo Entrenador</Text>
         </TouchableOpacity>
+        </View>
       </View>
 
       {/* Planes de Entrenamiento Generados */}
@@ -438,6 +521,132 @@ export default function WorkoutScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de Invitaciones de Entrenador */}
+      <Modal
+        visible={showInvitationsModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowInvitationsModal(false)}
+      >
+        <View style={styles.invitationsModalOverlay}>
+          <TouchableOpacity 
+            style={styles.invitationsModalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowInvitationsModal(false)}
+          />
+          <View style={styles.invitationsModalContent}>
+            {/* Header Mejorado */}
+            <View style={styles.invitationsHeaderContainer}>
+              <View style={styles.invitationsIconWrapper}>
+                <View style={styles.invitationsIconGradient}>
+                  <Ionicons name="fitness" size={32} color="#1a1a1a" />
+                </View>
+              </View>
+              <Text style={styles.invitationsMainTitle}>
+                {trainerInvitations.length === 1 
+                  ? 'Nueva Invitación' 
+                  : `${trainerInvitations.length} Invitaciones Nuevas`}
+              </Text>
+              <Text style={styles.invitationsSubtitle}>
+                {trainerInvitations.length === 1 
+                  ? 'Tienes una invitación de entrenador pendiente' 
+                  : 'Tienes invitaciones de entrenador pendientes'}
+              </Text>
+            </View>
+
+            {/* Lista de Invitaciones */}
+            <ScrollView 
+              style={styles.invitationsList} 
+              contentContainerStyle={styles.invitationsListContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {trainerInvitations.map((invitation, index) => (
+                <View key={invitation.id} style={styles.invitationCard}>
+                  {/* Avatar y Info del Entrenador */}
+                  <View style={styles.trainerInfoSection}>
+                    <View style={styles.trainerAvatarWrapper}>
+                      <View style={styles.trainerAvatarGradient}>
+                        <Text style={styles.trainerAvatarText}>
+                          {(invitation.trainer_name || invitation.trainer_username || 'T')[0].toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.trainerTextInfo}>
+                      <Text style={styles.trainerNameText}>
+                        {invitation.trainer_name || invitation.trainer_username || 'Entrenador'}
+                      </Text>
+                      {invitation.trainer_username && (
+                        <Text style={styles.trainerUsernameText}>@{invitation.trainer_username}</Text>
+                      )}
+                    </View>
+                  </View>
+
+                  {/* Mensaje */}
+                  <View style={styles.invitationMessageContainer}>
+                    <Ionicons name="information-circle-outline" size={18} color="#ffb300" />
+                    <Text style={styles.invitationMessageText}>
+                      Quiere ser tu entrenador personal y acceder a tus métricas de entrenamiento
+                    </Text>
+                  </View>
+
+                  {/* Botones de Acción */}
+                  <View style={styles.invitationActionsRow}>
+                    <TouchableOpacity
+                      style={[styles.invitationActionButton, styles.rejectActionButton]}
+                      onPress={() => handleRespondInvitation(
+                        invitation.id,
+                        false,
+                        invitation.trainer_name || invitation.trainer_username || 'El entrenador'
+                      )}
+                      disabled={isRespondingInvitation}
+                      activeOpacity={0.8}
+                    >
+                      {isRespondingInvitation ? (
+                        <ActivityIndicator size="small" color="#ff4444" />
+                      ) : (
+                        <>
+                          <Ionicons name="close-circle-outline" size={22} color="#ff4444" />
+                          <Text style={styles.rejectActionText}>Rechazar</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.invitationActionButton, styles.acceptActionButton]}
+                      onPress={() => handleRespondInvitation(
+                        invitation.id,
+                        true,
+                        invitation.trainer_name || invitation.trainer_username || 'El entrenador'
+                      )}
+                      disabled={isRespondingInvitation}
+                      activeOpacity={0.8}
+                    >
+                      {isRespondingInvitation ? (
+                        <ActivityIndicator size="small" color="#1a1a1a" />
+                      ) : (
+                        <>
+                          <Ionicons name="checkmark-circle" size={22} color="#1a1a1a" />
+                          <Text style={styles.acceptActionText}>Aceptar</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+
+            {/* Botón Cerrar */}
+            <TouchableOpacity
+              style={styles.invitationsCloseButton}
+              onPress={() => setShowInvitationsModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.invitationsCloseButtonText}>Revisar Después</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -447,10 +656,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1a1a1a',
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  headerContainer: {
     padding: 20,
     paddingBottom: 10,
   },
@@ -458,13 +664,19 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
+    marginBottom: 16,
+  },
+  buttonsRow: {
+    flexDirection: 'row',
+    gap: 12,
   },
   generateButton: {
+    flex: 1,
     backgroundColor: '#ffb300',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    justifyContent: 'center',
+    paddingVertical: 12,
     borderRadius: 8,
   },
   generateButtonText: {
@@ -862,6 +1074,181 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   modalCloseButtonText: {
+    color: '#999',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  trainerModeButton: {
+    flex: 1,
+    backgroundColor: '#8B2635',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  trainerModeButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  // Estilos del modal de invitaciones
+  invitationsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'flex-end',
+  },
+  invitationsModalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  invitationsModalContent: {
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingTop: 32,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+    maxHeight: '90%',
+    borderTopWidth: 3,
+    borderTopColor: '#ffb300',
+  },
+  invitationsHeaderContainer: {
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  invitationsIconWrapper: {
+    marginBottom: 16,
+  },
+  invitationsIconGradient: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffb300',
+  },
+  invitationsMainTitle: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  invitationsSubtitle: {
+    fontSize: 15,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  invitationsList: {
+    maxHeight: 450,
+  },
+  invitationsListContent: {
+    paddingBottom: 8,
+  },
+  invitationCard: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 179, 0, 0.2)',
+  },
+  trainerInfoSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  trainerAvatarWrapper: {
+    marginRight: 14,
+  },
+  trainerAvatarGradient: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffb300',
+  },
+  trainerAvatarText: {
+    fontSize: 26,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+  },
+  trainerTextInfo: {
+    flex: 1,
+  },
+  trainerNameText: {
+    fontSize: 19,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  trainerUsernameText: {
+    fontSize: 14,
+    color: '#ffb300',
+    fontWeight: '500',
+  },
+  invitationMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255, 179, 0, 0.1)',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 18,
+    gap: 10,
+  },
+  invitationMessageText: {
+    flex: 1,
+    fontSize: 14,
+    color: '#ccc',
+    lineHeight: 20,
+  },
+  invitationActionsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  invitationActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    gap: 8,
+  },
+  acceptActionButton: {
+    backgroundColor: '#ffb300',
+  },
+  acceptActionText: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  rejectActionButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#ff4444',
+  },
+  rejectActionText: {
+    color: '#ff4444',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  invitationsCloseButton: {
+    marginTop: 20,
+    paddingVertical: 16,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 14,
+  },
+  invitationsCloseButtonText: {
     color: '#999',
     fontSize: 16,
     fontWeight: '600',

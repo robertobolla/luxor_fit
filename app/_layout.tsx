@@ -11,6 +11,7 @@ import { useChatNotifications } from '../src/hooks/useChatNotifications';
 import { useFriendRequestNotifications } from '../src/hooks/useFriendRequestNotifications';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { SplashScreen } from '../src/components/SplashScreen';
+import { AlertProvider } from '../src/contexts/AlertContext';
 
 function NotificationSetup() {
   const { user } = useUser();
@@ -218,6 +219,7 @@ export default function RootLayout() {
   return (
     <ErrorBoundary>
       <ClerkProviderWrapper>
+        <AlertProvider>
         <SafeAreaProvider>
           <NotificationSetup />
           <SubscriptionGate />
@@ -228,6 +230,7 @@ export default function RootLayout() {
           />
           <StatusBar style="light" />
         </SafeAreaProvider>
+        </AlertProvider>
       </ClerkProviderWrapper>
     </ErrorBoundary>
   );

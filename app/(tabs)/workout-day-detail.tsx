@@ -11,9 +11,10 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useLocalSearchParams, router, Stack } from 'expo-router';
+import { useLocalSearchParams, router, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useAlert } from '../../src/contexts/AlertContext';
 import { supabase } from '../../src/services/supabase';
 import { WorkoutCompletion } from '../../src/types';
 import ExerciseVideoModal from '../../src/components/ExerciseVideoModal';
@@ -22,27 +23,33 @@ import { smartNotificationService } from '../../src/services/smartNotifications'
 import { getExerciseVideoUrl } from '../../src/services/exerciseVideoService';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 import { useRetry } from '../../src/hooks/useRetry';
+import Svg, { Circle } from 'react-native-svg';
+import { Audio } from 'expo-av';
+import { Vibration } from 'react-native';
 
 export default function WorkoutDayDetailScreen() {
   const params = useLocalSearchParams();
+  const { showAlert } = useAlert();
   const { user } = useUser();
   
   // Parsear los datos del día con validación
-  let dayData = null;
-  try {
-    if (params.dayData) {
-      dayData = JSON.parse(params.dayData as string);
+  const parseDayData = (dataString: string | undefined) => {
+    try {
+      if (dataString) {
+        return JSON.parse(dataString as string);
+      }
+    } catch (e) {
+      console.error('Error parseando dayData:', e);
     }
-  } catch (e) {
-    console.error('Error parseando dayData:', e);
-    dayData = null;
-  }
+    return null;
+  };
   
   const planName = params.planName as string || 'Plan de Entrenamiento';
   const planId = params.planId as string;
   const dayName = params.dayName as string; // ej: 'day_1'
   const isCustomPlan = params.isCustomPlan === 'true'; // Si es plan personalizado
   
+  const [dayData, setDayData] = useState(parseDayData(params.dayData as string));
   const [isCompleted, setIsCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
@@ -59,9 +66,74 @@ export default function WorkoutDayDetailScreen() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoExerciseName, setVideoExerciseName] = useState('');
   
+  // Estados para el temporizador de descanso
+  const [showRestTimerModal, setShowRestTimerModal] = useState(false);
+  const [selectedRestTime, setSelectedRestTime] = useState(120);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  
   useEffect(() => {
     checkIfCompleted();
   }, [user, planId, dayName]);
+
+  // Limpiar timer cuando el modal se cierre
+  useEffect(() => {
+    if (!showRestTimerModal) {
+      // Cuando el modal se cierra, asegurar que el timer se detiene
+      setIsTimerRunning(false);
+      setTimerSeconds(0);
+      console.log('🧹 Modal cerrado: timer limpiado');
+    }
+  }, [showRestTimerModal]);
+
+  // Recargar datos del plan cuando la pantalla gana foco
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 Pantalla ganó foco, recargando datos del plan...');
+      loadPlanData();
+    }, [planId, dayName, user])
+  );
+
+  const loadPlanData = async () => {
+    if (!planId || !dayName || !user?.id) {
+      console.log('⚠️ Faltan datos para cargar el plan');
+      return;
+    }
+
+    try {
+      console.log('📥 Cargando plan desde Supabase...', { planId, dayName });
+      
+      const { data: planData, error } = await supabase
+        .from('workout_plans')
+        .select('plan_data')
+        .eq('id', planId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('❌ Error cargando plan:', error);
+        return;
+      }
+
+      if (planData?.plan_data) {
+        const fullPlan = planData.plan_data;
+        console.log('📦 Plan completo cargado:', JSON.stringify(fullPlan, null, 2));
+
+        // Encontrar los datos del día específico
+        const dayDataFromDB = fullPlan[dayName];
+        
+        if (dayDataFromDB) {
+          console.log('✅ Datos del día encontrados:', JSON.stringify(dayDataFromDB, null, 2));
+          setDayData(dayDataFromDB);
+        } else {
+          console.warn('⚠️ No se encontraron datos para', dayName);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error recargando datos del plan:', error);
+    }
+  };
   
   const checkIfCompleted = async () => {
     if (!user?.id || !planId || !dayName) return;
@@ -214,7 +286,12 @@ export default function WorkoutDayDetailScreen() {
       setDuration('');
       setDifficulty(3);
       setNotes('');
-      Alert.alert('¡Felicitaciones! 🎉', 'Entrenamiento completado. ¡Sigue así!');
+      showAlert(
+        '¡Felicitaciones!',
+        'Entrenamiento completado. ¡Sigue así!',
+        [{ text: 'Entendido', style: 'default' }],
+        { icon: 'trophy', iconColor: '#ffb300' }
+      );
     }
   };
 
@@ -231,6 +308,89 @@ export default function WorkoutDayDetailScreen() {
       [exerciseName]: sets,
     }));
   };
+
+  const formatRestTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleOpenRestTimer = (restSeconds: number) => {
+    setSelectedRestTime(restSeconds);
+    setShowRestTimerModal(true);
+  };
+
+  const handleStartRestTimer = () => {
+    if (!isTimerRunning) {
+      // Primera vez o reiniciar - iniciar el temporizador
+      setTimerSeconds(selectedRestTime);
+      setIsTimerRunning(true);
+    } else {
+      // Ya está corriendo - reiniciar
+      setTimerSeconds(selectedRestTime);
+    }
+  };
+
+  // Función para reproducir sonido de finalización
+  const playTimerSound = async () => {
+    if (!soundEnabled) return;
+    
+    try {
+      // Vibración de triple pulso
+      Vibration.vibrate([0, 200, 100, 200, 100, 200]);
+      
+      // Reproducir sonido de notificación
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3' },
+        { shouldPlay: true, volume: 1.0 }
+      );
+      
+      // Liberar el sonido después de reproducirlo
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          sound.unloadAsync();
+        }
+      });
+    } catch (error) {
+      console.log('Error reproduciendo sonido:', error);
+      // Si falla el sonido, al menos vibrar
+      Vibration.vibrate([0, 200, 100, 200, 100, 200]);
+    }
+  };
+
+  // Effect para el countdown del temporizador
+  useEffect(() => {
+    // Si el timer no está corriendo, no hacer nada
+    if (!isTimerRunning) {
+      return;
+    }
+
+    // Si llegó a 0, detener y reproducir sonido
+    if (timerSeconds === 0) {
+      setIsTimerRunning(false);
+      playTimerSound();
+      return;
+    }
+
+    // Timer está corriendo y tiene tiempo restante
+    const interval = setInterval(() => {
+      setTimerSeconds(prev => {
+        if (prev <= 1) {
+          // Llegó a 0, el próximo useEffect se encargará del sonido
+          setIsTimerRunning(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    // ✅ Cleanup: siempre limpiar el interval cuando el componente se desmonte
+    // o cuando cambien las dependencias
+    return () => {
+      console.log('🧹 Limpiando timer interval');
+      clearInterval(interval);
+    };
+  }, [isTimerRunning, timerSeconds]);
 
   if (isLoading) {
     return (
@@ -515,6 +675,20 @@ export default function WorkoutDayDetailScreen() {
                       />
                     </TouchableOpacity>
                     <TouchableOpacity 
+                      style={styles.statsButton}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/exercise-progress-stats',
+                          params: {
+                            exerciseName: exerciseName,
+                            exerciseId: exerciseName, // TODO: En el futuro usar ID real
+                          },
+                        } as any);
+                      }}
+                    >
+                      <Ionicons name="stats-chart" size={20} color="#ffb300" />
+                    </TouchableOpacity>
+                    <TouchableOpacity 
                       style={styles.videoButton}
                       onPress={async () => {
                         try {
@@ -545,6 +719,22 @@ export default function WorkoutDayDetailScreen() {
                   </View>
                 </View>
 
+                {/* Temporizador de Descanso */}
+                {!isOldFormat && exercise.rest_seconds && (
+                  <TouchableOpacity
+                    style={styles.restTimerContainer}
+                    onPress={() => handleOpenRestTimer(exercise.rest_seconds || 120)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="timer-outline" size={18} color="#ffb300" />
+                    <Text style={styles.restTimerLabel}>Temporizador de Descanso:</Text>
+                    <Text style={styles.restTimerValue}>
+                      {formatRestTime(exercise.rest_seconds || 120)}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={16} color="#666" />
+                  </TouchableOpacity>
+                )}
+
                 {/* Tracker de series */}
                 {isExpanded && user?.id && (
                   <ExerciseSetTracker
@@ -553,7 +743,10 @@ export default function WorkoutDayDetailScreen() {
                     exerciseName={exerciseName}
                     defaultSets={sets || 3}
                     usesTime={false} // TODO: Detectar si el ejercicio usa tiempo
+                    setTypes={setTypes || []} // Pasar tipos de series para excluir calentamiento
                     onSetsChange={(sets) => handleSetsChange(exerciseName, sets)}
+                    planId={planId} // Identificar por plan
+                    dayName={dayName} // Identificar por día de rutina
                   />
                 )}
 
@@ -783,6 +976,116 @@ export default function WorkoutDayDetailScreen() {
         exerciseName={videoExerciseName}
         onClose={() => setShowVideoModal(false)}
       />
+
+      {/* Modal de Temporizador de Descanso */}
+      <Modal
+        visible={showRestTimerModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRestTimerModal(false)}
+      >
+        <View style={styles.timerModalOverlay}>
+          <View style={styles.timerModalContent}>
+            <View style={styles.timerModalHeader}>
+              <Ionicons name="timer" size={24} color="#ffb300" />
+              <Text style={styles.timerModalTitle}>Temporizador de Descanso</Text>
+            </View>
+
+            <View style={styles.timePickerContainer}>
+              <View style={styles.timeDisplay}>
+                {/* Círculo progresivo SVG */}
+                <Svg width="200" height="200" style={{ position: 'absolute' }}>
+                  {/* Círculo de fondo (gris) */}
+                  <Circle
+                    cx="100"
+                    cy="100"
+                    r="92"
+                    stroke="#333"
+                    strokeWidth="8"
+                    fill="none"
+                  />
+                  {/* Círculo de progreso (amarillo) */}
+                  <Circle
+                    cx="100"
+                    cy="100"
+                    r="92"
+                    stroke="#ffb300"
+                    strokeWidth="8"
+                    fill="none"
+                    strokeDasharray={`${2 * Math.PI * 92}`}
+                    strokeDashoffset={
+                      isTimerRunning
+                        ? (2 * Math.PI * 92) * (timerSeconds / selectedRestTime)
+                        : 0
+                    }
+                    strokeLinecap="round"
+                    rotation="-90"
+                    origin="100, 100"
+                  />
+                </Svg>
+                
+                <Text style={styles.timeDisplayText}>
+                  {isTimerRunning ? formatRestTime(timerSeconds) : formatRestTime(selectedRestTime)}
+                </Text>
+              </View>
+              
+              {!isTimerRunning && (
+                <View style={styles.timeAdjustButtons}>
+                  <TouchableOpacity
+                    style={styles.timeAdjustButton}
+                    onPress={() => setSelectedRestTime(Math.max(15, selectedRestTime - 15))}
+                  >
+                    <Text style={styles.timeAdjustButtonText}>-15s</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.timeAdjustButton}
+                    onPress={() => setSelectedRestTime(selectedRestTime + 15)}
+                  >
+                    <Text style={styles.timeAdjustButtonText}>+15s</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+
+            {/* Botón de control de sonido */}
+            <TouchableOpacity
+              onPress={() => setSoundEnabled(!soundEnabled)}
+              style={styles.soundButton}
+            >
+              <Ionicons 
+                name={soundEnabled ? "volume-high" : "volume-mute"} 
+                size={26} 
+                color={soundEnabled ? "#ffb300" : "#666"} 
+              />
+            </TouchableOpacity>
+
+            <View style={styles.timerModalActions}>
+              <TouchableOpacity
+                style={styles.timerCancelButton}
+                onPress={() => {
+                  // Detener el timer y limpiar estado
+                  setIsTimerRunning(false);
+                  setTimerSeconds(0);
+                  // Cerrar modal después de limpiar el estado
+                  setShowRestTimerModal(false);
+                  console.log('🛑 Timer detenido y modal cerrado');
+                }}
+              >
+                <Text style={styles.timerCancelButtonText}>Cerrar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.timerStartButton}
+                onPress={handleStartRestTimer}
+              >
+                <Ionicons name={isTimerRunning ? "refresh" : "play"} size={20} color="#1a1a1a" />
+                <Text style={styles.timerStartButtonText}>
+                  {isTimerRunning ? 'Reiniciar' : 'Iniciar'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -1152,6 +1455,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ffb300',
   },
+  statsButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#1a1a1a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#ffb300',
+    marginLeft: 8,
+  },
   statBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1218,6 +1532,121 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#ccc',
     lineHeight: 22,
+  },
+  // Estilos para el temporizador de descanso
+  restTimerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 2,
+    paddingBottom: 14,
+    gap: 8,
+  },
+  restTimerLabel: {
+    fontSize: 15,
+    color: '#ffb300',
+    fontWeight: '500',
+  },
+  restTimerValue: {
+    fontSize: 15,
+    color: '#ffb300',
+    fontWeight: '600',
+    marginRight: 4,
+  },
+  timerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  timerModalContent: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 20,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+  },
+  timerModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 24,
+  },
+  soundButton: {
+    padding: 8,
+    marginBottom: 16,
+    alignSelf: 'flex-start',
+  },
+  timerModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  timePickerContainer: {
+    alignItems: 'center',
+    gap: 20,
+    marginBottom: 24,
+  },
+  timeDisplay: {
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: '#1a1a1a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  timeDisplayText: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  timeAdjustButtons: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  timeAdjustButton: {
+    backgroundColor: '#333',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  timeAdjustButtonText: {
+    color: '#ffb300',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  timerModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  timerCancelButton: {
+    flex: 1,
+    backgroundColor: '#333',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  timerCancelButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  timerStartButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#ffb300',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  timerStartButtonText: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
 

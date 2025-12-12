@@ -208,6 +208,7 @@ const WeeklyHistoryScrollView = React.memo(({
   onPressNextWeek: () => void;
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   const pastWeeks = useMemo(() => {
@@ -239,9 +240,14 @@ const WeeklyHistoryScrollView = React.memo(({
   // También intentar scroll cuando cambian las semanas pasadas
   useEffect(() => {
     if (scrollViewRef.current && pastWeeks.length > 0) {
+      // Limpiar timeout anterior si existe
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
       // Usar requestAnimationFrame para asegurar que el layout esté completo
       requestAnimationFrame(() => {
-        setTimeout(() => {
+        scrollTimeoutRef.current = setTimeout(() => {
           const cardWidth = 292;
           const scrollPosition = pastWeeks.length * cardWidth;
           
@@ -249,9 +255,18 @@ const WeeklyHistoryScrollView = React.memo(({
             x: scrollPosition,
             animated: false,
           });
+          scrollTimeoutRef.current = null; // Limpiar referencia después de ejecutar
         }, 50);
       });
     }
+    
+    // Cleanup al desmontar
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+        console.log('🧹 Timeout de scroll limpiado');
+      }
+    };
   }, [pastWeeks.length, weeklyHistory.length]);
 
   return (

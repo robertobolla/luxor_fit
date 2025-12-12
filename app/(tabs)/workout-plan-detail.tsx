@@ -19,7 +19,7 @@ import { FriendSelectionModal, ConfirmModal } from '../../src/components/CustomM
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 
 export default function WorkoutPlanDetailScreen() {
-  const { planId } = useLocalSearchParams();
+  const { planId, isTrainerView, studentId } = useLocalSearchParams();
   const { user } = useUser();
   const [plan, setPlan] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -172,51 +172,17 @@ export default function WorkoutPlanDetailScreen() {
 
     try {
       const planData = plan.plan_data;
-      const weeklyStructure = planData.weekly_structure || [];
-      const daysPerWeek = planData.days_per_week || weeklyStructure.length;
-      const equipment = planData.equipment || [];
-
-      // Limpiar datos anteriores de AsyncStorage
-      for (let i = 1; i <= 7; i++) {
-        await AsyncStorage.removeItem(`day_${i}_data`);
-      }
-      await AsyncStorage.removeItem('selectedExercise');
-
-      // Guardar nombre del plan
-      await AsyncStorage.setItem('custom_plan_name', plan.plan_name || `Plan Personalizado - ${new Date().toLocaleDateString()}`);
-
-      // Guardar cada día en AsyncStorage
-      for (let i = 0; i < weeklyStructure.length; i++) {
-        const day = weeklyStructure[i];
-        const dayNumber = i + 1;
-        
-        // Convertir ejercicios del formato del plan al formato de edición
-        const exercises = (day.exercises || []).map((ex: any) => ({
-          id: `${ex.name}_${dayNumber}_${Date.now()}_${Math.random()}`,
-          name: ex.name,
-          sets: ex.sets || 3,
-          reps: ex.reps || [10, 10, 10],
-        }));
-
-        const dayData = {
-          dayNumber,
-          name: day.day || day.focus || `Día ${dayNumber}`,
-          exercises,
-        };
-
-        await AsyncStorage.setItem(`day_${dayNumber}_data`, JSON.stringify(dayData));
-      }
-
-      // Guardar el planId para saber que estamos editando
-      await AsyncStorage.setItem('editing_plan_id', plan.id.toString());
-
-      // Navegar a la pantalla de edición
+      const equipment = planData.equipment || planData.userData?.equipment || [];
+      
+      // Simplemente navegar a la pantalla de edición
+      // custom-plan-days.tsx se encargará de cargar todo desde Supabase
       router.push({
         pathname: '/(tabs)/workout/custom-plan-days',
         params: {
-          daysPerWeek: daysPerWeek.toString(),
           equipment: JSON.stringify(equipment),
           planId: plan.id.toString(),
+          isTrainerView: isTrainerView || 'false',
+          studentId: studentId || '',
         },
       });
     } catch (error) {
@@ -292,13 +258,16 @@ export default function WorkoutPlanDetailScreen() {
     }
   }, [plan, user, loadCompletedDays]);
 
-  // Recargar los días completados cuando se enfoca la pantalla
+  // Recargar el plan y los días completados cuando se enfoca la pantalla
   useFocusEffect(
     useCallback(() => {
-      if (plan && user?.id) {
+      console.log('🔄 Pantalla enfocada - recargando plan...');
+      loadPlanDetails().then(() => {
+        if (user?.id) {
         loadCompletedDays();
       }
-    }, [plan, user, loadCompletedDays])
+      });
+    }, [planId, user])
   );
 
   if (isLoading) {
@@ -436,27 +405,28 @@ export default function WorkoutPlanDetailScreen() {
             </View>
           </View>
           
-          {/* Botón de IA o Editar según el tipo de plan */}
-          {plan.description?.toLowerCase().includes('plan personalizado') ? (
-            <TouchableOpacity 
-              style={styles.aiButton}
-              onPress={handleEditPlan}
-              activeOpacity={0.8}
-            >
-              <View style={styles.aiButtonContent}>
-                <View style={styles.aiIconContainer}>
-                  <Ionicons name="create-outline" size={18} color="#ffffff" />
-                </View>
-                <View style={styles.aiTextContainer}>
-                  <Text style={styles.aiButtonTitle}>Editar</Text>
-                  <Text style={styles.aiButtonSubtitle}>Modifica tu plan personalizado</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#ffb300" />
+          {/* Botón de Editar (siempre visible para todos los planes) */}
+          <TouchableOpacity 
+            style={styles.aiButton}
+            onPress={handleEditPlan}
+            activeOpacity={0.8}
+          >
+            <View style={styles.aiButtonContent}>
+              <View style={styles.aiIconContainer}>
+                <Ionicons name="create-outline" size={18} color="#ffffff" />
               </View>
-            </TouchableOpacity>
-          ) : (
+              <View style={styles.aiTextContainer}>
+                <Text style={styles.aiButtonTitle}>Editar Plan</Text>
+                <Text style={styles.aiButtonSubtitle}>Modifica ejercicios, series y más</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color="#ffb300" />
+            </View>
+          </TouchableOpacity>
+
+          {/* Botón de Adaptar con IA (solo para planes NO personalizados) */}
+          {!plan.description?.toLowerCase().includes('plan personalizado') && (
             <TouchableOpacity 
-              style={styles.aiButton}
+              style={[styles.aiButton, { marginTop: 12 }]}
               onPress={() => setShowAIModal(true)}
               activeOpacity={0.8}
             >
@@ -466,7 +436,7 @@ export default function WorkoutPlanDetailScreen() {
                 </View>
                 <View style={styles.aiTextContainer}>
                   <Text style={styles.aiButtonTitle}>Adaptar con IA</Text>
-                  <Text style={styles.aiButtonSubtitle}>Personaliza tu entrenamiento</Text>
+                  <Text style={styles.aiButtonSubtitle}>Personaliza con inteligencia artificial</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#ffb300" />
               </View>
@@ -513,95 +483,191 @@ export default function WorkoutPlanDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📅 Estructura Semanal</Text>
           <Text style={styles.sectionSubtitle}>Toca cada día para ver detalles y tips</Text>
-          {safePlanData.weekly_structure?.map((day: any, index: number) => {
-            const dayKey = day.day || `day_${index + 1}`;
-            const isCompleted = completedDays.has(dayKey);
-            
-            // Procesar el título del día para evitar duplicados
-            let dayTitle = day.day;
-            if (!dayTitle || dayTitle.trim() === '') {
-              // Si no hay título, usar el índice
-              dayTitle = `Día ${index + 1}`;
-            } else {
-              // Limpiar espacios
-              dayTitle = dayTitle.trim();
-              // Si el título ya tiene formato "Día X", usarlo tal cual
-              // Si no tiene formato, usar el índice
-              if (!dayTitle.match(/^Día\s*\d+/i)) {
+          
+          {/* Mostrar multi_week_structure si existe, sino weekly_structure */}
+          {safePlanData.multi_week_structure && safePlanData.multi_week_structure.length > 0 ? (
+            // Plan multi-semana
+            safePlanData.multi_week_structure.map((week: any, weekIndex: number) => (
+              <View key={weekIndex} style={styles.weekContainer}>
+                {safePlanData.multi_week_structure.length > 1 && (
+                  <Text style={styles.weekTitle}>Semana {week.week_number}</Text>
+                )}
+                {week.days?.map((day: any, dayIndex: number) => {
+                  const dayKey = day.day || `week_${week.week_number}_day_${dayIndex + 1}`;
+                  const isCompleted = completedDays.has(dayKey);
+                  
+                  // Procesar el título del día para evitar duplicados
+                  let dayTitle = day.day;
+                  if (!dayTitle || dayTitle.trim() === '') {
+                    dayTitle = `Día ${dayIndex + 1}`;
+                  } else {
+                    dayTitle = dayTitle.trim();
+                    if (!dayTitle.match(/^Día\s*\d+/i)) {
+                      dayTitle = `Día ${dayIndex + 1}`;
+                    }
+                  }
+                  
+                  const safeDay = {
+                    day: dayTitle,
+                    duration: day.duration || 45,
+                    focus: day.focus || 'Entrenamiento general',
+                    exercises: day.exercises || [],
+                  };
+                  
+                  return (
+                    <TouchableOpacity
+                      key={dayIndex}
+                      style={[styles.dayCard, isCompleted && styles.dayCardCompleted]}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/(tabs)/workout-day-detail',
+                          params: {
+                            dayData: JSON.stringify(safeDay),
+                            planName: plan.plan_name,
+                            planId: plan.id,
+                            dayName: dayKey,
+                            isCustomPlan: plan.description?.toLowerCase().includes('plan personalizado') ? 'true' : 'false',
+                          },
+                        } as any);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      {isCompleted && <View style={styles.completedSideBar} />}
+                      <View style={styles.dayHeader}>
+                        <View style={styles.dayTitleContainer}>
+                          <Text style={styles.dayTitle}>{safeDay.day}</Text>
+                          {isCompleted && (
+                            <View style={styles.completedBadge}>
+                              <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+                              <Text style={styles.completedBadgeText}>Completado</Text>
+                            </View>
+                          )}
+                        </View>
+                        {!plan.description?.toLowerCase().includes('plan personalizado') && safeDay.duration && (
+                          <View style={styles.dayDuration}>
+                            <Ionicons name="time-outline" size={14} color="#ffb300" />
+                            <Text style={styles.dayDurationText}>{safeDay.duration} min</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.dayFocus}>{safeDay.focus}</Text>
+                      <View style={styles.exercisesContainer}>
+                        <Text style={styles.exercisesTitle}>Ejercicios ({safeDay.exercises?.length || 0}):</Text>
+                        <View style={styles.exercisesList}>
+                          {safeDay.exercises?.map((exercise: any, idx: number) => {
+                            const isOldFormat = typeof exercise === 'string';
+                            const exerciseName = isOldFormat ? exercise : exercise.name;
+
+                            return (
+                              <View key={idx} style={styles.exercisePreviewItem}>
+                                <Ionicons name="checkmark-circle" size={14} color="#ffb300" />
+                                <Text style={styles.exercisePreviewText}>{exerciseName}</Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                      <View style={styles.viewDetailsButton}>
+                        <Text style={styles.viewDetailsText}>Ver detalles completos</Text>
+                        <Ionicons name="chevron-forward" size={16} color="#ffb300" />
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))
+          ) : (
+            // Plan de una semana (compatibilidad)
+            safePlanData.weekly_structure?.map((day: any, index: number) => {
+              const dayKey = day.day || `day_${index + 1}`;
+              const isCompleted = completedDays.has(dayKey);
+              
+              // Procesar el título del día para evitar duplicados
+              let dayTitle = day.day;
+              if (!dayTitle || dayTitle.trim() === '') {
+                // Si no hay título, usar el índice
                 dayTitle = `Día ${index + 1}`;
+              } else {
+                // Limpiar espacios
+                dayTitle = dayTitle.trim();
+                // Si el título ya tiene formato "Día X", usarlo tal cual
+                // Si no tiene formato, usar el índice
+                if (!dayTitle.match(/^Día\s*\d+/i)) {
+                  dayTitle = `Día ${index + 1}`;
+                }
               }
-            }
-            
-            // Asegurar que tenemos todos los campos necesarios para el día
-            const safeDay = {
-              day: dayTitle,
-              duration: day.duration || 45,
-              focus: day.focus || 'Entrenamiento general',
-              exercises: day.exercises || [],
-            };
-            
-            return (
-              <TouchableOpacity
-                key={index}
-                style={[styles.dayCard, isCompleted && styles.dayCardCompleted]}
-                onPress={() => {
-                  router.push({
-                    pathname: '/(tabs)/workout-day-detail',
-                    params: {
-                      dayData: JSON.stringify(safeDay),
-                      planName: plan.plan_name,
-                      planId: plan.id,
-                      dayName: dayKey,
-                      isCustomPlan: plan.description?.toLowerCase().includes('plan personalizado') ? 'true' : 'false',
-                    },
-                  } as any);
-                }}
-                activeOpacity={0.7}
-              >
-                {isCompleted && <View style={styles.completedSideBar} />}
-                <View style={styles.dayHeader}>
-                  <View style={styles.dayTitleContainer}>
-                    <Text style={styles.dayTitle}>{safeDay.day}</Text>
-                    {isCompleted && (
-                      <View style={styles.completedBadge}>
-                        <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
-                        <Text style={styles.completedBadgeText}>Completado</Text>
+              
+              // Asegurar que tenemos todos los campos necesarios para el día
+              const safeDay = {
+                day: dayTitle,
+                duration: day.duration || 45,
+                focus: day.focus || 'Entrenamiento general',
+                exercises: day.exercises || [],
+              };
+              
+              return (
+                <TouchableOpacity
+                  key={index}
+                  style={[styles.dayCard, isCompleted && styles.dayCardCompleted]}
+                  onPress={() => {
+                    router.push({
+                      pathname: '/(tabs)/workout-day-detail',
+                      params: {
+                        dayData: JSON.stringify(safeDay),
+                        planName: plan.plan_name,
+                        planId: plan.id,
+                        dayName: dayKey,
+                        isCustomPlan: plan.description?.toLowerCase().includes('plan personalizado') ? 'true' : 'false',
+                      },
+                    } as any);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  {isCompleted && <View style={styles.completedSideBar} />}
+                  <View style={styles.dayHeader}>
+                    <View style={styles.dayTitleContainer}>
+                      <Text style={styles.dayTitle}>{safeDay.day}</Text>
+                      {isCompleted && (
+                        <View style={styles.completedBadge}>
+                          <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+                          <Text style={styles.completedBadgeText}>Completado</Text>
+                        </View>
+                      )}
+                    </View>
+                    {/* Solo mostrar duración si NO es plan personalizado */}
+                    {!plan.description?.toLowerCase().includes('plan personalizado') && safeDay.duration && (
+                      <View style={styles.dayDuration}>
+                        <Ionicons name="time-outline" size={14} color="#ffb300" />
+                        <Text style={styles.dayDurationText}>{safeDay.duration} min</Text>
                       </View>
                     )}
                   </View>
-                  {/* Solo mostrar duración si NO es plan personalizado */}
-                  {!plan.description?.toLowerCase().includes('plan personalizado') && safeDay.duration && (
-                    <View style={styles.dayDuration}>
-                      <Ionicons name="time-outline" size={14} color="#ffb300" />
-                      <Text style={styles.dayDurationText}>{safeDay.duration} min</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.dayFocus}>{safeDay.focus}</Text>
-                <View style={styles.exercisesContainer}>
-                  <Text style={styles.exercisesTitle}>Ejercicios ({safeDay.exercises?.length || 0}):</Text>
-                  <View style={styles.exercisesList}>
-                    {/* Mostrar todos los ejercicios en planes personalizados */}
-                    {safeDay.exercises?.map((exercise: any, idx: number) => {
-                      const isOldFormat = typeof exercise === 'string';
-                      const exerciseName = isOldFormat ? exercise : exercise.name;
+                  <Text style={styles.dayFocus}>{safeDay.focus}</Text>
+                  <View style={styles.exercisesContainer}>
+                    <Text style={styles.exercisesTitle}>Ejercicios ({safeDay.exercises?.length || 0}):</Text>
+                    <View style={styles.exercisesList}>
+                      {/* Mostrar todos los ejercicios en planes personalizados */}
+                      {safeDay.exercises?.map((exercise: any, idx: number) => {
+                        const isOldFormat = typeof exercise === 'string';
+                        const exerciseName = isOldFormat ? exercise : exercise.name;
 
-                      return (
-                        <View key={idx} style={styles.exercisePreviewItem}>
-                          <Ionicons name="checkmark-circle" size={14} color="#ffb300" />
-                          <Text style={styles.exercisePreviewText}>{exerciseName}</Text>
-                        </View>
-                      );
-                    })}
+                        return (
+                          <View key={idx} style={styles.exercisePreviewItem}>
+                            <Ionicons name="checkmark-circle" size={14} color="#ffb300" />
+                            <Text style={styles.exercisePreviewText}>{exerciseName}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
                   </View>
-                </View>
-                <View style={styles.viewDetailsButton}>
-                  <Text style={styles.viewDetailsText}>Ver detalles completos</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#ffb300" />
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+                  <View style={styles.viewDetailsButton}>
+                    <Text style={styles.viewDetailsText}>Ver detalles completos</Text>
+                    <Ionicons name="chevron-forward" size={16} color="#ffb300" />
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
         {/* Key Principles */}
@@ -1165,6 +1231,16 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'center',
     paddingVertical: 20,
+  },
+  weekContainer: {
+    marginBottom: 24,
+  },
+  weekTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffb300',
+    marginBottom: 12,
+    paddingLeft: 4,
   },
 });
 

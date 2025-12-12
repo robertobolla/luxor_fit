@@ -140,6 +140,36 @@ export async function getUserChats(userId: string): Promise<{
 }
 
 /**
+ * Obtener el número total de chats con mensajes sin leer
+ */
+export async function getTotalUnreadChatsCount(userId: string): Promise<number> {
+  try {
+    // Obtener todos los chats del usuario
+    const { data: chats } = await supabase
+      .from('chats')
+      .select('id')
+      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+
+    if (!chats) return 0;
+
+    // Contar cuántos chats tienen mensajes sin leer
+    let unreadChatsCount = 0;
+    
+    for (const chat of chats) {
+      const unreadCount = await getUnreadMessageCount(chat.id, userId);
+      if (unreadCount > 0) {
+        unreadChatsCount++;
+      }
+    }
+
+    return unreadChatsCount;
+  } catch (error) {
+    console.error('Error getting unread chats count:', error);
+    return 0;
+  }
+}
+
+/**
  * Obtener mensajes de un chat
  */
 export async function getChatMessages(chatId: string, limit: number = 50): Promise<{
