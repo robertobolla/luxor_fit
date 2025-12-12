@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { searchUsers, addAdmin } from '../services/adminService';
 import { supabase } from '../services/supabase';
-import './Settings.css';
+import './AdminTools.css';
 
 type UserRole = 'admin' | 'socio' | 'empresario' | 'gym_member';
 

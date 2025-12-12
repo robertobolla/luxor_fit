@@ -2,12 +2,17 @@ import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useUser, UserButton } from '@clerk/clerk-react';
 import { supabase } from '../services/adminService';
+import { useViewAs } from '../contexts/ViewAsContext';
 import './Layout.css';
 
 export default function Layout() {
   const location = useLocation();
   const { user } = useUser();
   const [userRole, setUserRole] = React.useState<'admin' | 'socio' | 'empresario' | null>(null);
+  const { isViewingAs, currentUser: viewAsUser } = useViewAs();
+  
+  // Si estamos en modo "View As", usar el rol del usuario simulado
+  const effectiveRole = isViewingAs && viewAsUser ? viewAsUser.role_type : userRole;
   
   React.useEffect(() => {
     async function getUserRole() {
@@ -26,16 +31,16 @@ export default function Layout() {
     getUserRole();
   }, [user?.id]);
 
-  const navItems = userRole === 'socio' 
+  const navItems = effectiveRole === 'socio' 
     ? [
         { path: '/', label: 'Dashboard', icon: '📊' },
         { path: '/partner-referrals', label: 'Mis Referidos', icon: '👥' },
       ]
-    : userRole === 'empresario'
+    : effectiveRole === 'empresario'
     ? [
         { path: '/', label: 'Dashboard', icon: '📊' },
         { path: '/empresario-users', label: 'Mis Usuarios', icon: '👥' },
-        { path: '/settings', label: 'Configuración', icon: '⚙️' },
+        ...(userRole === 'admin' ? [{ path: '/admin-tools', label: 'Admin Tools', icon: '🛠️' }] : []),
       ]
     : (() => {
         const items = [
@@ -49,10 +54,14 @@ export default function Layout() {
           { path: '/stats', label: 'Estadísticas', icon: '📈' },
         ];
         
-        // Solo admins ven Ejercicios y Configuración
-        if (userRole === 'admin') {
+        // Solo admins ven Ejercicios
+        if (effectiveRole === 'admin') {
           items.splice(2, 0, { path: '/exercises', label: 'Ejercicios', icon: '🏋️' });
-          items.push({ path: '/settings', label: 'Configuración', icon: '⚙️' });
+        }
+        
+        // Admin Tools siempre visible para admins reales (incluso en modo View As)
+        if (userRole === 'admin') {
+          items.push({ path: '/admin-tools', label: 'Admin Tools', icon: '🛠️' });
         }
         
         return items;
