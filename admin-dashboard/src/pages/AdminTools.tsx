@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { getUserRole, addAdmin, searchUsers, type UserProfile } from '../services/adminService';
-import './Settings.css';
+import { getUserRole, addAdmin, searchUsers, type UserProfile, supabase } from '../services/adminService';
+import { useViewAs } from '../contexts/ViewAsContext';
+import './AdminTools.css';
 
-export default function Settings() {
+export default function AdminTools() {
   const { user } = useUser();
   const [userRole, setUserRole] = useState<'admin' | 'socio' | 'empresario' | 'user' | null>(null);
   const [loading, setLoading] = useState(true);
@@ -16,6 +17,14 @@ export default function Settings() {
   const [adminEmail, setAdminEmail] = useState('');
   const [addingAdmin, setAddingAdmin] = useState(false);
   const [addMode, setAddMode] = useState<'direct' | 'search'>('direct'); // 'direct' o 'search'
+  
+  // Estados para Vista de Rol
+  const [showRoleViewModal, setShowRoleViewModal] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<'admin' | 'socio' | 'empresario' | 'user'>('user');
+  const [roleUsers, setRoleUsers] = useState<UserProfile[]>([]);
+  const [loadingRoleUsers, setLoadingRoleUsers] = useState(false);
+  const [roleSearchQuery, setRoleSearchQuery] = useState('');
+  const { setViewAsUser, exitViewAs, isViewingAs, currentUser: viewAsUser } = useViewAs();
 
   useEffect(() => {
     async function loadRole() {
@@ -134,30 +143,199 @@ export default function Settings() {
 
   const isAdmin = userRole === 'admin';
 
+  // Cargar usuarios por rol
+  async function loadUsersByRole(role: 'admin' | 'socio' | 'empresario' | 'user') {
+    try {
+      setLoadingRoleUsers(true);
+      
+      if (role === 'user') {
+        // Obtener usuarios normales (sin rol especial)
+        const { data: allUsers } = await supabase
+          .from('user_profiles')
+          .select('user_id, name, email, created_at, updated_at')
+          .order('created_at', { ascending: false })
+          .limit(100);
+        
+        // Obtener todos los user_ids con roles especiales
+        const { data: specialRoles } = await supabase
+          .from('admin_roles')
+          .select('user_id');
+        
+        const specialUserIds = new Set((specialRoles || []).map(r => r.user_id));
+        
+        // Filtrar usuarios que NO tienen rol especial
+        const regularUsers = (allUsers || [])
+          .filter(u => !specialUserIds.has(u.user_id))
+          .map(u => ({
+            ...u,
+            id: u.user_id,
+            age: null,
+            height: null,
+            weight: null,
+            fitness_level: null,
+            goals: [],
+            activity_types: [],
+            available_days: null,
+            session_duration: null,
+            equipment: [],
+            role_type: 'user' as const,
+          }));
+        
+        setRoleUsers(regularUsers);
+      } else {
+        // Obtener usuarios con rol especial
+        const { data } = await supabase
+          .from('admin_roles')
+          .select('user_id, name, email, role_type, created_at')
+          .eq('role_type', role)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false });
+        
+        const users = (data || []).map(u => ({
+          id: u.user_id,
+          user_id: u.user_id,
+          name: u.name,
+          email: u.email,
+          age: null,
+          height: null,
+          weight: null,
+          fitness_level: null,
+          goals: [],
+          activity_types: [],
+          available_days: null,
+          session_duration: null,
+          equipment: [],
+          created_at: u.created_at,
+          updated_at: u.created_at,
+          role_type: role,
+        }));
+        
+        setRoleUsers(users);
+      }
+    } catch (error) {
+      console.error('Error cargando usuarios por rol:', error);
+      setRoleUsers([]);
+    } finally {
+      setLoadingRoleUsers(false);
+    }
+  }
+
+  // Filtrar usuarios por búsqueda
+  const filteredRoleUsers = roleUsers.filter(u => {
+    const query = roleSearchQuery.toLowerCase();
+    return (
+      u.name?.toLowerCase().includes(query) ||
+      u.email?.toLowerCase().includes(query)
+    );
+  });
+
+  // Manejar cambio de vista
+  function handleViewAsUser(selectedUser: UserProfile) {
+    const confirmed = window.confirm(
+      `¿Estás seguro de que quieres cambiar a la vista de:\n\n` +
+      `Nombre: ${selectedUser.name || 'Sin nombre'}\n` +
+      `Email: ${selectedUser.email || 'Sin email'}\n` +
+      `Rol: ${selectedUser.role_type || 'user'}\n\n` +
+      `Verás el dashboard como lo ve este usuario.`
+    );
+
+    if (confirmed) {
+      setViewAsUser({
+        user_id: selectedUser.user_id,
+        name: selectedUser.name,
+        email: selectedUser.email,
+        role_type: selectedUser.role_type || 'user',
+      });
+      setShowRoleViewModal(false);
+      console.log('👁️ Cambiando a vista de:', selectedUser.email);
+    }
+  }
+
   return (
     <div className="settings-page">
       <header className="page-header">
-        <h1>Configuración</h1>
-        <p className="subtitle">Gestionar configuración del sistema</p>
+        <h1>Admin Tools</h1>
+        <p className="subtitle">Herramientas de administración del sistema</p>
       </header>
+
+      {/* Indicador de Vista de Rol */}
+      {isViewingAs && viewAsUser && (
+        <div style={{
+          background: 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)',
+          padding: '16px',
+          borderRadius: '8px',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 4px 12px rgba(255, 152, 0, 0.3)',
+        }}>
+          <div>
+            <p style={{ margin: 0, fontWeight: '600', color: '#000', fontSize: '14px' }}>
+              👁️ Viendo como: <strong>{viewAsUser.name || viewAsUser.email}</strong>
+            </p>
+            <p style={{ margin: '4px 0 0 0', color: '#000', fontSize: '12px', opacity: 0.8 }}>
+              Rol: {viewAsUser.role_type} • {viewAsUser.email}
+            </p>
+          </div>
+          <button
+            onClick={exitViewAs}
+            style={{
+              background: '#000',
+              color: '#FF9800',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: '600',
+              fontSize: '14px',
+            }}
+          >
+            🔙 Volver a Admin
+          </button>
+        </div>
+      )}
 
       <div className="settings-content">
         {isAdmin ? (
-          <div className="settings-section">
-            <div className="section-header">
-              <h2>Administradores</h2>
-              <button 
-                className="btn-primary"
-                onClick={() => setShowAddAdminModal(true)}
-              >
-                + Agregar Administrador
-              </button>
+          <>
+            {/* Vista de Rol */}
+            <div className="settings-section">
+              <div className="section-header">
+                <h2>👁️ Vista de Rol</h2>
+                <button 
+                  className="btn-primary"
+                  onClick={() => {
+                    setShowRoleViewModal(true);
+                    loadUsersByRole(selectedRole);
+                  }}
+                >
+                  Cambiar Vista
+                </button>
+              </div>
+              
+              <p style={{ color: '#999', marginTop: '12px' }}>
+                Simula la vista del dashboard como si fueras otro usuario. Útil para pruebas y debugging.
+              </p>
             </div>
-            
-            <p style={{ color: '#999', marginTop: '12px' }}>
-              Solo los administradores pueden agregar nuevos administradores al sistema.
-            </p>
-          </div>
+
+            {/* Administradores */}
+            <div className="settings-section" style={{ marginTop: '32px' }}>
+              <div className="section-header">
+                <h2>Administradores</h2>
+                <button 
+                  className="btn-primary"
+                  onClick={() => setShowAddAdminModal(true)}
+                >
+                  + Agregar Administrador
+                </button>
+              </div>
+              
+              <p style={{ color: '#999', marginTop: '12px' }}>
+                Solo los administradores pueden agregar nuevos administradores al sistema.
+              </p>
+            </div>
+          </>
         ) : (
           <div className="info-card">
             <h2>Acceso Restringido</h2>
@@ -165,6 +343,143 @@ export default function Settings() {
           </div>
         )}
       </div>
+
+      {/* Modal para Vista de Rol */}
+      {showRoleViewModal && isAdmin && (
+        <div className="modal-overlay" onClick={() => setShowRoleViewModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '80vh' }}>
+            <h2>👁️ Vista de Rol</h2>
+            <p style={{ color: '#999', marginBottom: '20px' }}>
+              Selecciona un rol y usuario para ver el dashboard desde su perspectiva
+            </p>
+
+            {/* Selector de Rol */}
+            <div className="form-group">
+              <label>Seleccionar Rol</label>
+              <select
+                value={selectedRole}
+                onChange={(e) => {
+                  const newRole = e.target.value as 'admin' | 'socio' | 'empresario' | 'user';
+                  setSelectedRole(newRole);
+                  loadUsersByRole(newRole);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  background: '#0a0a0a',
+                  border: '1px solid #2a2a2a',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  marginTop: '8px',
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                }}
+              >
+                <option value="user">Usuario Regular</option>
+                <option value="socio">Socio</option>
+                <option value="empresario">Empresario</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </div>
+
+            {/* Buscador */}
+            <div className="form-group" style={{ marginTop: '16px' }}>
+              <label>Buscar Usuario</label>
+              <input
+                type="text"
+                value={roleSearchQuery}
+                onChange={(e) => setRoleSearchQuery(e.target.value)}
+                placeholder="Nombre o email..."
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  background: '#0a0a0a',
+                  border: '1px solid #2a2a2a',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  marginTop: '8px',
+                }}
+              />
+            </div>
+
+            {/* Lista de Usuarios */}
+            <div style={{ marginTop: '20px' }}>
+              <h3 style={{ color: '#fff', marginBottom: '12px', fontSize: '14px' }}>
+                Usuarios con rol "{selectedRole}" ({filteredRoleUsers.length})
+              </h3>
+              
+              {loadingRoleUsers ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                  Cargando usuarios...
+                </div>
+              ) : filteredRoleUsers.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                  No se encontraron usuarios con este rol
+                </div>
+              ) : (
+                <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {filteredRoleUsers.map((roleUser) => (
+                    <div
+                      key={roleUser.user_id}
+                      onClick={() => handleViewAsUser(roleUser)}
+                      style={{
+                        padding: '12px',
+                        background: '#1a1a1a',
+                        border: '1px solid #2a2a2a',
+                        borderRadius: '6px',
+                        marginBottom: '8px',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#2a2a2a';
+                        e.currentTarget.style.borderColor = '#FF9800';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#1a1a1a';
+                        e.currentTarget.style.borderColor = '#2a2a2a';
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <strong style={{ color: '#fff', display: 'block', marginBottom: '4px' }}>
+                            {roleUser.name || 'Sin nombre'}
+                          </strong>
+                          <p style={{ color: '#999', fontSize: '13px', margin: 0 }}>
+                            {roleUser.email || 'Sin email'}
+                          </p>
+                        </div>
+                        <span style={{
+                          background: 'rgba(255, 152, 0, 0.2)',
+                          color: '#FF9800',
+                          padding: '4px 12px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                        }}>
+                          {selectedRole}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: '20px' }}>
+              <button 
+                className="btn-secondary" 
+                onClick={() => {
+                  setShowRoleViewModal(false);
+                  setRoleSearchQuery('');
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal para agregar admin */}
       {showAddAdminModal && isAdmin && (

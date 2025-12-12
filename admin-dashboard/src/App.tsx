@@ -5,7 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Users from './pages/Users';
 import UserDetail from './pages/UserDetail';
 import Stats from './pages/Stats';
-import Settings from './pages/Settings';
+import AdminTools from './pages/AdminTools';
 import CreateUser from './pages/CreateUser';
 import Partners from './pages/Partners';
 import Exercises from './pages/Exercises';
@@ -15,29 +15,32 @@ import Empresarios from './pages/Empresarios';
 import EmpresarioUsers from './pages/EmpresarioUsers';
 import Layout from './components/Layout';
 import { checkAdminRole } from './services/adminService';
+import { ViewAsProvider } from './contexts/ViewAsContext';
 
 function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<ProtectedRoute />}>
-          <Route index element={<Dashboard />} />
-          <Route path="users" element={<Users />} />
-          <Route path="users/:userId" element={<UserDetail />} />
-          <Route path="partners" element={<Partners />} />
-          <Route path="exercises" element={<Exercises />} />
-          <Route path="partner-payments" element={<PartnerPayments />} />
-          <Route path="partner-payments/:partnerId" element={<PartnerPayments />} />
-          <Route path="empresarios" element={<Empresarios />} />
-          <Route path="empresarios/:empresarioId" element={<EmpresarioUsers />} />
-          <Route path="stats" element={<Stats />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="create-user" element={<CreateUser />} />
-          <Route path="partner-referrals" element={<PartnerReferrals />} />
-          <Route path="empresario-users" element={<EmpresarioUsers />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ViewAsProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<ProtectedRoute />}>
+            <Route index element={<Dashboard />} />
+            <Route path="users" element={<Users />} />
+            <Route path="users/:userId" element={<UserDetail />} />
+            <Route path="partners" element={<Partners />} />
+            <Route path="exercises" element={<Exercises />} />
+            <Route path="partner-payments" element={<PartnerPayments />} />
+            <Route path="partner-payments/:partnerId" element={<PartnerPayments />} />
+            <Route path="empresarios" element={<Empresarios />} />
+            <Route path="empresarios/:empresarioId" element={<EmpresarioUsers />} />
+            <Route path="stats" element={<Stats />} />
+            <Route path="admin-tools" element={<AdminTools />} />
+            <Route path="create-user" element={<CreateUser />} />
+            <Route path="partner-referrals" element={<PartnerReferrals />} />
+            <Route path="empresario-users" element={<EmpresarioUsers />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ViewAsProvider>
   );
 }
 
