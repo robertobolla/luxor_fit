@@ -184,6 +184,11 @@ export default function CustomPlanSelectExerciseScreen() {
       }
     } catch (error) {
       console.error('Error saving selected exercise:', error);
+      Alert.alert(
+        'Aviso',
+        'Hubo un problema al guardar el ejercicio, pero se intentará agregarlo de todas formas.',
+        [{ text: 'OK' }]
+      );
       // En caso de error, intentar navegar de todas formas
       if (dayNumber && daysPerWeek) {
         router.push({

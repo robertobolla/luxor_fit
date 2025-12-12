@@ -17,6 +17,7 @@ import Svg, { Circle } from 'react-native-svg';
 import { supabase } from '@/services/supabase';
 import { getHealthDataForDate, requestHealthPermissions, hasHealthPermissions, resetPermissionsCache, showHealthDiagnosticsAlert, getHealthDiagnostics, HealthData } from '@/services/healthService';
 import { getExerciseDaysThisWeek, getGymDaysThisWeek } from '@/services/exerciseService';
+import { syncHealthDataToSupabase } from '@/services/healthSyncService';
 import DashboardCustomizationModal from '@/components/DashboardCustomizationModal';
 import WeeklyCheckinModal from '@/components/WeeklyCheckinModal';
 import { DashboardConfig, MetricType, AVAILABLE_METRICS, PRESET_PRIORITIES } from '@/types/dashboard';
@@ -93,6 +94,9 @@ export default function DashboardScreen() {
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig | null>(null);
   const { isLoading: isCheckingOnboarding, setLoading: setIsCheckingOnboarding, executeAsync } = useLoadingState(true);
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
+  
+  // Ref para cleanup de timeout del modal de checkin
+  const checkinModalTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Datos de salud
   const [stats, setStats] = useState({
@@ -150,6 +154,16 @@ export default function DashboardScreen() {
 
     checkOnboarding();
   }, [user]);
+
+  // Cleanup: Limpiar timeout del modal de checkin al desmontar
+  useEffect(() => {
+    return () => {
+      if (checkinModalTimeoutRef.current) {
+        clearTimeout(checkinModalTimeoutRef.current);
+        console.log('🧹 Timeout de modal de checkin limpiado al desmontar');
+      }
+    };
+  }, []);
 
   // Cargar configuración del dashboard
   useEffect(() => {
@@ -237,9 +251,11 @@ export default function DashboardScreen() {
 
       if (status.needsCheckin && isViewingToday && showReminder) {
         // Mostrar el modal después de un pequeño delay para mejor UX
-        setTimeout(() => {
+        // Guardar referencia del timeout para poder limpiarlo
+        checkinModalTimeoutRef.current = setTimeout(() => {
           setShowCheckinModal(true);
           markCheckinReminderShown();
+          checkinModalTimeoutRef.current = null; // Limpiar referencia después de ejecutar
         }, 1500);
       }
     } catch (error) {
@@ -269,6 +285,15 @@ export default function DashboardScreen() {
       // Guardar la fuente de datos
       setHealthDataSource(healthData.source || 'none');
       
+      // Sincronizar datos a Supabase para que los entrenadores puedan verlos
+      const dateStr = selectedDate.toISOString().split('T')[0];
+      if (healthData.steps > 0 || healthData.distance > 0 || healthData.calories > 0) {
+        syncHealthDataToSupabase(user.id, dateStr, healthData).catch(err => {
+          console.warn('No se pudieron sincronizar datos de salud a Supabase:', err);
+          // No mostrar error al usuario, es una sincronización en segundo plano
+        });
+      }
+      
       // Obtener días de ejercicio de la semana actual (incluye ejercicios libres y entrenamientos)
       const exerciseDays = await getExerciseDaysThisWeek(user.id);
       
@@ -284,7 +309,7 @@ export default function DashboardScreen() {
         calorías: healthData.calories,
         sueño: healthData.sleep,
         fuente: healthData.source,
-        fecha: selectedDate.toISOString().split('T')[0],
+        fecha: dateStr,
       });
       
       // Actualizar estados con los datos obtenidos

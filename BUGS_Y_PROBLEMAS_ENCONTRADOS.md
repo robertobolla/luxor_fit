@@ -1,396 +1,373 @@
-# 🐛 Bugs y Problemas Encontrados en la App
+# 🐛 Bugs y Problemas Encontrados - Análisis Completo
 
-## 🔴 **CRÍTICOS** (Pueden causar crashes o pérdida de datos)
+## 🔴 CRÍTICOS (Afectan funcionalidad)
 
-### 1. **Uso de `.single()` sin manejo de errores cuando no hay datos**
+### 1. **Memory Leak en Timer de Descanso** ⏱️
+**Archivo**: `app/(tabs)/workout-day-detail.tsx` (línea ~361)
 
-**Ubicaciones:**
-- `app/(tabs)/nutrition/index.tsx` - Líneas 372, 392, 418, 567
-- `app/(tabs)/home.tsx` - Línea 162
-- `app/(tabs)/nutrition/today-detail.tsx` - Línea 61
-
-**Problema:**
+**Problema**: 
 ```typescript
-const { data: targetData } = await supabase
-  .from('nutrition_targets')
-  .select('*')
-  .eq('user_id', user.id)
-  .eq('date', today)
-  .single(); // ❌ Puede lanzar error si no hay filas
-
-if (!targetData) { // ❌ Nunca se ejecutará si .single() lanza error
-  await initializeWeek();
-}
+const interval = setInterval(() => {
+  setTimerSeconds(prev => {
+    if (prev <= 1) {
+      clearInterval(interval);  // ❌ Intenta limpiar desde dentro
+      return 0;
+    }
+    return prev - 1;
+  });
+}, 1000);
 ```
 
-**Solución:**
-Usar `.maybeSingle()` o manejar el error explícitamente:
+**Bug**: El `setInterval` no se limpia correctamente si el usuario cierra el modal antes de que termine. Causa memory leak.
+
+**Impacto**: Alto - Memory leak, puede hacer más lento el dispositivo
+
+**Fix sugerido**: 
 ```typescript
-const { data: targetData, error } = await supabase
-  .from('nutrition_targets')
-  .select('*')
-  .eq('user_id', user.id)
-  .eq('date', today)
-  .maybeSingle();
-
-if (error && error.code !== 'PGRST116') {
-  console.error('Error:', error);
-  Alert.alert('Error', 'No se pudieron cargar los datos');
-  return;
-}
-
-if (!targetData) {
-  await initializeWeek();
-}
-```
-
----
-
-### 2. **Error no manejado en `home.tsx` al cargar nutrición**
-
-**Ubicación:** `app/(tabs)/home.tsx` - Línea 162
-
-**Problema:**
-```typescript
-const { data: targetData } = await supabase
-  .from('nutrition_targets')
-  .select('*')
-  .eq('user_id', user.id)
-  .eq('date', today)
-  .single(); // ❌ Si no hay datos, lanza error y crashea
-
-setTodayNutrition(targetData); // ❌ Puede ser null/undefined
-```
-
-**Solución:**
-```typescript
-const { data: targetData, error } = await supabase
-  .from('nutrition_targets')
-  .select('*')
-  .eq('user_id', user.id)
-  .eq('date', today)
-  .maybeSingle();
-
-if (error && error.code !== 'PGRST116') {
-  console.error('Error loading nutrition:', error);
-}
-
-setTodayNutrition(targetData || null);
-```
-
----
-
-### 3. **Acceso a propiedades sin validación en `workout-day-detail.tsx`**
-
-**Ubicación:** `app/(tabs)/workout-day-detail.tsx` - Línea 104
-
-**Problema:**
-```typescript
-exercises_completed: dayData.exercises || [], // ❌ dayData puede ser null
-```
-
-**Solución:**
-```typescript
-exercises_completed: dayData?.exercises || [],
-```
-
----
-
-### 4. **Verificación de completado no verifica fecha en `workout-day-detail.tsx`**
-
-**Ubicación:** `app/(tabs)/workout-day-detail.tsx` - Líneas 58-79
-
-**Problema:**
-El código verifica si un día está completado, pero no verifica si fue completado **hoy**. Un usuario podría completar el mismo día múltiples veces en días diferentes.
-
-**Solución:**
-```typescript
-const today = new Date().toISOString().split('T')[0];
-const { data, error } = await supabase
-  .from('workout_completions')
-  .select('*')
-  .eq('user_id', user.id)
-  .eq('workout_plan_id', planId)
-  .eq('day_name', dayName)
-  .gte('completed_at', `${today}T00:00:00`)
-  .lte('completed_at', `${today}T23:59:59`)
-  .order('completed_at', { ascending: false })
-  .limit(1);
-```
-
----
-
-## 🟡 **MEDIA PRIORIDAD** (Afectan UX o funcionalidad)
-
-### 5. **No se maneja el error de `compError` en `home.tsx`**
-
-**Ubicación:** `app/(tabs)/home.tsx` - Línea 107
-
-**Problema:**
-```typescript
-const { data: completionData, error: compError } = await supabase
-  .from('workout_completions')
-  .select('id')
-  .eq('user_id', user.id)
-  .eq('workout_plan_id', activePlan.id)
-  .eq('day_name', dayKey)
-  .maybeSingle();
-
-console.log(`🔍 ${dayData.day} (${dayKey}) - Completado:`, !!completionData);
-// ❌ No se verifica compError
-```
-
-**Solución:**
-```typescript
-if (compError) {
-  console.error('Error checking completion:', compError);
-  // Continuar pero no marcar como completado
-}
-```
-
----
-
-### 6. **Cálculo de lunes incorrecto en nutrición**
-
-**Ubicación:** `app/(tabs)/nutrition/index.tsx` - Líneas 381-385
-
-**Problema:**
-```typescript
-const dayOfWeek = new Date().getDay();
-const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-const monday = new Date();
-monday.setDate(new Date().getDate() + diff); // ❌ Usa new Date() dos veces
-```
-
-**Solución:**
-```typescript
-const today = new Date();
-const dayOfWeek = today.getDay();
-const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-const monday = new Date(today);
-monday.setDate(today.getDate() + diff);
-```
-
----
-
-### 7. **Falta validación de `dayData` antes de acceder a propiedades**
-
-**Ubicación:** `app/(tabs)/workout-day-detail.tsx` - Múltiples lugares
-
-**Problema:**
-```typescript
-if (!dayData) {
-  return (
-    <View style={styles.container}>
-      <Text>Error: No se encontraron datos del día</Text>
-    </View>
-  );
-}
-// ... pero luego se accede a dayData.exercises sin validación
-```
-
-**Solución:**
-Asegurar que todas las referencias a `dayData` estén dentro del bloque que verifica su existencia.
-
----
-
-### 8. **Race condition en recálculo de targets**
-
-**Ubicación:** `app/(tabs)/nutrition/index.tsx` - Líneas 597-617
-
-**Problema:**
-Se borran targets y se recalculan en un loop, pero no se espera a que termine cada operación antes de continuar.
-
-**Solución:**
-```typescript
-for (let i = 0; i < 7; i++) {
-  const date = new Date(monday);
-  date.setDate(monday.getDate() + i);
-  const dateStr = date.toISOString().split('T')[0];
+useEffect(() => {
+  if (!isTimerRunning) return;
   
-  const { error: deleteError } = await supabase
-    .from('nutrition_targets')
-    .delete()
-    .eq('user_id', user.id)
-    .eq('date', dateStr);
-  
-  if (deleteError) {
-    console.error(`Error borrando target ${dateStr}:`, deleteError);
-    continue; // Saltar este día si falla
-  }
-  
-  const result = await computeAndSaveTargets(user.id, dateStr);
-  if (!result.success) {
-    console.error(`Error recalculando ${dateStr}:`, result.error);
-  }
+  const interval = setInterval(() => {
+    setTimerSeconds(prev => {
+      if (prev <= 1) {
+        setIsTimerRunning(false);
+        return 0;
+      }
+      return prev - 1;
+    });
+  }, 1000);
+
+  return () => clearInterval(interval); // ✅ Limpia al desmontar
+}, [isTimerRunning]);
+```
+
+---
+
+### 2. **Race Condition en AsyncStorage** 💾
+**Archivo**: `app/(tabs)/workout/custom-plan-days.tsx` (líneas 320-412)
+
+**Problema**: `useFocusEffect` y `useEffect` pueden cargar/guardar datos simultáneamente en AsyncStorage.
+
+**Escenario problemático**:
+```
+1. Usuario edita día → useEffect guarda en AsyncStorage
+2. Usuario sale (sin esperar) → useFocusEffect carga de AsyncStorage
+3. ❌ Datos desincronizados entre memoria y storage
+```
+
+**Impacto**: Medio - Pérdida de cambios recientes
+
+**Fix sugerido**: Usar una flag `isSaving` y `isLoading` para evitar operaciones simultáneas.
+
+---
+
+### 3. **Falta Validación de Series Vacías** ❌
+**Archivo**: `src/components/ExerciseSetTracker.tsx` (línea ~258)
+
+**Problema**: Permite guardar series sin datos:
+```typescript
+const setsToSave = sets.filter((set) => {
+  const hasData = set.reps !== null || set.weight_kg !== null || set.duration_seconds !== null;
+  return hasData && !isWarmup;
+});
+
+if (setsToSave.length === 0) {
+  Alert.alert('Sin datos', 'No hay datos para guardar...');
+  return;  // ✅ Esto está bien
 }
+
+// ❌ PERO: ¿Qué pasa si el usuario pone 0 reps y 0kg? Técnicamente no es null
 ```
+
+**Impacto**: Bajo-Medio - Datos sin sentido en DB
+
+**Fix sugerido**: Validar que los valores sean > 0
 
 ---
 
-### 9. **No se verifica si `activePlan` existe antes de acceder a propiedades**
+### 4. **Múltiples Alert.alert() en lugar de Custom Alerts** 🚨
+**Archivo**: Múltiples archivos
 
-**Ubicación:** `app/(tabs)/home.tsx` - Línea 86
+**Problema**: Aún hay 205 usos de `Alert.alert()` nativo en lugar de `useAlert()`
 
-**Problema:**
+**Inconsistencia**:
 ```typescript
-if (activePlan && activePlan.plan_data) {
-  const planData = activePlan.plan_data;
-  // ✅ Verifica activePlan
-  const schedule = planData.weekly_structure || planData.weekly_schedule || [];
-  // ❌ Pero planData puede ser null/undefined
-}
+// ❌ Algunos lugares usan Alert nativo
+Alert.alert('Error', 'Algo salió mal');
+
+// ✅ Otros usan custom alert
+showAlert('Error', 'Algo salió mal', [{ text: 'OK' }]);
 ```
 
-**Solución:**
-```typescript
-if (activePlan?.plan_data) {
-  const planData = activePlan.plan_data;
-  if (!planData || typeof planData !== 'object') {
-    console.warn('plan_data is invalid');
-    return;
-  }
-  const schedule = planData.weekly_structure || planData.weekly_schedule || [];
-}
-```
+**Impacto**: Bajo - Inconsistencia visual
+
+**Fix sugerido**: Migrar todos los `Alert.alert` a `useAlert()`
 
 ---
 
-### 10. **Mensaje de error incorrecto en adherencia**
+## 🟡 IMPORTANTES (Afectan UX)
 
-**Ubicación:** `src/services/nutrition.ts` - Línea 490
+### 5. **140 console.log() en Producción** 📝
+**Archivo**: `app/(tabs)/workout/*` (todos los archivos)
 
-**Problema:**
+**Problema**: Demasiados logs de debug que irán a producción
+
+**Ejemplos**:
 ```typescript
-educationalMessage += ` Nota: Tu adherencia a la dieta es del ${Math.round(adherence)}%. Para obtener los mejores resultados, intenta registrar al menos el ${Math.round(adherence)}% de tus comidas.`;
-// ❌ Dice "al menos el X%" donde X es la adherencia actual (baja), debería ser 70%
+console.log('🔍 Estado modal cambió:', { showSetTypeModal, selectedSetIndex });
+console.log('📦 Datos encontrados:', data.length, 'registros');
+console.log('✅ Series cargadas:', loadedSets.length);
 ```
 
-**Solución:**
-```typescript
-educationalMessage += ` Nota: Tu adherencia a la dieta es del ${Math.round(adherence)}%. Para obtener los mejores resultados, intenta registrar al menos el 70% de tus comidas.`;
-```
+**Impacto**: Bajo - Performance y exposición de datos
+
+**Fix sugerido**: 
+- Opción A: Eliminar logs innecesarios
+- Opción B: Crear wrapper `__DEV__ && console.log()`
+- Opción C: Usar librería de logging (react-native-logs)
 
 ---
 
-## 🟢 **BAJA PRIORIDAD** (Mejoras de código)
+### 6. **Falta Loading State en Guardado de Plan** ⏳
+**Archivo**: `app/(tabs)/workout/custom-plan-days.tsx`
 
-### 11. **Código de debug no removido**
-
-**Ubicaciones:**
-- `app/(tabs)/home.tsx` - Línea 32, 84, 95
-- `app/paywall.tsx` - Línea 79, 95
-
-**Solución:**
-Remover variables y código de debug antes de producción.
-
----
-
-### 12. **Catch blocks vacíos**
-
-**Ubicación:** `app/(tabs)/workout-plan-detail.tsx` - Líneas 69, 74
-
-**Problema:**
+**Problema**: Cuando guardas un plan, el botón muestra "Guardando..." pero si falla silenciosamente:
 ```typescript
+setIsSaving(true);
 try {
-  // código
-} catch {} // ❌ Catch vacío oculta errores
-```
-
-**Solución:**
-```typescript
-try {
-  // código
-} catch (e) {
-  console.warn('Error in diagnostic logs:', e);
-  // No crítico, solo logs
+  // ... código de guardado ...
+} catch (error) {
+  console.error('Error:', error); // ❌ Solo log, no muestra al usuario
+} finally {
+  setIsSaving(false);
 }
 ```
 
----
+**Impacto**: Medio - Usuario no sabe si el guardado falló
 
-### 13. **Validación de tipos débil en nutrición**
-
-**Ubicación:** `src/services/nutrition.ts` - Líneas 1104-1128
-
-**Problema:**
-El código valida `food_id` y `grams`, pero no valida otros campos potencialmente problemáticos.
-
-**Solución:**
-Agregar validación más exhaustiva o usar un esquema de validación (Zod, Yup).
+**Fix sugerido**: Mostrar alert al usuario si falla
 
 ---
 
-### 14. **Falta timeout en operaciones de red**
+### 7. **setTimeout sin Cleanup** ⏰
+**Archivo**: `app/(tabs)/workout/custom-plan-day-detail.tsx` (línea ~694)
 
-**Ubicación:** Múltiples archivos
-
-**Problema:**
-Las llamadas a Supabase no tienen timeout, pueden colgar la app si hay problemas de red.
-
-**Solución:**
-Agregar timeout a operaciones críticas:
+**Problema**:
 ```typescript
-const timeoutPromise = new Promise((_, reject) => 
-  setTimeout(() => reject(new Error('Timeout')), 10000)
+setTimeout(() => {
+  setShowAddExercise(true);
+}, 100); // ❌ No se limpia si el componente se desmonta
+```
+
+**Impacto**: Bajo - Puede causar warning "Can't perform a React state update on unmounted component"
+
+**Fix sugerido**: Guardar referencia y limpiar en cleanup
+
+---
+
+### 8. **TODOs sin Implementar** 📋
+**Archivo**: `app/(tabs)/workout-day-detail.tsx`
+
+**TODOs encontrados**:
+```typescript
+exerciseId: exerciseName, // TODO: En el futuro usar ID real del ejercicio
+usesTime: false, // TODO: Detectar si el ejercicio usa tiempo
+```
+
+**Impacto**: Bajo - Funcionalidad futura, pero puede causar bugs si se asume que existe
+
+---
+
+## 🟢 MENORES (Mejoras de código)
+
+### 9. **Dependencias de useEffect Incompletas** ⚠️
+**Archivo**: Múltiples
+
+**Problema**: Algunos `useEffect` tienen dependencias faltantes
+
+**Ejemplo en `workout.tsx`**:
+```typescript
+useEffect(() => {
+  loadWorkouts();
+  loadSessions();
+  loadWorkoutPlans();
+  loadTrainerInvitations();
+}, [user]);  // ❌ Falta loadWorkouts, loadSessions, etc.
+```
+
+**Impacto**: Bajo - Puede causar bugs sutiles si las funciones cambian
+
+**Fix sugerido**: Agregar todas las dependencias o usar `useCallback`
+
+---
+
+### 10. **AsyncStorage sin Error Handling** 💾
+**Archivo**: Múltiples
+
+**Problema**: Algunos usos de AsyncStorage no manejan errores:
+```typescript
+const value = await AsyncStorage.getItem('key');
+// ❌ ¿Qué pasa si falla? (espacio lleno, permisos, etc.)
+```
+
+**Impacto**: Bajo - App puede crashear en casos raros
+
+**Fix sugerido**: Wrap en try-catch
+
+---
+
+### 11. **JSON.parse sin Validación** 🔍
+**Archivo**: `app/(tabs)/workout/custom-plan-select-exercise.tsx`
+
+**Problema**:
+```typescript
+const equipment = JSON.parse((params.equipment as string) || '[]');
+// ⚠️ ¿Qué pasa si params.equipment es JSON inválido?
+```
+
+**Impacto**: Bajo - Crashea si recibe JSON malformado
+
+**Fix sugerido**: Ya implementado en algunos lugares con `parseSafeJSON`, aplicar en todos
+
+---
+
+### 12. **Falta Limpieza de Supabase Channels** 🧹
+**Archivo**: `app/(tabs)/workout/custom-plan-select-exercise.tsx`
+
+**Problema**:
+```typescript
+useFocusEffect(
+  React.useCallback(() => {
+    supabase.removeAllChannels(); // ⚠️ Agresivo, elimina TODOS los channels
+    // ¿Y si hay otros componentes usando channels?
+  }, [])
 );
-
-const result = await Promise.race([
-  supabase.from('table').select(),
-  timeoutPromise
-]);
 ```
 
----
+**Impacto**: Bajo-Medio - Puede afectar realtime en otras pantallas
 
-### 15. **No hay retry logic en operaciones críticas**
-
-**Ubicación:** Múltiples archivos
-
-**Problema:**
-Si falla una operación de red, no se reintenta automáticamente.
-
-**Solución:**
-Implementar retry logic para operaciones críticas (guardar datos, cargar planes, etc.).
+**Fix sugerido**: Solo limpiar channels específicos de esta pantalla
 
 ---
 
-## 📋 Resumen de Prioridades
+### 13. **Hardcoded Dates** 📅
+**Archivo**: `app/body-evolution.tsx`
 
-### 🔴 **URGENTE - Corregir antes de producción:**
-1. Reemplazar todos los `.single()` por `.maybeSingle()` o manejo de errores
-2. Validar `dayData` antes de acceder a propiedades
-3. Verificar fecha en completado de entrenamientos
-
-### 🟡 **IMPORTANTE - Corregir pronto:**
-4. Manejar errores de `compError`
-5. Corregir cálculo de lunes
-6. Agregar validación de `activePlan?.plan_data`
-7. Corregir mensaje de adherencia
-
-### 🟢 **MEJORAS - Puede esperar:**
-8. Remover código de debug
-9. Reemplazar catch vacíos
-10. Agregar timeouts y retry logic
-
----
-
-## 🛠️ Scripts de Verificación
-
-Para verificar estos problemas:
-
-```bash
-# Buscar todos los .single() sin manejo de errores
-grep -r "\.single()" app/ --include="*.tsx" --include="*.ts"
-
-# Buscar catch vacíos
-grep -r "catch {}" app/ --include="*.tsx" --include="*.ts"
-
-# Buscar accesos sin validación
-grep -r "dayData\." app/ --include="*.tsx"
+**Problema**:
+```typescript
+case 'all':
+  startDate = new Date('2020-01-01'); // ❌ Hardcoded
+  break;
 ```
 
+**Impacto**: Bajo - Funciona, pero no es ideal
+
+**Fix sugerido**: Usar fecha de registro del usuario o fecha muy antigua dinámica
+
 ---
 
-¿Quieres que corrija alguno de estos bugs ahora?
+### 14. **Alert "Próximamente" en Funcionalidad** 🚧
+**Archivo**: `app/trainer-student-detail.tsx` (línea ~138)
+
+**Problema**:
+```typescript
+const handleViewAllWorkouts = () => {
+  Alert.alert('Próximamente', 'Esta funcionalidad estará disponible pronto');
+};
+```
+
+**Impacto**: Bajo - UX confusa, mejor ocultar el botón
+
+**Fix sugerido**: Ocultar la opción hasta que esté implementada
+
+---
+
+## 📊 Resumen por Prioridad
+
+| Prioridad | Bugs Encontrados | Tiempo Estimado Fix |
+|-----------|------------------|---------------------|
+| 🔴 Críticos | 4 | ~2 horas |
+| 🟡 Importantes | 4 | ~1.5 horas |
+| 🟢 Menores | 6 | ~1 hora |
+| **Total** | **14** | **~4.5 horas** |
+
+---
+
+## 🎯 Recomendación de Fixes por Prioridad
+
+### Build Inmediato (solo críticos):
+1. ✅ Memory leak timer (~20 min)
+2. ✅ Validación series vacías (~15 min)
+
+**Total: ~35 min** → Build seguro
+
+---
+
+### Build Mejorado (críticos + importantes):
+Todo lo anterior +
+3. ✅ Loading states en errores (~20 min)
+4. ✅ setTimeout cleanup (~10 min)
+5. ✅ AsyncStorage error handling (~15 min)
+
+**Total: ~1h 20min** → Build robusto
+
+---
+
+### Build Perfecto (todo):
+Todo lo anterior +
+6. ✅ Limpieza de logs (~30 min)
+7. ✅ Migrar Alert.alert → useAlert (~45 min)
+8. ✅ useEffect dependencies (~20 min)
+
+**Total: ~2h 55min** → Build perfecto
+
+---
+
+## 🔍 Bugs NO Encontrados (Buenas Noticias)
+
+✅ No hay infinite loops obvios
+✅ No hay variables globales peligrosas
+✅ No hay problemas de tipos TypeScript
+✅ No hay imports circulares
+✅ No hay setState en loops
+✅ RLS policies están configuradas correctamente
+✅ Supabase queries están bien estructuradas
+
+---
+
+## 💡 Sugerencias Adicionales
+
+### Para después de la build:
+
+1. **Implementar Error Boundaries**
+   - Envolver la app en `<ErrorBoundary>` para capturar crashes
+
+2. **Agregar Analytics**
+   - Trackear errores con Sentry o similar
+   - Medir performance con Firebase Performance
+
+3. **Testing**
+   - Unit tests para lógica crítica
+   - Integration tests para flujos principales
+
+4. **Code Splitting**
+   - Lazy load de pantallas menos usadas
+   - Reducir bundle size inicial
+
+---
+
+## 🤔 ¿En cuál quieres trabajar?
+
+**Elige por número o describe otro problema que hayas notado:**
+
+1. Memory leak timer (20 min) 🔴
+2. Race condition AsyncStorage (30 min) 🔴
+3. Validación series vacías (15 min) 🔴
+4. Loading states en errores (20 min) 🟡
+5. setTimeout cleanup (10 min) 🟡
+6. Limpieza de logs (30 min) 🟢
+7. Migrar Alert.alert (45 min) 🟢
+8. Todos los críticos (1h) 🔴🔴🔴
+9. Build directo sin fixes 🚀
+10. Otro (dime cuál)
 

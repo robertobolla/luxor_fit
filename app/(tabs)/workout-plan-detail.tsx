@@ -19,7 +19,7 @@ import { FriendSelectionModal, ConfirmModal } from '../../src/components/CustomM
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 
 export default function WorkoutPlanDetailScreen() {
-  const { planId } = useLocalSearchParams();
+  const { planId, isTrainerView, studentId } = useLocalSearchParams();
   const { user } = useUser();
   const [plan, setPlan] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -172,95 +172,17 @@ export default function WorkoutPlanDetailScreen() {
 
     try {
       const planData = plan.plan_data;
-      
-      // Verificar si es plan multi-semana o de una sola semana
-      const multiWeekStructure = planData.multi_week_structure;
-      const weeklyStructure = planData.weekly_structure || [];
-      const isMultiWeek = multiWeekStructure && multiWeekStructure.length > 0;
-      
       const equipment = planData.equipment || planData.userData?.equipment || [];
       
-      // Limpiar datos anteriores de AsyncStorage
-      for (let i = 1; i <= 7; i++) {
-        await AsyncStorage.removeItem(`day_${i}_data`);
-      }
-      await AsyncStorage.removeItem('selectedExercise');
-      await AsyncStorage.removeItem('custom_plan_weeks_count');
-
-      // Guardar nombre del plan
-      await AsyncStorage.setItem('custom_plan_name', plan.plan_name || `Plan Personalizado - ${new Date().toLocaleDateString()}`);
-
-      if (isMultiWeek) {
-        // Plan multi-semana: guardar estructura completa
-        await AsyncStorage.setItem('custom_plan_weeks_count', multiWeekStructure.length.toString());
-        
-        let globalDayIndex = 1;
-        for (let weekIndex = 0; weekIndex < multiWeekStructure.length; weekIndex++) {
-          const week = multiWeekStructure[weekIndex];
-          const days = week.days || [];
-          
-          for (let dayIndex = 0; dayIndex < days.length; dayIndex++) {
-            const day = days[dayIndex];
-            
-            // Convertir ejercicios del formato del plan al formato de edición
-            const exercises = (day.exercises || []).map((ex: any) => ({
-              id: `${ex.name}_${globalDayIndex}_${Date.now()}_${Math.random()}`,
-              name: ex.name,
-              sets: ex.sets || 3,
-              reps: ex.reps || [10, 10, 10],
-              rest_seconds: ex.rest_seconds || 120,
-            }));
-
-            const dayData = {
-              dayNumber: globalDayIndex,
-              name: day.day || day.focus || `Día ${dayIndex + 1}`,
-              exercises,
-              weekNumber: week.week_number || (weekIndex + 1),
-            };
-
-            await AsyncStorage.setItem(`day_${globalDayIndex}_data`, JSON.stringify(dayData));
-            globalDayIndex++;
-          }
-        }
-      } else {
-        // Plan de una sola semana
-        for (let i = 0; i < weeklyStructure.length; i++) {
-          const day = weeklyStructure[i];
-          const dayNumber = i + 1;
-          
-          // Convertir ejercicios del formato del plan al formato de edición
-          const exercises = (day.exercises || []).map((ex: any) => ({
-            id: `${ex.name}_${dayNumber}_${Date.now()}_${Math.random()}`,
-            name: ex.name,
-            sets: ex.sets || 3,
-            reps: ex.reps || [10, 10, 10],
-            rest_seconds: ex.rest_seconds || 120,
-          }));
-
-          const dayData = {
-            dayNumber,
-            name: day.day || day.focus || `Día ${dayNumber}`,
-            exercises,
-          };
-
-          await AsyncStorage.setItem(`day_${dayNumber}_data`, JSON.stringify(dayData));
-        }
-      }
-
-      // Guardar el planId para saber que estamos editando
-      await AsyncStorage.setItem('editing_plan_id', plan.id.toString());
-
-      const daysPerWeek = isMultiWeek 
-        ? multiWeekStructure[0]?.days?.length || 1
-        : (planData.days_per_week || weeklyStructure.length);
-
-      // Navegar a la pantalla de edición
+      // Simplemente navegar a la pantalla de edición
+      // custom-plan-days.tsx se encargará de cargar todo desde Supabase
       router.push({
         pathname: '/(tabs)/workout/custom-plan-days',
         params: {
-          daysPerWeek: daysPerWeek.toString(),
           equipment: JSON.stringify(equipment),
           planId: plan.id.toString(),
+          isTrainerView: isTrainerView || 'false',
+          studentId: studentId || '',
         },
       });
     } catch (error) {
@@ -336,13 +258,16 @@ export default function WorkoutPlanDetailScreen() {
     }
   }, [plan, user, loadCompletedDays]);
 
-  // Recargar los días completados cuando se enfoca la pantalla
+  // Recargar el plan y los días completados cuando se enfoca la pantalla
   useFocusEffect(
     useCallback(() => {
-      if (plan && user?.id) {
+      console.log('🔄 Pantalla enfocada - recargando plan...');
+      loadPlanDetails().then(() => {
+        if (user?.id) {
         loadCompletedDays();
       }
-    }, [plan, user, loadCompletedDays])
+      });
+    }, [planId, user])
   );
 
   if (isLoading) {

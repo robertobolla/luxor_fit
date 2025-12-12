@@ -11,9 +11,10 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useLocalSearchParams, router, Stack } from 'expo-router';
+import { useLocalSearchParams, router, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useAlert } from '../../src/contexts/AlertContext';
 import { supabase } from '../../src/services/supabase';
 import { WorkoutCompletion } from '../../src/types';
 import ExerciseVideoModal from '../../src/components/ExerciseVideoModal';
@@ -28,24 +29,27 @@ import { Vibration } from 'react-native';
 
 export default function WorkoutDayDetailScreen() {
   const params = useLocalSearchParams();
+  const { showAlert } = useAlert();
   const { user } = useUser();
   
   // Parsear los datos del día con validación
-  let dayData = null;
-  try {
-    if (params.dayData) {
-      dayData = JSON.parse(params.dayData as string);
+  const parseDayData = (dataString: string | undefined) => {
+    try {
+      if (dataString) {
+        return JSON.parse(dataString as string);
+      }
+    } catch (e) {
+      console.error('Error parseando dayData:', e);
     }
-  } catch (e) {
-    console.error('Error parseando dayData:', e);
-    dayData = null;
-  }
+    return null;
+  };
   
   const planName = params.planName as string || 'Plan de Entrenamiento';
   const planId = params.planId as string;
   const dayName = params.dayName as string; // ej: 'day_1'
   const isCustomPlan = params.isCustomPlan === 'true'; // Si es plan personalizado
   
+  const [dayData, setDayData] = useState(parseDayData(params.dayData as string));
   const [isCompleted, setIsCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
@@ -72,6 +76,64 @@ export default function WorkoutDayDetailScreen() {
   useEffect(() => {
     checkIfCompleted();
   }, [user, planId, dayName]);
+
+  // Limpiar timer cuando el modal se cierre
+  useEffect(() => {
+    if (!showRestTimerModal) {
+      // Cuando el modal se cierra, asegurar que el timer se detiene
+      setIsTimerRunning(false);
+      setTimerSeconds(0);
+      console.log('🧹 Modal cerrado: timer limpiado');
+    }
+  }, [showRestTimerModal]);
+
+  // Recargar datos del plan cuando la pantalla gana foco
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 Pantalla ganó foco, recargando datos del plan...');
+      loadPlanData();
+    }, [planId, dayName, user])
+  );
+
+  const loadPlanData = async () => {
+    if (!planId || !dayName || !user?.id) {
+      console.log('⚠️ Faltan datos para cargar el plan');
+      return;
+    }
+
+    try {
+      console.log('📥 Cargando plan desde Supabase...', { planId, dayName });
+      
+      const { data: planData, error } = await supabase
+        .from('workout_plans')
+        .select('plan_data')
+        .eq('id', planId)
+        .eq('user_id', user.id)
+        .single();
+
+      if (error) {
+        console.error('❌ Error cargando plan:', error);
+        return;
+      }
+
+      if (planData?.plan_data) {
+        const fullPlan = planData.plan_data;
+        console.log('📦 Plan completo cargado:', JSON.stringify(fullPlan, null, 2));
+
+        // Encontrar los datos del día específico
+        const dayDataFromDB = fullPlan[dayName];
+        
+        if (dayDataFromDB) {
+          console.log('✅ Datos del día encontrados:', JSON.stringify(dayDataFromDB, null, 2));
+          setDayData(dayDataFromDB);
+        } else {
+          console.warn('⚠️ No se encontraron datos para', dayName);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error recargando datos del plan:', error);
+    }
+  };
   
   const checkIfCompleted = async () => {
     if (!user?.id || !planId || !dayName) return;
@@ -224,7 +286,12 @@ export default function WorkoutDayDetailScreen() {
       setDuration('');
       setDifficulty(3);
       setNotes('');
-      Alert.alert('¡Felicitaciones! 🎉', 'Entrenamiento completado. ¡Sigue así!');
+      showAlert(
+        '¡Felicitaciones!',
+        'Entrenamiento completado. ¡Sigue así!',
+        [{ text: 'Entendido', style: 'default' }],
+        { icon: 'trophy', iconColor: '#ffb300' }
+      );
     }
   };
 
@@ -293,26 +360,37 @@ export default function WorkoutDayDetailScreen() {
 
   // Effect para el countdown del temporizador
   useEffect(() => {
-    if (!isTimerRunning || timerSeconds <= 0) {
-      if (timerSeconds === 0 && isTimerRunning) {
-        setIsTimerRunning(false);
-        playTimerSound(); // ✅ Reproducir sonido al terminar
-      }
+    // Si el timer no está corriendo, no hacer nada
+    if (!isTimerRunning) {
       return;
     }
 
+    // Si llegó a 0, detener y reproducir sonido
+    if (timerSeconds === 0) {
+      setIsTimerRunning(false);
+      playTimerSound();
+      return;
+    }
+
+    // Timer está corriendo y tiene tiempo restante
     const interval = setInterval(() => {
       setTimerSeconds(prev => {
         if (prev <= 1) {
-          clearInterval(interval);
+          // Llegó a 0, el próximo useEffect se encargará del sonido
+          setIsTimerRunning(false);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
 
-    return () => clearInterval(interval);
-  }, [isTimerRunning, timerSeconds, soundEnabled]);
+    // ✅ Cleanup: siempre limpiar el interval cuando el componente se desmonte
+    // o cuando cambien las dependencias
+    return () => {
+      console.log('🧹 Limpiando timer interval');
+      clearInterval(interval);
+    };
+  }, [isTimerRunning, timerSeconds]);
 
   if (isLoading) {
     return (
@@ -667,6 +745,8 @@ export default function WorkoutDayDetailScreen() {
                     usesTime={false} // TODO: Detectar si el ejercicio usa tiempo
                     setTypes={setTypes || []} // Pasar tipos de series para excluir calentamiento
                     onSetsChange={(sets) => handleSetsChange(exerciseName, sets)}
+                    planId={planId} // Identificar por plan
+                    dayName={dayName} // Identificar por día de rutina
                   />
                 )}
 
@@ -983,11 +1063,12 @@ export default function WorkoutDayDetailScreen() {
               <TouchableOpacity
                 style={styles.timerCancelButton}
                 onPress={() => {
+                  // Detener el timer y limpiar estado
+                  setIsTimerRunning(false);
+                  setTimerSeconds(0);
+                  // Cerrar modal después de limpiar el estado
                   setShowRestTimerModal(false);
-                  if (isTimerRunning) {
-                    setIsTimerRunning(false);
-                    setTimerSeconds(0);
-                  }
+                  console.log('🛑 Timer detenido y modal cerrado');
                 }}
               >
                 <Text style={styles.timerCancelButtonText}>Cerrar</Text>

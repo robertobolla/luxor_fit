@@ -19,6 +19,33 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../../src/services/supabase';
 import { useCustomAlert } from '../../../src/components/CustomAlert';
+import Constants from 'expo-constants';
+
+// ============================================================================
+// 🚀 DRAG & DROP - DETECCIÓN AUTOMÁTICA DE ENTORNO
+// ============================================================================
+// Detectar automáticamente si estamos en Expo Go o en un build nativo
+const isExpoGo = Constants.appOwnership === 'expo';
+const DRAG_DROP_ENABLED = !isExpoGo; // Solo activar si NO es Expo Go
+
+// Imports condicionales - solo cargar si no es Expo Go
+let DraggableFlatList: any;
+let ScaleDecorator: any;
+let GestureHandlerRootView: any;
+
+if (DRAG_DROP_ENABLED) {
+  const draggable = require('react-native-draggable-flatlist');
+  const gesture = require('react-native-gesture-handler');
+  DraggableFlatList = draggable.default;
+  ScaleDecorator = draggable.ScaleDecorator;
+  GestureHandlerRootView = gesture.GestureHandlerRootView;
+}
+
+console.log('🎯 Entorno detectado:', {
+  isExpoGo,
+  DRAG_DROP_ENABLED,
+  appOwnership: Constants.appOwnership
+});
 
 // Suprimir warning de keys - todas las keys están implementadas correctamente
 LogBox.ignoreLogs([
@@ -85,6 +112,10 @@ export default function CustomPlanDayDetailScreen() {
   const hasLocalChanges = React.useRef(false);
   // Ref para mantener siempre la referencia actualizada de exercises
   const exercisesRef = React.useRef<Exercise[]>([]);
+  // Refs para prevenir race conditions en AsyncStorage
+  const isSavingToStorage = React.useRef(false);
+  const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+  const modalTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   
   // Mantener exercisesRef actualizado
   React.useEffect(() => {
@@ -106,10 +137,39 @@ export default function CustomPlanDayDetailScreen() {
     console.log('🔍 Estado modal cambió:', { showSetTypeModal, selectedSetIndex });
   }, [showSetTypeModal, selectedSetIndex]);
 
+  // Cleanup: Limpiar todos los timeouts al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (modalTimeoutRef.current) {
+        clearTimeout(modalTimeoutRef.current);
+        console.log('🧹 Timeout de modal limpiado al desmontar');
+      }
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        console.log('🧹 Timeout de auto-guardado limpiado al desmontar');
+      }
+    };
+  }, []);
+
   // Guardar automáticamente en AsyncStorage cuando cambian los ejercicios
+  // Con debounce para evitar guardados excesivos y race conditions
   useEffect(() => {
     if (hasLocalChanges.current && exercises.length > 0) {
-      const saveToStorage = async () => {
+      // Cancelar guardado anterior si existe
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        console.log('⏸️ Guardado anterior cancelado (debounce)');
+      }
+
+      // Programar nuevo guardado con debounce de 500ms
+      saveTimeoutRef.current = setTimeout(async () => {
+        // Prevenir race condition: no guardar si ya hay guardado en proceso
+        if (isSavingToStorage.current) {
+          console.log('⏳ Ya hay un guardado en proceso, saltando...');
+          return;
+        }
+
+        isSavingToStorage.current = true;
         try {
           const dayDataToSave = {
             dayNumber,
@@ -120,10 +180,21 @@ export default function CustomPlanDayDetailScreen() {
           console.log('💾 Auto-guardado en AsyncStorage:', { dayNumber, exercisesCount: exercises.length });
         } catch (error) {
           console.error('❌ Error auto-guardando:', error);
+          // No mostrar alert en auto-guardado, es automático y no crítico
+          // El usuario puede guardar manualmente el plan completo
+        } finally {
+          isSavingToStorage.current = false;
         }
-      };
-      saveToStorage();
+      }, 500); // Debounce de 500ms
     }
+
+    // Cleanup: cancelar timeout al desmontar
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        console.log('🧹 Timeout de auto-guardado limpiado');
+      }
+    };
   }, [exercises, dayNumber, weekNumber, dayName]);
 
   // Inicializar estados del modal cuando se abre para editar un ejercicio
@@ -491,6 +562,14 @@ export default function CustomPlanDayDetailScreen() {
     );
   };
 
+  const handleReorderExercises = (data: Exercise[]) => {
+    console.log('🔄 Reordenando ejercicios');
+    setExercises(data);
+    // Marcar que hay cambios locales sin guardar
+    hasLocalChanges.current = true;
+    console.log('✅ Orden de ejercicios actualizado');
+  };
+
   const handleOpenRestTimerModal = (exerciseId: string) => {
     const exercise = exercises.find(ex => ex.id === exerciseId);
     if (exercise) {
@@ -579,8 +658,12 @@ export default function CustomPlanDayDetailScreen() {
           }
           
           // Luego cargar desde AsyncStorage (sobrescribe si existe)
-          const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
-          if (dayDataStr) {
+          // Prevenir race condition: no cargar si hay guardado en proceso
+          if (isSavingToStorage.current) {
+            console.log('⏳ Guardado en proceso, usando datos de parámetros solamente');
+          } else {
+            const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
+            if (dayDataStr) {
             const savedDayData = parseSafeJSON(dayDataStr, {});
             // Verificar que los datos guardados correspondan al día correcto
             if (savedDayData.dayNumber === dayNumber && isMounted) {
@@ -595,10 +678,11 @@ export default function CustomPlanDayDetailScreen() {
                 setExercises([]);
               }
             }
-          } else if (isMounted) {
-            // Si no hay datos guardados, usar los valores por defecto
-            setDayName(`Día ${dayNumber}`);
-            setExercises([]);
+            } else if (isMounted) {
+              // Si no hay datos guardados, usar los valores por defecto
+              setDayName(`Día ${dayNumber}`);
+              setExercises([]);
+            }
           }
         } catch (error) {
           console.error('Error loading day data:', error);
@@ -643,22 +727,31 @@ export default function CustomPlanDayDetailScreen() {
               }
               
               // Guardar inmediatamente en AsyncStorage para evitar pérdida de datos
-              try {
-                const currentDayName = dayName || `Día ${dayNumber}`;
-                const dayDataToSave = {
-                  dayNumber,
-                  name: currentDayName,
-                  exercises: updatedExercises,
-                };
-                await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
-              } catch (error) {
-                console.error('Error saving updated day data:', error);
+              // Prevenir race condition
+              if (!isSavingToStorage.current) {
+                isSavingToStorage.current = true;
+                try {
+                  const currentDayName = dayName || `Día ${dayNumber}`;
+                  const dayDataToSave = {
+                    dayNumber,
+                    name: currentDayName,
+                    exercises: updatedExercises,
+                  };
+                  await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
+                  console.log('💾 Ejercicio guardado inmediatamente en AsyncStorage');
+                } catch (error) {
+                  console.error('Error saving updated day data:', error);
+                } finally {
+                  isSavingToStorage.current = false;
+                }
               }
               
               // Abrir modal de edición inmediatamente para configurar series y repeticiones
-              setTimeout(() => {
+              // Guardar referencia del timeout para poder limpiarlo
+              modalTimeoutRef.current = setTimeout(() => {
                 if (isMounted) {
                   setEditingExercise(newExercise);
+                  modalTimeoutRef.current = null; // Limpiar referencia después de ejecutar
                 }
               }, 100);
             }
@@ -777,9 +870,18 @@ export default function CustomPlanDayDetailScreen() {
     }, [dayNumber, params.dayData])
   );
 
+  // Componente wrapper condicional
+  const WrapperComponent = DRAG_DROP_ENABLED && GestureHandlerRootView 
+    ? GestureHandlerRootView 
+    : React.Fragment;
+  const wrapperProps = (DRAG_DROP_ENABLED && GestureHandlerRootView) 
+    ? { style: { flex: 1 } } 
+    : {};
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <WrapperComponent {...wrapperProps}>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
       
       <View style={styles.header}>
         <TouchableOpacity
@@ -906,11 +1008,176 @@ export default function CustomPlanDayDetailScreen() {
           </View>
         ) : (
           <View style={styles.exercisesList}>
-            {exercises.map((exercise, exerciseIdx) => {
-              console.log(`🏋️ Renderizando ejercicio ${exerciseIdx + 1}: ${exercise.name} (ID: ${exercise.id})`);
-              return (
-              <View key={exercise.id} style={styles.exerciseCard}>
-                <View style={styles.exerciseHeader}>
+            {DRAG_DROP_ENABLED ? (
+              // ============================================================================
+              // VERSIÓN CON DRAG & DROP (Solo para builds de producción)
+              // ============================================================================
+              <DraggableFlatList
+                data={exercises}
+                onDragEnd={({ data }) => handleReorderExercises(data)}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item: exercise, drag, isActive, getIndex }) => {
+                  const exerciseIdx = getIndex() ?? 0;
+                  console.log(`🏋️ Renderizando ejercicio ${exerciseIdx + 1}: ${exercise.name} (ID: ${exercise.id})`);
+                  return (
+                  <ScaleDecorator>
+                    <View 
+                      key={exercise.id} 
+                      style={[
+                        styles.exerciseCard,
+                        isActive && styles.exerciseCardDragging
+                      ]}
+                    >
+                      <View style={styles.exerciseHeader}>
+                        <TouchableOpacity
+                          onLongPress={drag}
+                          style={styles.dragHandle}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="reorder-three" size={24} color="#666" />
+                        </TouchableOpacity>
+                        <View style={styles.exerciseTitleContainer}>
+                          <View style={styles.exerciseNumberBadge}>
+                            <Text style={styles.exerciseNumberText}>{exerciseIdx + 1}</Text>
+                          </View>
+                          <Text style={styles.exerciseName}>{exercise.name}</Text>
+                        </View>
+                        <View style={styles.exerciseActions}>
+                          <TouchableOpacity
+                            onPress={() => setEditingExercise(exercise)}
+                            style={styles.editButton}
+                          >
+                            <Ionicons name="create-outline" size={20} color="#ffb300" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleDeleteExercise(exercise.id)}
+                            style={styles.deleteButton}
+                          >
+                            <Ionicons name="trash-outline" size={20} color="#F44336" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      {/* Temporizador de Descanso */}
+                      {showRestTimers && (
+                        <TouchableOpacity
+                          style={styles.restTimerContainer}
+                          onPress={() => handleOpenRestTimerModal(exercise.id)}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="timer-outline" size={18} color="#ffb300" />
+                          <Text style={styles.restTimerLabel}>Temporizador de Descanso:</Text>
+                          <Text style={styles.restTimerValue}>
+                            {formatRestTime(exercise.rest_seconds || 120)}
+                          </Text>
+                          <Ionicons name="chevron-forward" size={16} color="#666" />
+                        </TouchableOpacity>
+                      )}
+
+                      <View style={styles.exerciseDetails}>
+                        <TouchableOpacity
+                          style={styles.setsHeader}
+                          onPress={() => toggleExerciseExpansion(exercise.id)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={styles.setsHeaderLeft}>
+                            <Ionicons name="list" size={16} color="#999" />
+                            <Text style={styles.setsHeaderText}>
+                              {exercise.sets} {exercise.sets === 1 ? 'serie' : 'series'}
+                            </Text>
+                            <Ionicons
+                              name={expandedExercises.has(exercise.id) ? "chevron-up" : "chevron-down"}
+                              size={18}
+                              color="#ffb300"
+                            />
+                          </View>
+                        </TouchableOpacity>
+                        {expandedExercises.has(exercise.id) && (
+                          <View style={styles.setsGrid}>
+                            {(exercise.setTypes || []).map((setInfo, idx) => {
+                            // Calcular label de la serie
+                            const label = (() => {
+                              switch (setInfo.type) {
+                                case 'warmup': return 'C';
+                                case 'drop': return 'D';
+                                case 'failure':
+                                case 'normal':
+                                default:
+                                  let seriesCount = 0;
+                                  for (let i = 0; i <= idx; i++) {
+                                    const type = (exercise.setTypes || [])[i]?.type || 'normal';
+                                    if (type === 'normal' || type === 'failure') {
+                                      seriesCount++;
+                                    }
+                                  }
+                                  return setInfo.type === 'failure' ? `${seriesCount}` : `${seriesCount}`;
+                              }
+                            })();
+                            
+                            // Determinar color y estilo del badge
+                            const badgeStyle = (() => {
+                              switch (setInfo.type) {
+                                case 'warmup': return styles.setBadgeWarmup;
+                                case 'failure': return styles.setBadgeFailure;
+                                case 'drop': return styles.setBadgeDrop;
+                                default: return styles.setBadgeNormal;
+                              }
+                            })();
+                            
+                              return (
+                                <View key={`${exercise.id}_set_${idx}`} style={styles.setBadge}>
+                                  <View style={[styles.setBadgeNumber, badgeStyle]}>
+                                    <Text style={styles.setBadgeNumberText}>
+                                      {label}{setInfo.type === 'failure' ? ' F' : ''}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.setBadgeContent}>
+                                    {setInfo.type === 'warmup' ? (
+                                      <Text style={styles.setBadgeReps}>Calentamiento</Text>
+                                    ) : setInfo.type === 'failure' ? (
+                                      <View style={styles.setBadgeInfo}>
+                                        <Text style={styles.setBadgeReps}>
+                                          {setInfo.reps || 0} reps
+                                        </Text>
+                                        <Text style={styles.setBadgeFailureText}>al fallo</Text>
+                                      </View>
+                                    ) : (
+                                      <View style={styles.setBadgeInfo}>
+                                        <Text style={styles.setBadgeReps}>
+                                          {setInfo.reps || 0} reps
+                                        </Text>
+                                        {setInfo.rir !== null && setInfo.rir !== undefined && (
+                                          <Text style={styles.setBadgeRir}>RIR {setInfo.rir}</Text>
+                                        )}
+                                      </View>
+                                    )}
+                                  </View>
+                                </View>
+                              );
+                            })}
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </ScaleDecorator>
+                  );
+                }}
+                scrollEnabled={false}
+                containerStyle={{ flexGrow: 0 }}
+              />
+            ) : (
+              // ============================================================================
+              // VERSIÓN SIMPLE (Para desarrollo en Expo Go)
+              // ============================================================================
+              <>
+                {exercises.map((exercise, exerciseIdx) => {
+                  console.log(`🏋️ Renderizando ejercicio ${exerciseIdx + 1}: ${exercise.name} (ID: ${exercise.id})`);
+                  return (
+                    <View 
+                      key={exercise.id} 
+                      style={styles.exerciseCard}
+                    >
+                      <View style={styles.exerciseHeader}>
                   <View style={styles.exerciseTitleContainer}>
                     <View style={styles.exerciseNumberBadge}>
                       <Text style={styles.exerciseNumberText}>{exerciseIdx + 1}</Text>
@@ -1033,9 +1300,11 @@ export default function CustomPlanDayDetailScreen() {
                     </View>
                   )}
                 </View>
-              </View>
-              );
-            })}
+                    </View>
+                  );
+                })}
+              </>
+            )}
           </View>
         )}
 
@@ -1383,7 +1652,8 @@ export default function CustomPlanDayDetailScreen() {
       </Modal>
 
       <AlertComponent />
-    </SafeAreaView>
+      </SafeAreaView>
+    </WrapperComponent>
   );
 }
 
@@ -1486,11 +1756,26 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  exerciseCardDragging: {
+    backgroundColor: '#2a2a2a',
+    borderColor: '#ffb300',
+    borderWidth: 2,
+    shadowColor: '#ffb300',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+  },
   exerciseHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+  },
+  dragHandle: {
+    padding: 8,
+    marginRight: 8,
+    marginLeft: -8,
   },
   exerciseTitleContainer: {
     flexDirection: 'row',

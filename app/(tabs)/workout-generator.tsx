@@ -77,6 +77,9 @@ export default function WorkoutGeneratorScreen() {
   });
   const [showActivateModal, setShowActivateModal] = useState(false);
   const [newPlanId, setNewPlanId] = useState<string | null>(null);
+  
+  // Ref para cleanup de timeout de navegación
+  const navigationTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   // Hook para retry en generación de plan (ya no se usa directamente, pero lo mantenemos por compatibilidad)
 
@@ -97,6 +100,16 @@ export default function WorkoutGeneratorScreen() {
       }
     }, [isGenerating, showForm])
   );
+
+  // Cleanup: Limpiar timeout de navegación al desmontar
+  useEffect(() => {
+    return () => {
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+        console.log('🧹 Timeout de navegación limpiado al desmontar');
+      }
+    };
+  }, []);
 
   // NO mostrar modal automáticamente - solo cuando se hace clic en el botón
 
@@ -425,12 +438,14 @@ export default function WorkoutGeneratorScreen() {
     setError('');
 
     // Pequeño delay para asegurar que los estados se limpien antes de navegar
-    setTimeout(() => {
+    // Guardar referencia del timeout para poder limpiarlo
+    navigationTimeoutRef.current = setTimeout(() => {
       // Navegar al detalle del plan recién creado para que lo vea inmediatamente
       router.replace({
         pathname: '/(tabs)/workout-plan-detail',
         params: { planId: newPlanId }
       } as any);
+      navigationTimeoutRef.current = null; // Limpiar referencia después de ejecutar
     }, 100);
   };
 

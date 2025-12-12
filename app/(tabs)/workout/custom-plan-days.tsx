@@ -17,6 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../../src/services/supabase';
 import { useCustomAlert } from '../../../src/components/CustomAlert';
+import { updateStudentWorkoutPlan } from '../../../src/services/trainerService';
 
 interface DayData {
   dayNumber: number;
@@ -35,6 +36,8 @@ export default function CustomPlanDaysScreen() {
   const params = useLocalSearchParams();
   const equipment = JSON.parse((params.equipment as string) || '[]');
   const editingPlanId = params.planId as string | undefined;
+  const isTrainerView = params.isTrainerView === 'true';
+  const studentId = params.studentId as string | undefined;
   const { showAlert, AlertComponent } = useCustomAlert();
 
   const [weeks, setWeeks] = useState<WeekData[]>([]);
@@ -46,6 +49,10 @@ export default function CustomPlanDaysScreen() {
   const [showWeekDropdown, setShowWeekDropdown] = useState(false);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [isPlanCurrentlyActive, setIsPlanCurrentlyActive] = useState(false);
+  
+  // Refs para prevenir race conditions en AsyncStorage
+  const isLoadingFromStorage = React.useRef(false);
+  const isSavingToStorage = React.useRef(false);
   
   // Días de la semana actual
   const currentWeekDays = weeks[currentWeekIndex]?.days || [];
@@ -61,17 +68,27 @@ export default function CustomPlanDaysScreen() {
 
       try {
         console.log('🔄 Cargando plan existente desde Supabase:', editingPlanId);
+        console.log('👨‍🏫 Modo entrenador:', isTrainerView, 'StudentId:', studentId);
         
         // Cargar el plan desde Supabase
+        // Si es modo entrenador, cargar el plan del alumno
+        const targetUserId = isTrainerView && studentId ? studentId : user.id;
+        
         const { data: plan, error } = await supabase
           .from('workout_plans')
           .select('*')
           .eq('id', editingPlanId)
-          .eq('user_id', user.id)
+          .eq('user_id', targetUserId)
           .single();
 
         if (error) {
           console.error('❌ Error cargando plan:', error);
+          showAlert(
+            'Error al cargar plan',
+            'No se pudo cargar el plan desde la base de datos. Se iniciará un plan vacío.',
+            [{ text: 'OK' }],
+            { icon: 'alert-circle', iconColor: '#F44336' }
+          );
           initializeEmptyPlan();
           return;
         }
@@ -83,17 +100,25 @@ export default function CustomPlanDaysScreen() {
         }
 
         console.log('✅ Plan cargado:', plan.plan_name);
+        console.log('📦 plan_data:', JSON.stringify(plan.plan_data, null, 2));
 
         // Verificar si este plan es el activo actualmente
-        const { data: profile, error: profileError } = await supabase
-          .from('user_profiles')
-          .select('active_plan_id')
-          .eq('user_id', user.id)
+        // Consultamos directamente is_active de workout_plans
+        const { data: currentPlan, error: planError } = await supabase
+          .from('workout_plans')
+          .select('is_active')
+          .eq('id', editingPlanId)
           .single();
 
-        const isActive = profile?.active_plan_id === editingPlanId;
+        const isActive = currentPlan?.is_active === true;
+        
         setIsPlanCurrentlyActive(isActive);
-        console.log('🔍 Plan activo:', isActive);
+        console.log('🔍 Verificación plan activo:', {
+          planId: editingPlanId,
+          is_active_from_db: currentPlan?.is_active,
+          isActive,
+          planError
+        });
 
         // Extraer datos del plan
         const planData = plan.plan_data;
@@ -106,6 +131,13 @@ export default function CustomPlanDaysScreen() {
         // Cargar estructura multi-semana si existe, sino usar weekly_structure
         const multiWeekStructure = planData.multi_week_structure;
         const weeklyStructure = planData.weekly_structure;
+        
+        console.log('🔍 Estructuras encontradas:', {
+          hasMultiWeek: !!multiWeekStructure && multiWeekStructure.length > 0,
+          multiWeekLength: multiWeekStructure?.length || 0,
+          hasWeekly: !!weeklyStructure && weeklyStructure.length > 0,
+          weeklyLength: weeklyStructure?.length || 0,
+        });
 
         if (multiWeekStructure && multiWeekStructure.length > 0) {
           // Plan multi-semana
@@ -114,20 +146,31 @@ export default function CustomPlanDaysScreen() {
           const loadedWeeks: WeekData[] = [];
           
           for (const weekData of multiWeekStructure) {
+            console.log(`  📅 Semana ${weekData.week_number}: ${weekData.days?.length || 0} días`);
             const weekDays: DayData[] = [];
             
             for (const dayData of weekData.days) {
               const dayNumber = weekDays.length + 1;
+              
+              // Validar que dayData tenga datos
+              if (!dayData || !dayData.day) {
+                console.warn(`⚠️ Día ${dayNumber} tiene datos inválidos, saltando`);
+                continue;
+              }
+              
+              console.log(`    📆 Día ${dayNumber}: ${dayData.day}, ${dayData.exercises?.length || 0} ejercicios`);
+              
               // Hacer copia profunda de ejercicios para evitar referencias compartidas
-              const exercises = dayData.exercises.map((ex: any) => ({
-                name: ex.name,
-                sets: ex.sets,
-                reps: Array.isArray(ex.reps) ? [...ex.reps] : ex.reps,
-                rest_seconds: ex.rest_seconds || 120, // Incluir tiempo de descanso
+              const exercises = (dayData.exercises || []).map((ex: any, idx: number) => ({
+                id: ex.id || `${ex.name}_${weekData.week_number}_${dayNumber}_${idx}_${Date.now()}`, // ← ID único con más contexto
+                name: ex.name || 'Ejercicio sin nombre',
+                sets: ex.sets || 3,
+                reps: Array.isArray(ex.reps) ? [...ex.reps] : [10, 10, 10],
+                rest_seconds: ex.rest_seconds || 120,
                 setTypes: Array.isArray(ex.setTypes) ? ex.setTypes.map((st: any) => ({
-                  type: st.type,
-                  reps: st.reps,
-                  rir: st.rir,
+                  type: st.type || 'normal',
+                  reps: st.reps || 10,
+                  rir: st.rir || null,
                 })) : [],
               }));
 
@@ -166,16 +209,26 @@ export default function CustomPlanDaysScreen() {
           for (let i = 0; i < weeklyStructure.length; i++) {
             const dayData = weeklyStructure[i];
             const dayNumber = i + 1;
+            
+            // Validar que dayData tenga datos
+            if (!dayData || !dayData.day) {
+              console.warn(`⚠️ Día ${dayNumber} tiene datos inválidos, saltando`);
+              continue;
+            }
+            
+            console.log(`  📆 Día ${dayNumber}: ${dayData.day}, ${dayData.exercises?.length || 0} ejercicios`);
+            
             // Hacer copia profunda de ejercicios para evitar referencias compartidas
-            const exercises = dayData.exercises.map((ex: any) => ({
-              name: ex.name,
-              sets: ex.sets,
-              reps: Array.isArray(ex.reps) ? [...ex.reps] : ex.reps,
-              rest_seconds: ex.rest_seconds || 120, // Incluir tiempo de descanso
+            const exercises = (dayData.exercises || []).map((ex: any, idx: number) => ({
+              id: ex.id || `${ex.name}_${dayNumber}_${idx}_${Date.now()}`, // ← ID único
+              name: ex.name || 'Ejercicio sin nombre',
+              sets: ex.sets || 3,
+              reps: Array.isArray(ex.reps) ? [...ex.reps] : [10, 10, 10],
+              rest_seconds: ex.rest_seconds || 120,
               setTypes: Array.isArray(ex.setTypes) ? ex.setTypes.map((st: any) => ({
-                type: st.type,
-                reps: st.reps,
-                rir: st.rir,
+                type: st.type || 'normal',
+                reps: st.reps || 10,
+                rir: st.rir || null,
               })) : [],
             }));
 
@@ -210,6 +263,12 @@ export default function CustomPlanDaysScreen() {
         
       } catch (error) {
         console.error('❌ Error cargando plan:', error);
+        showAlert(
+          'Error inesperado',
+          'Ocurrió un error al cargar el plan. Se iniciará un plan vacío.',
+          [{ text: 'OK' }],
+          { icon: 'alert-circle', iconColor: '#F44336' }
+        );
         initializeEmptyPlan();
       }
     };
@@ -264,6 +323,12 @@ export default function CustomPlanDaysScreen() {
         }
       } catch (error) {
         console.error('Error loading plan data from AsyncStorage:', error);
+        showAlert(
+          'Aviso',
+          'No se pudieron cargar algunos datos guardados. Se usarán valores por defecto.',
+          [{ text: 'OK' }],
+          { icon: 'warning', iconColor: '#ffb300' }
+        );
         setPlanName(`Plan Personalizado - ${new Date().toLocaleDateString()}`);
       }
       
@@ -283,20 +348,45 @@ export default function CustomPlanDaysScreen() {
           return;
         }
 
+        // Prevenir race condition: no cargar si hay guardado en proceso
+        if (isSavingToStorage.current) {
+          console.log('⏳ Guardado en proceso, esperando para cargar...');
+          return;
+        }
+
+        // Prevenir race condition: no cargar si ya hay carga en proceso
+        if (isLoadingFromStorage.current) {
+          console.log('⏳ Ya hay una carga en proceso, saltando...');
+          return;
+        }
+
+        isLoadingFromStorage.current = true;
         console.log('🔄 useFocusEffect: recargando datos desde AsyncStorage');
 
         try {
           // Si estamos editando un plan existente, recargar is_active desde Supabase
           if (editingPlanId && user) {
-            const { data: profile } = await supabase
-              .from('user_profiles')
-              .select('active_plan_id')
-              .eq('user_id', user.id)
+            console.log('🔄 Recargando estado activo del plan...');
+            
+            // Consultamos directamente is_active de workout_plans
+            const { data: currentPlan } = await supabase
+              .from('workout_plans')
+              .select('is_active')
+              .eq('id', editingPlanId)
               .single();
             
-            const isActive = profile?.active_plan_id === editingPlanId;
+            const isActive = currentPlan?.is_active === true;
+            
+            console.log('🔄 ======================================');
+            console.log('🔄 RECARGA DE ESTADO (useFocusEffect)');
+            console.log('🔄 ======================================');
+            console.log('  - planId:', editingPlanId);
+            console.log('  - is_active from DB:', currentPlan?.is_active);
+            console.log('  - isActive (booleano):', isActive);
+            console.log('  - Estableciendo isPlanCurrentlyActive =', isActive);
+            console.log('🔄 ======================================');
+            
             setIsPlanCurrentlyActive(isActive);
-            console.log('✅ Estado activo del plan:', isActive);
           }
           
           // Cargar número de semanas guardadas
@@ -353,6 +443,15 @@ export default function CustomPlanDaysScreen() {
           }
         } catch (error) {
           console.error('Error loading week data:', error);
+          showAlert(
+            'Error al cargar',
+            'No se pudieron cargar los datos de las semanas guardadas.',
+            [{ text: 'OK' }],
+            { icon: 'alert-circle', iconColor: '#F44336' }
+          );
+        } finally {
+          isLoadingFromStorage.current = false;
+          console.log('✅ Carga desde AsyncStorage completada');
         }
       };
       
@@ -411,6 +510,12 @@ export default function CustomPlanDaysScreen() {
       console.log('✅ Día vacío guardado en AsyncStorage:', key);
     } catch (error) {
       console.error('❌ Error guardando día en AsyncStorage:', error);
+      showAlert(
+        'Aviso',
+        'El día se agregó pero hubo un problema al guardar. Intenta guardar el plan completo.',
+        [{ text: 'OK' }],
+        { icon: 'warning', iconColor: '#ffb300' }
+      );
     }
     
     showAlert(
@@ -528,6 +633,7 @@ export default function CustomPlanDaysScreen() {
               await AsyncStorage.setItem('custom_plan_weeks_count', updatedWeeks.length.toString());
             } catch (error) {
               console.error('Error saving weeks count:', error);
+              // No mostrar alert aquí, es un error menor y la semana ya se agregó exitosamente
             }
             
             showAlert(
@@ -654,8 +760,8 @@ export default function CustomPlanDaysScreen() {
           },
           {
             text: 'Guardar como Borrador',
-            // Si el plan ya es activo, mantenerlo activo
-            onPress: () => savePlanToDatabase(editingPlanId && isPlanCurrentlyActive),
+            // Si el plan ya es activo, mantenerlo activo; si no, guardar como inactivo
+            onPress: () => savePlanToDatabase(isPlanCurrentlyActive || false),
           },
         ],
         { icon: 'document-text', iconColor: '#ffb300' }
@@ -663,11 +769,25 @@ export default function CustomPlanDaysScreen() {
     } else {
       // Plan completo
       // Solo preguntar si quiere activarlo si NO es actualmente activo
-      if (editingPlanId && isPlanCurrentlyActive) {
+      console.log('💾 ======================================');
+      console.log('💾 VERIFICACIÓN DE ESTADO DE PLAN ACTIVO');
+      console.log('💾 ======================================');
+      console.log('  - editingPlanId:', editingPlanId, '(tipo:', typeof editingPlanId, ')');
+      console.log('  - isPlanCurrentlyActive:', isPlanCurrentlyActive, '(tipo:', typeof isPlanCurrentlyActive, ')');
+      console.log('  - Comparación estricta (isPlanCurrentlyActive === true):', isPlanCurrentlyActive === true);
+      console.log('  - Comparación flexible (isPlanCurrentlyActive == true):', isPlanCurrentlyActive == true);
+      console.log('  - Condición completa:', editingPlanId && isPlanCurrentlyActive === true);
+      console.log('💾 ======================================');
+      
+      // Si estamos editando un plan Y ese plan es actualmente activo, no preguntar
+      if (editingPlanId && isPlanCurrentlyActive === true) {
         // El plan ya es activo, guardar sin preguntar
+        console.log('✅ Plan ya activo - guardar sin preguntar');
         savePlanToDatabase(true);
       } else {
         // Plan nuevo o plan existente pero no activo - preguntar si quiere activarlo
+        console.log('❓ Plan NO activo o es nuevo - preguntar al usuario');
+        console.log('   Razón: editingPlanId=' + editingPlanId + ', isPlanCurrentlyActive=' + isPlanCurrentlyActive);
         showAlert(
           '¿Activar este plan?',
           '¿Quieres que este sea tu plan de entrenamiento activo?',
@@ -675,11 +795,17 @@ export default function CustomPlanDaysScreen() {
             {
               text: 'No',
               style: 'cancel',
-              onPress: () => savePlanToDatabase(false),
+              onPress: () => {
+                console.log('👤 Usuario eligió NO activar');
+                savePlanToDatabase(false);
+              },
             },
             {
               text: 'Sí',
-              onPress: () => savePlanToDatabase(true),
+              onPress: () => {
+                console.log('👤 Usuario eligió SÍ activar');
+                savePlanToDatabase(true);
+              },
             },
           ],
           { icon: 'checkmark-done-circle', iconColor: '#4CAF50' }
@@ -695,6 +821,17 @@ export default function CustomPlanDaysScreen() {
         'Usuario no autenticado',
         [{ text: 'OK' }],
         { icon: 'alert-circle', iconColor: '#F44336' }
+      );
+      return;
+    }
+
+    // Validar que el plan tenga un nombre
+    if (!planName || planName.trim().length === 0) {
+      showAlert(
+        'Nombre requerido',
+        'Por favor, ingresa un nombre para tu plan de entrenamiento.',
+        [{ text: 'OK' }],
+        { icon: 'create-outline', iconColor: '#ffb300' }
       );
       return;
     }
@@ -753,11 +890,12 @@ export default function CustomPlanDaysScreen() {
             day: day.name || `Día ${day.dayNumber}`,
             focus: day.name || `Día ${day.dayNumber}`,
             exercises: day.exercises.map((ex: any) => ({
+              id: ex.id, // ← IMPORTANTE: Mantener el ID
               name: ex.name,
               sets: ex.sets,
               reps: ex.reps,
-              rest_seconds: ex.rest_seconds || 120, // Usar valor configurado o 2min por defecto
-              setTypes: ex.setTypes || [], // Incluir tipos de series
+              rest_seconds: ex.rest_seconds || 120,
+              setTypes: ex.setTypes || [],
             })),
             duration: 45,
           })),
@@ -767,10 +905,11 @@ export default function CustomPlanDaysScreen() {
           day: day.name || `Día ${day.dayNumber}`,
           focus: day.name || `Día ${day.dayNumber}`,
           exercises: day.exercises.map((ex: any) => ({
+            id: ex.id, // ← IMPORTANTE: Mantener el ID
             name: ex.name,
             sets: ex.sets,
             reps: ex.reps,
-            rest_seconds: ex.rest_seconds || 120, // Usar valor configurado o 2min por defecto
+            rest_seconds: ex.rest_seconds || 120,
             setTypes: ex.setTypes || [],
           })),
           duration: 45,
@@ -790,6 +929,12 @@ export default function CustomPlanDaysScreen() {
 
         if (updateError) {
           console.error('Error desactivando planes anteriores:', updateError);
+          showAlert(
+            'Aviso',
+            'El plan se guardará pero hubo un problema al desactivar otros planes. Es posible que tengas múltiples planes activos.',
+            [{ text: 'Continuar' }],
+            { icon: 'warning', iconColor: '#ffb300' }
+          );
         }
       }
 
@@ -800,30 +945,58 @@ export default function CustomPlanDaysScreen() {
       
       // Si estamos editando un plan existente, actualizar en lugar de insertar
       if (planIdToUpdate) {
-        const { data, error } = await supabase
-          .from('workout_plans')
-          .update({
-            plan_name: finalPlanName,
-            description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}`,
-            duration_weeks: planData.duration_weeks,
-            plan_data: planData,
-            is_active: isActive,
-          })
-          .eq('id', planIdToUpdate)
-          .eq('user_id', user.id)
-          .select('id')
-          .single();
-
-        if (error) {
-          console.error('Error al actualizar plan:', error);
-          showAlert(
-            'Error',
-            'No se pudo actualizar el plan. Intenta nuevamente.',
-            [{ text: 'OK' }],
-            { icon: 'alert-circle', iconColor: '#F44336' }
+        // Si es modo entrenador, usar la función especial para actualizar plan del alumno
+        if (isTrainerView && studentId) {
+          console.log('👨‍🏫 Actualizando plan del alumno como entrenador');
+          const result = await updateStudentWorkoutPlan(
+            user.id,
+            studentId,
+            planIdToUpdate,
+            {
+              plan_name: finalPlanName,
+              description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}`,
+              plan_data: planData,
+            }
           );
-          setIsSaving(false);
-          return;
+
+          if (!result.success) {
+            console.error('Error al actualizar plan del alumno:', result.error);
+            showAlert(
+              'Error',
+              result.error || 'No se pudo actualizar el plan. Intenta nuevamente.',
+              [{ text: 'OK' }],
+              { icon: 'alert-circle', iconColor: '#F44336' }
+            );
+            setIsSaving(false);
+            return;
+          }
+        } else {
+          // Actualización normal para el propio usuario
+          const { data, error } = await supabase
+            .from('workout_plans')
+            .update({
+              plan_name: finalPlanName,
+              description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}`,
+              duration_weeks: planData.duration_weeks,
+              plan_data: planData,
+              is_active: isActive,
+            })
+            .eq('id', planIdToUpdate)
+            .eq('user_id', user.id)
+            .select('id')
+            .single();
+
+          if (error) {
+            console.error('Error al actualizar plan:', error);
+            showAlert(
+              'Error',
+              'No se pudo actualizar el plan. Intenta nuevamente.',
+              [{ text: 'OK' }],
+              { icon: 'alert-circle', iconColor: '#F44336' }
+            );
+            setIsSaving(false);
+            return;
+          }
         }
 
         // Limpiar AsyncStorage después de actualizar
@@ -838,23 +1011,32 @@ export default function CustomPlanDaysScreen() {
         await AsyncStorage.removeItem('custom_plan_weeks_count');
         await AsyncStorage.removeItem('editing_plan_id');
 
+        // Importante: Establecer isSaving a false ANTES del alert
+        setIsSaving(false);
+
         showAlert(
           '¡Éxito!',
-          isActive 
-            ? 'Plan actualizado y activado exitosamente' 
-            : 'Plan actualizado exitosamente. Puedes activarlo desde "Mis planes de entrenamiento"',
+          isTrainerView 
+            ? 'Plan del alumno actualizado correctamente'
+            : isActive 
+              ? 'Plan actualizado y activado exitosamente' 
+              : 'Plan actualizado exitosamente. Puedes activarlo desde "Mis planes de entrenamiento"',
           [
             {
               text: 'OK',
               onPress: () => {
-                // Volver al detalle del plan que estábamos editando
-                router.push(`/(tabs)/workout-plan-detail?planId=${planIdToUpdate}` as any);
+                if (isTrainerView && studentId) {
+                  // Si es modo entrenador, volver a la pantalla del alumno
+                  router.back();
+                } else {
+                  // Si es modo normal, ir a la pestaña de entrenamientos
+                  router.push('/(tabs)/workout' as any);
+                }
               },
             },
           ],
           { icon: 'checkmark-circle', iconColor: '#4CAF50' }
         );
-        setIsSaving(false);
         return;
       }
 
@@ -899,6 +1081,9 @@ export default function CustomPlanDaysScreen() {
 
       const newPlanId = data?.id;
       
+      // Importante: Establecer isSaving a false ANTES del alert
+      setIsSaving(false);
+      
       showAlert(
         '¡Éxito!',
         isActive 
@@ -908,12 +1093,8 @@ export default function CustomPlanDaysScreen() {
           {
             text: 'OK',
             onPress: () => {
-              // Volver al detalle del plan recién creado
-              if (newPlanId) {
-                router.push(`/(tabs)/workout-plan-detail?planId=${newPlanId}` as any);
-              } else {
-                router.push('/(tabs)/workout' as any);
-              }
+              // Ir a la pestaña de entrenamientos
+              router.push('/(tabs)/workout' as any);
             },
           },
         ],
@@ -921,14 +1102,13 @@ export default function CustomPlanDaysScreen() {
       );
     } catch (error) {
       console.error('Error inesperado al guardar plan:', error);
+      setIsSaving(false);
       showAlert(
         'Error',
         'Ocurrió un error al guardar el plan',
         [{ text: 'OK' }],
         { icon: 'alert-circle', iconColor: '#F44336' }
       );
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -961,15 +1141,28 @@ export default function CustomPlanDaysScreen() {
         {/* Nombre del plan editable */}
         <View style={styles.planNameContainer}>
           {isEditingPlanName ? (
-            <View style={styles.planNameEditContainer}>
+            <View style={[
+              styles.planNameEditContainer,
+              planName.trim().length === 0 && styles.planNameEditContainerEmpty
+            ]}>
               <TextInput
                 style={styles.planNameInput}
                 value={planName}
                 onChangeText={setPlanName}
-                placeholder="Nombre del plan"
+                placeholder="Nombre del plan (requerido)"
                 placeholderTextColor="#666"
                 autoFocus
                 onBlur={async () => {
+                  // Si el nombre está vacío, mostrar alerta
+                  if (planName.trim().length === 0) {
+                    showAlert(
+                      'Nombre requerido',
+                      'El plan debe tener un nombre. Se usará un nombre por defecto.',
+                      [{ text: 'OK' }],
+                      { icon: 'alert-circle', iconColor: '#ffb300' }
+                    );
+                    setPlanName(`Plan Personalizado - ${new Date().toLocaleDateString()}`);
+                  }
                   setIsEditingPlanName(false);
                   // Guardar el nombre en AsyncStorage
                   try {
@@ -979,6 +1172,16 @@ export default function CustomPlanDaysScreen() {
                   }
                 }}
                 onSubmitEditing={async () => {
+                  // Si el nombre está vacío, mostrar alerta
+                  if (planName.trim().length === 0) {
+                    showAlert(
+                      'Nombre requerido',
+                      'El plan debe tener un nombre. Se usará un nombre por defecto.',
+                      [{ text: 'OK' }],
+                      { icon: 'alert-circle', iconColor: '#ffb300' }
+                    );
+                    setPlanName(`Plan Personalizado - ${new Date().toLocaleDateString()}`);
+                  }
                   setIsEditingPlanName(false);
                   // Guardar el nombre en AsyncStorage
                   try {
@@ -1446,6 +1649,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ffb300',
     gap: 12,
+  },
+  planNameEditContainerEmpty: {
+    borderColor: '#F44336',
+    borderWidth: 2,
   },
   planNameInput: {
     flex: 1,

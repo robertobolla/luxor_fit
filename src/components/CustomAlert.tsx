@@ -62,7 +62,9 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
           <View style={styles.alertContainer}>
             {icon && (
               <View style={styles.iconContainer}>
-                <Ionicons name={icon} size={48} color={iconColor} />
+                <View style={styles.iconCircle}>
+                  <Ionicons name={icon} size={40} color="#1a1a1a" />
+                </View>
               </View>
             )}
             
@@ -74,25 +76,25 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
               {buttons.map((button, index) => {
                 const isDestructive = button.style === 'destructive';
                 const isCancel = button.style === 'cancel';
-                const isLast = index === buttons.length - 1;
+                const isDefault = !isDestructive && !isCancel;
                 
                 return (
                   <TouchableOpacity
                     key={index}
                     style={[
                       styles.button,
-                      isDestructive && styles.buttonDestructive,
                       isCancel && styles.buttonCancel,
-                      !isLast && styles.buttonNotLast,
+                      isDestructive && styles.buttonDestructive,
                     ]}
                     onPress={() => handleButtonPress(button)}
-                    activeOpacity={0.7}
+                    activeOpacity={0.8}
                   >
                     <Text
                       style={[
                         styles.buttonText,
                         isDestructive && styles.buttonTextDestructive,
                         isCancel && styles.buttonTextCancel,
+                        isDefault && styles.buttonTextDefault,
                       ]}
                     >
                       {button.text}
@@ -111,31 +113,39 @@ export const CustomAlert: React.FC<CustomAlertProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(0, 0, 0, 0.92)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   alertContainer: {
-    backgroundColor: '#2a2a2a',
-    borderRadius: 20,
-    padding: 24,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 24,
+    padding: 28,
     width: Dimensions.get('window').width - 80,
     maxWidth: 400,
     borderWidth: 2,
-    borderColor: '#ffb300',
-    shadowColor: '#000',
+    borderColor: 'rgba(255, 179, 0, 0.3)',
+    shadowColor: '#ffb300',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 12,
   },
   iconContainer: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffb300',
   },
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#ffffff',
     textAlign: 'center',
@@ -143,10 +153,10 @@ const styles = StyleSheet.create({
   },
   message: {
     fontSize: 15,
-    color: '#cccccc',
+    color: '#ccc',
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 24,
+    marginBottom: 26,
   },
   buttonsContainer: {
     flexDirection: 'row',
@@ -154,15 +164,14 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+    minHeight: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
     paddingVertical: 14,
     paddingHorizontal: 20,
-    borderRadius: 12,
     backgroundColor: '#ffb300',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonNotLast: {
-    // Para mantener el gap consistente
   },
   buttonCancel: {
     backgroundColor: 'transparent',
@@ -170,18 +179,23 @@ const styles = StyleSheet.create({
     borderColor: '#666',
   },
   buttonDestructive: {
-    backgroundColor: '#F44336',
+    backgroundColor: '#ff4444',
   },
   buttonText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
+  },
+  buttonTextDefault: {
     color: '#1a1a1a',
+    fontWeight: 'bold',
   },
   buttonTextCancel: {
     color: '#999',
+    fontWeight: '600',
   },
   buttonTextDestructive: {
     color: '#ffffff',
+    fontWeight: 'bold',
   },
 });
 
