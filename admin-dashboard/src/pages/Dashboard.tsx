@@ -318,13 +318,20 @@ function StatCard({ title, value, icon, color }: {
   icon: string;
   color: string;
 }) {
+  // Manejar valores undefined/null
+  const displayValue = value === null || value === undefined 
+    ? 'N/A' 
+    : typeof value === 'number' 
+      ? value.toLocaleString() 
+      : value;
+
   return (
     <div className="stat-card" style={{ borderTopColor: color }}>
       <div className="stat-header">
         <span className="stat-icon">{icon}</span>
         <h3 className="stat-title">{title}</h3>
       </div>
-      <p className="stat-value" style={{ color }}>{value.toLocaleString()}</p>
+      <p className="stat-value" style={{ color }}>{displayValue}</p>
     </div>
   );
 }
