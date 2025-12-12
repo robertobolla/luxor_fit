@@ -1,13 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './supabase';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('⚠️ Variables de entorno de Supabase no configuradas');
-}
-
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '');
+// Re-exportar supabase para compatibilidad con archivos existentes
+export { supabase };
 
 export interface AdminUser {
   id: string;
@@ -116,8 +110,6 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
     if (userEmail) {
       console.log('📧 Email del usuario:', userEmail);
     }
-    console.log('🔗 Supabase URL:', supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'NO CONFIGURADA');
-    console.log('🔑 Supabase Key:', supabaseAnonKey ? supabaseAnonKey.substring(0, 20) + '...' : 'NO CONFIGURADA');
     
     // Limpiar el userId (trim y asegurar que no tenga espacios)
     const cleanUserId = userId.trim();
