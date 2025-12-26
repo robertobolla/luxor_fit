@@ -115,6 +115,7 @@ export default function MealPlanScreen() {
   const loadWeekPlan = async () => {
     if (!user?.id) return;
 
+    console.log('📅 loadWeekPlan iniciado con params:', params);
     setIsLoading(true);
     try {
       // Usar weekStart del parámetro si está disponible, sino usar la semana actual
@@ -169,10 +170,12 @@ export default function MealPlanScreen() {
         .maybeSingle();
 
       let plan = await getMealPlan(user.id, mondayStr);
+      console.log('📋 Plan obtenido:', plan ? `${Object.keys(plan).length} días` : 'null');
 
       // Si no existe plan en la base de datos, mostrar modal
       // NO generar automáticamente - el usuario debe generarlo manualmente
       if (!planExists && !plan) {
+        console.log('⚠️ No existe plan, mostrando modal');
         setWeekPlan(null);
         setShowNoPlanModal(true);
         setIsLoading(false);
@@ -185,10 +188,12 @@ export default function MealPlanScreen() {
         console.log('⚠️ Plan incompleto detectado, mostrando tal como está');
       }
 
+      console.log('✅ Estableciendo weekPlan con', plan ? Object.keys(plan).length : 0, 'días');
       setWeekPlan(plan);
     } catch (err) {
-      console.error('Error loading meal plan:', err);
+      console.error('❌ Error loading meal plan:', err);
       Alert.alert('Error', 'No se pudo cargar el plan de comidas.');
+      setShowNoPlanModal(true);
     } finally {
       setIsLoading(false);
     }
@@ -244,6 +249,7 @@ export default function MealPlanScreen() {
         .eq('week_start', mondayStr);
 
       // Borrar targets existentes de esta semana
+      const monday = new Date(mondayStr);
       for (let i = 0; i < 7; i++) {
         const date = new Date(monday);
         date.setDate(monday.getDate() + i);
@@ -421,11 +427,15 @@ export default function MealPlanScreen() {
     );
   }
 
+  // Si no hay plan y no hay modal, mostrar el modal automáticamente
   if (!weekPlan && !showNoPlanModal) {
+    console.log('⚠️ weekPlan es null y no hay modal, mostrando modal automáticamente');
+    // Mostrar modal en el próximo render
+    setTimeout(() => setShowNoPlanModal(true), 0);
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <LoadingOverlay visible={true} message="Cargando plan..." fullScreen />
+        <LoadingOverlay visible={true} message="Verificando plan..." fullScreen />
       </SafeAreaView>
     );
   }
@@ -527,6 +537,40 @@ export default function MealPlanScreen() {
   }
 
   const dayPlan = weekPlan[DAYS[selectedDay] as keyof WeekPlan];
+
+  // Si no hay plan para el día seleccionado, mostrar mensaje
+  if (!dayPlan) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <View style={styles.header}>
+          <TouchableOpacity 
+            onPress={() => router.push('/(tabs)/nutrition' as any)} 
+            style={styles.backIconButton}
+          >
+            <Ionicons name="arrow-back" size={24} color="#ffffff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Plan Semanal</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Ionicons name="alert-circle-outline" size={64} color="#FFB300" />
+          <Text style={[styles.errorText, { fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginTop: 16 }]}>
+            No hay plan disponible para {DAY_NAMES[selectedDay]}
+          </Text>
+          <Text style={styles.errorSubtext}>
+            El plan puede estar incompleto. Intenta regenerarlo desde la pantalla de nutrición.
+          </Text>
+          <TouchableOpacity
+            style={{ marginTop: 24, backgroundColor: '#ffb300', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+            onPress={() => router.push('/(tabs)/nutrition' as any)}
+          >
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1a1a1a' }}>Volver a Nutrición</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -687,7 +731,7 @@ export default function MealPlanScreen() {
 
               <View style={styles.modalButtons}>
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
+                  style={[styles.modalButtonRow, styles.cancelButton]}
                   onPress={() => {
                     setShowAIModal(false);
                     setAiPrompt('');
@@ -697,7 +741,7 @@ export default function MealPlanScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.modalButton, styles.confirmButton]}
+                  style={[styles.modalButtonRow, styles.confirmButton]}
                   onPress={handleAIAdjustment}
                 >
                   <Ionicons name="sparkles" size={20} color="#1a1a1a" />
@@ -789,11 +833,10 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   errorText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginTop: 16,
-    textAlign: 'center',
+    fontSize: 14,
+    color: '#F44336',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   errorSubtext: {
     fontSize: 14,
@@ -986,7 +1029,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
-  modalButton: {
+  modalButtonRow: {
     flex: 1,
     paddingVertical: 14,
     borderRadius: 8,
@@ -1012,12 +1055,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#1a1a1a',
-  },
-  errorText: {
-    fontSize: 14,
-    color: '#F44336',
-    marginTop: 8,
-    fontStyle: 'italic',
   },
   dailySummaryCard: {
     backgroundColor: '#0a0a0a',

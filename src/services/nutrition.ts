@@ -1004,7 +1004,7 @@ async function generateAIMealPlan(
         advanced: 'Avanzado',
       };
       const goalMap: Record<string, string> = {
-        weight_loss: 'Perder peso',
+        weight_loss: 'Bajar grasa',
         muscle_gain: 'Ganar músculo',
         strength: 'Aumentar fuerza',
         endurance: 'Mejorar resistencia',
@@ -1063,7 +1063,7 @@ NOTA: Tienes acceso a 200 alimentos diferentes (IDs 1-200). Si necesitas otros a
 
 REGLAS ESTRICTAS:
 1. SOLO usa alimentos de la lista anterior (usa el ID del alimento)
-       2. NUNCA uses food_id undefined, null, o fuera del rango 1-200
+2. NUNCA uses food_id undefined, null, o fuera del rango 1-200
 3. NUNCA uses grams undefined, null, o menor a 1
 4. Respeta EXACTAMENTE las preferencias y exclusiones del usuario
 5. Si el usuario dice "sin pescado" o "evitar pescado", NO incluyas ningún alimento con tag "pescado"
@@ -1071,13 +1071,21 @@ REGLAS ESTRICTAS:
 7. Si el usuario dice "sin gluten", NO incluyas alimentos con tag "gluten"
 8. Si el usuario dice "vegetariano" o "sin carne", NO incluyas alimentos con tag "carne"
 9. Crea ${mealsPerDay} comidas por día (${fastingWindow ? `ventana de alimentación: ${fastingWindow}` : 'sin ayuno'})
-10. OBJETIVO DIARIO: ${targets.calories} kcal (${targets.protein_g}g proteína, ${targets.carbs_g}g carbos, ${targets.fats_g}g grasas)
-11. IMPORTANTE: Cada comida debe tener aproximadamente ${caloriesPerMeal} kcal (${targets.calories} ÷ ${mealsPerDay})
-12. Ajusta los gramos de cada ingrediente para alcanzar las calorías objetivo por comida
-13. Usa cantidades realistas y generosas (por ejemplo: 200-250g de proteína, 150-200g de carbohidratos, vegetales abundantes)
-14. Genera comidas para 7 días (lunes a domingo)
-15. Proporciona 2 opciones diferentes para cada comida (para mantener el JSON compacto)
-       16. CRÍTICO: Cada item DEBE tener food_id (número 1-200) y grams (número > 0)
+
+⚠️ OBJETIVO DIARIO TOTAL (MUY IMPORTANTE):
+- Calorías totales del día: ${targets.calories} kcal
+- Proteína total del día: ${targets.protein_g}g 
+- Carbohidratos totales del día: ${targets.carbs_g}g
+- Grasas totales del día: ${targets.fats_g}g
+
+10. DISTRIBUCIÓN POR COMIDA: Cada comida debe tener aproximadamente ${caloriesPerMeal} kcal
+11. LA SUMA DE TODAS LAS COMIDAS DEL DÍA DEBE SER EXACTAMENTE ${targets.calories} kcal (±50 kcal de margen)
+12. LA SUMA DE PROTEÍNA DE TODAS LAS COMIDAS DEBE SER APROXIMADAMENTE ${targets.protein_g}g (±10g de margen)
+13. Ajusta los gramos de cada ingrediente para alcanzar EXACTAMENTE los targets diarios
+14. Usa cantidades realistas según los valores nutricionales de cada alimento
+15. Genera comidas para 7 días (lunes a domingo)
+16. Proporciona 2 opciones diferentes para cada comida (para mantener el JSON compacto)
+17. CRÍTICO: Cada item DEBE tener food_id (número 1-200) y grams (número > 0)
 
 ${userContext}
 
@@ -1121,7 +1129,19 @@ FORMATO DE RESPUESTA (JSON):
         { role: 'system', content: systemPrompt },
         {
           role: 'user',
-          content: `Crea un plan de ${mealsPerDay} comidas diarias para 7 días. CRÍTICO: Cada comida debe tener aproximadamente ${caloriesPerMeal} kcal para alcanzar mi objetivo diario de ${targets.calories} kcal. ${customPrompts.length > 0 ? `Preferencias: ${customPrompts.join(', ')}` : ''}
+          content: `Crea un plan de ${mealsPerDay} comidas diarias para 7 días.
+
+⚠️ OBJETIVO DIARIO TOTAL QUE DEBES CUMPLIR:
+- Calorías: ${targets.calories} kcal (±50 kcal máximo)
+- Proteína: ${targets.protein_g}g (±10g máximo)
+- Carbohidratos: ${targets.carbs_g}g 
+- Grasas: ${targets.fats_g}g
+
+DISTRIBUCIÓN: Cada comida debe tener aproximadamente ${caloriesPerMeal} kcal y ${Math.round(targets.protein_g / mealsPerDay)}g de proteína.
+
+VERIFICACIÓN: Al sumar TODAS las comidas del día, el total debe ser EXACTAMENTE el objetivo diario indicado arriba.
+
+${customPrompts.length > 0 ? `Preferencias del usuario: ${customPrompts.join(', ')}` : ''}
 
 IMPORTANTE: Responde SOLO con JSON válido. Cada item debe tener food_id (número 1-200) y grams (número > 0). NO uses undefined, null o valores vacíos.`,
         },

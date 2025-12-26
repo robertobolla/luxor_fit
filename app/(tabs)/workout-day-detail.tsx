@@ -476,75 +476,6 @@ export default function WorkoutDayDetailScreen() {
   };
 
   // Consejos específicos por ejercicio
-  const getExerciseTips = (exerciseName: string): string[] => {
-    const lowerName = exerciseName.toLowerCase();
-    
-    if (lowerName.includes('sentadilla') || lowerName.includes('squat')) {
-      return [
-        'Pies al ancho de hombros',
-        'Rodillas alineadas con los pies',
-        'Baja hasta que muslos estén paralelos al suelo',
-        'Mantén el pecho arriba y mirada al frente',
-      ];
-    } else if (lowerName.includes('press') && lowerName.includes('banca')) {
-      return [
-        'Retrae los omóplatos',
-        'Pies firmes en el suelo',
-        'Barra a la altura del pecho medio',
-        'Codos a 45° del cuerpo',
-      ];
-    } else if (lowerName.includes('peso muerto') || lowerName.includes('deadlift')) {
-      return [
-        'Espalda neutral en todo momento',
-        'Barra cerca de las espinillas',
-        'Empuja con las piernas primero',
-        'Extiende caderas al final del movimiento',
-      ];
-    } else if (lowerName.includes('dominada') || lowerName.includes('pull')) {
-      return [
-        'Agarre firme, manos al ancho de hombros',
-        'Retrae omóplatos antes de subir',
-        'Barbilla sobre la barra',
-        'Baja controladamente',
-      ];
-    } else if (lowerName.includes('press militar') || lowerName.includes('overhead')) {
-      return [
-        'Core activado para proteger espalda baja',
-        'Barra frente a la cara al subir',
-        'Codos ligeramente adelante',
-        'Extensión completa arriba',
-      ];
-    } else if (lowerName.includes('remo')) {
-      return [
-        'Espalda plana durante todo el movimiento',
-        'Lleva codos hacia atrás, no arriba',
-        'Contrae omóplatos al final',
-        'Controla el peso en la bajada',
-      ];
-    } else if (lowerName.includes('plancha') || lowerName.includes('plank')) {
-      return [
-        'Cuerpo en línea recta',
-        'Core contraído todo el tiempo',
-        'No dejes caer las caderas',
-        'Respira normalmente',
-      ];
-    } else if (lowerName.includes('burpee')) {
-      return [
-        'Mantén el ritmo constante',
-        'Flexión completa en el suelo',
-        'Salto explosivo al final',
-        'Aterriza suavemente',
-      ];
-    } else {
-      return [
-        'Mantén buena técnica',
-        'Controla el movimiento',
-        'Respira correctamente',
-        'Concentración en el músculo objetivo',
-      ];
-    }
-  };
-
   const generalTips = getTipsForFocus(dayData.focus);
 
   return (
@@ -647,10 +578,16 @@ export default function WorkoutDayDetailScreen() {
             const reps = isOldFormat ? null : exercise.reps;
             const rest = isOldFormat ? null : exercise.rest;
             const setTypes = isOldFormat ? null : exercise.setTypes;
-            const exerciseTips = getExerciseTips(exerciseName);
 
             // Debug log
-            console.log('Exercise:', { isOldFormat, exercise, sets, reps, rest, setTypes });
+            console.log('Exercise:', { 
+              isOldFormat, 
+              exercise, 
+              sets, 
+              reps, 
+              rest, 
+              setTypes
+            });
 
             const isExpanded = expandedExercises[exerciseName] || false;
 
@@ -829,16 +766,6 @@ export default function WorkoutDayDetailScreen() {
                     })()}
                   </View>
                 )}
-
-                <View style={styles.exerciseTips}>
-                  <Text style={styles.exerciseTipsTitle}>📌 Puntos clave:</Text>
-                  {exerciseTips.map((tip, idx) => (
-                    <View key={idx} style={styles.exerciseTipItem}>
-                      <View style={styles.bulletPoint} />
-                      <Text style={styles.exerciseTipText}>{tip}</Text>
-                    </View>
-                  ))}
-                </View>
               </View>
             );
           })}
@@ -1479,36 +1406,6 @@ const styles = StyleSheet.create({
     color: '#ffb300',
     fontWeight: '600',
     marginLeft: 6,
-  },
-  exerciseTips: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 8,
-    padding: 12,
-  },
-  exerciseTipsTitle: {
-    fontSize: 13,
-    color: '#999',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  exerciseTipItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 6,
-  },
-  bulletPoint: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#ffb300',
-    marginTop: 6,
-    marginRight: 8,
-  },
-  exerciseTipText: {
-    fontSize: 13,
-    color: '#ccc',
-    flex: 1,
-    lineHeight: 18,
   },
   finalNotesCard: {
     flexDirection: 'row',

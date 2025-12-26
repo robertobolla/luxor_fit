@@ -649,6 +649,71 @@ export default function CustomPlanDaysScreen() {
     );
   };
 
+  const handleDuplicateWeek = async (weekIndex: number) => {
+    const weekToDuplicate = weeks[weekIndex];
+    
+    showAlert(
+      'Duplicar Semana',
+      `¿Quieres duplicar la Semana ${weekToDuplicate.weekNumber}?\n\nSe copiará esta semana con todos sus ejercicios.`,
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel',
+        },
+        {
+          text: 'Duplicar',
+          onPress: async () => {
+            try {
+              const newWeekNumber = weeks.length + 1;
+              
+              // Crear copia profunda de la semana con sus días y ejercicios
+              const duplicatedWeek: Week = {
+                weekNumber: newWeekNumber,
+                days: weekToDuplicate.days.map(day => ({
+                  ...day,
+                  exercises: day.exercises.map(ex => ({ ...ex })), // Copia profunda de ejercicios
+                })),
+              };
+              
+              // Agregar la nueva semana
+              const updatedWeeks = [...weeks, duplicatedWeek];
+              setWeeks(updatedWeeks);
+              
+              // Guardar datos duplicados en AsyncStorage
+              for (const day of duplicatedWeek.days) {
+                const storageKey = `week_${newWeekNumber}_day_${day.dayNumber}_data`;
+                await AsyncStorage.setItem(storageKey, JSON.stringify(day));
+              }
+              
+              // Actualizar contador de semanas
+              await AsyncStorage.setItem('custom_plan_weeks_count', updatedWeeks.length.toString());
+              
+              // Cambiar a la nueva semana duplicada
+              setCurrentWeekIndex(updatedWeeks.length - 1);
+              setShowWeekDropdown(false);
+              
+              showAlert(
+                '¡Duplicado!',
+                `Semana ${newWeekNumber} creada con todos los ejercicios de la Semana ${weekToDuplicate.weekNumber}`,
+                [{ text: 'OK' }],
+                { icon: 'checkmark-circle', iconColor: '#4CAF50' }
+              );
+            } catch (error) {
+              console.error('Error duplicating week:', error);
+              showAlert(
+                'Error',
+                'No se pudo duplicar la semana',
+                [{ text: 'OK' }],
+                { icon: 'alert-circle', iconColor: '#F44336' }
+              );
+            }
+          },
+        },
+      ],
+      { icon: 'copy', iconColor: '#ffb300' }
+    );
+  };
+
   const handleDeleteWeek = async (weekIndex: number) => {
     if (weeks.length === 1) {
       showAlert(
@@ -1288,13 +1353,23 @@ export default function CustomPlanDaysScreen() {
                       </View>
                     </TouchableOpacity>
                     
-                    <TouchableOpacity
-                      style={styles.weekDropdownDeleteButton}
-                      onPress={() => handleDeleteWeek(index)}
-                      activeOpacity={0.7}
-                    >
-                      <Ionicons name="trash-outline" size={20} color="#F44336" />
-                    </TouchableOpacity>
+                    <View style={styles.weekDropdownActions}>
+                      <TouchableOpacity
+                        style={styles.weekDropdownDuplicateButton}
+                        onPress={() => handleDuplicateWeek(index)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="copy-outline" size={20} color="#ffb300" />
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={styles.weekDropdownDeleteButton}
+                        onPress={() => handleDeleteWeek(index)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="trash-outline" size={20} color="#F44336" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 );
               })}
@@ -1777,6 +1852,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     marginRight: 8,
+  },
+  weekDropdownActions: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  weekDropdownDuplicateButton: {
+    padding: 8,
   },
   weekDropdownDeleteButton: {
     padding: 8,

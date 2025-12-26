@@ -348,10 +348,10 @@ export default function Users() {
                         <span className="badge badge-success" style={{ backgroundColor: '#4caf50' }}>Gratis (Socio)</span>
                       ) : user.role_type === 'empresario' ? (
                         <span className="badge badge-success" style={{ backgroundColor: '#4caf50' }}>Gratis (Empresario)</span>
+                      ) : user.is_gym_member ? (
+                        <span className="badge badge-success" style={{ backgroundColor: '#9C27B0' }}>Gym Member</span>
                       ) : user.subscription_status ? (
                         <span className="badge badge-success">{user.subscription_status}</span>
-                      ) : user.is_gym_member ? (
-                        <span className="badge badge-success" style={{ backgroundColor: '#4caf50' }}>Gratis (Gimnasio)</span>
                       ) : (
                         <span className="badge badge-default">Sin suscripción</span>
                       )}

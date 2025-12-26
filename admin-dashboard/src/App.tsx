@@ -2,6 +2,8 @@ import React from 'react';
 import { useUser, SignedIn, SignedOut, SignIn } from '@clerk/clerk-react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
+import EmpresarioDashboard from './pages/EmpresarioDashboard';
+import Mensajeria from './pages/Mensajeria';
 import Users from './pages/Users';
 import UserDetail from './pages/UserDetail';
 import Stats from './pages/Stats';
@@ -13,6 +15,7 @@ import PartnerReferrals from './pages/PartnerReferrals';
 import PartnerPayments from './pages/PartnerPayments';
 import Empresarios from './pages/Empresarios';
 import EmpresarioUsers from './pages/EmpresarioUsers';
+import GymMemberDetail from './pages/GymMemberDetail';
 import Layout from './components/Layout';
 import { checkAdminRole } from './services/adminService';
 import { ViewAsProvider } from './contexts/ViewAsContext';
@@ -24,6 +27,8 @@ function App() {
         <Routes>
           <Route path="/" element={<ProtectedRoute />}>
             <Route index element={<Dashboard />} />
+            <Route path="empresario-dashboard" element={<EmpresarioDashboard />} />
+            <Route path="mensajeria" element={<Mensajeria />} />
             <Route path="users" element={<Users />} />
             <Route path="users/:userId" element={<UserDetail />} />
             <Route path="partners" element={<Partners />} />
@@ -32,6 +37,7 @@ function App() {
             <Route path="partner-payments/:partnerId" element={<PartnerPayments />} />
             <Route path="empresarios" element={<Empresarios />} />
             <Route path="empresarios/:empresarioId" element={<EmpresarioUsers />} />
+            <Route path="empresarios/:empresarioId/members/:userId/:userName/:userEmail" element={<GymMemberDetail />} />
             <Route path="stats" element={<Stats />} />
             <Route path="admin-tools" element={<AdminTools />} />
             <Route path="create-user" element={<CreateUser />} />

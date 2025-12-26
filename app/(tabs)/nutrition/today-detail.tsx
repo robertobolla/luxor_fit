@@ -130,6 +130,14 @@ export default function TodayDetailScreen() {
 
   const consumed = calculateConsumed();
 
+  // Formatear la fecha seleccionada para el título
+  const displayDate = new Date(selectedDate + 'T12:00:00'); // Usar mediodía para evitar problemas de zona horaria
+  const today = new Date().toISOString().split('T')[0];
+  const isToday = selectedDate === today;
+  
+  const dateTitle = isToday 
+    ? `Hoy - ${displayDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}`
+    : displayDate.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
 
   if (isLoading) {
     return (
@@ -156,7 +164,7 @@ export default function TodayDetailScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Hoy - {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
+          <Text style={styles.headerTitle}>{dateTitle}</Text>
           <View style={{ width: 24 }} />
         </View>
 
@@ -198,13 +206,17 @@ export default function TodayDetailScreen() {
           {todayLogs.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="restaurant-outline" size={64} color="#666666" />
-              <Text style={styles.emptyText}>No has registrado comidas hoy</Text>
-              <TouchableOpacity 
-                style={styles.emptyButton}
-                onPress={() => router.push('/(tabs)/nutrition/log' as any)}
-              >
-                <Text style={styles.emptyButtonText}>Registrar primera comida</Text>
-              </TouchableOpacity>
+              <Text style={styles.emptyText}>
+                {isToday ? 'No has registrado comidas hoy' : 'No hay comidas registradas en este día'}
+              </Text>
+              {isToday && (
+                <TouchableOpacity 
+                  style={styles.emptyButton}
+                  onPress={() => router.push('/(tabs)/nutrition/log' as any)}
+                >
+                  <Text style={styles.emptyButtonText}>Registrar primera comida</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             todayLogs.map((log, index) => {

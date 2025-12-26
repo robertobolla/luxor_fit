@@ -144,7 +144,7 @@ function buildPrompt(userData: UserProfile): string {
 
   const goalsText = userData.goals.map(goal => {
     const goalMap: { [key: string]: string } = {
-      weight_loss: 'perder peso',
+      weight_loss: 'bajar grasa',
       muscle_gain: 'ganar músculo',
       strength: 'aumentar fuerza',
       endurance: 'mejorar resistencia',
@@ -537,7 +537,7 @@ async function buildWorkoutPrompt(
 
   const goalsText = userData.goals.map(goal => {
     const goalMap: { [key: string]: string } = {
-      weight_loss: 'perder peso',
+      weight_loss: 'bajar grasa',
       muscle_gain: 'ganar músculo',
       strength: 'aumentar fuerza',
       endurance: 'mejorar resistencia',

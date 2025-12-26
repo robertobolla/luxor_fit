@@ -87,7 +87,7 @@ export default function PlanIntroductionScreen() {
 
   const getGoalText = (goal: string) => {
     const goalMap: { [key: string]: string } = {
-      weight_loss: 'Perder peso',
+      weight_loss: 'Bajar grasa',
       muscle_gain: 'Ganar músculo',
       strength: 'Aumentar fuerza',
       endurance: 'Mejorar resistencia',

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getEmpresarios, getEmpresariosStats, addEmpresario, updateEmpresario, type Empresario, type EmpresarioStats } from '../services/adminService';
+import { getEmpresarios, getEmpresariosStats, addEmpresario, updateEmpresario, toggleEmpresarioStatus, type Empresario, type EmpresarioStats } from '../services/adminService';
 import './Empresarios.css';
 
 export default function Empresarios() {
@@ -82,6 +82,25 @@ export default function Empresarios() {
 
   function handleViewUsers(empresario: EmpresarioStats) {
     navigate(`/empresarios/${empresario.empresario_id}`);
+  }
+
+  async function handleToggleStatus(empresario: EmpresarioStats) {
+    const currentStatus = empresario.is_active ?? true;
+    const newStatus = !currentStatus;
+    const action = newStatus ? 'activar' : 'desactivar';
+    
+    if (!window.confirm(`¿Estás seguro de ${action} a ${empresario.gym_name}?`)) {
+      return;
+    }
+    
+    try {
+      await toggleEmpresarioStatus(empresario.empresario_id, newStatus);
+      alert(`Empresario ${newStatus ? 'activado' : 'desactivado'} exitosamente`);
+      loadEmpresarios();
+    } catch (error: any) {
+      console.error('Error cambiando estado:', error);
+      alert(error.message || 'Error al cambiar estado del empresario');
+    }
   }
 
   function handleEdit(empresario: EmpresarioStats) {
@@ -176,6 +195,7 @@ export default function Empresarios() {
             <tr>
               <th>Gimnasio</th>
               <th>Contacto</th>
+              <th>Estado</th>
               <th>Tarifa/Usuario</th>
               <th>Usuarios Activos</th>
               <th>Total Miembros</th>
@@ -196,6 +216,16 @@ export default function Empresarios() {
                   )}
                 </td>
                 <td>{emp.empresario_email || '-'}</td>
+                <td>
+                  <button
+                    className={`badge ${emp.is_active !== false ? 'badge-success' : 'badge-default'}`}
+                    onClick={() => handleToggleStatus(emp)}
+                    style={{ cursor: 'pointer', border: 'none' }}
+                    title={emp.is_active !== false ? 'Click para desactivar' : 'Click para activar'}
+                  >
+                    {emp.is_active !== false ? 'Activo' : 'Inactivo'}
+                  </button>
+                </td>
                 <td>
                   {emp.monthly_fee ? (
                     <span>${emp.monthly_fee.toFixed(2)}/mes</span>

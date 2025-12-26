@@ -177,9 +177,12 @@ export default function DashboardScreen() {
     loadConfig();
   }, [showCustomizationModal, isCheckingOnboarding]); // Recargar cuando se cierre el modal
 
-  // Solicitar permisos al cargar por primera vez
+  // Bandera para controlar si ya se intentó solicitar permisos en esta sesión
+  const [permissionsChecked, setPermissionsChecked] = useState(false);
+
+  // Solicitar permisos al cargar por primera vez (solo una vez por sesión)
   useEffect(() => {
-    if (isCheckingOnboarding) return; // Esperar a verificar onboarding
+    if (isCheckingOnboarding || permissionsChecked) return; // Esperar a verificar onboarding y solo verificar una vez
     
     const initializeHealthData = async () => {
       // Primero verificar si ya tiene permisos
@@ -189,34 +192,53 @@ export default function DashboardScreen() {
         // Si no tiene permisos, solicitarlos
         const granted = await requestHealthPermissions();
         if (!granted) {
-          const platformMessage = Platform.OS === 'ios' 
-            ? 'Ve a Configuración → Salud → Datos de Salud y Apps → Luxor Fitness para otorgar permisos.'
-            : 'Asegúrate de tener Google Fit instalado y conectado.';
-          
-          Alert.alert(
-            'Permisos de Salud',
-            'Para mostrar tus estadísticas reales (pasos, distancia, calorías), Luxor Fitness necesita acceso a tus datos de salud.\n\n' + platformMessage,
-            [
-              { text: 'Más tarde', style: 'cancel' },
-              { 
-                text: 'Intentar de nuevo', 
-                onPress: async () => {
-                  resetPermissionsCache();
-                  await requestHealthPermissions();
-                }
-              }
-            ]
-          );
+          // Solo mostrar el alert si también falló la lectura de datos (verificar después de un delay)
+          setTimeout(async () => {
+            // Verificar si hay datos cargados
+            const healthData = await getHealthDataForDate(new Date());
+            const hasData = healthData && (
+              healthData.steps > 0 || 
+              healthData.distance > 0 || 
+              healthData.activeEnergyBurned > 0
+            );
+            
+            // Solo mostrar el modal si realmente no hay datos
+            if (!hasData) {
+              const platformMessage = Platform.OS === 'ios' 
+                ? 'Ve a Configuración → Salud → Datos de Salud y Apps → Luxor Fitness para otorgar permisos.'
+                : 'Asegúrate de tener Google Fit instalado y conectado.';
+              
+              Alert.alert(
+                'Permisos de Salud',
+                'Para mostrar tus estadísticas reales (pasos, distancia, calorías), Luxor Fitness necesita acceso a tus datos de salud.\n\n' + platformMessage,
+                [
+                  { text: 'Más tarde', style: 'cancel' },
+                  { 
+                    text: 'Intentar de nuevo', 
+                    onPress: async () => {
+                      resetPermissionsCache();
+                      setPermissionsChecked(false); // Permitir re-verificar
+                      await requestHealthPermissions();
+                    }
+                  }
+                ]
+              );
+            } else {
+              console.log('✅ Datos de salud disponibles, permisos funcionando correctamente');
+            }
+          }, 1000); // Esperar 1 segundo para verificar si hay datos
         } else {
           console.log('✅ Permisos de salud otorgados correctamente');
         }
       } else {
         console.log('✅ Ya tiene permisos de salud');
       }
+      
+      setPermissionsChecked(true);
     };
     
     initializeHealthData();
-  }, [isCheckingOnboarding]);
+  }, [isCheckingOnboarding, permissionsChecked]);
 
   // Cargar datos de salud cuando cambia la fecha
   useEffect(() => {

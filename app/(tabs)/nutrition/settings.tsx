@@ -209,7 +209,14 @@ export default function NutritionSettingsScreen() {
               {
                 text: 'Sí',
                 onPress: async () => {
-                  // Preguntar si quiere basar la dieta en el plan activo
+                  // Si el usuario ya eligió "con objetivos diferentes" (useActivePlan = false),
+                  // no volver a preguntar, generar directamente
+                  if (params.useActivePlan === 'false') {
+                    await regenerateMealPlan(false, null);
+                    return;
+                  }
+
+                  // Si vino sin especificar, preguntar
                   try {
                     // Verificar si hay plan activo
                     const { data: activePlan } = await supabase
@@ -219,7 +226,7 @@ export default function NutritionSettingsScreen() {
                       .eq('is_active', true)
                       .maybeSingle();
 
-                    // Siempre preguntar, incluso si no hay plan activo
+                    // Preguntar qué método quiere usar
                     Alert.alert(
                       'Generar Plan de Nutrición',
                       '¿Quieres generar tu dieta basada en tu plan de entrenamiento activo o con objetivos diferentes?',
@@ -501,7 +508,7 @@ export default function NutritionSettingsScreen() {
                 <View style={styles.activePlanTagsContainer}>
                   {(activePlanData.goals || []).map((goal: string, index: number) => {
                     const goalMap: { [key: string]: string } = {
-                      weight_loss: 'Perder peso',
+                      weight_loss: 'Bajar grasa',
                       muscle_gain: 'Ganar músculo',
                       strength: 'Aumentar fuerza',
                       endurance: 'Mejorar resistencia',
@@ -592,7 +599,7 @@ export default function NutritionSettingsScreen() {
               <View style={styles.optionsContainer}>
                 {Object.values(FitnessGoal).map((goal) => {
                   const goalLabels: { [key: string]: string } = {
-                    [FitnessGoal.WEIGHT_LOSS]: 'Perder peso',
+                    [FitnessGoal.WEIGHT_LOSS]: 'Bajar grasa',
                     [FitnessGoal.MUSCLE_GAIN]: 'Ganar músculo',
                     [FitnessGoal.STRENGTH]: 'Aumentar fuerza',
                     [FitnessGoal.ENDURANCE]: 'Mejorar resistencia',

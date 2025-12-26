@@ -10,7 +10,7 @@ const openai = new OpenAI({
   apiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY,
 });
 
-const DAYS_BETWEEN_PHOTOS = 14; // 2 semanas
+const DAYS_BETWEEN_PHOTOS = 15; // 15 días para ver cambios reales
 
 // ============================================================================
 // UPLOAD PHOTO
@@ -155,6 +155,73 @@ export async function checkPhotoReminder(userId: string): Promise<PhotoReminder>
       nextPhotoDate: new Date().toISOString(),
       daysSinceLastPhoto: 0,
       shouldShowReminder: false,
+    };
+  }
+}
+
+// ============================================================================
+// CHECK IF CAN UPLOAD NEW PHOTO (debe esperar 15 días)
+// ============================================================================
+
+export async function canUploadPhoto(userId: string): Promise<{
+  canUpload: boolean;
+  daysUntilNext: number;
+  message: string;
+}> {
+  try {
+    const { data, error } = await supabase
+      .from('progress_photos')
+      .select('photo_date')
+      .eq('user_id', userId)
+      .order('photo_date', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('❌ Error checking if can upload:', error);
+    }
+
+    if (!data) {
+      // No hay fotos, puede subir
+      return {
+        canUpload: true,
+        daysUntilNext: 0,
+        message: '¡Sube tu primera foto de progreso!',
+      };
+    }
+
+    const lastPhotoDate = new Date(data.photo_date);
+    const today = new Date();
+    const daysSince = Math.floor(
+      (today.getTime() - lastPhotoDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
+    const daysUntilNext = Math.max(0, DAYS_BETWEEN_PHOTOS - daysSince);
+    const canUpload = daysSince >= DAYS_BETWEEN_PHOTOS;
+
+    let message = '';
+    if (canUpload) {
+      message = '¡Ya puedes subir nuevas fotos!';
+    } else {
+      const nextDate = new Date(lastPhotoDate);
+      nextDate.setDate(nextDate.getDate() + DAYS_BETWEEN_PHOTOS);
+      message = `Podrás subir nuevas fotos el ${nextDate.toLocaleDateString('es-ES', {
+        day: 'numeric',
+        month: 'long',
+      })} (faltan ${daysUntilNext} días)`;
+    }
+
+    return {
+      canUpload,
+      daysUntilNext,
+      message,
+    };
+  } catch (error) {
+    console.error('❌ Unexpected error checking if can upload:', error);
+    return {
+      canUpload: false,
+      daysUntilNext: 0,
+      message: 'Error al verificar disponibilidad',
     };
   }
 }

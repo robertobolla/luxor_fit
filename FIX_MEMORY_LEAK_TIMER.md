@@ -534,3 +534,4 @@ const [activeTimers, setActiveTimers] = useState<{ [exerciseId: string]: number 
 El timer ahora es **100% seguro** con triple capa de protección contra memory leaks.
 
 
+

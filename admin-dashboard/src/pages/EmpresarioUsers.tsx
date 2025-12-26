@@ -230,6 +230,17 @@ export default function EmpresarioUsers() {
     loadPaymentHistory(true);
   }
 
+  function handleViewUserStats(userId: string) {
+    const targetUser = users.find(u => u.user_id === userId);
+    if (!targetUser) return;
+    
+    const targetEmpresarioId = empresarioId || user?.id;
+    const userName = encodeURIComponent(targetUser.name || targetUser.email || 'Usuario');
+    const userEmail = encodeURIComponent(targetUser.email || 'sin-email');
+    
+    navigate(`/empresarios/${targetEmpresarioId}/members/${userId}/${userName}/${userEmail}`);
+  }
+
   if (loading) {
     return <div className="page-loading">Cargando usuarios...</div>;
   }
@@ -340,12 +351,21 @@ export default function EmpresarioUsers() {
                   )}
                 </td>
                 <td>
-                  <button
-                    className="btn-link btn-danger"
-                    onClick={() => handleRemoveUser(user.user_id)}
-                  >
-                    Remover
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      className="btn-link"
+                      onClick={() => handleViewUserStats(user.user_id)}
+                      style={{ color: '#F7931E', fontWeight: '500' }}
+                    >
+                      Ver Info
+                    </button>
+                    <button
+                      className="btn-link btn-danger"
+                      onClick={() => handleRemoveUser(user.user_id)}
+                    >
+                      Remover
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

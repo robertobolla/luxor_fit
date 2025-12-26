@@ -185,7 +185,9 @@ export default function NotificationSettingsScreen() {
           title: 'Notificaciones',
           headerStyle: { backgroundColor: '#1a1a1a' },
           headerTintColor: '#ffffff',
-          headerTitleStyle: { color: '#ffffff' }
+          headerTitleStyle: { color: '#ffffff' },
+          headerBackTitle: ' ',
+          headerBackTitleVisible: false,
         }} 
       />
       <SafeAreaView style={styles.container}>

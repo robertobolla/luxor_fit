@@ -34,6 +34,7 @@ import {
   WeekSummary,
 } from '../../../src/services/nutrition';
 import NutritionAdjustmentModal from '../../../src/components/NutritionAdjustmentModal';
+import WeeklyRenewalModal from '../../../src/components/WeeklyRenewalModal';
 import { useNutritionStore } from '../../../src/store/nutritionStore';
 import { NutritionTarget, MealLog } from '../../../src/types/nutrition';
 
@@ -325,12 +326,15 @@ export default function NutritionHomeScreen() {
   const [mealsPerDay, setMealsPerDay] = useState(3);
   const [customPrompts, setCustomPrompts] = useState<string[]>([]);
   const [newPrompt, setNewPrompt] = useState('');
+  const [showWeeklyRenewalModal, setShowWeeklyRenewalModal] = useState(false);
+  const [lastWeekData, setLastWeekData] = useState<{ weekStart: string; weekEnd: string } | null>(null);
 
   useEffect(() => {
     if (user?.id) {
       loadNutritionData();
       checkProfileChanges();
       loadWeeklyHistory();
+      checkWeeklyRenewal();
     }
   }, [user]);
 
@@ -887,6 +891,128 @@ export default function NutritionHomeScreen() {
     }
   };
 
+  /**
+   * Verificar si necesitamos mostrar el modal de renovación semanal
+   * Se muestra cuando:
+   * 1. Es lunes
+   * 2. La semana anterior tiene un plan completo
+   * 3. No se ha mostrado el modal hoy (usar AsyncStorage para persistir)
+   */
+  const checkWeeklyRenewal = async () => {
+    if (!user?.id) return;
+
+    try {
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      
+      // Solo mostrar en lunes (1) o domingo (0) si es cerca de medianoche
+      if (dayOfWeek !== 1) return;
+
+      // Calcular la semana pasada
+      const lastMonday = new Date(today);
+      lastMonday.setDate(today.getDate() - 7);
+      const lastSunday = new Date(lastMonday);
+      lastSunday.setDate(lastMonday.getDate() + 6);
+
+      const lastWeekStart = lastMonday.toISOString().split('T')[0];
+      const lastWeekEnd = lastSunday.toISOString().split('T')[0];
+
+      // Verificar si existe un plan de la semana pasada
+      const { data: lastWeekPlan } = await supabase
+        .from('meal_plans')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('week_start', lastWeekStart)
+        .maybeSingle();
+
+      if (!lastWeekPlan) return; // No hay plan de la semana pasada
+
+      // Verificar si ya existe un plan para esta semana
+      const thisMonday = today.toISOString().split('T')[0];
+      const { data: thisWeekPlan } = await supabase
+        .from('meal_plans')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('week_start', thisMonday)
+        .maybeSingle();
+
+      if (thisWeekPlan) return; // Ya hay plan para esta semana
+
+      // Mostrar modal de renovación
+      setLastWeekData({ weekStart: lastWeekStart, weekEnd: lastWeekEnd });
+      setShowWeeklyRenewalModal(true);
+    } catch (err) {
+      console.error('Error checking weekly renewal:', err);
+    }
+  };
+
+  /**
+   * Generar plan de la siguiente semana con ajustes basados en métricas
+   */
+  const handleWeeklyRenewal = async (metrics: {
+    weight: number;
+    bodyFat?: number;
+    muscle?: number;
+  }) => {
+    if (!user?.id) return;
+
+    try {
+      console.log('📊 Generando plan semanal con nuevas métricas:', metrics);
+
+      // 1. Actualizar métricas en user_profiles
+      const { error: updateError } = await supabase
+        .from('user_profiles')
+        .update({
+          weight_kg: metrics.weight,
+          body_fat_percentage: metrics.bodyFat || null,
+          muscle_percentage: metrics.muscle || null,
+        })
+        .eq('user_id', user.id);
+
+      if (updateError) {
+        console.error('Error updating metrics:', updateError);
+        throw new Error('No se pudieron actualizar las métricas.');
+      }
+
+      // 2. Obtener el perfil nutricional actual
+      const profile = await getNutritionProfile(user.id);
+      if (!profile) {
+        throw new Error('No se encontró el perfil nutricional.');
+      }
+
+      // 3. Calcular la semana actual (lunes de esta semana)
+      const today = new Date();
+      const dayOfWeek = today.getDay();
+      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const thisMonday = new Date(today);
+      thisMonday.setDate(today.getDate() + diff);
+      const mondayStr = thisMonday.toISOString().split('T')[0];
+
+      // 4. Generar targets para la semana con las nuevas métricas
+      for (let i = 0; i < 7; i++) {
+        const date = new Date(thisMonday);
+        date.setDate(thisMonday.getDate() + i);
+        const dateStr = date.toISOString().split('T')[0];
+        await computeAndSaveTargets(user.id, dateStr);
+      }
+
+      // 5. Generar el plan de comidas para la semana
+      await createOrUpdateMealPlan(user.id, mondayStr);
+
+      // 6. Recargar datos
+      await loadNutritionData();
+      await loadWeeklyHistory();
+
+      Alert.alert(
+        '¡Plan Generado! 🎉',
+        'Tu nuevo plan nutricional está listo. Las métricas y el plan se han ajustado automáticamente.'
+      );
+    } catch (error: any) {
+      console.error('Error generating weekly plan:', error);
+      throw error;
+    }
+  };
+
   const loadNutritionData = async () => {
     if (!user?.id) return;
 
@@ -1348,6 +1474,18 @@ export default function NutritionHomeScreen() {
         adjustment={adjustmentData}
       />
 
+      {/* Modal de renovación semanal */}
+      {lastWeekData && (
+        <WeeklyRenewalModal
+          visible={showWeeklyRenewalModal}
+          onClose={() => setShowWeeklyRenewalModal(false)}
+          onGenerate={handleWeeklyRenewal}
+          userId={user?.id || ''}
+          lastWeekStart={lastWeekData.weekStart}
+          lastWeekEnd={lastWeekData.weekEnd}
+        />
+      )}
+
       {/* Modal de semana futura */}
       <Modal
         visible={showNextWeekModal}
@@ -1500,7 +1638,7 @@ export default function NutritionHomeScreen() {
                       <View style={styles.generatePlanTagsContainer}>
                         {(activePlanData.goals || []).map((goal: string, index: number) => {
                           const goalMap: { [key: string]: string } = {
-                            weight_loss: 'Perder peso',
+                            weight_loss: 'Bajar grasa',
                             muscle_gain: 'Ganar músculo',
                             strength: 'Aumentar fuerza',
                             endurance: 'Mejorar resistencia',

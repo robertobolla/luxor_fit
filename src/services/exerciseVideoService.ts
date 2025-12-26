@@ -7,6 +7,7 @@ export interface ExerciseVideo {
   description?: string | null;
   is_storage_video?: boolean;
   storage_path?: string | null;
+  key_points?: string[] | null;  // Puntos clave del ejercicio
 }
 
 /**
@@ -369,6 +370,53 @@ export async function upsertExerciseVideo(
   } catch (error: any) {
     console.error('❌ Error al guardar video:', error);
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Obtiene los puntos clave (key points) de un ejercicio específico
+ * Usa matching flexible para encontrar el ejercicio incluso si el nombre varía
+ */
+export async function getExerciseKeyPoints(
+  exerciseName: string
+): Promise<string[]> {
+  try {
+    if (!exerciseName || exerciseName.trim().length === 0) {
+      console.warn('⚠️ Nombre de ejercicio vacío');
+      return [];
+    }
+
+    // Normalizar el nombre
+    const normalizedName = normalizeExerciseName(exerciseName);
+    console.log(`🔍 Buscando puntos clave para: "${exerciseName}" (normalizado: "${normalizedName}")`);
+
+    // Llamar a la función SQL que hace matching flexible
+    const { data, error } = await supabase.rpc('find_exercise_video', {
+      exercise_name: normalizedName,
+    });
+
+    if (error) {
+      console.error('❌ Error al buscar puntos clave:', error);
+      return [];
+    }
+
+    if (!data || data.length === 0) {
+      console.log(`⚠️ No se encontró ejercicio para: "${exerciseName}"`);
+      return [];
+    }
+
+    const exercise = data[0] as ExerciseVideo;
+    
+    if (exercise.key_points && exercise.key_points.length > 0) {
+      console.log(`✅ Puntos clave encontrados: ${exercise.key_points.length} puntos`);
+      return exercise.key_points;
+    } else {
+      console.log(`⚠️ El ejercicio "${exerciseName}" no tiene puntos clave en la BD`);
+      return [];
+    }
+  } catch (error) {
+    console.error('❌ Error inesperado al buscar puntos clave:', error);
+    return [];
   }
 }
 

@@ -31,6 +31,7 @@ export default function WorkoutPlanDetailScreen() {
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
   const [showShareSuccess, setShowShareSuccess] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
 
   const loadPlanDetails = async () => {
     if (!planId) return;
@@ -87,12 +88,49 @@ export default function WorkoutPlanDetailScreen() {
       }
 
       setPlan(normalized);
+      
+      // Calcular la semana actual automáticamente si el plan es multi-semana y está activo
+      if (normalized.is_active && normalized.activated_at && normalized.plan_data?.multi_week_structure) {
+        const weekIndex = calculateCurrentWeekIndex(normalized.activated_at, normalized.plan_data.duration_weeks);
+        setCurrentWeekIndex(weekIndex);
+        console.log(`📅 Semana actual calculada: ${weekIndex + 1} de ${normalized.plan_data.duration_weeks}`);
+      }
     } catch (err) {
       console.error('Error inesperado:', err);
       setError('Ocurrió un error inesperado');
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Calcular qué semana del plan debería mostrarse basándose en activated_at
+  const calculateCurrentWeekIndex = (activatedAt: string, totalWeeks: number): number => {
+    if (!activatedAt) return 0;
+
+    const activatedDate = new Date(activatedAt);
+    const now = new Date();
+    
+    // Obtener el lunes de la semana cuando se activó
+    const activatedMonday = getMondayOfWeek(activatedDate);
+    
+    // Obtener el lunes de la semana actual
+    const currentMonday = getMondayOfWeek(now);
+    
+    // Calcular cuántas semanas han pasado
+    const weeksPassed = Math.floor((currentMonday.getTime() - activatedMonday.getTime()) / (7 * 24 * 60 * 60 * 1000));
+    
+    // La semana actual es el índice (weeksPassed), pero no debe exceder el total de semanas del plan
+    const weekIndex = Math.min(weeksPassed, totalWeeks - 1);
+    
+    // Si weeksPassed >= totalWeeks, el plan ha expirado, pero mostramos la última semana
+    return Math.max(0, weekIndex);
+  };
+
+  const getMondayOfWeek = (date: Date): Date => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Ajustar cuando es domingo
+    return new Date(d.setDate(diff));
   };
 
   const handleToggleActive = async () => {
@@ -116,17 +154,30 @@ export default function WorkoutPlanDetailScreen() {
         Alert.alert('Éxito', 'Plan desactivado');
       } else {
         // Activar plan: usar RPC para garantizar único activo
-        const { error } = await supabase.rpc('activate_workout_plan', {
+        console.log('🔄 Activando plan:', { userId: user.id, planId: plan.id });
+        
+        const { data, error } = await supabase.rpc('activate_workout_plan', {
           p_user_id: user.id,
           p_plan_id: plan.id,
         });
 
+        console.log('📡 Respuesta RPC:', { data, error });
+
         if (error) {
-          console.error('Error al activar plan:', error);
-          Alert.alert('Error', 'No se pudo activar el plan');
+          console.error('❌ Error al activar plan:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code,
+          });
+          Alert.alert(
+            'Error al activar plan',
+            `${error.message}\n\nDetalles: ${error.details || 'No disponibles'}\n\nCódigo: ${error.code || 'N/A'}`
+          );
           return;
         }
 
+        console.log('✅ Plan activado correctamente');
         setPlan({ ...plan, is_active: true });
         Alert.alert('Éxito', 'Plan activado');
       }
@@ -486,12 +537,53 @@ export default function WorkoutPlanDetailScreen() {
           
           {/* Mostrar multi_week_structure si existe, sino weekly_structure */}
           {safePlanData.multi_week_structure && safePlanData.multi_week_structure.length > 0 ? (
-            // Plan multi-semana
-            safePlanData.multi_week_structure.map((week: any, weekIndex: number) => (
-              <View key={weekIndex} style={styles.weekContainer}>
-                {safePlanData.multi_week_structure.length > 1 && (
-                  <Text style={styles.weekTitle}>Semana {week.week_number}</Text>
-                )}
+            // Plan multi-semana con navegación
+            <>
+              {safePlanData.multi_week_structure.length > 1 && (
+                <View style={styles.weekNavigation}>
+                  <TouchableOpacity
+                    style={[styles.weekNavButton, currentWeekIndex === 0 && styles.weekNavButtonDisabled]}
+                    onPress={() => setCurrentWeekIndex(Math.max(0, currentWeekIndex - 1))}
+                    disabled={currentWeekIndex === 0}
+                  >
+                    <Ionicons name="chevron-back" size={24} color={currentWeekIndex === 0 ? "#555" : "#ffb300"} />
+                  </TouchableOpacity>
+                  
+                  <View style={styles.weekIndicator}>
+                    <Text style={styles.weekIndicatorText}>
+                      Semana {currentWeekIndex + 1} de {safePlanData.multi_week_structure.length}
+                    </Text>
+                    {plan.is_active && plan.activated_at && (
+                      <Text style={styles.weekIndicatorSubtext}>
+                        {currentWeekIndex === calculateCurrentWeekIndex(plan.activated_at, safePlanData.duration_weeks) 
+                          ? '✓ Semana actual' 
+                          : currentWeekIndex < calculateCurrentWeekIndex(plan.activated_at, safePlanData.duration_weeks)
+                          ? '✓ Completada'
+                          : '⏳ Próxima'}
+                      </Text>
+                    )}
+                  </View>
+                  
+                  <TouchableOpacity
+                    style={[styles.weekNavButton, currentWeekIndex >= safePlanData.multi_week_structure.length - 1 && styles.weekNavButtonDisabled]}
+                    onPress={() => setCurrentWeekIndex(Math.min(safePlanData.multi_week_structure.length - 1, currentWeekIndex + 1))}
+                    disabled={currentWeekIndex >= safePlanData.multi_week_structure.length - 1}
+                  >
+                    <Ionicons name="chevron-forward" size={24} color={currentWeekIndex >= safePlanData.multi_week_structure.length - 1 ? "#555" : "#ffb300"} />
+                  </TouchableOpacity>
+                </View>
+              )}
+              
+              {/* Renderizar solo la semana actual seleccionada */}
+              {(() => {
+                const week = safePlanData.multi_week_structure[currentWeekIndex];
+                if (!week) return null;
+                
+                return (
+                  <View key={currentWeekIndex} style={styles.weekContainer}>
+                    {safePlanData.multi_week_structure.length === 1 && (
+                      <Text style={styles.weekTitle}>Semana {week.week_number}</Text>
+                    )}
                 {week.days?.map((day: any, dayIndex: number) => {
                   const dayKey = day.day || `week_${week.week_number}_day_${dayIndex + 1}`;
                   const isCompleted = completedDays.has(dayKey);
@@ -574,8 +666,10 @@ export default function WorkoutPlanDetailScreen() {
                     </TouchableOpacity>
                   );
                 })}
-              </View>
-            ))
+                  </View>
+                );
+              })()}
+            </>
           ) : (
             // Plan de una semana (compatibilidad)
             safePlanData.weekly_structure?.map((day: any, index: number) => {
@@ -1241,6 +1335,41 @@ const styles = StyleSheet.create({
     color: '#ffb300',
     marginBottom: 12,
     paddingLeft: 4,
+  },
+  weekNavigation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#ffb300',
+  },
+  weekNavButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#1a1a1a',
+  },
+  weekNavButtonDisabled: {
+    opacity: 0.3,
+  },
+  weekIndicator: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 16,
+  },
+  weekIndicatorText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 4,
+  },
+  weekIndicatorSubtext: {
+    fontSize: 12,
+    color: '#4CAF50',
+    fontWeight: '600',
   },
 });
 

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/adminService';
+import { generateKeyPoints } from '../services/aiService';
 
 interface ExerciseMetadataModalProps {
   exercise: {
@@ -14,6 +15,7 @@ interface ExerciseMetadataModalProps {
     goals?: string[] | null;
     activity_types?: string[] | null;
     uses_time?: boolean | null;
+    key_points?: string[] | null;
   };
   isOpen: boolean;
   onClose: () => void;
@@ -92,7 +94,7 @@ const EQUIPMENT_LABELS: Record<string, string> = {
 };
 
 const GOAL_LABELS: Record<string, string> = {
-  weight_loss: 'Perder peso',
+  weight_loss: 'Bajar grasa',
   muscle_gain: 'Ganar músculo',
   strength: 'Aumentar fuerza',
   endurance: 'Mejorar resistencia',
@@ -124,6 +126,8 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
   const [equipment, setEquipment] = useState<string[]>(exercise.equipment || []);
   const [goals, setGoals] = useState<string[]>(exercise.goals || []);
   const [activityTypes, setActivityTypes] = useState<string[]>(exercise.activity_types || []);
+  const [keyPoints, setKeyPoints] = useState<string[]>(exercise.key_points || ['', '', '', '']);
+  const [generatingKeyPoints, setGeneratingKeyPoints] = useState(false);
 
   // Auto-set movement_type when category changes
   useEffect(() => {
@@ -145,6 +149,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
       setEquipment(exercise.equipment || []);
       setGoals(exercise.goals || []);
       setActivityTypes(exercise.activity_types || []);
+      setKeyPoints(exercise.key_points && exercise.key_points.length > 0 ? exercise.key_points : ['', '', '', '']);
       setStep(1);
       setError(null);
     }
@@ -167,6 +172,52 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
     }
   };
 
+  const generateKeyPointsWithAI = async () => {
+    setGeneratingKeyPoints(true);
+    setError(null);
+
+    try {
+      // Preparar el contexto del ejercicio
+      const context = {
+        name: canonicalName,
+        category: category,
+        muscles: muscles,
+        equipment: equipment,
+        exerciseType: exerciseType,
+      };
+
+      const generatedKeyPoints = await generateKeyPoints(context);
+      
+      if (generatedKeyPoints && generatedKeyPoints.length > 0) {
+        // Asegurarse de tener exactamente 4 puntos (rellenar con vacíos si es necesario)
+        while (generatedKeyPoints.length < 4) {
+          generatedKeyPoints.push('');
+        }
+        setKeyPoints(generatedKeyPoints.slice(0, 6)); // Máximo 6 puntos
+      }
+    } catch (e: any) {
+      setError(e.message || 'Error al generar puntos clave con IA. Verifica que la API key de OpenAI esté configurada.');
+    } finally {
+      setGeneratingKeyPoints(false);
+    }
+  };
+
+  const updateKeyPoint = (index: number, value: string) => {
+    const newKeyPoints = [...keyPoints];
+    newKeyPoints[index] = value;
+    setKeyPoints(newKeyPoints);
+  };
+
+  const addKeyPoint = () => {
+    setKeyPoints([...keyPoints, '']);
+  };
+
+  const removeKeyPoint = (index: number) => {
+    if (keyPoints.length > 1) {
+      setKeyPoints(keyPoints.filter((_, i) => i !== index));
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError(null);
@@ -174,6 +225,9 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
     try {
       const selectedCategory = CATEGORIES.find(c => c.value === category);
       const movementType = selectedCategory?.movementType || null;
+
+      // Filtrar key points vacíos
+      const filteredKeyPoints = keyPoints.filter(kp => kp.trim().length > 0);
 
       // Si el nombre cambió, actualizarlo también
       const updates: any = {
@@ -186,6 +240,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
         equipment: equipment.length > 0 ? equipment : null,
         goals: goals.length > 0 ? goals : null,
         activity_types: activityTypes.length > 0 ? activityTypes : null,
+        key_points: filteredKeyPoints.length > 0 ? filteredKeyPoints : null,
       };
 
       // Solo actualizar el nombre si cambió
@@ -219,6 +274,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
     if (step === 2) return muscles.length > 0;
     if (step === 3) return equipment.length > 0;
     if (step === 4) return goals.length > 0 || activityTypes.length > 0;
+    if (step === 5) return true; // Puntos clave son opcionales
     return true;
   };
 
@@ -287,7 +343,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
 
         {/* Progress indicator */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-          {[1, 2, 3, 4].map((s) => (
+          {[1, 2, 3, 4, 5].map((s) => (
             <div
               key={s}
               style={{
@@ -613,6 +669,117 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
           </div>
         )}
 
+        {/* Step 5: Puntos Clave */}
+        {step === 5 && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ color: '#fff', margin: 0 }}>Paso 5: Puntos Clave del Ejercicio</h3>
+              <button
+                onClick={generateKeyPointsWithAI}
+                disabled={generatingKeyPoints || !canonicalName}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: generatingKeyPoints || !canonicalName ? '#2a2a2a' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: '#fff',
+                  cursor: generatingKeyPoints || !canonicalName ? 'not-allowed' : 'pointer',
+                  fontSize: 14,
+                  fontWeight: 'bold',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                {generatingKeyPoints ? (
+                  <>⏳ Generando...</>
+                ) : (
+                  <>🤖 Generar con IA</>
+                )}
+              </button>
+            </div>
+            
+            <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>
+              💡 Los puntos clave son consejos técnicos específicos para ejecutar correctamente el ejercicio.
+              Puedes agregar entre 3 y 6 puntos.
+            </p>
+
+            <div style={{ marginBottom: 16 }}>
+              {keyPoints.map((point, index) => (
+                <div key={index} style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+                  <div style={{
+                    minWidth: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    background: '#2a2a2a',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#4CAF50',
+                    fontWeight: 'bold',
+                    fontSize: 14,
+                  }}>
+                    {index + 1}
+                  </div>
+                  <input
+                    type="text"
+                    value={point}
+                    onChange={(e) => updateKeyPoint(index, e.target.value)}
+                    placeholder={`Punto clave ${index + 1}`}
+                    style={{
+                      flex: 1,
+                      padding: '10px 12px',
+                      borderRadius: 8,
+                      border: '1px solid #2a2a2a',
+                      background: '#0a0a0a',
+                      color: '#fff',
+                      fontSize: 14,
+                    }}
+                  />
+                  {keyPoints.length > 1 && (
+                    <button
+                      onClick={() => removeKeyPoint(index)}
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 8,
+                        border: '1px solid #ff4444',
+                        background: 'transparent',
+                        color: '#ff4444',
+                        cursor: 'pointer',
+                        fontSize: 18,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {keyPoints.length < 6 && (
+              <button
+                onClick={addKeyPoint}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: 8,
+                  border: '1px dashed #2a2a2a',
+                  background: 'transparent',
+                  color: '#4CAF50',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  width: '100%',
+                }}
+              >
+                + Agregar otro punto clave
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Navigation buttons */}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
           <button
@@ -630,7 +797,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
             ← Anterior
           </button>
           
-          {step < 4 ? (
+          {step < 5 ? (
             <button
               onClick={() => setStep(step + 1)}
               disabled={!canGoNext()}

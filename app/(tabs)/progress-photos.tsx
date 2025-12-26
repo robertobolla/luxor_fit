@@ -20,6 +20,7 @@ import {
   uploadProgressPhoto,
   checkPhotoReminder,
   deleteProgressPhoto,
+  canUploadPhoto,
 } from '@/services/progressPhotos';
 import { ProgressPhoto, PhotoType, PhotoReminder } from '@/types/progressPhotos';
 import { useRetry } from '@/hooks/useRetry';
@@ -38,6 +39,11 @@ export default function ProgressPhotosScreen() {
   const [sessionModalVisible, setSessionModalVisible] = useState(false);
   const [currentSession, setCurrentSession] = useState<{ front?: ProgressPhoto; back?: ProgressPhoto; side?: ProgressPhoto }>({});
   const [sessionUploading, setSessionUploading] = useState<{ [K in PhotoType]?: boolean }>({});
+  const [uploadRestriction, setUploadRestriction] = useState<{ canUpload: boolean; message: string; daysUntilNext: number }>({
+    canUpload: true,
+    message: '',
+    daysUntilNext: 0,
+  });
   const requiredViews: PhotoType[] = ['front', 'side', 'back'];
   const uploadParamsRef = useRef<{ uri: string; type: PhotoType; notes?: string } | null>(null);
 
@@ -76,15 +82,18 @@ export default function ProgressPhotosScreen() {
 
     setLoading(true);
     try {
-      const [photosData, reminderData] = await Promise.all([
+      const [photosData, reminderData, uploadStatus] = await Promise.all([
         getUserPhotos(user.id),
         checkPhotoReminder(user.id),
+        canUploadPhoto(user.id),
       ]);
 
       setPhotos(photosData);
       setReminder(reminderData);
+      setUploadRestriction(uploadStatus);
       console.log('📸 Fotos cargadas:', photosData.length);
       console.log('📅 Recordatorio:', reminderData);
+      console.log('🔒 Restricción de subida:', uploadStatus);
     } catch (error) {
       console.error('❌ Error loading data:', error);
     } finally {
@@ -113,6 +122,16 @@ export default function ProgressPhotosScreen() {
 
   // Tomar foto o seleccionar de galería (flujo simple)
   const handleAddPhoto = async () => {
+    // Verificar si puede subir fotos
+    if (!uploadRestriction.canUpload) {
+      Alert.alert(
+        '⏳ Debes esperar',
+        uploadRestriction.message + '\n\nEsto permite ver cambios reales en tu progreso.',
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
+
     Alert.alert(
       'Nueva sesión de fotos',
       'Captura frente, espalda y costado para una comparación ideal.',
@@ -367,16 +386,30 @@ export default function ProgressPhotosScreen() {
 
         {/* Botón agregar foto */}
         <TouchableOpacity
-          style={styles.addButton}
+          style={[
+            styles.addButton,
+            !uploadRestriction.canUpload && styles.addButtonDisabled,
+          ]}
           onPress={handleAddPhoto}
-          disabled={uploading}
+          disabled={uploading || !uploadRestriction.canUpload}
         >
           {uploading ? (
             <ActivityIndicator size="small" color="#1a1a1a" />
           ) : (
             <>
-              <Ionicons name="add-circle" size={32} color="#1a1a1a" />
-              <Text style={styles.addButtonText}>Nueva sesión (frente, espalda, costado)</Text>
+              <Ionicons 
+                name={uploadRestriction.canUpload ? "add-circle" : "time"} 
+                size={32} 
+                color={uploadRestriction.canUpload ? "#1a1a1a" : "#666"} 
+              />
+              <Text style={[
+                styles.addButtonText,
+                !uploadRestriction.canUpload && styles.addButtonTextDisabled,
+              ]}>
+                {uploadRestriction.canUpload 
+                  ? 'Nueva sesión (frente, espalda, costado)' 
+                  : uploadRestriction.message}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -656,10 +689,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 8,
   },
+  addButtonDisabled: {
+    backgroundColor: '#2a2a2a',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
   addButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1a1a1a',
+  },
+  addButtonTextDisabled: {
+    color: '#888',
+    fontSize: 14,
   },
   emptyContainer: {
     alignItems: 'center',

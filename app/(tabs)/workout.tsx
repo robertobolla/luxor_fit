@@ -18,6 +18,7 @@ import { useWorkoutStore } from '@/store/workoutStore';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
 import { SkeletonWorkout } from '@/components/SkeletonLoaders';
+import { PlanExpirationModal } from '@/components/PlanExpirationModal';
 import { 
   getPendingTrainerInvitations, 
   respondToTrainerInvitation 
@@ -39,6 +40,8 @@ export default function WorkoutScreen() {
   const [trainerInvitations, setTrainerInvitations] = useState<any[]>([]);
   const [showInvitationsModal, setShowInvitationsModal] = useState(false);
   const [isRespondingInvitation, setIsRespondingInvitation] = useState(false);
+  const [showExpirationModal, setShowExpirationModal] = useState(false);
+  const [expiredPlan, setExpiredPlan] = useState<any | null>(null);
 
   // Cargar datos cuando se monta el componente
   useEffect(() => {
@@ -49,7 +52,11 @@ export default function WorkoutScreen() {
   }, [user]);
 
   // Recargar planes automáticamente cuando la pantalla recibe foco
-  // Esto asegura que se actualice cuando el usuario regresa después de generar un plan
+  // Esto asegura que se actualice cuando el usuario:
+  // 1. Regresa después de generar un plan
+  // 2. Regresa después de editar un plan (incluyendo cambios a duration_weeks)
+  // 3. Regresa de cualquier otra pantalla
+  // La función checkForExpiredPlan() detectará automáticamente si duration_weeks cambió
   useFocusEffect(
     useCallback(() => {
       loadWorkoutPlans();
@@ -76,11 +83,111 @@ export default function WorkoutScreen() {
       }
 
       setWorkoutPlans(data || []);
+      
+      // Verificar si el plan activo ha expirado
+      checkForExpiredPlan(data || []);
     } catch (err) {
       console.error('Error inesperado:', err);
     } finally {
       setLoadingPlans(false);
     }
+  };
+
+  const checkForExpiredPlan = (plans: any[]) => {
+    // Encontrar el plan activo
+    const activePlan = plans.find(p => p.is_active);
+    if (!activePlan || !activePlan.activated_at) {
+      console.log('📅 checkForExpiredPlan: No hay plan activo o no tiene fecha de activación');
+      return;
+    }
+
+    // Obtener duration_weeks (puede haber sido editado)
+    // Si el plan se editó y se cambió la duración, este valor reflejará el cambio
+    const durationWeeks = activePlan.duration_weeks || activePlan.plan_data?.duration_weeks || 1;
+    
+    console.log(`📅 Verificando expiración de plan "${activePlan.plan_name}"`);
+    console.log(`   - Duración del plan: ${durationWeeks} ${durationWeeks === 1 ? 'semana' : 'semanas'}`);
+    console.log(`   - Activado: ${new Date(activePlan.activated_at).toLocaleDateString('es-ES')}`);
+
+    // Calcular si el plan ha expirado
+    // Las semanas vencen los domingos a la noche (a partir del lunes 00:00)
+    const activatedDate = new Date(activePlan.activated_at);
+    const now = new Date();
+    
+    // Obtener el lunes de la semana cuando se activó
+    const activatedMonday = getMondayOfWeek(activatedDate);
+    
+    // Obtener el lunes de la semana actual
+    const currentMonday = getMondayOfWeek(now);
+    
+    // Calcular cuántas semanas han pasado desde la activación
+    const weeksPassed = Math.floor((currentMonday.getTime() - activatedMonday.getTime()) / (7 * 24 * 60 * 60 * 1000));
+    
+    console.log(`   - Semanas transcurridas: ${weeksPassed}`);
+    console.log(`   - Estado: ${weeksPassed >= durationWeeks ? '❌ EXPIRADO' : '✅ ACTIVO'}`);
+    
+    // Si han pasado duration_weeks o más, el plan ha expirado
+    // Ejemplo: Plan de 3 semanas → se muestra modal al inicio de la semana 4 (weeksPassed >= 3)
+    // Ejemplo: Plan de 1 semana → se muestra modal al inicio de la semana 2 (weeksPassed >= 1)
+    if (weeksPassed >= durationWeeks) {
+      console.log(`📅 Plan "${activePlan.plan_name}" ha finalizado (${weeksPassed} semanas de ${durationWeeks})`);
+      console.log(`   ⚠️ Mostrando modal de finalización...`);
+      setExpiredPlan(activePlan);
+      setShowExpirationModal(true);
+    }
+  };
+
+  const getMondayOfWeek = (date: Date): Date => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Ajustar cuando es domingo
+    return new Date(d.setDate(diff));
+  };
+
+  const handleRepeatPlan = async () => {
+    if (!user || !expiredPlan) return;
+
+    try {
+      // Reactivar el plan usando la función RPC
+      // La función RPC automáticamente:
+      // 1. Desactiva otros planes
+      // 2. Activa este plan
+      // 3. Actualiza activated_at a NOW()
+      // 4. Actualiza last_week_monday al lunes de esta semana
+      // 5. Incrementa times_repeated si es una nueva semana
+      const { error: rpcError } = await supabase.rpc('activate_workout_plan', {
+        p_user_id: user.id,
+        p_plan_id: expiredPlan.id,
+      });
+
+      if (rpcError) {
+        console.error('Error reactivating workout plan:', rpcError);
+        Alert.alert('Error', 'No se pudo reactivar el plan');
+        return;
+      }
+      
+      // Cerrar modal y recargar planes
+      setShowExpirationModal(false);
+      setExpiredPlan(null);
+      await loadWorkoutPlans();
+      
+      Alert.alert(
+        '✅ Plan Reactivado',
+        `El plan "${expiredPlan.plan_name}" ha sido reactivado. ¡Comienza una nueva semana!`
+      );
+    } catch (err) {
+      console.error('Error reactivating plan:', err);
+      Alert.alert('Error', 'Ocurrió un error al reactivar el plan');
+    }
+  };
+
+  const handleChooseAnotherPlan = () => {
+    // Cerrar el modal
+    setShowExpirationModal(false);
+    setExpiredPlan(null);
+    
+    // La pantalla actual ya muestra todos los planes disponibles
+    // El usuario puede seleccionar otro plan directamente
   };
 
   const loadTrainerInvitations = async () => {
@@ -149,22 +256,38 @@ export default function WorkoutScreen() {
     if (!user) return;
 
     try {
+      console.log('🔄 Activando plan:', { userId: user.id, planId });
+      
       // Activación atómica vía RPC (desactiva otros y activa este)
-      const { error: rpcError } = await supabase.rpc('activate_workout_plan', {
+      const { data, error: rpcError } = await supabase.rpc('activate_workout_plan', {
         p_user_id: user.id,
         p_plan_id: planId,
       });
 
+      console.log('📡 Respuesta RPC:', { data, error: rpcError });
+
       if (rpcError) {
-        console.error('Error activating workout plan:', rpcError);
+        console.error('❌ Error activating workout plan:', {
+          message: rpcError.message,
+          details: rpcError.details,
+          hint: rpcError.hint,
+          code: rpcError.code,
+        });
+        Alert.alert(
+          'Error al activar plan',
+          `${rpcError.message}\n\nDetalles: ${rpcError.details || 'No disponibles'}\n\nCódigo: ${rpcError.code || 'N/A'}`
+        );
         return;
       }
+      
+      console.log('✅ Plan activado correctamente');
       
       // Recargar la lista de planes para mostrar el estado actualizado
       await loadWorkoutPlans();
       
-    } catch (err) {
-      console.error('Error activating workout plan:', err);
+    } catch (err: any) {
+      console.error('❌ Error inesperado activating workout plan:', err);
+      Alert.alert('Error', `No se pudo activar el plan: ${err?.message || 'Error desconocido'}`);
     }
   };
 
@@ -283,6 +406,14 @@ export default function WorkoutScreen() {
                     <View style={styles.stat}>
                       <Ionicons name="time-outline" size={16} color="#ffb300" />
                       <Text style={styles.statText}>{planData.weekly_structure?.[0]?.duration || 45} min</Text>
+                    </View>
+                  )}
+                  {plan.times_repeated > 0 && (
+                    <View style={styles.stat}>
+                      <Ionicons name="refresh" size={16} color="#4CAF50" />
+                      <Text style={[styles.statText, { color: '#4CAF50' }]}>
+                        {plan.times_repeated} {plan.times_repeated === 1 ? 'repetición' : 'repeticiones'}
+                      </Text>
                     </View>
                   )}
                 </View>
@@ -647,6 +778,17 @@ export default function WorkoutScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de Expiración de Plan */}
+      {expiredPlan && (
+        <PlanExpirationModal
+          visible={showExpirationModal}
+          planName={expiredPlan.plan_name}
+          timesRepeated={expiredPlan.times_repeated || 0}
+          onRepeat={handleRepeatPlan}
+          onChooseAnother={handleChooseAnotherPlan}
+        />
+      )}
     </ScrollView>
   );
 }

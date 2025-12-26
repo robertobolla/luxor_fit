@@ -24,6 +24,7 @@ import { CustomRefreshControl } from '../../src/components/CustomRefreshControl'
 import { useRefresh } from '../../src/hooks/useRefresh';
 import { useNetworkStatus, checkNetworkBeforeOperation } from '../../src/hooks/useNetworkStatus';
 import { getTotalUnreadChatsCount } from '../../src/services/chatService';
+import NotificationBell from '../../src/components/NotificationBell';
 
 export default function HomeScreen() {
   const { user } = useUser();
@@ -266,21 +267,27 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>{getGreeting()}</Text>
             <Text style={styles.userName}>{userName || 'Usuario'}</Text>
           </View>
-          <TouchableOpacity 
-            onPress={() => {
-              router.push('/chats');
-            }}
-            style={styles.profileButton}
-          >
-            <Ionicons name="paper-plane-outline" size={32} color="#ffb300" />
-            {unreadChatsCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {unreadChatsCount > 99 ? '99+' : unreadChatsCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerIcons}>
+            {/* Icono de Notificaciones */}
+            <NotificationBell />
+            
+            {/* Icono de Mensajes Directos */}
+            <TouchableOpacity 
+              onPress={() => {
+                router.push('/chats');
+              }}
+              style={styles.profileButton}
+            >
+              <Ionicons name="paper-plane-outline" size={32} color="#ffb300" />
+              {unreadChatsCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadChatsCount > 99 ? '99+' : unreadChatsCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Fecha de hoy */}
@@ -514,6 +521,11 @@ const styles = StyleSheet.create({
     color: '#ffb300',
     marginTop: 4,
     fontWeight: '600',
+  },
+  headerIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   profileButton: {
     width: 48,

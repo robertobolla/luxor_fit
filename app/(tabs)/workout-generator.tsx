@@ -473,7 +473,7 @@ export default function WorkoutGeneratorScreen() {
 
   const getGoalText = (goal: string) => {
     const map: { [key: string]: string } = {
-      weight_loss: 'Perder peso',
+      weight_loss: 'Bajar grasa',
       muscle_gain: 'Ganar músculo',
       strength: 'Aumentar fuerza',
       endurance: 'Mejorar resistencia',
@@ -531,7 +531,7 @@ export default function WorkoutGeneratorScreen() {
                   styles.formOptionText,
                   formData.goals.includes(goal) && styles.formOptionTextSelected
                 ]}>
-                  {goal === FitnessGoal.WEIGHT_LOSS && 'Perder peso'}
+                  {goal === FitnessGoal.WEIGHT_LOSS && 'Bajar grasa'}
                   {goal === FitnessGoal.MUSCLE_GAIN && 'Ganar músculo'}
                   {goal === FitnessGoal.STRENGTH && 'Aumentar fuerza'}
                   {goal === FitnessGoal.ENDURANCE && 'Mejorar resistencia'}

@@ -206,6 +206,25 @@ export default function RegisterWeightScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Botón Fotos de Progreso */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.evolutionButton}
+            onPress={() => router.push('/(tabs)/progress-photos' as any)}
+          >
+            <View style={styles.evolutionButtonIcon}>
+              <Ionicons name="camera" size={24} color="#ffb300" />
+            </View>
+            <View style={styles.evolutionButtonContent}>
+              <Text style={styles.evolutionButtonTitle}>📸 Fotos de Progreso</Text>
+              <Text style={styles.evolutionButtonSubtitle}>
+                Documenta tus cambios físicos cada 2 semanas
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#666" />
+          </TouchableOpacity>
+        </View>
+
         {/* Fecha */}
         <View style={styles.section}>
           <Text style={styles.label}>Fecha de la medición</Text>

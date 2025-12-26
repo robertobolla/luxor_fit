@@ -333,6 +333,9 @@ export interface Database {
           is_active: boolean
           created_at: string
           updated_at: string
+          activated_at: string | null
+          times_repeated: number
+          last_week_monday: string | null
         }
         Insert: {
           id?: string
@@ -344,6 +347,9 @@ export interface Database {
           is_active?: boolean
           created_at?: string
           updated_at?: string
+          activated_at?: string | null
+          times_repeated?: number
+          last_week_monday?: string | null
         }
         Update: {
           id?: string
@@ -355,6 +361,9 @@ export interface Database {
           is_active?: boolean
           created_at?: string
           updated_at?: string
+          activated_at?: string | null
+          times_repeated?: number
+          last_week_monday?: string | null
         }
       }
       workout_completions: {
