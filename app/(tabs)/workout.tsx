@@ -23,6 +23,8 @@ import {
   getPendingTrainerInvitations, 
   respondToTrainerInvitation 
 } from '../../src/services/trainerService';
+import { useTutorial } from '@/contexts/TutorialContext';
+import { HelpModal } from '@/components/HelpModal';
 
 export default function WorkoutScreen() {
   const { user } = useUser();
@@ -42,6 +44,9 @@ export default function WorkoutScreen() {
   const [isRespondingInvitation, setIsRespondingInvitation] = useState(false);
   const [showExpirationModal, setShowExpirationModal] = useState(false);
   const [expiredPlan, setExpiredPlan] = useState<any | null>(null);
+
+  // Tutorial states
+  const { showHelpModal, setShowHelpModal, hasCompletedTutorial } = useTutorial();
 
   // Cargar datos cuando se monta el componente
   useEffect(() => {
@@ -318,7 +323,15 @@ export default function WorkoutScreen() {
       }
     >
       <View style={styles.headerContainer}>
-        <Text style={styles.title}>Entrenamientos</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title}>Entrenamientos</Text>
+          <TouchableOpacity
+            onPress={() => setShowHelpModal(true)}
+            style={styles.helpButton}
+          >
+            <Ionicons name="help-circle-outline" size={28} color="#ffb300" />
+          </TouchableOpacity>
+        </View>
         <View style={styles.buttonsRow}>
         <TouchableOpacity
           style={styles.generateButton}
@@ -326,6 +339,11 @@ export default function WorkoutScreen() {
         >
           <Ionicons name="add" size={20} color="#1a1a1a" />
             <Text style={styles.generateButtonText}>Crear Entrenamiento</Text>
+            {!hasCompletedTutorial('WORKOUT') && workoutPlans.length === 0 && (
+              <View style={styles.newBadge}>
+                <Text style={styles.newBadgeText}>Nuevo</Text>
+              </View>
+            )}
           </TouchableOpacity>
 
           {/* Botón Modo Entrenador */}
@@ -789,6 +807,12 @@ export default function WorkoutScreen() {
           onChooseAnother={handleChooseAnotherPlan}
         />
       )}
+
+      {/* Modal de ayuda */}
+      <HelpModal
+        visible={showHelpModal}
+        onClose={() => setShowHelpModal(false)}
+      />
     </ScrollView>
   );
 }
@@ -802,11 +826,19 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 10,
   },
+  titleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginBottom: 16,
+  },
+  helpButton: {
+    padding: 4,
   },
   buttonsRow: {
     flexDirection: 'row',
@@ -820,6 +852,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: 12,
     borderRadius: 8,
+    position: 'relative',
+  },
+  newBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#ff6b6b',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#1a1a1a',
+  },
+  newBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
   generateButtonText: {
     color: '#1a1a1a',

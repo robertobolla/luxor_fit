@@ -37,6 +37,8 @@ import NutritionAdjustmentModal from '../../../src/components/NutritionAdjustmen
 import WeeklyRenewalModal from '../../../src/components/WeeklyRenewalModal';
 import { useNutritionStore } from '../../../src/store/nutritionStore';
 import { NutritionTarget, MealLog } from '../../../src/types/nutrition';
+import { useTutorial } from '@/contexts/TutorialContext';
+import { HelpModal } from '@/components/HelpModal';
 
 // Componente memoizado para las tarjetas de semana
 const WeekCard = React.memo(({ 
@@ -327,6 +329,9 @@ export default function NutritionHomeScreen() {
   const [customPrompts, setCustomPrompts] = useState<string[]>([]);
   const [newPrompt, setNewPrompt] = useState('');
   const [showWeeklyRenewalModal, setShowWeeklyRenewalModal] = useState(false);
+
+  // Tutorial states
+  const { showHelpModal, setShowHelpModal, hasCompletedTutorial } = useTutorial();
   const [lastWeekData, setLastWeekData] = useState<{ weekStart: string; weekEnd: string } | null>(null);
 
   useEffect(() => {
@@ -1228,7 +1233,12 @@ export default function NutritionHomeScreen() {
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Nutrición</Text>
-          <View style={{ width: 24 }} />
+          <TouchableOpacity
+            onPress={() => setShowHelpModal(true)}
+            style={styles.helpButton}
+          >
+            <Ionicons name="help-circle-outline" size={28} color="#ffb300" />
+          </TouchableOpacity>
         </View>
 
         {/* Acciones rápidas */}
@@ -1275,6 +1285,11 @@ export default function NutritionHomeScreen() {
             >
               <Ionicons name="create" size={32} color="#ffb300" />
               <Text style={styles.actionText}>Generar Plan Nutricional</Text>
+              {!hasCompletedTutorial('NUTRITION') && !activePlanData && (
+                <View style={styles.newBadge}>
+                  <Text style={styles.newBadgeText}>Nuevo</Text>
+                </View>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -1776,6 +1791,12 @@ export default function NutritionHomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de ayuda */}
+      <HelpModal
+        visible={showHelpModal}
+        onClose={() => setShowHelpModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -1802,6 +1823,9 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: '#ffffff',
+  },
+  helpButton: {
+    padding: 4,
   },
   loadingText: {
     marginTop: 16,
@@ -1897,10 +1921,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#ffb300',
+    position: 'relative',
   },
   actionCardWide: {
     minWidth: '100%',
     flex: 0,
+  },
+  newBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#ff6b6b',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#0a0a0a',
+  },
+  newBadgeText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
   actionText: {
     fontSize: 14,

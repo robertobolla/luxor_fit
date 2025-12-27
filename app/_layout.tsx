@@ -13,6 +13,7 @@ import { useFriendRequestNotifications } from '../src/hooks/useFriendRequestNoti
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { SplashScreen } from '../src/components/SplashScreen';
 import { AlertProvider } from '../src/contexts/AlertContext';
+import { TutorialProvider } from '../src/contexts/TutorialContext';
 
 function NotificationSetup() {
   const { user } = useUser();
@@ -235,16 +236,18 @@ export default function RootLayout() {
     <ErrorBoundary>
       <ClerkProviderWrapper>
         <AlertProvider>
-        <SafeAreaProvider>
-          <NotificationSetup />
-          <SubscriptionGate />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-            }}
-          />
-          <StatusBar style="light" />
-        </SafeAreaProvider>
+          <TutorialProvider>
+            <SafeAreaProvider>
+              <NotificationSetup />
+              <SubscriptionGate />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                }}
+              />
+              <StatusBar style="light" />
+            </SafeAreaProvider>
+          </TutorialProvider>
         </AlertProvider>
       </ClerkProviderWrapper>
     </ErrorBoundary>

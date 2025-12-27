@@ -25,6 +25,9 @@ import { useRefresh } from '../../src/hooks/useRefresh';
 import { useNetworkStatus, checkNetworkBeforeOperation } from '../../src/hooks/useNetworkStatus';
 import { getTotalUnreadChatsCount } from '../../src/services/chatService';
 import NotificationBell from '../../src/components/NotificationBell';
+import { useTutorial } from '@/contexts/TutorialContext';
+import { AppTour } from '@/components/AppTour';
+import { HelpModal } from '@/components/HelpModal';
 
 export default function HomeScreen() {
   const { user } = useUser();
@@ -33,6 +36,17 @@ export default function HomeScreen() {
   const [todayNutrition, setTodayNutrition] = useState<any>(null);
   const [userName, setUserName] = useState('');
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
+
+  // Tutorial states
+  const { 
+    hasCompletedInitialTour, 
+    shouldShowTooltip, 
+    completeTutorial, 
+    markTooltipShown, 
+    showHelpModal, 
+    setShowHelpModal 
+  } = useTutorial();
+  const [showTour, setShowTour] = useState(false);
 
   // Detectar estado de conexión
   const { isConnected } = useNetworkStatus();
@@ -209,6 +223,17 @@ export default function HomeScreen() {
     }
   }, [user, loadData]);
 
+  // Mostrar tour inicial la primera vez
+  useEffect(() => {
+    if (!hasCompletedInitialTour && user?.id && !isLoading) {
+      // Esperar un segundo después de cargar para mejor UX
+      const timer = setTimeout(() => {
+        setShowTour(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [hasCompletedInitialTour, user, isLoading]);
+
   // Recargar datos cada vez que la pantalla recibe focus
   useFocusEffect(
     React.useCallback(() => {
@@ -286,6 +311,14 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               )}
+            </TouchableOpacity>
+
+            {/* Botón de Ayuda */}
+            <TouchableOpacity
+              onPress={() => setShowHelpModal(true)}
+              style={styles.helpButton}
+            >
+              <Ionicons name="help-circle-outline" size={28} color="#ffb300" />
             </TouchableOpacity>
           </View>
         </View>
@@ -414,6 +447,21 @@ export default function HomeScreen() {
 
         <View style={{ height: 30 }} />
       </ScrollView>
+
+      {/* Tour inicial */}
+      {showTour && (
+        <AppTour
+          onDone={() => {
+            setShowTour(false);
+          }}
+        />
+      )}
+
+      {/* Modal de ayuda */}
+      <HelpModal
+        visible={showHelpModal}
+        onClose={() => setShowHelpModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -553,6 +601,10 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: 'bold',
+  },
+  helpButton: {
+    padding: 4,
+    marginLeft: 12,
   },
 });
 
