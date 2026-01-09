@@ -3,6 +3,8 @@ import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Linking } from 'react-native';
+import { I18nextProvider } from 'react-i18next';
+import i18n from '../src/i18n';
 import { ClerkProviderWrapper } from '../src/clerk';
 import { useUser, useAuth } from '@clerk/clerk-expo';
 import { setupUserNotifications, setupNotificationListeners } from '../src/services/notificationService';
@@ -14,6 +16,7 @@ import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { SplashScreen } from '../src/components/SplashScreen';
 import { AlertProvider } from '../src/contexts/AlertContext';
 import { TutorialProvider } from '../src/contexts/TutorialContext';
+import { LanguageProvider } from '../src/contexts/LanguageContext';
 
 function NotificationSetup() {
   const { user } = useUser();
@@ -234,22 +237,26 @@ function SubscriptionGate() {
 export default function RootLayout() {
   return (
     <ErrorBoundary>
-      <ClerkProviderWrapper>
-        <AlertProvider>
-          <TutorialProvider>
-            <SafeAreaProvider>
-              <NotificationSetup />
-              <SubscriptionGate />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                }}
-              />
-              <StatusBar style="light" />
-            </SafeAreaProvider>
-          </TutorialProvider>
-        </AlertProvider>
-      </ClerkProviderWrapper>
+      <I18nextProvider i18n={i18n}>
+        <LanguageProvider>
+          <ClerkProviderWrapper>
+            <AlertProvider>
+              <TutorialProvider>
+                <SafeAreaProvider>
+                  <NotificationSetup />
+                  <SubscriptionGate />
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                    }}
+                  />
+                  <StatusBar style="light" />
+                </SafeAreaProvider>
+              </TutorialProvider>
+            </AlertProvider>
+          </ClerkProviderWrapper>
+        </LanguageProvider>
+      </I18nextProvider>
     </ErrorBoundary>
   );
 }

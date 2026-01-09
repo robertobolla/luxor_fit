@@ -28,9 +28,9 @@ export default function ClearDataButton({ onDataCleared }: ClearDataButtonProps)
       }
       
       return { success: true, keysRemoved: appKeys.length };
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error limpiando AsyncStorage:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: error?.message || 'Error desconocido' };
     }
   };
 
@@ -61,9 +61,9 @@ export default function ClearDataButton({ onDataCleared }: ClearDataButtonProps)
       
       console.log(`✅ SecureStore limpiado: ${removedCount} tokens eliminados`);
       return { success: true, tokensRemoved: removedCount };
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error limpiando SecureStore:', error);
-      return { success: false, error: error.message };
+      return { success: false, error: error?.message || 'Error desconocido' };
     }
   };
 
@@ -103,10 +103,10 @@ export default function ClearDataButton({ onDataCleared }: ClearDataButtonProps)
                   [{ text: 'OK' }]
                 );
               }
-            } catch (error) {
+            } catch (error: any) {
               Alert.alert(
                 '❌ Error',
-                `Error durante la limpieza: ${error.message}`,
+                `Error durante la limpieza: ${error?.message || 'Error desconocido'}`,
                 [{ text: 'OK' }]
               );
             } finally {

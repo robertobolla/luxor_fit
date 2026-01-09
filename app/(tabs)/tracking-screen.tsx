@@ -14,6 +14,7 @@ import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useUser } from '@clerk/clerk-expo';
 import { saveExercise } from '@/services/exerciseService';
+import { useTranslation } from 'react-i18next';
 
 const { width, height } = Dimensions.get('window');
 
@@ -25,6 +26,7 @@ interface RoutePoint {
 export default function TrackingScreen() {
   const params = useLocalSearchParams();
   const { user } = useUser();
+  const { t } = useTranslation();
   
   const activityName = params.activityName as string;
   const activityType = params.activityType as string;
@@ -216,7 +218,7 @@ export default function TrackingScreen() {
                   [{ text: 'OK', onPress: () => router.push('/(tabs)/workout' as any) }]
                 );
               } else {
-                Alert.alert('Error', 'No se pudo guardar el entrenamiento');
+                Alert.alert(t('common.error'), t('workout.couldNotSaveWorkout'));
               }
             }
           },

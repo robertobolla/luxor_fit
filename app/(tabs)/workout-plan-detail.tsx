@@ -1,299 +1,309 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-} from 'react-native';
-import { useLocalSearchParams, router, Stack, useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '@/services/supabase';
+import { useTranslation } from 'react-i18next';
+
+import { supabase } from '../../src/services/supabase';
 import { AIWorkoutAdaptationModal } from '../../src/components/AIWorkoutAdaptationModal';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFriends } from '../../src/services/friendsService';
 import { shareWorkout } from '../../src/services/sharedWorkoutService';
 import { FriendSelectionModal, ConfirmModal } from '../../src/components/CustomModal';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 
+type WorkoutExercise =
+  | string
+  | {
+      name?: string;
+      sets?: number | string;
+      reps?: number | string;
+      rest?: number | string;
+      notes?: string;
+      [key: string]: unknown;
+    };
+
+type WeeklyDay = {
+  day?: string;
+  duration?: number;
+  focus?: string;
+  exercises?: WorkoutExercise[];
+  [key: string]: unknown;
+};
+
+type MultiWeek = {
+  week_number?: number;
+  days?: WeeklyDay[];
+  [key: string]: unknown;
+};
+
+type PlanData = {
+  duration_weeks?: number;
+  days_per_week?: number;
+
+  weekly_structure?: WeeklyDay[];
+  multi_week_structure?: MultiWeek[];
+
+  key_principles?: unknown;
+  principles?: unknown;
+  core_principles?: unknown;
+  keyPrinciples?: unknown;
+  principios_clave?: unknown;
+
+  recommendations?: unknown;
+  tips?: unknown;
+  advice?: unknown;
+  suggestions?: unknown;
+  recomendaciones?: unknown;
+
+  progression?: unknown;
+  progress?: unknown;
+  progression_notes?: unknown;
+  progresion?: unknown;
+
+  equipment?: unknown;
+  userData?: { equipment?: unknown };
+
+  [key: string]: unknown;
+};
+
+type WorkoutPlanRow = {
+  id: string;
+  plan_name: string;
+  description?: string;
+  created_at?: string;
+  activated_at?: string;
+  is_active?: boolean;
+  plan_data?: unknown;
+
+  duration_weeks?: number;
+  days_per_week?: number;
+  weekly_structure?: unknown;
+
+  key_principles?: unknown;
+  recommendations?: unknown;
+  progression?: unknown;
+  progress?: unknown;
+  progression_notes?: unknown;
+  principles?: unknown;
+  core_principles?: unknown;
+  tips?: unknown;
+  advice?: unknown;
+  suggestions?: unknown;
+
+  [key: string]: unknown;
+};
+
+type NormalizedWorkoutPlan = Omit<WorkoutPlanRow, 'plan_data'> & { plan_data: PlanData };
+
+type FriendsResult = { success: boolean; data?: any[]; error?: string };
+
+const DEFAULT_PRINCIPLES = [
+  'Técnica estricta antes de aumentar cargas',
+  'Progresión semanal controlada (carga o repeticiones)',
+  'Equilibrio entre grupos musculares y descanso adecuado',
+];
+
+const DEFAULT_RECOMMENDATIONS = [
+  'Calienta 5-10 minutos antes de empezar',
+  'Descansa 48 h entre estímulos del mismo músculo',
+  'Prioriza rango completo y control del movimiento',
+];
+
+const getParamString = (v: string | string[] | undefined): string | undefined => {
+  if (!v) return undefined;
+  return Array.isArray(v) ? v[0] : v;
+};
+
+const safeJsonParse = <T,>(input: string, fallback: T): T => {
+  try {
+    return JSON.parse(input) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const str = (v: unknown, fallback = ''): string => {
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return fallback;
+};
+
+const lowerStr = (v: unknown): string => str(v).toLowerCase();
+
+const dateValue = (v: unknown): string | number | Date => {
+  if (v instanceof Date) return v;
+  if (typeof v === 'string' || typeof v === 'number') return v;
+  return Date.now();
+};
+
+const toNumber = (v: unknown, fallback: number): number => {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
+  }
+  return fallback;
+};
+
+const coerceStringArray = (value: unknown): string[] => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map((v) => String(v));
+  if (typeof value === 'string') return [value];
+  if (typeof value === 'object') {
+    const v = value as any;
+    const arr = (v.items || v.values || v.list) as unknown;
+    if (Array.isArray(arr)) return arr.map((x) => String(x));
+  }
+  return [];
+};
+
+const coerceString = (value: unknown, fallback: string): string => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.join('. ');
+  if (typeof value === 'object') {
+    const v = value as any;
+    return (v.text || v.description || fallback) as string;
+  }
+  return String(value);
+};
+
+const normalizePlanRow = (row: WorkoutPlanRow): NormalizedWorkoutPlan => {
+  const raw = row.plan_data;
+
+  let planDataObj: PlanData = {};
+  if (typeof raw === 'string') {
+    planDataObj = safeJsonParse<PlanData>(raw, {});
+  } else if (raw && typeof raw === 'object') {
+    planDataObj = raw as PlanData;
+  }
+
+  return {
+    ...row,
+    plan_data: planDataObj,
+  };
+};
+
 export default function WorkoutPlanDetailScreen() {
-  const { planId, isTrainerView, studentId } = useLocalSearchParams();
+  const { t } = useTranslation();
   const { user } = useUser();
-  const [plan, setPlan] = useState<any>(null);
+
+  const params = useLocalSearchParams<{
+    planId?: string | string[];
+    isTrainerView?: string | string[];
+    studentId?: string | string[];
+  }>();
+
+  const planId = getParamString(params.planId);
+  const isTrainerView = getParamString(params.isTrainerView);
+  const studentId = getParamString(params.studentId);
+
+  const [plan, setPlan] = useState<NormalizedWorkoutPlan | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [completedDays, setCompletedDays] = useState<Set<string>>(new Set());
   const [showAIModal, setShowAIModal] = useState(false);
+
   const [showShareModal, setShowShareModal] = useState(false);
   const [friends, setFriends] = useState<any[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
+
   const [showShareSuccess, setShowShareSuccess] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+
   const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
 
-  const loadPlanDetails = async () => {
+  const getMondayOfWeek = (date: Date): Date => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+  };
+
+  const calculateCurrentWeekIndex = (activatedAt: string, totalWeeks: number): number => {
+    const safeTotal = Math.max(1, totalWeeks);
+    if (!activatedAt) return 0;
+
+    const activatedDate = new Date(activatedAt);
+    const now = new Date();
+
+    const activatedMonday = getMondayOfWeek(activatedDate);
+    const currentMonday = getMondayOfWeek(now);
+
+    const weeksPassed = Math.floor(
+      (currentMonday.getTime() - activatedMonday.getTime()) / (7 * 24 * 60 * 60 * 1000)
+    );
+
+    return Math.max(0, Math.min(weeksPassed, safeTotal - 1));
+  };
+
+  const loadPlanDetails = useCallback(async () => {
     if (!planId) return;
 
     try {
       setIsLoading(true);
-      // Usamos maybeSingle para evitar errores cuando no hay filas
-      // y evitamos filtrar por user_id aquí (RLS ya debe proteger acceso)
-      const { data, error, status } = await supabase
+      setError(null);
+
+      const { data, error: sbError, status } = await supabase
         .from('workout_plans')
         .select('*')
         .eq('id', planId)
         .limit(1)
         .maybeSingle();
 
-      if (error) {
-        console.error('Error al cargar plan:', error);
-        setError('No se pudo cargar el plan');
+      if (sbError) {
+        console.error('Error al cargar plan:', sbError);
+        setError(str(t('workoutPlanDetail.couldNotLoadPlan'), 'No se pudo cargar el plan'));
         return;
       }
 
       if (!data) {
         console.warn('Plan no encontrado para id:', planId, 'status:', status);
-        setError('Plan no encontrado');
+        setError(str(t('workoutPlanDetail.planNotFound'), 'Plan no encontrado'));
         return;
       }
 
-      // Normalizar plan_data: puede venir como string o como objeto
-      let normalized = { ...data } as any;
-      try {
-        if (typeof normalized.plan_data === 'string') {
-          normalized.plan_data = JSON.parse(normalized.plan_data);
-        }
-      } catch (e) {
-        console.error('Error parseando plan_data; usando objeto vacío. Causa:', e);
-        normalized.plan_data = {};
-      }
-
-      // Logs útiles de diagnóstico (no romperán UI)
-      try {
-        const keys = normalized?.plan_data ? Object.keys(normalized.plan_data) : [];
-        console.log('📦 Plan data keys:', JSON.stringify(keys));
-        const w = normalized?.plan_data?.weekly_structure;
-        console.log('📅 Schedule es array:', Array.isArray(w), 'Longitud:', Array.isArray(w) ? w.length : 0);
-      } catch (e) {
-        console.warn('Error in diagnostic logs:', e);
-      }
-
-      try {
-        console.log('🧩 plan.plan_data keys:', normalized?.plan_data ? Object.keys(normalized.plan_data) : []);
-        console.log('🧩 plan.plan_data.sample:', JSON.stringify(normalized?.plan_data)?.slice(0, 400));
-      } catch (e) {
-        console.warn('Error in diagnostic logs:', e);
-      }
-
+      const normalized = normalizePlanRow(data as WorkoutPlanRow);
       setPlan(normalized);
-      
-      // Calcular la semana actual automáticamente si el plan es multi-semana y está activo
-      if (normalized.is_active && normalized.activated_at && normalized.plan_data?.multi_week_structure) {
-        const weekIndex = calculateCurrentWeekIndex(normalized.activated_at, normalized.plan_data.duration_weeks);
-        setCurrentWeekIndex(weekIndex);
-        console.log(`📅 Semana actual calculada: ${weekIndex + 1} de ${normalized.plan_data.duration_weeks}`);
+
+      const durationWeeks = toNumber(normalized.plan_data.duration_weeks ?? normalized.duration_weeks, 4);
+
+      const hasMulti =
+        Array.isArray(normalized.plan_data.multi_week_structure) &&
+        normalized.plan_data.multi_week_structure.length > 0;
+
+      if (normalized.is_active && normalized.activated_at && hasMulti) {
+        setCurrentWeekIndex(calculateCurrentWeekIndex(str(normalized.activated_at), durationWeeks));
+      } else {
+        setCurrentWeekIndex(0);
       }
     } catch (err) {
       console.error('Error inesperado:', err);
-      setError('Ocurrió un error inesperado');
+      setError(str(t('workoutPlanDetail.unexpectedError'), 'Error inesperado'));
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Calcular qué semana del plan debería mostrarse basándose en activated_at
-  const calculateCurrentWeekIndex = (activatedAt: string, totalWeeks: number): number => {
-    if (!activatedAt) return 0;
-
-    const activatedDate = new Date(activatedAt);
-    const now = new Date();
-    
-    // Obtener el lunes de la semana cuando se activó
-    const activatedMonday = getMondayOfWeek(activatedDate);
-    
-    // Obtener el lunes de la semana actual
-    const currentMonday = getMondayOfWeek(now);
-    
-    // Calcular cuántas semanas han pasado
-    const weeksPassed = Math.floor((currentMonday.getTime() - activatedMonday.getTime()) / (7 * 24 * 60 * 60 * 1000));
-    
-    // La semana actual es el índice (weeksPassed), pero no debe exceder el total de semanas del plan
-    const weekIndex = Math.min(weeksPassed, totalWeeks - 1);
-    
-    // Si weeksPassed >= totalWeeks, el plan ha expirado, pero mostramos la última semana
-    return Math.max(0, weekIndex);
-  };
-
-  const getMondayOfWeek = (date: Date): Date => {
-    const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Ajustar cuando es domingo
-    return new Date(d.setDate(diff));
-  };
-
-  const handleToggleActive = async () => {
-    if (!plan || !user) return;
-
-    try {
-      if (plan.is_active) {
-        // Desactivar plan: UPDATE directo (no viola constraint único)
-        const { error } = await supabase
-          .from('workout_plans')
-          .update({ is_active: false })
-          .eq('id', plan.id);
-
-        if (error) {
-          console.error('Error al desactivar plan:', error);
-          Alert.alert('Error', 'No se pudo desactivar el plan');
-          return;
-        }
-
-        setPlan({ ...plan, is_active: false });
-        Alert.alert('Éxito', 'Plan desactivado');
-      } else {
-        // Activar plan: usar RPC para garantizar único activo
-        console.log('🔄 Activando plan:', { userId: user.id, planId: plan.id });
-        
-        const { data, error } = await supabase.rpc('activate_workout_plan', {
-          p_user_id: user.id,
-          p_plan_id: plan.id,
-        });
-
-        console.log('📡 Respuesta RPC:', { data, error });
-
-        if (error) {
-          console.error('❌ Error al activar plan:', {
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-            code: error.code,
-          });
-          Alert.alert(
-            'Error al activar plan',
-            `${error.message}\n\nDetalles: ${error.details || 'No disponibles'}\n\nCódigo: ${error.code || 'N/A'}`
-          );
-          return;
-        }
-
-        console.log('✅ Plan activado correctamente');
-        setPlan({ ...plan, is_active: true });
-        Alert.alert('Éxito', 'Plan activado');
-      }
-    } catch (err) {
-      console.error('Error inesperado:', err);
-      Alert.alert('Error', 'Ocurrió un error inesperado');
-    }
-  };
-
-  const handleSharePlan = async () => {
-    if (!plan || !user?.id) return;
-
-    setIsLoadingFriends(true);
-
-    // Obtener lista de amigos
-    const friendsResult = await getFriends(user.id);
-    if (friendsResult.success && friendsResult.data && friendsResult.data.length > 0) {
-      setFriends(friendsResult.data);
-      setShowShareModal(true);
-    } else {
-      // Mostrar mensaje si no hay amigos
-      setShareError('No tienes amigos aún. Ve a la pestaña Inicio y agrega amigos para compartir entrenamientos.');
-    }
-    setIsLoadingFriends(false);
-  };
-
-  const handleSelectFriend = async (friendId: string, friendName: string) => {
-    if (!plan || !user?.id) return;
-
-    const result = await shareWorkout(user.id, friendId, plan.id);
-    if (result.success) {
-      setShowShareSuccess(true);
-    } else {
-      setShareError(result.error || 'No se pudo compartir el entrenamiento');
-    }
-  };
-
-  const handleEditPlan = async () => {
-    if (!plan || !plan.plan_data) {
-      Alert.alert('Error', 'No se pueden cargar los datos del plan');
-      return;
-    }
-
-    try {
-      const planData = plan.plan_data;
-      const equipment = planData.equipment || planData.userData?.equipment || [];
-      
-      // Simplemente navegar a la pantalla de edición
-      // custom-plan-days.tsx se encargará de cargar todo desde Supabase
-      router.push({
-        pathname: '/(tabs)/workout/custom-plan-days',
-        params: {
-          equipment: JSON.stringify(equipment),
-          planId: plan.id.toString(),
-          isTrainerView: isTrainerView || 'false',
-          studentId: studentId || '',
-        },
-      });
-    } catch (error) {
-      console.error('Error al cargar plan para edición:', error);
-      Alert.alert('Error', 'No se pudo cargar el plan para edición');
-    }
-  };
-
-  const handleDeletePlan = () => {
-    Alert.alert(
-      'Eliminar Plan',
-      '¿Estás seguro de que quieres eliminar este plan?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const { error } = await supabase
-                .from('workout_plans')
-                .delete()
-                .eq('id', plan.id);
-
-              if (error) {
-                console.error('Error al eliminar plan:', error);
-                Alert.alert('Error', 'No se pudo eliminar el plan');
-                return;
-              }
-
-              Alert.alert('Éxito', 'Plan eliminado correctamente');
-              router.push('/(tabs)/workout' as any);
-            } catch (err) {
-              console.error('Error inesperado:', err);
-              Alert.alert('Error', 'Ocurrió un error inesperado');
-            }
-          },
-        },
-      ]
-    );
-  };
+  }, [planId, t]);
 
   const loadCompletedDays = useCallback(async () => {
     if (!user?.id || !planId) return;
 
     try {
-      const { data, error } = await supabase
+      const { data, error: sbError } = await supabase
         .from('workout_completions')
         .select('day_name')
         .eq('user_id', user.id)
         .eq('workout_plan_id', planId);
 
-      if (error) {
-        console.error('Error al cargar días completados:', error);
+      if (sbError) {
+        console.error('Error al cargar días completados:', sbError);
         return;
       }
 
-      const completedSet = new Set(data.map((completion: any) => completion.day_name));
+      const completedSet = new Set((data || []).map((c: any) => str(c.day_name)));
       setCompletedDays(completedSet);
-      console.log('✅ Días completados cargados:', Array.from(completedSet));
     } catch (err) {
       console.error('Error inesperado al cargar días completados:', err);
     }
@@ -301,32 +311,228 @@ export default function WorkoutPlanDetailScreen() {
 
   useEffect(() => {
     loadPlanDetails();
-  }, [planId]);
+  }, [loadPlanDetails]);
 
   useEffect(() => {
-    if (plan && user?.id) {
-      loadCompletedDays();
-    }
-  }, [plan, user, loadCompletedDays]);
+    if (plan && user?.id) loadCompletedDays();
+  }, [plan, user?.id, loadCompletedDays]);
 
-  // Recargar el plan y los días completados cuando se enfoca la pantalla
   useFocusEffect(
     useCallback(() => {
-      console.log('🔄 Pantalla enfocada - recargando plan...');
       loadPlanDetails().then(() => {
-        if (user?.id) {
-        loadCompletedDays();
-      }
+        if (user?.id) loadCompletedDays();
       });
-    }, [planId, user])
+    }, [loadPlanDetails, loadCompletedDays, user?.id])
   );
+
+  const handleToggleActive = async () => {
+    if (!plan || !user) return;
+
+    const planId = String(plan.id);
+    try {
+      if (!!plan.is_active) {
+        const { error: sbError } = await supabase
+          .from('workout_plans')
+          .update({ is_active: false })
+          .eq('id', planId);
+
+        if (sbError) {
+          console.error('Error al desactivar plan:', sbError);
+          Alert.alert(str(t('common.error'), 'Error'), str(t('workout.couldNotDeactivatePlan'), 'No se pudo desactivar'));
+          return;
+        }
+
+        setPlan({ ...plan, is_active: false });
+        Alert.alert(str(t('common.success'), 'OK'), str(t('workout.planDeactivated'), 'Plan desactivado'));
+      } else {
+        const { error: rpcError } = await supabase.rpc('activate_workout_plan', {
+          p_user_id: user.id,
+          p_plan_id: planId,
+        });
+
+        if (rpcError) {
+          console.error('❌ Error al activar plan:', rpcError);
+          Alert.alert(str(t('workout.errorActivatingPlan'), 'Error'), rpcError.message);
+          return;
+        }
+
+        setPlan({ ...plan, is_active: true });
+        Alert.alert(str(t('common.success'), 'OK'), str(t('workout.planActivated'), 'Plan activado'));
+      }
+    } catch (err) {
+      console.error('Error inesperado:', err);
+      Alert.alert(str(t('common.error'), 'Error'), str(t('common.unexpectedError'), 'Error inesperado'));
+    }
+  };
+
+  const handleSharePlan = async () => {
+    if (!plan || !user?.id) return;
+
+    setIsLoadingFriends(true);
+    setShareError(null);
+
+    const friendsResult = (await getFriends(user.id)) as FriendsResult;
+
+    if (friendsResult.success && friendsResult.data && friendsResult.data.length > 0) {
+      setFriends(friendsResult.data);
+      setShowShareModal(true);
+    } else {
+      setShareError(
+        'No tienes amigos aún. Ve a la pestaña Inicio y agrega amigos para compartir entrenamientos.'
+      );
+    }
+
+    setIsLoadingFriends(false);
+  };
+
+  const handleSelectFriend = async (friendId: string) => {
+    if (!plan || !user?.id) return;
+
+    const result = await shareWorkout(user.id, friendId, String(plan.id));
+    if (result.success) {
+      setShowShareSuccess(true);
+    } else {
+      setShareError(str(result.error as string, 'No se pudo compartir el entrenamiento'));
+    }
+  };
+
+  const handleEditPlan = async () => {
+    if (!plan) {
+      Alert.alert(str(t('common.error'), 'Error'), str(t('workout.couldNotLoadPlanData'), 'No se pudo cargar'));
+      return;
+    }
+
+    try {
+      const equipment = plan.plan_data.equipment || plan.plan_data.userData?.equipment || [];
+
+      router.push({
+        pathname: '/(tabs)/workout/custom-plan-days',
+        params: {
+          equipment: JSON.stringify(equipment),
+          planId: String(plan.id),
+          isTrainerView: isTrainerView || 'false',
+          studentId: studentId || '',
+        },
+      } as any);
+    } catch (e) {
+      console.error('Error al cargar plan para edición:', e);
+      Alert.alert(str(t('common.error'), 'Error'), str(t('workout.couldNotLoadForEdit'), 'No se pudo abrir'));
+    }
+  };
+
+  const handleDeletePlan = () => {
+    if (!plan) return;
+
+    Alert.alert(str(t('workout.deletePlanConfirm'), 'Eliminar plan'), str(t('workout.deletePlanMessage'), '¿Seguro?'), [
+      { text: str(t('common.cancel'), 'Cancelar'), style: 'cancel' },
+      {
+        text: str(t('common.delete'), 'Eliminar'),
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const { error: sbError } = await supabase.from('workout_plans').delete().eq('id', String(plan.id));
+
+            if (sbError) {
+              console.error('Error al eliminar plan:', sbError);
+              Alert.alert(str(t('common.error'), 'Error'), str(t('workout.couldNotDeletePlan'), 'No se pudo eliminar'));
+              return;
+            }
+
+            Alert.alert(str(t('common.success'), 'OK'), str(t('workout.planDeletedSuccessfully'), 'Plan eliminado'));
+            router.push('/(tabs)/workout' as any);
+          } catch (err) {
+            console.error('Error inesperado:', err);
+            Alert.alert(str(t('common.error'), 'Error'), str(t('common.unexpectedError'), 'Error inesperado'));
+          }
+        },
+      },
+    ]);
+  };
+
+  const safePlanData = useMemo(() => {
+    if (!plan) {
+      return {
+        duration_weeks: 4,
+        days_per_week: 3,
+        weekly_structure: [] as WeeklyDay[],
+        multi_week_structure: [] as MultiWeek[],
+        key_principles: DEFAULT_PRINCIPLES,
+        progression: str(t('workout.progressionDefault'), 'Progresión semanal'),
+        recommendations: DEFAULT_RECOMMENDATIONS,
+      };
+    }
+
+    const pd = plan.plan_data;
+
+    const weeklyStructure = Array.isArray(pd.weekly_structure)
+      ? pd.weekly_structure
+      : Array.isArray(plan.weekly_structure)
+        ? (plan.weekly_structure as WeeklyDay[])
+        : [];
+
+    const multiWeekStructure = Array.isArray(pd.multi_week_structure) ? pd.multi_week_structure : [];
+
+    const durationWeeks = toNumber(pd.duration_weeks ?? plan.duration_weeks, 4);
+    const daysPerWeek = toNumber(pd.days_per_week ?? plan.days_per_week ?? weeklyStructure.length, weeklyStructure.length || 3);
+
+    const keyPrinciples = coerceStringArray(
+      pd.key_principles ||
+        pd.principles ||
+        pd.core_principles ||
+        pd.keyPrinciples ||
+        plan.key_principles ||
+        plan.principles ||
+        plan.core_principles ||
+        plan.keyPrinciples ||
+        pd.principios_clave
+    );
+
+    const recommendations = coerceStringArray(
+      pd.recommendations ||
+        pd.tips ||
+        pd.advice ||
+        pd.suggestions ||
+        plan.recommendations ||
+        plan.tips ||
+        plan.advice ||
+        plan.suggestions ||
+        pd.recomendaciones
+    );
+
+    const progression = coerceString(
+      pd.progression ||
+        pd.progress ||
+        pd.progression_notes ||
+        plan.progression ||
+        plan.progress ||
+        plan.progression_notes ||
+        pd.progresion,
+      str(t('workout.progressionDefault'), 'Progresión semanal')
+    );
+
+    return {
+      duration_weeks: durationWeeks,
+      days_per_week: daysPerWeek,
+      weekly_structure: weeklyStructure,
+      multi_week_structure: multiWeekStructure,
+      key_principles: keyPrinciples.length ? keyPrinciples : DEFAULT_PRINCIPLES,
+      progression,
+      recommendations: recommendations.length ? recommendations : DEFAULT_RECOMMENDATIONS,
+    };
+  }, [plan, t]);
+
+  const isCustomPlan = useMemo(() => {
+    return lowerStr(plan?.description).includes('plan personalizado');
+  }, [plan]);
+
+  const minPerSession = safePlanData.weekly_structure?.[0]?.duration || 45;
 
   if (isLoading) {
     return (
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.container}>
-          <LoadingOverlay visible={true} message="Cargando plan..." fullScreen />
+          <LoadingOverlay visible={true} message={str(t('commonUI.loading'), 'Cargando...')} fullScreen />
         </View>
       </>
     );
@@ -347,140 +553,47 @@ export default function WorkoutPlanDetailScreen() {
     );
   }
 
-  const planData = plan.plan_data || {};
-
-  // Normalizadores para cubrir múltiples formatos del adaptador IA
-  const coerceStringArray = (value: any): string[] => {
-    if (!value) return [];
-    if (Array.isArray(value)) return value.map((v) => String(v));
-    if (typeof value === 'string') return [value];
-    if (typeof value === 'object') {
-      // Si viene como { items: [...] } o similar
-      const arr = (value.items || value.values || value.list) as any[] | undefined;
-      if (Array.isArray(arr)) return arr.map((v) => String(v));
-    }
-    return [];
-  };
-
-  const coerceString = (value: any, fallback: string): string => {
-    if (!value && value !== 0) return fallback;
-    if (typeof value === 'string') return value;
-    if (Array.isArray(value)) return value.join('. ');
-    if (typeof value === 'object') return value.text || value.description || fallback;
-    return String(value);
-  };
-
-  // Asegurar que tenemos todos los campos necesarios, mapeando posibles nombres alternativos
-  const safePlanData = (() => {
-    const keyPrinciples = coerceStringArray(
-      planData.key_principles || planData.principles || planData.core_principles || planData.keyPrinciples ||
-      plan.key_principles || plan.principles || plan.core_principles || plan.keyPrinciples ||
-      planData.principios_clave || plan.principios_clave
-    );
-
-    const progression = coerceString(
-      planData.progression || planData.progress || planData.progression_notes || plan.progression || plan.progress || plan.progression_notes ||
-      planData.progresion || plan.progresion,
-      'Progresión gradual basada en tu nivel actual'
-    );
-
-    const recommendations = coerceStringArray(
-      planData.recommendations || planData.tips || planData.advice || planData.suggestions ||
-      plan.recommendations || plan.tips || plan.advice || plan.suggestions ||
-      planData.recomendaciones || plan.recomendaciones
-    );
-
-    // Si faltan, generar un set básico para no dejar vacío tras adaptación
-    const fallbackPrinciples = keyPrinciples.length > 0 ? keyPrinciples : [
-      'Técnica estricta antes de aumentar cargas',
-      'Progresión semanal controlada (carga o repeticiones)',
-      'Equilibrio entre grupos musculares y descanso adecuado',
-    ];
-    const fallbackRecommendations = recommendations.length > 0 ? recommendations : [
-      'Calienta 5-10 minutos antes de empezar',
-      'Descansa 48 h entre estímulos del mismo músculo',
-      'Prioriza rango completo y control del movimiento',
-    ];
-
-    return {
-      duration_weeks: planData.duration_weeks || plan.duration_weeks || 4,
-      days_per_week: planData.days_per_week || plan.days_per_week || (planData.weekly_structure?.length || 3),
-      weekly_structure: planData.weekly_structure || [],
-      key_principles: fallbackPrinciples,
-      progression,
-      recommendations: fallbackRecommendations,
-    };
-  })();
-
-  const DEFAULT_PRINCIPLES = [
-    'Técnica estricta antes de aumentar cargas',
-    'Progresión semanal controlada (carga o repeticiones)',
-    'Equilibrio entre grupos musculares y descanso adecuado',
-  ];
-  const DEFAULT_RECOMMENDATIONS = [
-    'Calienta 5-10 minutos antes de empezar',
-    'Descansa 48 h entre estímulos del mismo músculo',
-    'Prioriza rango completo y control del movimiento',
-  ];
-
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView style={styles.container}>
-        {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => {
-              // Siempre volver a la pestaña de Entrenar
-              router.push('/(tabs)/workout' as any);
-            }} 
-            style={styles.backIconButton}
-          >
+          <TouchableOpacity onPress={() => router.push('/(tabs)/workout' as any)} style={styles.backIconButton}>
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Plan de Entrenamiento</Text>
+
+          <Text style={styles.headerTitle}>{str(t('workout.planTitle'), 'Plan')}</Text>
           <View style={{ width: 24 }} />
         </View>
 
-        {/* Plan Info */}
         <View style={styles.planHeader}>
           <View style={styles.planTitleContainer}>
             <Ionicons name="fitness" size={32} color="#ffb300" />
             <View style={styles.planTitleTextContainer}>
-              <Text style={styles.planName}>{plan.plan_name}</Text>
-              {plan.is_active && (
+              <Text style={styles.planName}>{str(plan.plan_name, 'Plan')}</Text>
+              {!!plan.is_active && (
                 <View style={styles.activeBadge}>
-                  <Text style={styles.activeBadgeText}>Plan Activo</Text>
+                  <Text style={styles.activeBadgeText}>{str(t('workout.activePlan'), 'Activo')}</Text>
                 </View>
               )}
             </View>
           </View>
-          
-          {/* Botón de Editar (siempre visible para todos los planes) */}
-          <TouchableOpacity 
-            style={styles.aiButton}
-            onPress={handleEditPlan}
-            activeOpacity={0.8}
-          >
+
+          <TouchableOpacity style={styles.aiButton} onPress={handleEditPlan} activeOpacity={0.8}>
             <View style={styles.aiButtonContent}>
               <View style={styles.aiIconContainer}>
                 <Ionicons name="create-outline" size={18} color="#ffffff" />
               </View>
               <View style={styles.aiTextContainer}>
-                <Text style={styles.aiButtonTitle}>Editar Plan</Text>
-                <Text style={styles.aiButtonSubtitle}>Modifica ejercicios, series y más</Text>
+                <Text style={styles.aiButtonTitle}>{str(t('workout.editPlan'), 'Editar plan')}</Text>
+                <Text style={styles.aiButtonSubtitle}>{str(t('workout.modifyExercises'), 'Modificar ejercicios')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color="#ffb300" />
             </View>
           </TouchableOpacity>
 
-          {/* Botón de Adaptar con IA (solo para planes NO personalizados) */}
-          {!plan.description?.toLowerCase().includes('plan personalizado') && (
-            <TouchableOpacity 
-              style={[styles.aiButton, { marginTop: 12 }]}
-              onPress={() => setShowAIModal(true)}
-              activeOpacity={0.8}
-            >
+          {!isCustomPlan && (
+            <TouchableOpacity style={[styles.aiButton, { marginTop: 12 }]} onPress={() => setShowAIModal(true)} activeOpacity={0.8}>
               <View style={styles.aiButtonContent}>
                 <View style={styles.aiIconContainer}>
                   <Ionicons name="sparkles" size={18} color="#ffffff" />
@@ -494,211 +607,196 @@ export default function WorkoutPlanDetailScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Botón de compartir */}
-          <TouchableOpacity
-            style={styles.shareButton}
-            onPress={handleSharePlan}
-            activeOpacity={0.8}
-          >
+          <TouchableOpacity style={styles.shareButton} onPress={handleSharePlan} activeOpacity={0.8}>
             <View style={styles.shareButtonContent}>
               <Ionicons name="share-social" size={18} color="#ffb300" />
-              <Text style={styles.shareButtonText}>Compartir con un amigo</Text>
+              <Text style={styles.shareButtonText}>{str(t('workout.shareWithFriend'), 'Compartir')}</Text>
             </View>
           </TouchableOpacity>
-          
-          <Text style={styles.planDescription}>{plan.description}</Text>
+
+          {!!str(plan.description) && <Text style={styles.planDescription}>{str(plan.description)}</Text>}
         </View>
 
-        {/* Stats */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
             <Ionicons name="calendar" size={24} color="#ffb300" />
             <Text style={styles.statValue}>{safePlanData.duration_weeks}</Text>
             <Text style={styles.statLabel}>Semanas</Text>
           </View>
+
           <View style={styles.statCard}>
             <Ionicons name="fitness-outline" size={24} color="#ffb300" />
             <Text style={styles.statValue}>{safePlanData.days_per_week}</Text>
-            <Text style={styles.statLabel}>Días/Semana</Text>
+            <Text style={styles.statLabel}>{str(t('workout.daysPerWeekLabel'), 'Días/semana')}</Text>
           </View>
-          {!plan.description?.toLowerCase().includes('plan personalizado') && (
+
+          {!isCustomPlan && (
             <View style={styles.statCard}>
               <Ionicons name="time-outline" size={24} color="#ffb300" />
-              <Text style={styles.statValue}>{safePlanData.weekly_structure?.[0]?.duration || 45}</Text>
-              <Text style={styles.statLabel}>Min/Sesión</Text>
+              <Text style={styles.statValue}>{minPerSession}</Text>
+              <Text style={styles.statLabel}>{str(t('workout.minPerSessionLabel'), 'Min/sesión')}</Text>
             </View>
           )}
         </View>
 
-        {/* Weekly Structure */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📅 Estructura Semanal</Text>
-          <Text style={styles.sectionSubtitle}>Toca cada día para ver detalles y tips</Text>
-          
-          {/* Mostrar multi_week_structure si existe, sino weekly_structure */}
-          {safePlanData.multi_week_structure && safePlanData.multi_week_structure.length > 0 ? (
-            // Plan multi-semana con navegación
+          <Text style={styles.sectionSubtitle}>{str(t('workout.tapDayForDetails'), 'Tocá un día para ver detalles')}</Text>
+
+          {safePlanData.multi_week_structure.length > 0 ? (
             <>
               {safePlanData.multi_week_structure.length > 1 && (
                 <View style={styles.weekNavigation}>
                   <TouchableOpacity
                     style={[styles.weekNavButton, currentWeekIndex === 0 && styles.weekNavButtonDisabled]}
-                    onPress={() => setCurrentWeekIndex(Math.max(0, currentWeekIndex - 1))}
+                    onPress={() => setCurrentWeekIndex((v) => Math.max(0, v - 1))}
                     disabled={currentWeekIndex === 0}
                   >
-                    <Ionicons name="chevron-back" size={24} color={currentWeekIndex === 0 ? "#555" : "#ffb300"} />
+                    <Ionicons name="chevron-back" size={24} color={currentWeekIndex === 0 ? '#555' : '#ffb300'} />
                   </TouchableOpacity>
-                  
+
                   <View style={styles.weekIndicator}>
                     <Text style={styles.weekIndicatorText}>
                       Semana {currentWeekIndex + 1} de {safePlanData.multi_week_structure.length}
                     </Text>
-                    {plan.is_active && plan.activated_at && (
+                    {!!plan.is_active && !!str(plan.activated_at) && (
                       <Text style={styles.weekIndicatorSubtext}>
-                        {currentWeekIndex === calculateCurrentWeekIndex(plan.activated_at, safePlanData.duration_weeks) 
-                          ? '✓ Semana actual' 
-                          : currentWeekIndex < calculateCurrentWeekIndex(plan.activated_at, safePlanData.duration_weeks)
-                          ? '✓ Completada'
-                          : '⏳ Próxima'}
+                        {currentWeekIndex === calculateCurrentWeekIndex(str(plan.activated_at), safePlanData.duration_weeks)
+                          ? '✓ Semana actual'
+                          : currentWeekIndex < calculateCurrentWeekIndex(str(plan.activated_at), safePlanData.duration_weeks)
+                            ? '✓ Completada'
+                            : '⏳ Próxima'}
                       </Text>
                     )}
                   </View>
-                  
+
                   <TouchableOpacity
-                    style={[styles.weekNavButton, currentWeekIndex >= safePlanData.multi_week_structure.length - 1 && styles.weekNavButtonDisabled]}
-                    onPress={() => setCurrentWeekIndex(Math.min(safePlanData.multi_week_structure.length - 1, currentWeekIndex + 1))}
+                    style={[
+                      styles.weekNavButton,
+                      currentWeekIndex >= safePlanData.multi_week_structure.length - 1 && styles.weekNavButtonDisabled,
+                    ]}
+                    onPress={() => setCurrentWeekIndex((v) => Math.min(safePlanData.multi_week_structure.length - 1, v + 1))}
                     disabled={currentWeekIndex >= safePlanData.multi_week_structure.length - 1}
                   >
-                    <Ionicons name="chevron-forward" size={24} color={currentWeekIndex >= safePlanData.multi_week_structure.length - 1 ? "#555" : "#ffb300"} />
+                    <Ionicons
+                      name="chevron-forward"
+                      size={24}
+                      color={currentWeekIndex >= safePlanData.multi_week_structure.length - 1 ? '#555' : '#ffb300'}
+                    />
                   </TouchableOpacity>
                 </View>
               )}
-              
-              {/* Renderizar solo la semana actual seleccionada */}
+
               {(() => {
                 const week = safePlanData.multi_week_structure[currentWeekIndex];
                 if (!week) return null;
-                
+
+                const weekNumber = toNumber(week.week_number, currentWeekIndex + 1);
+
                 return (
                   <View key={currentWeekIndex} style={styles.weekContainer}>
                     {safePlanData.multi_week_structure.length === 1 && (
-                      <Text style={styles.weekTitle}>Semana {week.week_number}</Text>
+                      <Text style={styles.weekTitle}>Semana {weekNumber}</Text>
                     )}
-                {week.days?.map((day: any, dayIndex: number) => {
-                  const dayKey = day.day || `week_${week.week_number}_day_${dayIndex + 1}`;
-                  const isCompleted = completedDays.has(dayKey);
-                  
-                  // Procesar el título del día para evitar duplicados
-                  let dayTitle = day.day;
-                  if (!dayTitle || dayTitle.trim() === '') {
-                    dayTitle = `Día ${dayIndex + 1}`;
-                  } else {
-                    dayTitle = dayTitle.trim();
-                    if (!dayTitle.match(/^Día\s*\d+/i)) {
-                      dayTitle = `Día ${dayIndex + 1}`;
-                    }
-                  }
-                  
-                  const safeDay = {
-                    day: dayTitle,
-                    duration: day.duration || 45,
-                    focus: day.focus || 'Entrenamiento general',
-                    exercises: day.exercises || [],
-                  };
-                  
-                  return (
-                    <TouchableOpacity
-                      key={dayIndex}
-                      style={[styles.dayCard, isCompleted && styles.dayCardCompleted]}
-                      onPress={() => {
-                        router.push({
-                          pathname: '/(tabs)/workout-day-detail',
-                          params: {
-                            dayData: JSON.stringify(safeDay),
-                            planName: plan.plan_name,
-                            planId: plan.id,
-                            dayName: dayKey,
-                            isCustomPlan: plan.description?.toLowerCase().includes('plan personalizado') ? 'true' : 'false',
-                          },
-                        } as any);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      {isCompleted && <View style={styles.completedSideBar} />}
-                      <View style={styles.dayHeader}>
-                        <View style={styles.dayTitleContainer}>
-                          <Text style={styles.dayTitle}>{safeDay.day}</Text>
-                          {isCompleted && (
-                            <View style={styles.completedBadge}>
-                              <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
-                              <Text style={styles.completedBadgeText}>Completado</Text>
-                            </View>
-                          )}
-                        </View>
-                        {!plan.description?.toLowerCase().includes('plan personalizado') && safeDay.duration && (
-                          <View style={styles.dayDuration}>
-                            <Ionicons name="time-outline" size={14} color="#ffb300" />
-                            <Text style={styles.dayDurationText}>{safeDay.duration} min</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.dayFocus}>{safeDay.focus}</Text>
-                      <View style={styles.exercisesContainer}>
-                        <Text style={styles.exercisesTitle}>Ejercicios ({safeDay.exercises?.length || 0}):</Text>
-                        <View style={styles.exercisesList}>
-                          {safeDay.exercises?.map((exercise: any, idx: number) => {
-                            const isOldFormat = typeof exercise === 'string';
-                            const exerciseName = isOldFormat ? exercise : exercise.name;
 
-                            return (
-                              <View key={idx} style={styles.exercisePreviewItem}>
-                                <Ionicons name="checkmark-circle" size={14} color="#ffb300" />
-                                <Text style={styles.exercisePreviewText}>{exerciseName}</Text>
+                    {(week.days || []).map((day, dayIndex) => {
+                      const dayKey = day.day || `week_${weekNumber}_day_${dayIndex + 1}`;
+                      const isCompleted = completedDays.has(dayKey);
+
+                      let dayTitle = str(day.day).trim();
+                      if (!dayTitle) dayTitle = `Día ${dayIndex + 1}`;
+                      if (!/^Día\s*\d+/i.test(dayTitle)) dayTitle = `Día ${dayIndex + 1}`;
+
+                      const safeDay = {
+                        day: dayTitle,
+                        duration: toNumber(day.duration, 45),
+                        focus: str(day.focus, str(t('workout.generalTraining'), 'Entrenamiento general')),
+                        exercises: Array.isArray(day.exercises) ? day.exercises : [],
+                      };
+
+                      return (
+                        <TouchableOpacity
+                          key={dayIndex}
+                          style={[styles.dayCard, isCompleted && styles.dayCardCompleted]}
+                          onPress={() => {
+                            router.push({
+                              pathname: '/(tabs)/workout-day-detail',
+                              params: {
+                                dayData: JSON.stringify(safeDay),
+                                planName: str(plan.plan_name, 'Plan'),
+                                planId: String(plan.id),
+                                dayName: dayKey,
+                                isCustomPlan: isCustomPlan ? 'true' : 'false',
+                              },
+                            } as any);
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          {isCompleted && <View style={styles.completedSideBar} />}
+
+                          <View style={styles.dayHeader}>
+                            <View style={styles.dayTitleContainer}>
+                              <Text style={styles.dayTitle}>{safeDay.day}</Text>
+                              {isCompleted && (
+                                <View style={styles.completedBadge}>
+                                  <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+                                  <Text style={styles.completedBadgeText}>Completado</Text>
+                                </View>
+                              )}
+                            </View>
+
+                            {!isCustomPlan && (
+                              <View style={styles.dayDuration}>
+                                <Ionicons name="time-outline" size={14} color="#ffb300" />
+                                <Text style={styles.dayDurationText}>{safeDay.duration} min</Text>
                               </View>
-                            );
-                          })}
-                        </View>
-                      </View>
-                      <View style={styles.viewDetailsButton}>
-                        <Text style={styles.viewDetailsText}>Ver detalles completos</Text>
-                        <Ionicons name="chevron-forward" size={16} color="#ffb300" />
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
+                            )}
+                          </View>
+
+                          <Text style={styles.dayFocus}>{safeDay.focus}</Text>
+
+                          <View style={styles.exercisesContainer}>
+                            <Text style={styles.exercisesTitle}>Ejercicios ({safeDay.exercises.length}):</Text>
+                            <View style={styles.exercisesList}>
+                              {safeDay.exercises.map((exercise: WorkoutExercise, idx: number) => {
+                                const name = typeof exercise === 'string' ? exercise : str(exercise.name, 'Ejercicio');
+                                return (
+                                  <View key={idx} style={styles.exercisePreviewItem}>
+                                    <Ionicons name="checkmark-circle" size={14} color="#ffb300" />
+                                    <Text style={styles.exercisePreviewText}>{name}</Text>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          </View>
+
+                          <View style={styles.viewDetailsButton}>
+                            <Text style={styles.viewDetailsText}>Ver detalles completos</Text>
+                            <Ionicons name="chevron-forward" size={16} color="#ffb300" />
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
                 );
               })()}
             </>
           ) : (
-            // Plan de una semana (compatibilidad)
-            safePlanData.weekly_structure?.map((day: any, index: number) => {
+            (safePlanData.weekly_structure || []).map((day, index) => {
               const dayKey = day.day || `day_${index + 1}`;
               const isCompleted = completedDays.has(dayKey);
-              
-              // Procesar el título del día para evitar duplicados
-              let dayTitle = day.day;
-              if (!dayTitle || dayTitle.trim() === '') {
-                // Si no hay título, usar el índice
-                dayTitle = `Día ${index + 1}`;
-              } else {
-                // Limpiar espacios
-                dayTitle = dayTitle.trim();
-                // Si el título ya tiene formato "Día X", usarlo tal cual
-                // Si no tiene formato, usar el índice
-                if (!dayTitle.match(/^Día\s*\d+/i)) {
-                  dayTitle = `Día ${index + 1}`;
-                }
-              }
-              
-              // Asegurar que tenemos todos los campos necesarios para el día
+
+              let dayTitle = str(day.day).trim();
+              if (!dayTitle) dayTitle = `Día ${index + 1}`;
+              if (!/^Día\s*\d+/i.test(dayTitle)) dayTitle = `Día ${index + 1}`;
+
               const safeDay = {
                 day: dayTitle,
-                duration: day.duration || 45,
-                focus: day.focus || 'Entrenamiento general',
-                exercises: day.exercises || [],
+                duration: toNumber(day.duration, 45),
+                focus: str(day.focus, str(t('workout.generalTraining'), 'Entrenamiento general')),
+                exercises: Array.isArray(day.exercises) ? day.exercises : [],
               };
-              
+
               return (
                 <TouchableOpacity
                   key={index}
@@ -708,16 +806,17 @@ export default function WorkoutPlanDetailScreen() {
                       pathname: '/(tabs)/workout-day-detail',
                       params: {
                         dayData: JSON.stringify(safeDay),
-                        planName: plan.plan_name,
-                        planId: plan.id,
+                        planName: str(plan.plan_name, 'Plan'),
+                        planId: String(plan.id),
                         dayName: dayKey,
-                        isCustomPlan: plan.description?.toLowerCase().includes('plan personalizado') ? 'true' : 'false',
+                        isCustomPlan: isCustomPlan ? 'true' : 'false',
                       },
                     } as any);
                   }}
                   activeOpacity={0.7}
                 >
                   {isCompleted && <View style={styles.completedSideBar} />}
+
                   <View style={styles.dayHeader}>
                     <View style={styles.dayTitleContainer}>
                       <Text style={styles.dayTitle}>{safeDay.day}</Text>
@@ -728,32 +827,32 @@ export default function WorkoutPlanDetailScreen() {
                         </View>
                       )}
                     </View>
-                    {/* Solo mostrar duración si NO es plan personalizado */}
-                    {!plan.description?.toLowerCase().includes('plan personalizado') && safeDay.duration && (
+
+                    {!isCustomPlan && (
                       <View style={styles.dayDuration}>
                         <Ionicons name="time-outline" size={14} color="#ffb300" />
                         <Text style={styles.dayDurationText}>{safeDay.duration} min</Text>
                       </View>
                     )}
                   </View>
-                  <Text style={styles.dayFocus}>{safeDay.focus}</Text>
-                  <View style={styles.exercisesContainer}>
-                    <Text style={styles.exercisesTitle}>Ejercicios ({safeDay.exercises?.length || 0}):</Text>
-                    <View style={styles.exercisesList}>
-                      {/* Mostrar todos los ejercicios en planes personalizados */}
-                      {safeDay.exercises?.map((exercise: any, idx: number) => {
-                        const isOldFormat = typeof exercise === 'string';
-                        const exerciseName = isOldFormat ? exercise : exercise.name;
 
+                  <Text style={styles.dayFocus}>{safeDay.focus}</Text>
+
+                  <View style={styles.exercisesContainer}>
+                    <Text style={styles.exercisesTitle}>Ejercicios ({safeDay.exercises.length}):</Text>
+                    <View style={styles.exercisesList}>
+                      {safeDay.exercises.map((exercise: WorkoutExercise, idx: number) => {
+                        const name = typeof exercise === 'string' ? exercise : str(exercise.name, 'Ejercicio');
                         return (
                           <View key={idx} style={styles.exercisePreviewItem}>
                             <Ionicons name="checkmark-circle" size={14} color="#ffb300" />
-                            <Text style={styles.exercisePreviewText}>{exerciseName}</Text>
+                            <Text style={styles.exercisePreviewText}>{name}</Text>
                           </View>
                         );
                       })}
                     </View>
                   </View>
+
                   <View style={styles.viewDetailsButton}>
                     <Text style={styles.viewDetailsText}>Ver detalles completos</Text>
                     <Ionicons name="chevron-forward" size={16} color="#ffb300" />
@@ -764,11 +863,10 @@ export default function WorkoutPlanDetailScreen() {
           )}
         </View>
 
-        {/* Key Principles */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>🎯 Principios Clave</Text>
           <View style={styles.principlesContainer}>
-            {(safePlanData.key_principles?.length ? safePlanData.key_principles : DEFAULT_PRINCIPLES).map((principle: string, index: number) => (
+            {safePlanData.key_principles.map((principle, index) => (
               <View key={index} style={styles.principleItem}>
                 <Ionicons name="bulb" size={16} color="#FFD700" />
                 <Text style={styles.principleText}>{principle}</Text>
@@ -777,19 +875,17 @@ export default function WorkoutPlanDetailScreen() {
           </View>
         </View>
 
-        {/* Progression */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📈 Progresión</Text>
+          <Text style={styles.sectionTitle}>{str(t('workout.progressionTitle'), 'Progresión')}</Text>
           <View style={styles.infoCard}>
             <Text style={styles.infoText}>{safePlanData.progression}</Text>
           </View>
         </View>
 
-        {/* Recommendations */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>💡 Recomendaciones</Text>
           <View style={styles.recommendationsContainer}>
-            {(safePlanData.recommendations?.length ? safePlanData.recommendations : DEFAULT_RECOMMENDATIONS).map((rec: string, index: number) => (
+            {safePlanData.recommendations.map((rec, index) => (
               <View key={index} style={styles.recommendationItem}>
                 <Ionicons name="star" size={16} color="#ffb300" />
                 <Text style={styles.recommendationText}>{rec}</Text>
@@ -798,20 +894,13 @@ export default function WorkoutPlanDetailScreen() {
           </View>
         </View>
 
-        {/* Actions */}
         <View style={styles.actionsContainer}>
           <TouchableOpacity
-            style={[styles.actionButton, plan.is_active ? styles.deactivateButton : styles.activateButton]}
+            style={[styles.actionButton, !!plan.is_active ? styles.deactivateButton : styles.activateButton]}
             onPress={handleToggleActive}
           >
-            <Ionicons
-              name={plan.is_active ? 'pause-circle' : 'play-circle'}
-              size={20}
-              color="#ffffff"
-            />
-            <Text style={styles.actionButtonText}>
-              {plan.is_active ? 'Desactivar Plan' : 'Activar Plan'}
-            </Text>
+            <Ionicons name={!!plan.is_active ? 'pause-circle' : 'play-circle'} size={20} color="#ffffff" />
+            <Text style={styles.actionButtonText}>{!!plan.is_active ? 'Desactivar Plan' : 'Activar Plan'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.deleteButton} onPress={handleDeletePlan}>
@@ -820,9 +909,9 @@ export default function WorkoutPlanDetailScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Creation Date */}
         <Text style={styles.creationDate}>
-          Creado el {new Date(plan.created_at).toLocaleDateString('es-ES', {
+          Creado el{' '}
+          {new Date(dateValue(plan.created_at)).toLocaleDateString('es-ES', {
             day: 'numeric',
             month: 'long',
             year: 'numeric',
@@ -830,35 +919,22 @@ export default function WorkoutPlanDetailScreen() {
         </Text>
       </ScrollView>
 
-      {/* Modal de Adaptación con IA */}
       <AIWorkoutAdaptationModal
         visible={showAIModal}
         onClose={() => setShowAIModal(false)}
-        onSuccess={(adaptedPlan) => {
-          // Normalizar plan_data por si viene como string
-          let normalized = { ...adaptedPlan } as any;
-          try {
-            if (typeof normalized.plan_data === 'string') {
-              normalized.plan_data = JSON.parse(normalized.plan_data);
-            }
-          } catch (e) {
-            console.error('Error parseando plan_data adaptado; usando objeto vacío. Causa:', e);
-            normalized.plan_data = {};
-          }
+        onSuccess={(adaptedPlan: any) => {
+          const normalized = normalizePlanRow(adaptedPlan as WorkoutPlanRow);
           setPlan(normalized);
           setShowAIModal(false);
-          // Opcional: mostrar mensaje de éxito
-          Alert.alert(
-            '¡Plan Adaptado!',
-            'Tu entrenamiento ha sido personalizado según tus especificaciones.',
-            [{ text: 'Perfecto', style: 'default' }]
-          );
+
+          Alert.alert('¡Plan Adaptado!', 'Tu entrenamiento ha sido personalizado según tus especificaciones.', [
+            { text: 'Perfecto', style: 'default' },
+          ]);
         }}
         workoutPlan={plan}
         userId={user?.id || ''}
       />
 
-      {/* Modal de compartir con amigos */}
       <FriendSelectionModal
         visible={showShareModal}
         onClose={() => {
@@ -867,27 +943,25 @@ export default function WorkoutPlanDetailScreen() {
         }}
         friends={friends}
         onSelectFriend={handleSelectFriend}
-        title={`Compartir "${plan?.plan_name || 'Entrenamiento'}"`}
+        title={`Compartir "${str(plan.plan_name, 'Entrenamiento')}"`}
       />
 
-      {/* Modal de éxito al compartir */}
       <ConfirmModal
         visible={showShareSuccess}
         onClose={() => setShowShareSuccess(false)}
-        title="¡Entrenamiento compartido!"
-        message="El entrenamiento se ha compartido correctamente con tu amigo."
-        confirmText="OK"
+        title={str(t('workoutPlan.workoutShared'), 'Listo')}
+        message={str(t('workoutPlan.sharedWithFriend'), 'Compartido')}
+        confirmText={str(t('common.ok'), 'OK')}
         cancelText=""
         onConfirm={() => setShowShareSuccess(false)}
       />
 
-      {/* Modal de error al compartir */}
       <ConfirmModal
         visible={!!shareError}
         onClose={() => setShareError(null)}
-        title="Error al compartir"
-        message={shareError || 'No se pudo compartir el entrenamiento'}
-        confirmText="OK"
+        title={str(t('workoutPlan.errorSharing'), 'Error')}
+        message={shareError || str(t('chat.couldNotShare'), 'No se pudo compartir')}
+        confirmText={str(t('common.ok'), 'OK')}
         cancelText=""
         onConfirm={() => setShareError(null)}
       />
@@ -1000,7 +1074,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   aiButton: {
-    backgroundColor: 'linear-gradient(135deg, #ffb300 0%, #00B894 100%)',
     backgroundColor: '#ffb300',
     borderRadius: 16,
     marginBottom: 20,
@@ -1094,7 +1167,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   dayCardCompleted: {
-    backgroundColor: 'rgba(76, 175, 80, 0.08)', // Verde muy tenue
+    backgroundColor: 'rgba(76, 175, 80, 0.08)',
     borderColor: '#4CAF50',
   },
   completedSideBar: {
@@ -1372,4 +1445,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-

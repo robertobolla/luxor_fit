@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Workout, WorkoutSession, Exercise, AIRecommendation } from '../types';
-import { supabase } from '../services/supabase';
+import { supabase } from '../../src/services/supabase';
 
 interface WorkoutState {
   currentWorkout: Workout | null;

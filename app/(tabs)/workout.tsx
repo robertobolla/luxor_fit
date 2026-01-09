@@ -13,7 +13,8 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '@/services/supabase';
+import { useTranslation } from 'react-i18next';
+import { supabase } from '../../src/services/supabase';
 import { useWorkoutStore } from '@/store/workoutStore';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
@@ -25,8 +26,10 @@ import {
 } from '../../src/services/trainerService';
 import { useTutorial } from '@/contexts/TutorialContext';
 import { HelpModal } from '@/components/HelpModal';
+import { TutorialTooltip } from '@/components/TutorialTooltip';
 
 export default function WorkoutScreen() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const { 
     workouts, 
@@ -46,7 +49,15 @@ export default function WorkoutScreen() {
   const [expiredPlan, setExpiredPlan] = useState<any | null>(null);
 
   // Tutorial states
-  const { showHelpModal, setShowHelpModal, hasCompletedTutorial } = useTutorial();
+  const { 
+    showHelpModal, 
+    setShowHelpModal, 
+    hasCompletedTutorial,
+    shouldShowTooltip,
+    completeTutorial,
+    markTooltipShown 
+  } = useTutorial();
+  const [showWorkoutTooltips, setShowWorkoutTooltips] = useState(false);
 
   // Cargar datos cuando se monta el componente
   useEffect(() => {
@@ -56,19 +67,42 @@ export default function WorkoutScreen() {
     loadTrainerInvitations();
   }, [user]);
 
-  // Recargar planes automáticamente cuando la pantalla recibe foco
-  // Esto asegura que se actualice cuando el usuario:
-  // 1. Regresa después de generar un plan
-  // 2. Regresa después de editar un plan (incluyendo cambios a duration_weeks)
-  // 3. Regresa de cualquier otra pantalla
-  // La función checkForExpiredPlan() detectará automáticamente si duration_weeks cambió
+  // Mostrar tooltips cuando corresponde
+  const tutorialShownRef = React.useRef(false);
+  useEffect(() => {
+    const shouldShow = shouldShowTooltip('WORKOUT');
+    
+    // Si el tutorial debe mostrarse y el ref dice que ya se mostró,
+    // significa que el usuario lo reseteó, así que reseteamos el ref
+    if (shouldShow && tutorialShownRef.current) {
+      tutorialShownRef.current = false;
+    }
+    
+    if (!tutorialShownRef.current && shouldShow && user?.id && !isLoadingPlans) {
+      tutorialShownRef.current = true;
+      const timer = setTimeout(() => {
+        setShowWorkoutTooltips(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldShowTooltip, user, isLoadingPlans]);
+
+  // Cerrar tutorial cuando la pantalla pierde el foco
   useFocusEffect(
     useCallback(() => {
+      // Al entrar a la pantalla
       loadWorkoutPlans();
       loadWorkouts();
       loadSessions();
       loadTrainerInvitations();
-    }, [user])
+      
+      // Al salir de la pantalla, cerrar el tutorial si está abierto
+      return () => {
+        if (showWorkoutTooltips) {
+          setShowWorkoutTooltips(false);
+        }
+      };
+    }, [user, showWorkoutTooltips])
   );
 
   const loadWorkoutPlans = async () => {
@@ -84,6 +118,8 @@ export default function WorkoutScreen() {
 
       if (error) {
         console.error('Error loading workout plans:', error);
+        Alert.alert(t('common.error'), t('workout.errorLoadingPlans'));
+        setWorkoutPlans([]);
         return;
       }
 
@@ -167,7 +203,7 @@ export default function WorkoutScreen() {
 
       if (rpcError) {
         console.error('Error reactivating workout plan:', rpcError);
-        Alert.alert('Error', 'No se pudo reactivar el plan');
+        Alert.alert(t('common.error'), t('workout.errorReactivatingPlan'));
         return;
       }
       
@@ -182,7 +218,7 @@ export default function WorkoutScreen() {
       );
     } catch (err) {
       console.error('Error reactivating plan:', err);
-      Alert.alert('Error', 'Ocurrió un error al reactivar el plan');
+      Alert.alert(t('common.error'), t('workout.unexpectedErrorReactivating'));
     }
   };
 
@@ -248,10 +284,10 @@ export default function WorkoutScreen() {
           setShowInvitationsModal(false);
         }
       } else {
-        Alert.alert('Error', result.error || 'No se pudo procesar la invitación');
+        Alert.alert(t('common.error'), result.error || t('workout.errorProcessingInvitation'));
       }
     } catch (error) {
-      Alert.alert('Error', 'Ocurrió un error al procesar la invitación');
+      Alert.alert(t('common.error'), t('workout.unexpectedErrorProcessingInvitation'));
     } finally {
       setIsRespondingInvitation(false);
     }
@@ -279,8 +315,8 @@ export default function WorkoutScreen() {
           code: rpcError.code,
         });
         Alert.alert(
-          'Error al activar plan',
-          `${rpcError.message}\n\nDetalles: ${rpcError.details || 'No disponibles'}\n\nCódigo: ${rpcError.code || 'N/A'}`
+          t('workout.errorActivatingPlan'),
+          `${rpcError.message}\n\n${t('common.details')}: ${rpcError.details || t('common.notAvailable')}\n\n${t('common.code')}: ${rpcError.code || 'N/A'}`
         );
         return;
       }
@@ -292,7 +328,7 @@ export default function WorkoutScreen() {
       
     } catch (err: any) {
       console.error('❌ Error inesperado activating workout plan:', err);
-      Alert.alert('Error', `No se pudo activar el plan: ${err?.message || 'Error desconocido'}`);
+      Alert.alert(t('common.error'), `${t('workout.couldNotActivatePlan')}: ${err?.message || t('errors.unknownError')}`);
     }
   };
 
@@ -303,45 +339,54 @@ export default function WorkoutScreen() {
   };
 
   const getWorkoutDifficulty = (difficulty: number) => {
-    if (difficulty <= 3) return { text: 'Fácil', color: '#4CAF50' };
-    if (difficulty <= 6) return { text: 'Moderado', color: '#FF9800' };
-    return { text: 'Difícil', color: '#F44336' };
+    const key = difficulty <= 3 ? 'easy' : (difficulty <= 6 ? 'moderate' : 'hard');
+    // Usar claves de traducción para el texto
+    return { text: t(`workout.difficulty.${key}`) ?? key, color: difficulty <= 3 ? '#4CAF50' : (difficulty <= 6 ? '#FF9800' : '#F44336') };
   };
 
   const getWorkoutType = (workout: any) => {
     const exerciseCount = workout.workout_exercises?.length || 0;
-    if (exerciseCount <= 4) return 'Entrenamiento corto';
-    if (exerciseCount <= 8) return 'Entrenamiento estándar';
-    return 'Entrenamiento intenso';
+    if (exerciseCount <= 4) return t('workout.shortWorkout');
+    if (exerciseCount <= 8) return t('workout.standardWorkout');
+    return t('workout.intenseWorkout');
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
+    <>
+      <ScrollView
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
       <View style={styles.headerContainer}>
         <View style={styles.titleRow}>
-          <Text style={styles.title}>Entrenamientos</Text>
-          <TouchableOpacity
-            onPress={() => setShowHelpModal(true)}
-            style={styles.helpButton}
-          >
-            <Ionicons name="help-circle-outline" size={28} color="#ffb300" />
-          </TouchableOpacity>
+          <Text style={styles.title}>{t('tabs.train')}</Text>
         </View>
-        <View style={styles.buttonsRow}>
+        {/* Botón de ayuda */}
         <TouchableOpacity
-          style={styles.generateButton}
-          onPress={() => setShowSelectionModal(true)}
+          onPress={() => {
+            // Si el tutorial está trabado, cerrarlo primero
+            if (showWorkoutTooltips) {
+              setShowWorkoutTooltips(false);
+            } else {
+              setShowHelpModal(true);
+            }
+          }}
+          style={styles.helpButtonAbsolute}
         >
-          <Ionicons name="add" size={20} color="#1a1a1a" />
-            <Text style={styles.generateButtonText}>Crear Entrenamiento</Text>
+          <Ionicons name="help-circle-outline" size={28} color="#ffb300" />
+        </TouchableOpacity>
+        <View style={styles.buttonsRow}>
+          <TouchableOpacity
+            style={styles.generateButton}
+            onPress={() => setShowSelectionModal(true)}
+          >
+            <Ionicons name="add" size={20} color="#1a1a1a" />
+            <Text style={styles.generateButtonText}>{t('workout.createWorkout')}</Text>
             {!hasCompletedTutorial('WORKOUT') && workoutPlans.length === 0 && (
               <View style={styles.newBadge}>
-                <Text style={styles.newBadgeText}>Nuevo</Text>
+                <Text style={styles.newBadgeText}>{t('common.new')}</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -352,8 +397,8 @@ export default function WorkoutScreen() {
             onPress={() => router.push('/trainer-mode' as any)}
           >
             <Ionicons name="people" size={20} color="#ffffff" />
-            <Text style={styles.trainerModeButtonText}>Modo Entrenador</Text>
-        </TouchableOpacity>
+            <Text style={styles.trainerModeButtonText}>{t('workout.trainerMode')}</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -362,7 +407,7 @@ export default function WorkoutScreen() {
         <SkeletonWorkout />
       ) : workoutPlans.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📋 Mis Planes de Entrenamiento</Text>
+          <Text style={styles.sectionTitle}>{t('workout.myWorkoutPlans')}</Text>
           {workoutPlans.map((plan) => {
             const planData = plan.plan_data;
             
@@ -388,13 +433,13 @@ export default function WorkoutScreen() {
                   <View style={styles.badgesContainer}>
                     {plan.is_active && (
                       <View style={styles.activeBadge}>
-                        <Text style={styles.activeBadgeText}>Activo</Text>
+                        <Text style={styles.activeBadgeText}>{t('workout.activePlan')}</Text>
                       </View>
                     )}
                     {isPartialPlan && (
                       <View style={styles.draftBadge}>
                         <Ionicons name="create-outline" size={10} color="#1a1a1a" />
-                        <Text style={styles.draftBadgeText}>Borrador</Text>
+                        <Text style={styles.draftBadgeText}>{t('common.draft')}</Text>
                       </View>
                     )}
                   </View>
@@ -406,7 +451,7 @@ export default function WorkoutScreen() {
                   <View style={styles.progressInfo}>
                     <Ionicons name="information-circle-outline" size={14} color="#ff9800" />
                     <Text style={styles.progressText}>
-                      {completedDays} de {totalDays} días completados
+                      {t('workout.daysCompleted', { completed: completedDays, total: totalDays })}
                     </Text>
                   </View>
                 )}
@@ -414,11 +459,11 @@ export default function WorkoutScreen() {
                 <View style={styles.planStats}>
                   <View style={styles.stat}>
                     <Ionicons name="calendar" size={16} color="#ffb300" />
-                    <Text style={styles.statText}>{planData.duration_weeks} semanas</Text>
+                    <Text style={styles.statText}>{planData.duration_weeks} {t('common.weeks')}</Text>
                   </View>
                   <View style={styles.stat}>
                     <Ionicons name="fitness-outline" size={16} color="#ffb300" />
-                    <Text style={styles.statText}>{planData.days_per_week} días/semana</Text>
+                    <Text style={styles.statText}>{planData.days_per_week} {t('common.daysPerWeek')}</Text>
                   </View>
                   {!plan.description?.toLowerCase().includes('plan personalizado') && (
                     <View style={styles.stat}>
@@ -450,7 +495,7 @@ export default function WorkoutScreen() {
                       } as any)}
                     >
                       <Ionicons name="create-outline" size={16} color="#1a1a1a" />
-                      <Text style={styles.continueEditButtonText}>Continuar Editando</Text>
+                      <Text style={styles.continueEditButtonText}>{t('workout.continueEditing')}</Text>
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity
@@ -459,13 +504,13 @@ export default function WorkoutScreen() {
                   >
                     <Ionicons name="eye" size={16} color={isPartialPlan ? "#ffb300" : "#ffffff"} />
                     <Text style={[styles.viewPlanButtonText, isPartialPlan && styles.viewPlanButtonTextSecondary]}>
-                      Ver Plan
+                      {t('workout.viewPlan')}
                     </Text>
                   </TouchableOpacity>
                 </View>
 
                 <Text style={styles.planDate}>
-                  Creado: {new Date(plan.created_at).toLocaleDateString('es-ES')}
+                  {t('workout.created')} {new Date(plan.created_at).toLocaleDateString('es-ES')}
                 </Text>
               </View>
             );
@@ -476,7 +521,7 @@ export default function WorkoutScreen() {
       {/* Entrenamientos del Store */}
       {workouts.length > 0 ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🏋️ Entrenamientos</Text>
+          <Text style={styles.sectionTitle}>🏋️ {t('workout.workoutTitle')}</Text>
           {workouts.map((workout) => {
             const difficulty = getWorkoutDifficulty(workout.difficulty);
             const type = getWorkoutType(workout);
@@ -503,7 +548,7 @@ export default function WorkoutScreen() {
                   </View>
                   <View style={styles.stat}>
                     <Ionicons name="fitness-outline" size={16} color="#ffb300" />
-                    <Text style={styles.statText}>{workout.workout_exercises?.length || 0} ejercicios</Text>
+                    <Text style={styles.statText}>{workout.workout_exercises?.length || 0} {t('workout.exercises')}</Text>
                   </View>
                   <View style={styles.stat}>
                     <Ionicons name="trending-up-outline" size={16} color="#ffb300" />
@@ -534,7 +579,7 @@ export default function WorkoutScreen() {
                       styles.startButtonText,
                       workout.is_active && styles.activePlanButtonText
                     ]}>
-                      {workout.is_active ? "Activo" : "Activar"}
+                      {workout.is_active ? t('workout.active') : t('workout.activate')}
                     </Text>
                   </TouchableOpacity>
                   
@@ -543,7 +588,7 @@ export default function WorkoutScreen() {
                     onPress={() => router.push(`/workout-details/${workout.id}`)}
                   >
                     <Ionicons name="eye" size={16} color="#ffb300" />
-                    <Text style={styles.detailsButtonText}>Ver detalles</Text>
+                    <Text style={styles.detailsButtonText}>{t('workout.details')}</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
@@ -556,22 +601,22 @@ export default function WorkoutScreen() {
       {workoutPlans.length === 0 && workouts.length === 0 && !isLoadingPlans && (
         <View style={styles.emptyState}>
           <Ionicons name="fitness-outline" size={64} color="#666" />
-          <Text style={styles.emptyTitle}>No hay entrenamientos</Text>
+          <Text style={styles.emptyTitle}>{t('workout.noWorkouts')}</Text>
           <Text style={styles.emptyDescription}>
-            Genera tu primer plan de entrenamiento personalizado
+            {t('workout.noWorkoutsDesc')}
           </Text>
           <TouchableOpacity
             style={styles.createButton}
             onPress={() => setShowSelectionModal(true)}
           >
-            <Text style={styles.createButtonText}>Crear plan de entrenamiento</Text>
+            <Text style={styles.createButtonText}>{t('workout.createWorkoutPlan')}</Text>
           </TouchableOpacity>
         </View>
       )}
 
       {sessions.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Sesiones recientes</Text>
+          <Text style={styles.sectionTitle}>{t('workout.recentSessions')}</Text>
           {sessions.slice(0, 3).map((session) => (
             <View key={session.id} style={styles.sessionCard}>
               <View style={styles.sessionInfo}>
@@ -596,6 +641,7 @@ export default function WorkoutScreen() {
           ))}
         </View>
       )}
+      </ScrollView>
 
       {/* Modal de selección de tipo de plan */}
       <Modal
@@ -610,9 +656,9 @@ export default function WorkoutScreen() {
         <View style={styles.modalOverlay} pointerEvents="box-none">
           <View style={styles.modalContent} pointerEvents="box-none">
             <View pointerEvents="auto">
-              <Text style={styles.modalTitle}>¿Cómo quieres crear tu plan?</Text>
+              <Text style={styles.modalTitle}>{t('workout.selectPlanType')}</Text>
               <Text style={styles.modalSubtitle}>
-                Elige el método que prefieras para generar tu plan de entrenamiento
+                {t('workout.selectPlanDesc')}
               </Text>
               
               <TouchableOpacity
@@ -631,9 +677,9 @@ export default function WorkoutScreen() {
                 <View style={styles.optionIconContainer}>
                   <Ionicons name="sparkles" size={28} color="#ffb300" />
                 </View>
-                <Text style={styles.selectionOptionTitlePrimary}>Generar con IA</Text>
+                <Text style={styles.selectionOptionTitlePrimary}>{t('workout.generateAI')}</Text>
                 <Text style={styles.selectionOptionDescriptionPrimary}>
-                  Crea un plan completo y personalizado usando inteligencia artificial basada en evidencia científica
+                  {t('workout.generateAIDesc')}
                 </Text>
               </TouchableOpacity>
 
@@ -653,9 +699,9 @@ export default function WorkoutScreen() {
                 <View style={styles.optionIconContainer}>
                   <Ionicons name="create" size={28} color="#ffb300" />
                 </View>
-                <Text style={styles.selectionOptionTitleSecondary}>Crear Personalizado</Text>
+                <Text style={styles.selectionOptionTitleSecondary}>{t('workout.customPlan')}</Text>
                 <Text style={styles.selectionOptionDescriptionSecondary}>
-                  Construye tu propio plan seleccionando ejercicios día por día desde nuestro banco de ejercicios
+                  {t('workout.customPlanDesc')}
                 </Text>
               </TouchableOpacity>
 
@@ -664,7 +710,7 @@ export default function WorkoutScreen() {
                 onPress={() => setShowSelectionModal(false)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.modalCloseButtonText}>Cancelar</Text>
+                <Text style={styles.modalCloseButtonText}>{t('workout.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -694,13 +740,13 @@ export default function WorkoutScreen() {
               </View>
               <Text style={styles.invitationsMainTitle}>
                 {trainerInvitations.length === 1 
-                  ? 'Nueva Invitación' 
-                  : `${trainerInvitations.length} Invitaciones Nuevas`}
+                  ? t('workout.newInvitation') 
+                  : t('workout.newInvitations', { count: trainerInvitations.length })}
               </Text>
               <Text style={styles.invitationsSubtitle}>
                 {trainerInvitations.length === 1 
-                  ? 'Tienes una invitación de entrenador pendiente' 
-                  : 'Tienes invitaciones de entrenador pendientes'}
+                  ? t('workout.pendingInvitationSingular') 
+                  : t('workout.pendingInvitationPlural')}
               </Text>
             </View>
 
@@ -723,7 +769,7 @@ export default function WorkoutScreen() {
                     </View>
                     <View style={styles.trainerTextInfo}>
                       <Text style={styles.trainerNameText}>
-                        {invitation.trainer_name || invitation.trainer_username || 'Entrenador'}
+                        {invitation.trainer_name || invitation.trainer_username || t('workout.trainer')}
                       </Text>
                       {invitation.trainer_username && (
                         <Text style={styles.trainerUsernameText}>@{invitation.trainer_username}</Text>
@@ -735,7 +781,7 @@ export default function WorkoutScreen() {
                   <View style={styles.invitationMessageContainer}>
                     <Ionicons name="information-circle-outline" size={18} color="#ffb300" />
                     <Text style={styles.invitationMessageText}>
-                      Quiere ser tu entrenador personal y acceder a tus métricas de entrenamiento
+                      {t('workout.wantsToBeYourTrainer')}
                     </Text>
                   </View>
 
@@ -756,7 +802,7 @@ export default function WorkoutScreen() {
                       ) : (
                         <>
                           <Ionicons name="close-circle-outline" size={22} color="#ff4444" />
-                          <Text style={styles.rejectActionText}>Rechazar</Text>
+                          <Text style={styles.rejectActionText}>{t('common.reject')}</Text>
                         </>
                       )}
                     </TouchableOpacity>
@@ -766,7 +812,7 @@ export default function WorkoutScreen() {
                       onPress={() => handleRespondInvitation(
                         invitation.id,
                         true,
-                        invitation.trainer_name || invitation.trainer_username || 'El entrenador'
+                        invitation.trainer_name || invitation.trainer_username || t('workout.trainer')
                       )}
                       disabled={isRespondingInvitation}
                       activeOpacity={0.8}
@@ -776,7 +822,7 @@ export default function WorkoutScreen() {
                       ) : (
                         <>
                           <Ionicons name="checkmark-circle" size={22} color="#1a1a1a" />
-                          <Text style={styles.acceptActionText}>Aceptar</Text>
+                          <Text style={styles.acceptActionText}>{t('common.accept')}</Text>
                         </>
                       )}
                     </TouchableOpacity>
@@ -813,7 +859,70 @@ export default function WorkoutScreen() {
         visible={showHelpModal}
         onClose={() => setShowHelpModal(false)}
       />
-    </ScrollView>
+
+      {/* Tooltips de tutorial */}
+      <TutorialTooltip
+        visible={showWorkoutTooltips}
+        steps={[
+            {
+              element: <View />,
+              title: t('tutorial.workout.title1'),
+              content: t('tutorial.workout.content1'),
+              placement: 'center',
+            },
+            {
+              element: <View />,
+              title: t('tutorial.workout.title2'),
+              content: t('tutorial.workout.content2'),
+              placement: 'center',
+              // Spotlight sobre el botón "Crear Entrenamiento"
+              spotlightPosition: {
+                x: 15,
+                y: 110,
+                width: 180,
+                height: 51,
+                borderRadius: 8,
+              },
+            },
+            {
+              element: <View />,
+              title: t('tutorial.workout.title3'),
+              content: t('tutorial.workout.content3'),
+              placement: 'center',
+              // Spotlight sobre el botón "Modo Entrenador"
+              spotlightPosition: {
+                x: 198,
+                y: 110,
+                width: 180,
+                height: 51,
+                borderRadius: 8,
+              },
+            },
+            {
+              element: <View />,
+              title: t('tutorial.workout.title4'),
+              content: t('tutorial.workout.content4'),
+              placement: 'center',
+            },
+          ]}
+          onComplete={() => {
+            // Primero cerrar el modal, luego actualizar el contexto
+            setShowWorkoutTooltips(false);
+            setTimeout(() => {
+              completeTutorial('WORKOUT');
+              markTooltipShown('WORKOUT');
+            }, 100);
+          }}
+          onSkip={() => {
+            // Primero cerrar el modal, luego actualizar el contexto
+            setShowWorkoutTooltips(false);
+            setTimeout(() => {
+              completeTutorial('WORKOUT');
+              markTooltipShown('WORKOUT');
+            }, 100);
+          }}
+        />
+    </>
   );
 }
 
@@ -824,11 +933,12 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     padding: 20,
-    paddingBottom: 10,
+    paddingTop: 65,
+    paddingBottom: 15,
   },
   titleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
@@ -836,9 +946,17 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
+    textAlign: 'center',
   },
   helpButton: {
     padding: 4,
+  },
+  helpButtonAbsolute: {
+    position: 'absolute',
+    top: 68,
+    right: 20,
+    padding: 4,
+    zIndex: 10,
   },
   buttonsRow: {
     flexDirection: 'row',

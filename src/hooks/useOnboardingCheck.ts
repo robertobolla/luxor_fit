@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-expo';
 import { router, useSegments } from 'expo-router';
-import { supabase } from '../services/supabase';
+import { supabase } from '@/services/supabase';
 
 export function useOnboardingCheck() {
   const { user, isLoaded } = useUser();

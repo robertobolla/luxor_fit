@@ -12,36 +12,33 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '../../../src/services/supabase';
+import { supabase } from '@/services/supabase';
 import { getExerciseVideoUrl } from '../../../src/services/exerciseVideoService';
 import ExerciseVideoModal from '../../../src/components/ExerciseVideoModal';
 
-// Músculos del dashboard
+// Músculos (IDs internos, NO traducibles)
 const MUSCLES = [
-  'pecho', 'espalda', 'hombros', 'bíceps', 'tríceps', 'antebrazos', 'trapecio',
-  'cuádriceps', 'isquiotibiales', 'glúteos', 'pantorrillas', 'gemelos',
-  'abdominales', 'oblicuos', 'lumbares', 'cuerpo_completo'
-];
+  'chest',
+  'back',
+  'shoulders',
+  'biceps',
+  'triceps',
+  'forearms',
+  'trapezius',
+  'quadriceps',
+  'hamstrings',
+  'glutes',
+  'calves',
+  'abs',
+  'obliques',
+  'lowerBack',
+  'fullBody',
+] as const;
 
-const MUSCLE_LABELS: Record<string, string> = {
-  pecho: 'Pecho',
-  espalda: 'Espalda',
-  hombros: 'Hombros',
-  bíceps: 'Bíceps',
-  tríceps: 'Tríceps',
-  antebrazos: 'Antebrazos',
-  trapecio: 'Trapecio',
-  cuádriceps: 'Cuádriceps',
-  isquiotibiales: 'Isquiotibiales',
-  glúteos: 'Glúteos',
-  pantorrillas: 'Pantorrillas',
-  gemelos: 'Gemelos',
-  abdominales: 'Abdominales',
-  oblicuos: 'Oblicuos',
-  lumbares: 'Lumbares',
-  cuerpo_completo: 'Cuerpo Completo',
-};
+type Muscle = typeof MUSCLES[number];
+
 
 interface ExerciseVideo {
   id: string;
@@ -56,6 +53,7 @@ interface ExerciseVideo {
 }
 
 export default function CustomPlanSelectExerciseScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const params = useLocalSearchParams();
   const equipment = JSON.parse((params.equipment as string) || '[]');
@@ -63,7 +61,7 @@ export default function CustomPlanSelectExerciseScreen() {
   const weekNumber = params.weekNumber as string;
   const daysPerWeek = params.daysPerWeek as string;
 
-  const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
+  const [selectedMuscle, setSelectedMuscle] = useState<Muscle | null>(null);
   const [exercises, setExercises] = useState<ExerciseVideo[]>([]);
   const [loading, setLoading] = useState(false);
   const [videoModalVisible, setVideoModalVisible] = useState(false);
@@ -134,7 +132,7 @@ export default function CustomPlanSelectExerciseScreen() {
 
       if (error) {
         console.error('Error loading exercises:', error);
-        Alert.alert('Error', 'No se pudieron cargar los ejercicios');
+        Alert.alert(t('common.error'), t('customPlan.couldNotLoadExercises'));
         return;
       }
 
@@ -148,7 +146,7 @@ export default function CustomPlanSelectExerciseScreen() {
       setExercises(exercisesWithVideo);
     } catch (error) {
       console.error('❌ Error cargando ejercicios:', error);
-      Alert.alert('Error', 'Ocurrió un error al cargar los ejercicios. Intenta de nuevo.');
+      Alert.alert(t('common.error'), t('customPlan.errorLoadingExercises'));
     } finally {
       setLoading(false);
     }
@@ -185,10 +183,11 @@ export default function CustomPlanSelectExerciseScreen() {
     } catch (error) {
       console.error('Error saving selected exercise:', error);
       Alert.alert(
-        'Aviso',
-        'Hubo un problema al guardar el ejercicio, pero se intentará agregarlo de todas formas.',
-        [{ text: 'OK' }]
+        t('common.notice'),
+        t('customPlan.problemSavingExerciseFallback'),
+        [{ text: t('common.ok') }]
       );
+      
       // En caso de error, intentar navegar de todas formas
       if (dayNumber && daysPerWeek) {
         router.push({
@@ -229,11 +228,11 @@ export default function CustomPlanSelectExerciseScreen() {
         setSelectedExerciseName(exercise.canonical_name);
         setVideoModalVisible(true);
       } else {
-        Alert.alert('Video no disponible', 'Este ejercicio no tiene video disponible');
+        Alert.alert(t('customPlan.videoNotAvailable'), t('customPlan.exerciseNoVideo'));
       }
     } catch (error) {
       console.error('Error al obtener video:', error);
-      Alert.alert('Error', 'No se pudo cargar el video');
+      Alert.alert(t('common.error'), t('customPlan.couldNotLoadVideo'));
     }
   };
 
@@ -261,13 +260,13 @@ export default function CustomPlanSelectExerciseScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Seleccionar Músculo</Text>
+          <Text style={styles.headerTitle}>{t('customPlan.selectMuscle')}</Text>
           <View style={{ width: 40 }} />
         </View>
 
         <ScrollView style={styles.content}>
           <Text style={styles.description}>
-            Selecciona el grupo muscular para ver los ejercicios disponibles
+            {t('customPlan.selectMuscleDescription')}
           </Text>
 
           <View style={styles.musclesGrid}>
@@ -278,7 +277,7 @@ export default function CustomPlanSelectExerciseScreen() {
                 onPress={() => setSelectedMuscle(muscle)}
               >
                 <Text style={styles.muscleButtonText}>
-                  {MUSCLE_LABELS[muscle] || muscle}
+                {t(`muscles.${muscle}`)}
                 </Text>
                 <Ionicons name="chevron-forward" size={20} color="#999" />
               </TouchableOpacity>
@@ -302,7 +301,7 @@ export default function CustomPlanSelectExerciseScreen() {
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {MUSCLE_LABELS[selectedMuscle] || selectedMuscle}
+        {t(`muscles.${selectedMuscle}`)}
         </Text>
         <TouchableOpacity
           style={styles.backButton}
@@ -324,15 +323,16 @@ export default function CustomPlanSelectExerciseScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#ffb300" />
-            <Text style={styles.loadingText}>Cargando ejercicios...</Text>
-          </View>
+            <Text style={styles.loadingText}>{t('customPlan.loadingExercises')}</Text>
+            </View>
         ) : exercises.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="fitness-outline" size={64} color="#666" />
-            <Text style={styles.emptyStateText}>No hay ejercicios disponibles</Text>
-            <Text style={styles.emptyStateSubtext}>
-              No se encontraron ejercicios para este músculo con el equipamiento seleccionado
-            </Text>
+            <Text style={styles.emptyStateText}>{t('customPlan.noExercisesAvailable')}</Text>
+<Text style={styles.emptyStateSubtext}>
+  {t('customPlan.noExercisesForMuscleAndEquipment')}
+</Text>
+
           </View>
         ) : (
           <View style={styles.exercisesList}>

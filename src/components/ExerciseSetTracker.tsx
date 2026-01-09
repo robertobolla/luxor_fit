@@ -16,7 +16,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../services/supabase';
+import { supabase } from '../../src/services/supabase';
 
 interface ExerciseSet {
   set_number: number;

@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import {
   getTrainerStudents,
   sendTrainerInvitation,
@@ -27,6 +28,7 @@ import { getFriends } from '../src/services/friendsService';
 import { useAlert } from '../src/contexts/AlertContext';
 
 export default function TrainerModeScreen() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const { showAlert } = useAlert();
   const [students, setStudents] = useState<TrainerStudentRelationship[]>([]);
@@ -42,6 +44,7 @@ export default function TrainerModeScreen() {
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
   const [showCustomAlert, setShowCustomAlert] = useState(false);
   const [customAlertMessage, setCustomAlertMessage] = useState('');
+  const [activeMenuStudentId, setActiveMenuStudentId] = useState<string | null>(null);
 
   useEffect(() => {
     loadStudents();
@@ -163,7 +166,7 @@ export default function TrainerModeScreen() {
     
     if (!user || !searchUsername.trim()) {
       console.log('⚠️ Validación fallida - falta user o username');
-      setCustomAlertMessage('Por favor ingresa un nombre de usuario');
+      setCustomAlertMessage(t('trainer.enterUsername'));
       setShowCustomAlert(true);
       return;
     }
@@ -176,7 +179,7 @@ export default function TrainerModeScreen() {
       
       if (result.success) {
         console.log('✅ Invitación enviada exitosamente');
-        setCustomAlertMessage('Se ha enviado la invitación al alumno. También se ha enviado una solicitud de amistad automáticamente para que puedan chatear.');
+        setCustomAlertMessage(t('trainer.invitationSentMessage'));
         setShowCustomAlert(true);
         setShowAddStudentModal(false);
         setSearchUsername('');
@@ -186,16 +189,16 @@ export default function TrainerModeScreen() {
         console.log('❌ Error al enviar invitación:', result.error);
         // Personalizar el mensaje de error si ya existe la invitación
         if (result.error?.includes('Ya existe una invitación')) {
-          setCustomAlertMessage('Ya se ha enviado la invitación a este usuario. Si el alumno no la ha recibido, pídele que vaya a la pestaña "Entrenamientos" donde aparecerá un modal automáticamente.');
+          setCustomAlertMessage(t('trainer.invitationAlreadySent'));
         } else {
-          setCustomAlertMessage(result.error || 'No se pudo enviar la invitación');
+          setCustomAlertMessage(result.error || t('trainer.couldNotSendInvitation'));
         }
         setShowCustomAlert(true);
         console.log('🔔 Mostrando modal de alerta, estado:', showCustomAlert);
       }
     } catch (error) {
       console.error('💥 Excepción en handleSendInvitation:', error);
-      setCustomAlertMessage('Ocurrió un error al enviar la invitación');
+      setCustomAlertMessage(t('trainer.errorSendingInvitation'));
       setShowCustomAlert(true);
     } finally {
       setIsSendingInvitation(false);
@@ -232,17 +235,17 @@ export default function TrainerModeScreen() {
 
   const handleRemoveStudent = async (studentId: string, studentName: string, relationshipId: string) => {
     showAlert(
-      'Eliminar Alumno',
+      t('trainer.removeStudent'),
       `¿Estás seguro de que quieres dejar de entrenar a ${studentName}?`,
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Eliminar',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             const result = await removeTrainerStudentRelationship(relationshipId);
             if (result.success) {
-              setCustomAlertMessage('Alumno eliminado correctamente');
+              setCustomAlertMessage(t('trainer.studentRemovedSuccess'));
               setShowCustomAlert(true);
               await loadStudents();
             } else {
@@ -283,7 +286,7 @@ export default function TrainerModeScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ffb300" />
-          <Text style={styles.loadingText}>Cargando alumnos...</Text>
+          <Text style={styles.loadingText}>{t('trainer.loadingStudents')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -298,7 +301,7 @@ export default function TrainerModeScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.title}>Modo Entrenador</Text>
+        <Text style={styles.title}>{t('trainer.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -307,6 +310,7 @@ export default function TrainerModeScreen() {
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
+        onTouchStart={() => activeMenuStudentId && setActiveMenuStudentId(null)}
       >
         {/* Botón para agregar nuevo alumno */}
         <TouchableOpacity
@@ -318,15 +322,14 @@ export default function TrainerModeScreen() {
           }}
         >
           <Ionicons name="person-add" size={24} color="#1a1a1a" />
-          <Text style={styles.addStudentButtonText}>Agregar Nuevo Alumno</Text>
+          <Text style={styles.addStudentButtonText}>{t('trainer.addStudent')}</Text>
         </TouchableOpacity>
 
         {/* Descripción */}
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={24} color="#ffb300" />
           <Text style={styles.infoText}>
-            Como entrenador, puedes ver las estadísticas, rutinas y progreso de tus alumnos.
-            También puedes chatear con ellos como amigos.
+            {t('trainer.trainerDescription')}
           </Text>
         </View>
 
@@ -334,73 +337,95 @@ export default function TrainerModeScreen() {
         {students.length > 0 ? (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
-              👥 Mis Alumnos ({students.length})
+              👥 {t('trainer.myStudents')} ({students.length})
             </Text>
 
             {students.map((student) => (
               <View key={student.id} style={styles.studentCard}>
-                <View style={styles.studentHeader}>
-                  <View style={styles.studentInfo}>
-                    {student.student_photo ? (
-                      <View style={styles.avatarContainer}>
-                        <Text style={styles.avatarPlaceholder}>
-                          {(student.student_name || student.student_username || 'A')[0].toUpperCase()}
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={styles.avatarContainer}>
-                        <Text style={styles.avatarPlaceholder}>
-                          {(student.student_name || student.student_username || 'A')[0].toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={styles.studentTextInfo}>
-                      <Text style={styles.studentName}>
-                        {student.student_name || 'Sin nombre'}
+                {/* Menú de 3 puntos */}
+                <TouchableOpacity
+                  style={styles.menuButton}
+                  onPress={() => setActiveMenuStudentId(activeMenuStudentId === student.id ? null : student.id)}
+                >
+                  <Ionicons name="ellipsis-vertical" size={20} color="#999" />
+                </TouchableOpacity>
+
+                {/* Dropdown del menú */}
+                {activeMenuStudentId === student.id && (
+                  <View style={styles.dropdownMenu}>
+                    <TouchableOpacity
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setActiveMenuStudentId(null);
+                        handleRemoveStudent(
+                          student.student_id,
+                          student.student_name || student.student_username || t('trainer.thisStudent'),
+                          student.id
+                        );
+                      }}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#ff4444" />
+                      <Text style={styles.dropdownItemText}>{t('trainer.removeStudent')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Contenido principal de la tarjeta */}
+                <TouchableOpacity 
+                  style={styles.studentCardContent}
+                  onPress={() => handleViewStudentStats(student)}
+                  activeOpacity={0.7}
+                >
+                  {/* Avatar con indicador de estado */}
+                  <View style={styles.avatarWrapper}>
+                    <View style={styles.avatarContainer}>
+                      <Text style={styles.avatarPlaceholder}>
+                        {(student.student_name || student.student_username || 'A')[0].toUpperCase()}
                       </Text>
-                      <Text style={styles.studentUsername}>
-                        @{student.student_username || 'sin_usuario'}
-                      </Text>
+                    </View>
+                    <View style={styles.onlineIndicator} />
+                  </View>
+
+                  {/* Información del estudiante */}
+                  <View style={styles.studentTextInfo}>
+                    <Text style={styles.studentName} numberOfLines={1}>
+                      {student.student_name || t('trainer.noName')}
+                    </Text>
+                    <Text style={styles.studentUsername}>
+                      @{student.student_username || t('trainer.noUsername')}
+                    </Text>
+                    <View style={styles.studentMeta}>
+                      <Ionicons name="calendar-outline" size={12} color="#666" />
                       <Text style={styles.studentDate}>
-                        Desde: {new Date(student.accepted_at || student.created_at).toLocaleDateString('es-ES')}
+                        {new Date(student.accepted_at || student.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
                       </Text>
                     </View>
                   </View>
-                </View>
 
+                  {/* Flecha indicadora */}
+                  <Ionicons name="chevron-forward" size={20} color="#666" />
+                </TouchableOpacity>
+
+                {/* Acciones rápidas */}
                 <View style={styles.studentActions}>
                   <TouchableOpacity
                     style={[styles.actionButton, styles.statsButton]}
                     onPress={() => handleViewStudentStats(student)}
                   >
-                    <Ionicons name="stats-chart" size={18} color="#ffffff" />
-                    <Text style={styles.actionButtonText}>Ver Estadísticas</Text>
+                    <Ionicons name="stats-chart" size={16} color="#1a1a1a" />
+                    <Text style={styles.actionButtonText}>Estadísticas</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
                     style={[styles.actionButton, styles.chatButton]}
                     onPress={() => handleChatWithStudent(student)}
                   >
-                    <Ionicons name="chatbubble" size={18} color="#1a1a1a" />
+                    <Ionicons name="chatbubble" size={16} color="#ffb300" />
                     <Text style={[styles.actionButtonText, styles.chatButtonText]}>
-                      Chatear
+                      Chat
                     </Text>
                   </TouchableOpacity>
                 </View>
-
-                <TouchableOpacity
-                  style={styles.removeButton}
-                  onPress={() =>
-                    handleRemoveStudent(
-                      student.student_id,
-                      student.student_name || student.student_username || 'este alumno',
-                      student.id
-                    )
-                  }
-                >
-                  <Ionicons name="trash-outline" size={16} color="#ff4444" />
-                  <Text style={styles.removeButtonText}>Eliminar Alumno</Text>
-                </TouchableOpacity>
               </View>
             ))}
           </View>
@@ -707,93 +732,148 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   studentCard: {
-    backgroundColor: '#2a2a2a',
-    borderRadius: 16,
-    padding: 20,
+    backgroundColor: '#1f1f1f',
+    borderRadius: 20,
+    padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: 'rgba(255, 179, 0, 0.15)',
+    position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  studentHeader: {
-    marginBottom: 16,
+  menuButton: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
-  studentInfo: {
+  dropdownMenu: {
+    position: 'absolute',
+    top: 48,
+    right: 12,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#444',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 10,
+    zIndex: 100,
+    minWidth: 160,
+  },
+  dropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
+    padding: 14,
+    gap: 10,
+  },
+  dropdownItemText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#ff4444',
+  },
+  studentCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 36,
+    marginBottom: 16,
+  },
+  avatarWrapper: {
+    position: 'relative',
   },
   avatarContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#ffb300',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(255, 179, 0, 0.3)',
+  },
+  onlineIndicator: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#4ade80',
+    borderWidth: 2,
+    borderColor: '#1f1f1f',
   },
   avatarPlaceholder: {
-    fontSize: 24,
+    fontSize: 26,
     fontWeight: 'bold',
     color: '#1a1a1a',
   },
   studentTextInfo: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 14,
   },
   studentName: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#ffffff',
-    marginBottom: 4,
+    marginBottom: 3,
+    letterSpacing: 0.2,
   },
   studentUsername: {
     fontSize: 14,
     color: '#ffb300',
-    marginBottom: 4,
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  studentMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   studentDate: {
     fontSize: 12,
-    color: '#999',
+    color: '#666',
+    marginLeft: 2,
   },
   studentActions: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 12,
+    gap: 10,
   },
   actionButton: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 11,
+    borderRadius: 12,
     gap: 6,
   },
   statsButton: {
     backgroundColor: '#ffb300',
   },
   chatButton: {
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(255, 179, 0, 0.12)',
     borderWidth: 1,
-    borderColor: '#ffb300',
+    borderColor: 'rgba(255, 179, 0, 0.3)',
   },
   actionButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#1a1a1a',
   },
   chatButtonText: {
     color: '#ffb300',
-  },
-  removeButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    gap: 6,
-  },
-  removeButtonText: {
-    fontSize: 13,
-    color: '#ff4444',
-    fontWeight: '500',
   },
   emptyState: {
     alignItems: 'center',

@@ -10,6 +10,7 @@ interface TutorialContextType {
   hasCompletedTutorial: (screen: string) => boolean;
   completeTutorial: (screen: string) => Promise<void>;
   resetAllTutorials: () => Promise<void>;
+  resetTutorial: (screen: string) => Promise<void>;
   hasCompletedInitialTour: boolean;
   completeInitialTour: () => Promise<void>;
   
@@ -31,6 +32,8 @@ const TUTORIAL_KEYS = {
   NUTRITION: 'tutorial_nutrition_completed',
   PROGRESS: 'tutorial_progress_completed',
   PROFILE: 'tutorial_profile_completed',
+  METRICS: 'tutorial_metrics_completed',
+  CUSTOM_PLAN: 'tutorial_custom_plan_completed',
 };
 
 export function TutorialProvider({ children }: { children: React.ReactNode }) {
@@ -107,6 +110,27 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const resetTutorial = async (screen: string): Promise<void> => {
+    try {
+      const key = TUTORIAL_KEYS[screen.toUpperCase() as keyof typeof TUTORIAL_KEYS];
+      if (key) {
+        await AsyncStorage.removeItem(key);
+        setCompletedTutorials(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(key);
+          return newSet;
+        });
+        setShownTooltips(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(screen);
+          return newSet;
+        });
+      }
+    } catch (error) {
+      console.error('Error resetting tutorial:', error);
+    }
+  };
+
   const shouldShowTooltip = (screen: string): boolean => {
     // Solo mostrar tooltip si no se ha completado el tutorial Y no se ha mostrado en esta sesión
     return !hasCompletedTutorial(screen) && !shownTooltips.has(screen);
@@ -122,6 +146,7 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
         hasCompletedTutorial,
         completeTutorial,
         resetAllTutorials,
+        resetTutorial,
         hasCompletedInitialTour,
         completeInitialTour,
         shouldShowTooltip,

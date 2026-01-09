@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, router, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
 import { useAlert } from '../../src/contexts/AlertContext';
 import { supabase } from '../../src/services/supabase';
@@ -28,6 +29,7 @@ import { Audio } from 'expo-av';
 import { Vibration } from 'react-native';
 
 export default function WorkoutDayDetailScreen() {
+  const { t } = useTranslation();
   const params = useLocalSearchParams();
   const { showAlert } = useAlert();
   const { user } = useUser();
@@ -117,7 +119,7 @@ export default function WorkoutDayDetailScreen() {
       }
 
       if (planData?.plan_data) {
-        const fullPlan = planData.plan_data;
+        const fullPlan = planData.plan_data as Record<string, any>;
         console.log('📦 Plan completo cargado:', JSON.stringify(fullPlan, null, 2));
 
         // Encontrar los datos del día específico
@@ -180,7 +182,7 @@ export default function WorkoutDayDetailScreen() {
     if (!user?.id || !planId || !dayName) return;
     
     if (isCompleted) {
-      Alert.alert('Ya completado', 'Ya marcaste este entrenamiento como completado hoy.');
+      Alert.alert(t('workoutDay.completed'), t('workoutDay.alreadyCompleted'));
       return;
     }
     
@@ -397,7 +399,7 @@ export default function WorkoutDayDetailScreen() {
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.container}>
-          <LoadingOverlay visible={true} message="Cargando entrenamiento..." fullScreen />
+          <LoadingOverlay visible={true} message={t('workoutDay.loadingWorkout')} fullScreen />
         </View>
       </>
     );
@@ -409,9 +411,9 @@ export default function WorkoutDayDetailScreen() {
         <Stack.Screen options={{ headerShown: false }} />
         <View style={[styles.container, styles.centerContent]}>
           <Ionicons name="alert-circle-outline" size={64} color="#FF5722" />
-          <Text style={styles.errorText}>No se encontraron datos del día</Text>
+          <Text style={styles.errorText}>{t('workoutDay.noDataFound')}</Text>
           <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(tabs)/workout' as any)}>
-            <Text style={styles.backButtonText}>Volver a Entrenar</Text>
+            <Text style={styles.backButtonText}>{t('workoutDay.backToWorkout')}</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -522,7 +524,7 @@ export default function WorkoutDayDetailScreen() {
 
         {/* Tips Generales */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>💡 Tips para esta sesión</Text>
+          <Text style={styles.sectionTitle}>{t('workoutDay.tipsForSession')}</Text>
           <View style={styles.tipsContainer}>
             {generalTips.map((tip, index) => (
               <View key={index} style={styles.tipItem}>
@@ -544,7 +546,7 @@ export default function WorkoutDayDetailScreen() {
             disabled={saveCompletionWithRetry.isRetrying || isCompleted}
           >
             {saveCompletionWithRetry.isRetrying ? (
-              <Text style={styles.completionButtonText}>Guardando...</Text>
+              <Text style={styles.completionButtonText}>{t('workoutDay.saving')}</Text>
             ) : (
               <>
                 <Ionicons 
@@ -647,7 +649,7 @@ export default function WorkoutDayDetailScreen() {
                           }
                         } catch (error) {
                           console.error('❌ [workout-day-detail] Error al obtener video:', error);
-                          Alert.alert('Error', 'No se pudo cargar el video del ejercicio');
+                          Alert.alert(t('workoutDay.videoError'), t('workoutDay.couldNotLoadVideo'));
                         }
                       }}
                     >
@@ -664,7 +666,7 @@ export default function WorkoutDayDetailScreen() {
                     activeOpacity={0.7}
                   >
                     <Ionicons name="timer-outline" size={18} color="#ffb300" />
-                    <Text style={styles.restTimerLabel}>Temporizador de Descanso:</Text>
+                    <Text style={styles.restTimerLabel}>{t('workoutDay.restTimerLabel')}</Text>
                     <Text style={styles.restTimerValue}>
                       {formatRestTime(exercise.rest_seconds || 120)}
                     </Text>
@@ -776,7 +778,7 @@ export default function WorkoutDayDetailScreen() {
           <View style={styles.finalNotesCard}>
             <Ionicons name="information-circle" size={24} color="#ffb300" />
             <View style={styles.finalNotesContent}>
-              <Text style={styles.finalNotesTitle}>Recuerda</Text>
+              <Text style={styles.finalNotesTitle}>{t('workoutDay.remember')}</Text>
               <Text style={styles.finalNotesText}>
                 • Hidrátate durante toda la sesión{'\n'}
                 • Si sientes dolor (no molestia), detente{'\n'}
@@ -807,12 +809,12 @@ export default function WorkoutDayDetailScreen() {
               showsVerticalScrollIndicator={true}
               keyboardShouldPersistTaps="handled"
             >
-            <Text style={styles.modalTitle}>Completar Entrenamiento</Text>
-            <Text style={styles.modalSubtitle}>Registra los detalles de tu sesión</Text>
+            <Text style={styles.modalTitle}>{t('workoutDay.completeWorkout')}</Text>
+            <Text style={styles.modalSubtitle}>{t('workoutDay.registerDetails')}</Text>
 
             {/* Duración */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>⏱️ Duración (minutos)</Text>
+              <Text style={styles.inputLabel}>{t('workoutDay.durationLabel')}</Text>
               <TextInput
                 style={styles.input}
                 value={duration}
@@ -1371,16 +1373,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4CAF50',
     fontStyle: 'italic',
-  },
-  videoButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#1a1a1a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#ffb300',
   },
   statsButton: {
     width: 32,

@@ -448,8 +448,8 @@ export default function AdminTools() {
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                             <strong style={{ color: '#fff' }}>
-                              {roleUser.name || 'Sin nombre'}
-                            </strong>
+                            {roleUser.name || 'Sin nombre'}
+                          </strong>
                             {(roleUser as any).is_active === false && (
                               <span style={{
                                 background: 'rgba(244, 67, 54, 0.2)',

@@ -17,6 +17,9 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+
+// Este archivo ya tiene useTranslation importado
 import { useUser } from '@clerk/clerk-expo';
 import {
   getNutritionProfile,
@@ -25,11 +28,12 @@ import {
   computeAndSaveTargets,
 } from '../../../src/services/nutrition';
 import { NutritionProfile } from '../../../src/types/nutrition';
-import { supabase } from '../../../src/services/supabase';
+import { supabase } from '@/services/supabase';
 import { FitnessGoal } from '../../../src/types';
 
 export default function NutritionSettingsScreen() {
   const { user } = useUser();
+  const { t } = useTranslation();
   const params = useLocalSearchParams();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -96,18 +100,18 @@ export default function NutritionSettingsScreen() {
 
     // Validaciones
     if (mealsPerDay < 1 || mealsPerDay > 6) {
-      Alert.alert('Error', 'Las comidas por día deben estar entre 1 y 6.');
+      Alert.alert(t('common.error'), t('nutrition.mealsPerDayError'));
       return;
     }
 
     if (customPrompts.length > 10) {
-      Alert.alert('Error', 'Máximo 10 preferencias personalizadas.');
+      Alert.alert(t('common.error'), t('nutrition.maxPreferencesError'));
       return;
     }
 
     // Validar objetivo cuando no hay plan activo
     if (!activePlanData && params.useActivePlan === 'false' && !dietGoal) {
-      Alert.alert('Error', 'Por favor selecciona un objetivo para tu dieta.');
+      Alert.alert(t('common.error'), t('nutrition.selectGoalError'));
       return;
     }
 
@@ -134,8 +138,8 @@ export default function NutritionSettingsScreen() {
         // Si viene con plan activo, preguntar si quiere generar directamente
         if (activePlanData) {
           Alert.alert(
-            '¿Generar nuevo plan?',
-            '¿Estás seguro de generar un nuevo plan? Se borrarán los datos del plan nutricional anterior.',
+            t('nutrition.generateNewPlan'),
+            t('nutrition.generateNewPlanConfirm'),
             [
               {
                 text: 'Cancelar',
@@ -166,8 +170,8 @@ export default function NutritionSettingsScreen() {
         } else {
           // Preguntar si quiere regenerar el plan
           Alert.alert(
-            '¡Guardado!',
-            '¿Deseas crear un nuevo plan de comidas con la nueva configuración?',
+            t('nutrition.saved'),
+            t('nutrition.createNewPlanQuestion'),
             [
               {
                 text: 'No',
@@ -228,26 +232,25 @@ export default function NutritionSettingsScreen() {
 
                     // Preguntar qué método quiere usar
                     Alert.alert(
-                      'Generar Plan de Nutrición',
-                      '¿Quieres generar tu dieta basada en tu plan de entrenamiento activo o con objetivos diferentes?',
+                      t('nutrition.generatePlanTitle'),
+                      t('nutrition.generatePlanQuestion'),
                       [
                         {
-                          text: 'Basada en plan activo',
+                          text: t('nutrition.basedOnActivePlan'),
                           onPress: async () => {
                             if (activePlan) {
                               await regenerateMealPlan(true, activePlan);
                             } else {
-                              // No hay plan activo, mostrar cartel
                               Alert.alert(
-                                'No hay plan activo',
-                                'No tienes un plan de entrenamiento activo. Crea un plan de entrenamiento para poder generar una dieta basada en ese plan.',
+                                t('nutrition.noActivePlanTitle'),
+                                t('nutrition.noActivePlanMessage'),
                                 [
                                   {
-                                    text: 'Cerrar',
+                                    text: t('common.close'),
                                     style: 'cancel',
                                   },
                                   {
-                                    text: 'Ir a Entrenamiento',
+                                    text: t('nutrition.goToWorkout'),
                                     onPress: () => {
                                       router.push('/(tabs)/workout' as any);
                                     },
@@ -258,18 +261,18 @@ export default function NutritionSettingsScreen() {
                           },
                         },
                         {
-                          text: 'Con objetivos diferentes',
+                          text: t('nutrition.withDifferentGoals'),
                           onPress: async () => {
-                            // Usar datos del perfil actual
                             await regenerateMealPlan(false, null);
                           },
                         },
                         {
-                          text: 'Cancelar',
+                          text: t('common.cancel'),
                           style: 'cancel',
                         },
                       ]
                     );
+                    
                   } catch (err: any) {
                     console.error('Error checking active plan:', err);
                     // Si hay error, continuar con regeneración normal
@@ -281,11 +284,11 @@ export default function NutritionSettingsScreen() {
           );
         }
       } else {
-        Alert.alert('Error', result.error || 'No se pudo guardar la configuración.');
+        Alert.alert(t('common.error'), result.error || t('nutrition.saveConfigError'));
       }
     } catch (err: any) {
       console.error('Error saving profile:', err);
-      Alert.alert('Error', err.message || 'Error inesperado al guardar.');
+      Alert.alert(t('common.error'), err.message || t('common.unexpectedError'));
     } finally {
       setIsSaving(false);
     }
@@ -293,17 +296,17 @@ export default function NutritionSettingsScreen() {
 
   const addPrompt = () => {
     if (!newPrompt.trim()) {
-      Alert.alert('Error', 'Escribe una preferencia.');
+      Alert.alert(t('common.error'), t('nutrition.writePreference'));
       return;
     }
 
     if (newPrompt.length > 80) {
-      Alert.alert('Error', 'Máximo 80 caracteres por preferencia.');
+      Alert.alert(t('common.error'), t('nutrition.maxCharsPreference'));
       return;
     }
 
     if (customPrompts.length >= 10) {
-      Alert.alert('Error', 'Máximo 10 preferencias.');
+      Alert.alert(t('common.error'), t('nutrition.maxPreferences'));
       return;
     }
 
@@ -331,7 +334,7 @@ export default function NutritionSettingsScreen() {
 
       // Extraer datos del plan activo si se usa, o datos del formulario si no hay plan activo
       let workoutPlanData = null;
-      let bodyCompositionData: { body_fat_percentage?: number; muscle_percentage?: number } | null = null;
+      let bodyCompositionData: { body_fat_percentage?: number; muscle_percentage?: number } = {};
       
       if (useActivePlan && activePlan) {
         // Normalizar plan_data: puede venir como string o como objeto
@@ -347,12 +350,12 @@ export default function NutritionSettingsScreen() {
 
         // Extraer datos relevantes del plan para usar en la generación de dieta
         // Priorizar userData si existe (datos del formulario), sino usar datos directos del plan
+        const typedPlanData = planData as { userData?: any; fitness_level?: string; goals?: string[]; activity_types?: string[]; available_days?: number; days_per_week?: number } | null;
         workoutPlanData = {
-          fitness_level: planData.userData?.fitness_level || planData.fitness_level,
-          goals: planData.userData?.goals || planData.goals || [],
-          activity_types: planData.userData?.activity_types || planData.activity_types || [],
-          available_days: planData.userData?.available_days || planData.available_days || planData.days_per_week,
-          session_duration: planData.userData?.session_duration || planData.session_duration,
+          fitness_level: typedPlanData?.userData?.fitness_level || typedPlanData?.fitness_level,
+          goals: typedPlanData?.userData?.goals || typedPlanData?.goals || [],
+          activity_types: typedPlanData?.userData?.activity_types || typedPlanData?.activity_types || [],
+          available_days: typedPlanData?.userData?.available_days || typedPlanData?.available_days || typedPlanData?.days_per_week,
         };
         
         // Agregar composición corporal si se proporcionó
@@ -447,11 +450,11 @@ export default function NutritionSettingsScreen() {
       // Regenerar plan (pasar datos del plan activo si corresponde)
       await createOrUpdateMealPlan(user.id, mondayStr, workoutPlanData);
 
-      Alert.alert('¡Listo!', 'Tu nuevo plan de comidas ha sido generado.');
+      Alert.alert(t('nutrition.ready'), t('nutrition.mealPlanGenerated'));
       router.push('/(tabs)/nutrition' as any);
     } catch (err: any) {
       console.error('Error regenerating plan:', err);
-      Alert.alert('Error', 'No se pudo regenerar el plan. Intenta nuevamente.');
+      Alert.alert(t('common.error'), t('nutrition.regeneratePlanError'));
     } finally {
       setIsSaving(false);
     }
@@ -462,8 +465,8 @@ export default function NutritionSettingsScreen() {
       <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <StatusBar barStyle="light-content" />
         <ActivityIndicator size="large" color="#ffb300" />
-        <Text style={styles.loadingText}>Cargando configuración...</Text>
-      </SafeAreaView>
+        <Text style={styles.loadingText}>{t('common.loadingConfig')}</Text>
+        </SafeAreaView>
     );
   }
 
@@ -482,88 +485,92 @@ export default function NutritionSettingsScreen() {
           >
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Configuración</Text>
+          <Text style={styles.headerTitle}>{t('nutritionSettings.configTitle')}</Text>
           <View style={{ width: 24 }} />
         </View>
 
         {/* Información del Plan Activo */}
-        {activePlanData && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📋 Plan de Entrenamiento Activo</Text>
-            <Text style={styles.sectionHelper}>
-              Estos son los parámetros que se usarán para generar tu nuevo plan de nutrición:
-            </Text>
-            <View style={styles.activePlanCard}>
-              <View style={styles.activePlanRow}>
-                <Text style={styles.activePlanLabel}>Nivel de Fitness:</Text>
-                <Text style={styles.activePlanValue}>
-                  {activePlanData.fitness_level === 'beginner' ? 'Principiante' :
-                   activePlanData.fitness_level === 'intermediate' ? 'Intermedio' :
-                   activePlanData.fitness_level === 'advanced' ? 'Avanzado' :
-                   activePlanData.fitness_level || 'N/A'}
-                </Text>
-              </View>
-              <View style={styles.activePlanRow}>
-                <Text style={styles.activePlanLabel}>Objetivos:</Text>
-                <View style={styles.activePlanTagsContainer}>
-                  {(activePlanData.goals || []).map((goal: string, index: number) => {
-                    const goalMap: { [key: string]: string } = {
-                      weight_loss: 'Bajar grasa',
-                      muscle_gain: 'Ganar músculo',
-                      strength: 'Aumentar fuerza',
-                      endurance: 'Mejorar resistencia',
-                      flexibility: 'Flexibilidad',
-                      general_fitness: 'Forma general',
-                    };
-                    return (
-                      <View key={index} style={styles.activePlanTag}>
-                        <Text style={styles.activePlanTagText}>{goalMap[goal] || goal}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-              <View style={styles.activePlanRow}>
-                <Text style={styles.activePlanLabel}>Tipos de Actividad:</Text>
-                <View style={styles.activePlanTagsContainer}>
-                  {(activePlanData.activity_types || []).map((activity: string, index: number) => {
-                    const activityMap: { [key: string]: string } = {
-                      cardio: 'Cardio',
-                      strength: 'Fuerza',
-                      sports: 'Deportes',
-                      yoga: 'Yoga/Pilates',
-                      hiit: 'HIIT',
-                      mixed: 'Mixto',
-                    };
-                    return (
-                      <View key={index} style={styles.activePlanTag}>
-                        <Text style={styles.activePlanTagText}>{activityMap[activity] || activity}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-              <View style={styles.activePlanRow}>
-                <Text style={styles.activePlanLabel}>Días por Semana:</Text>
-                <Text style={styles.activePlanValue}>{activePlanData.available_days || 0} días</Text>
-              </View>
-              <View style={styles.activePlanRow}>
-                <Text style={styles.activePlanLabel}>Duración por Sesión:</Text>
-                <Text style={styles.activePlanValue}>{activePlanData.session_duration || 0} minutos</Text>
-              </View>
+   {/* Información del Plan Activo */}
+{activePlanData && (
+  <View style={styles.section}>
+    <Text style={styles.sectionTitle}>
+      📋 {t('workout.activeWorkoutPlanTitle')}
+    </Text>
+
+    <Text style={styles.sectionHelper}>
+      {t('workout.activeWorkoutPlanHelper')}
+    </Text>
+
+    <View style={styles.activePlanCard}>
+      <View style={styles.activePlanRow}>
+        <Text style={styles.activePlanLabel}>
+          {t('workout.fitnessLevel')}:
+        </Text>
+        <Text style={styles.activePlanValue}>
+          {activePlanData.fitness_level
+            ? t(`fitnessLevels.${activePlanData.fitness_level}`)
+            : t('common.notAvailable')}
+        </Text>
+      </View>
+
+      <View style={styles.activePlanRow}>
+        <Text style={styles.activePlanLabel}>{t('nutritionSettings.goals')}:</Text>
+        <View style={styles.activePlanTagsContainer}>
+          {(activePlanData.goals || []).map((goal: string, index: number) => (
+            <View key={index} style={styles.activePlanTag}>
+              <Text style={styles.activePlanTagText}>
+                {t(`fitnessGoals.${goal}`)}
+              </Text>
             </View>
-          </View>
-        )}
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.activePlanRow}>
+        <Text style={styles.activePlanLabel}>{t('nutritionSettings.activityTypes')}:</Text>
+        <View style={styles.activePlanTagsContainer}>
+          {(activePlanData.activity_types || []).map((activity: string, index: number) => (
+            <View key={index} style={styles.activePlanTag}>
+              <Text style={styles.activePlanTagText}>
+                {t(`activityTypes.${activity}`)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.activePlanRow}>
+        <Text style={styles.activePlanLabel}>{t('nutritionSettings.daysPerWeek')}:</Text>
+        <Text style={styles.activePlanValue}>
+          {activePlanData.available_days || 0} {t('common.days')}
+        </Text>
+      </View>
+
+      <View style={styles.activePlanRow}>
+        <Text style={styles.activePlanLabel}>{t('nutritionSettings.sessionDuration')}:</Text>
+        <Text style={styles.activePlanValue}>
+          {activePlanData.session_duration || 0} {t('common.minutes')}
+        </Text>
+      </View>
+    </View>
+  </View>
+)}
+
 
         {/* Campos de composición corporal cuando hay plan activo */}
         {activePlanData && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📊 Composición Corporal (Opcional)</Text>
-            <Text style={styles.sectionHelper}>
-              Esta información ayuda a personalizar mejor tu plan nutricional
-            </Text>
+           <Text style={styles.sectionTitle}>
+  📊 {t('nutrition.bodyCompositionTitle')}
+</Text>
+<Text style={styles.sectionHelper}>
+  {t('nutrition.bodyCompositionHelper')}
+</Text>
+
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Grasa corporal (%)</Text>
+            <Text style={styles.inputLabel}>
+  {t('nutrition.bodyFat')}
+</Text>
               <TextInput
                 style={styles.input}
                 value={activePlanBodyFat}
@@ -574,7 +581,9 @@ export default function NutritionSettingsScreen() {
               />
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Masa muscular (%)</Text>
+            <Text style={styles.inputLabel}>
+  {t('nutrition.muscleMass')}
+</Text>
               <TextInput
                 style={styles.input}
                 value={activePlanMuscle}
@@ -592,20 +601,12 @@ export default function NutritionSettingsScreen() {
           <>
             {/* Objetivo de la dieta */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🎯 Objetivo de la Dieta</Text>
+              <Text style={styles.sectionTitle}>🎯 {t('nutritionSettings.dietGoal')}</Text>
               <Text style={styles.sectionHelper}>
-                Selecciona el objetivo principal para tu plan nutricional
+                {t('nutritionSettings.selectMainGoal')}
               </Text>
               <View style={styles.optionsContainer}>
                 {Object.values(FitnessGoal).map((goal) => {
-                  const goalLabels: { [key: string]: string } = {
-                    [FitnessGoal.WEIGHT_LOSS]: 'Bajar grasa',
-                    [FitnessGoal.MUSCLE_GAIN]: 'Ganar músculo',
-                    [FitnessGoal.STRENGTH]: 'Aumentar fuerza',
-                    [FitnessGoal.ENDURANCE]: 'Mejorar resistencia',
-                    [FitnessGoal.FLEXIBILITY]: 'Flexibilidad',
-                    [FitnessGoal.GENERAL_FITNESS]: 'Forma general',
-                  };
                   return (
                     <TouchableOpacity
                       key={goal}
@@ -619,7 +620,7 @@ export default function NutritionSettingsScreen() {
                         styles.optionText,
                         dietGoal === goal && styles.optionTextSelected
                       ]}>
-                        {goalLabels[goal] || goal}
+                        {t(`fitnessGoals.${goal}`)}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -629,7 +630,7 @@ export default function NutritionSettingsScreen() {
 
             {/* Días de entrenamiento */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📅 Días de Entrenamiento por Semana</Text>
+              <Text style={styles.sectionTitle}>📅 {t('nutritionSettings.trainingDaysPerWeek')}</Text>
               <View style={styles.stepperContainer}>
                 <TouchableOpacity
                   style={styles.stepperButton}
@@ -659,12 +660,16 @@ export default function NutritionSettingsScreen() {
 
             {/* Composición corporal */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📊 Composición Corporal (Opcional)</Text>
-              <Text style={styles.sectionHelper}>
-                Esta información ayuda a personalizar mejor tu plan nutricional
-              </Text>
+            <Text style={styles.sectionTitle}>
+  {t('nutrition.bodyCompositionTitle')}
+</Text>
+<Text style={styles.sectionHelper}>
+  {t('nutrition.bodyCompositionHelper')}
+</Text>
+
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Grasa corporal (%)</Text>
+                <Text style={styles.inputLabel}>{t('nutrition.bodyFat')}
+                </Text>
                 <TextInput
                   style={styles.input}
                   value={bodyFatPercentage}
@@ -675,7 +680,7 @@ export default function NutritionSettingsScreen() {
                 />
               </View>
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Masa muscular (%)</Text>
+                <Text style={styles.inputLabel}>{t('nutrition.muscleMass')}</Text>
                 <TextInput
                   style={styles.input}
                   value={musclePercentage}
@@ -691,7 +696,8 @@ export default function NutritionSettingsScreen() {
 
         {/* Comidas por día */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🍽️ Comidas por Día</Text>
+          <Text style={styles.sectionTitle}>🍽️ {t('nutrition.mealsPerDayTitle')}
+          </Text>
           <View style={styles.stepperContainer}>
             <TouchableOpacity
               style={styles.stepperButton}
@@ -721,10 +727,11 @@ export default function NutritionSettingsScreen() {
 
         {/* Preferencias personalizadas */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>✨ Preferencias Personalizadas</Text>
+          <Text style={styles.sectionTitle}>✨ {t('nutrition.customPreferencesTitle')}
+          </Text>
           <Text style={styles.sectionHelper}>
-            Estas preferencias afectarán tu plan de comidas. Ejemplos: "prefiero platos rápidos",
-            "evitar picantes", "más opciones con pescado", "budget bajo".
+          {t('nutrition.customPreferencesHelper')}
+
           </Text>
 
           <View style={styles.inputContainer}>
@@ -732,7 +739,7 @@ export default function NutritionSettingsScreen() {
               style={styles.input}
               value={newPrompt}
               onChangeText={setNewPrompt}
-              placeholder="Ej: prefiero comidas rápidas"
+              placeholder={t('nutrition.preferencesPlaceholder')}
               placeholderTextColor="#666666"
               maxLength={80}
               onSubmitEditing={addPrompt}
@@ -754,8 +761,12 @@ export default function NutritionSettingsScreen() {
           </View>
 
           <Text style={styles.promptsCount}>
-            {customPrompts.length} / 10 preferencias
-          </Text>
+  {t('nutrition.preferencesCount', {
+    count: customPrompts.length,
+    max: 10,
+  })}
+</Text>
+
         </View>
 
         {/* Botón guardar */}
@@ -769,7 +780,9 @@ export default function NutritionSettingsScreen() {
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
-              <Text style={styles.saveButtonText}>Guardar Configuración</Text>
+              <Text style={styles.saveButtonText}>
+  {t('common.saveSettings')}
+</Text>
             </>
           )}
         </TouchableOpacity>

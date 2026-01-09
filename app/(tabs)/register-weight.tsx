@@ -13,15 +13,26 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/services/supabase';
 import { useCustomAlert } from '../../src/components/CustomAlert';
 
 export default function RegisterWeightScreen() {
   const { user } = useUser();
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language; // 'es', 'en', 'es-ES', etc.
+
+  // ✅ FIX: Supabase sin tipos -> TS infiere payload como "never".
+  // Casteamos el cliente (o from) para evitar los 2 errores que te quedaban.
+  const sb = supabase as any;
+
   const { showAlert, AlertComponent } = useCustomAlert();
   const params = useLocalSearchParams();
-  const defaultDate = params.date ? new Date(params.date as string).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-  
+
+  const defaultDate = params.date
+    ? new Date(params.date as string).toISOString().split('T')[0]
+    : new Date().toISOString().split('T')[0];
+
   const [date, setDate] = useState(defaultDate);
   const [weight, setWeight] = useState('');
   const [bodyFat, setBodyFat] = useState('');
@@ -32,57 +43,57 @@ export default function RegisterWeightScreen() {
   const performSave = async (bodyMetric: any, isUpdate: boolean) => {
     try {
       let metricsError;
+
       if (isUpdate) {
-        // Actualizar medición existente
-        const { error } = await supabase
+        // Update existing measurement
+        const { error } = await sb
           .from('body_metrics')
           .update(bodyMetric)
           .eq('user_id', user!.id)
           .eq('date', date);
+
         metricsError = error;
       } else {
-        // Insertar nueva medición
-        const { error } = await supabase
-          .from('body_metrics')
-          .insert(bodyMetric);
+        // Insert new measurement
+        const { error } = await sb.from('body_metrics').insert(bodyMetric);
         metricsError = error;
       }
 
       if (metricsError) {
-        console.error('❌ Error guardando medición:', metricsError);
+        console.error('❌ Error saving measurement:', metricsError);
         throw metricsError;
       }
 
-      console.log('✅ Medición guardada en historial');
+      console.log('✅ Measurement saved in history');
 
-      // 2. Actualizar peso actual en el perfil del usuario
-      const { error: profileError } = await supabase
+      // 2. Update current weight in the user profile
+      const { error: profileError } = await sb
         .from('user_profiles')
-        .update({ 
+        .update({
           weight: parseFloat(weight),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq('user_id', user!.id);
 
       if (profileError) {
-        console.error('⚠️ Error actualizando perfil:', profileError);
-        // No lanzamos error aquí para que no falle todo el guardado
+        console.error('⚠️ Error updating profile:', profileError);
+        // Don't throw here so the whole save doesn't fail
       } else {
-        console.log('✅ Peso actualizado en perfil');
+        console.log('✅ Weight updated in profile');
       }
 
       showAlert(
-        '¡Guardado!',
-        'Mediciones registradas correctamente.',
-        [{ text: 'OK', onPress: () => router.push('/(tabs)/nutrition' as any) }],
+        t('registerWeight.savedTitle'),
+        t('registerWeight.savedMessage'),
+        [{ text: t('common.ok'), onPress: () => router.push('/(tabs)/nutrition' as any) }],
         { icon: 'checkmark-circle', iconColor: '#4CAF50' }
       );
     } catch (error: any) {
       console.error('Error saving weight:', error);
       showAlert(
-        'Error',
-        error.message || 'No se pudo guardar la medición. Intenta nuevamente.',
-        [{ text: 'OK' }],
+        t('common.error'),
+        error?.message || t('registerWeight.saveError'),
+        [{ text: t('common.ok') }],
         { icon: 'alert-circle', iconColor: '#F44336' }
       );
     } finally {
@@ -93,9 +104,9 @@ export default function RegisterWeightScreen() {
   const handleSave = useCallback(async () => {
     if (!user?.id || !weight) {
       showAlert(
-        'Error',
-        'El peso es requerido',
-        [{ text: 'OK' }],
+        t('common.error'),
+        t('registerWeight.weightRequired'),
+        [{ text: t('common.ok') }],
         { icon: 'alert-circle', iconColor: '#F44336' }
       );
       return;
@@ -113,81 +124,84 @@ export default function RegisterWeightScreen() {
         notes: notes || null,
       };
 
-      console.log('💾 Guardando medición:', bodyMetric);
+      console.log('💾 Saving measurement:', bodyMetric);
 
-      // Verificar si ya existe una medición para este día
-      const { data: existingMetric } = await supabase
+      // Check if a measurement already exists for this day
+      const { data: existingMetric } = await sb
         .from('body_metrics')
         .select('id, weight_kg, body_fat_percentage, muscle_percentage')
         .eq('user_id', user.id)
         .eq('date', date)
         .single();
 
-      // Si existe, mostrar confirmación antes de sobrescribir
+      // If it exists, confirm before overwriting
       if (existingMetric) {
-        setSaving(false); // Detener loading mientras esperamos confirmación
-        
+        setSaving(false); // Stop loading while waiting for confirmation
+
         showAlert(
-          'Registro Existente',
-          `Ya registraste mediciones para el día ${new Date(date).toLocaleDateString('es-ES', { 
-            day: 'numeric', 
-            month: 'long',
-            year: 'numeric'
-          })}.\n\nSi continúas, los valores anteriores serán reemplazados por los nuevos datos.\n\n¿Deseas actualizar la medición?`,
+          t('registerWeight.existingRecordTitle'),
+          t('registerWeight.existingRecordMessage', {
+            // Podés usar locale si querés respetar el idioma actual:
+            // date: new Date(date).toLocaleDateString(locale, { ... })
+            date: new Date(date).toLocaleDateString('en-IE', {
+              day: 'numeric',
+              month: 'long',
+              year: 'numeric',
+            }),
+          }),
           [
             {
-              text: 'Cancelar',
+              text: t('common.cancel'),
               style: 'cancel',
               onPress: () => {
-                console.log('❌ Usuario canceló la actualización');
-              }
+                console.log('❌ User canceled update');
+              },
             },
             {
-              text: 'Actualizar',
+              text: t('common.update'),
               style: 'default',
               onPress: async () => {
                 setSaving(true);
                 await performSave(bodyMetric, true);
-              }
-            }
+              },
+            },
           ],
           { icon: 'calendar', iconColor: '#ffb300' }
         );
         return;
       }
 
-      // Si no existe, guardar directamente
+      // If it doesn't exist, save directly
       await performSave(bodyMetric, false);
-
     } catch (error: any) {
       console.error('Error checking existing weight:', error);
       showAlert(
-        'Error',
-        'No se pudo verificar la medición. Intenta nuevamente.',
-        [{ text: 'OK' }],
+        t('common.error'),
+        t('registerWeight.verifyError'),
+        [{ text: t('common.ok') }],
         { icon: 'alert-circle', iconColor: '#F44336' }
       );
       setSaving(false);
     }
-  }, [user, date, weight, bodyFat, muscle, notes]);
+  }, [user, date, weight, bodyFat, muscle, notes, showAlert, t]);
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.push('/(tabs)/nutrition' as any)}>
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Registrar Medición</Text>
+        <Text style={styles.headerTitle}>{t('registerWeight.title')}</Text>
         <TouchableOpacity onPress={() => router.push('/body-evolution' as any)}>
           <Ionicons name="analytics" size={24} color="#ffb300" />
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView}>
-        {/* Botón Ver Evolución */}
+        {/* View Evolution button */}
         <View style={styles.section}>
           <TouchableOpacity
             style={styles.evolutionButton}
@@ -197,16 +211,18 @@ export default function RegisterWeightScreen() {
               <Ionicons name="analytics" size={24} color="#ffb300" />
             </View>
             <View style={styles.evolutionButtonContent}>
-              <Text style={styles.evolutionButtonTitle}>Ver Evolución Corporal</Text>
+              <Text style={styles.evolutionButtonTitle}>
+                {t('registerWeight.viewBodyEvolution')}
+              </Text>
               <Text style={styles.evolutionButtonSubtitle}>
-                Gráficas de peso, grasa y músculo
+                {t('registerWeight.viewBodyEvolutionSubtitle')}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#666" />
           </TouchableOpacity>
         </View>
 
-        {/* Botón Fotos de Progreso */}
+        {/* Progress Photos button */}
         <View style={styles.section}>
           <TouchableOpacity
             style={styles.evolutionButton}
@@ -216,32 +232,34 @@ export default function RegisterWeightScreen() {
               <Ionicons name="camera" size={24} color="#ffb300" />
             </View>
             <View style={styles.evolutionButtonContent}>
-              <Text style={styles.evolutionButtonTitle}>📸 Fotos de Progreso</Text>
+              <Text style={styles.evolutionButtonTitle}>
+                {t('registerWeight.progressPhotosTitle')}
+              </Text>
               <Text style={styles.evolutionButtonSubtitle}>
-                Documenta tus cambios físicos cada 2 semanas
+                {t('registerWeight.progressPhotosSubtitle')}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#666" />
           </TouchableOpacity>
         </View>
 
-        {/* Fecha */}
+        {/* Date */}
         <View style={styles.section}>
-          <Text style={styles.label}>Fecha de la medición</Text>
-          <Text style={styles.dateText}>{new Date(date).toLocaleDateString('es-ES', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
-          })}</Text>
-          <Text style={styles.infoText}>
-            Puedes registrar mediciones pasadas navegando días en la sección de Progreso
+          <Text style={styles.label}>{t('registerWeight.measurementDate')}</Text>
+          <Text style={styles.dateText}>
+            {new Date(date).toLocaleDateString('en-IE', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}
           </Text>
+          <Text style={styles.infoText}>{t('registerWeight.dateHint')}</Text>
         </View>
 
-        {/* Peso */}
+        {/* Weight */}
         <View style={styles.section}>
-          <Text style={styles.label}>Peso (kg) *</Text>
+          <Text style={styles.label}>{t('registerWeight.weightLabel')}</Text>
           <TextInput
             style={styles.input}
             value={weight}
@@ -253,10 +271,10 @@ export default function RegisterWeightScreen() {
           />
         </View>
 
-        {/* Grasa corporal */}
+        {/* Body fat */}
         <View style={styles.section}>
-          <Text style={styles.label}>Grasa corporal (%)</Text>
-          <Text style={styles.optionalLabel}>Opcional - Ayuda a personalizar tu dieta</Text>
+          <Text style={styles.label}>{t('registerWeight.bodyFatLabel')}</Text>
+          <Text style={styles.optionalLabel}>{t('registerWeight.optionalDietHint')}</Text>
           <TextInput
             style={styles.input}
             value={bodyFat}
@@ -265,15 +283,13 @@ export default function RegisterWeightScreen() {
             placeholderTextColor="#666"
             keyboardType="decimal-pad"
           />
-          <Text style={styles.infoText}>
-            📍 Puedes medirlo con balanza de bioimpedancia o pellizco
-          </Text>
+          <Text style={styles.infoText}>{t('registerWeight.bodyFatHint')}</Text>
         </View>
 
-        {/* Masa muscular */}
+        {/* Muscle mass */}
         <View style={styles.section}>
-          <Text style={styles.label}>Masa muscular (%)</Text>
-          <Text style={styles.optionalLabel}>Opcional - Ayuda a evaluar tu progreso</Text>
+          <Text style={styles.label}>{t('registerWeight.muscleLabel')}</Text>
+          <Text style={styles.optionalLabel}>{t('registerWeight.optionalProgressHint')}</Text>
           <TextInput
             style={styles.input}
             value={muscle}
@@ -282,19 +298,17 @@ export default function RegisterWeightScreen() {
             placeholderTextColor="#666"
             keyboardType="decimal-pad"
           />
-          <Text style={styles.infoText}>
-            📍 Solo si tienes acceso a medición de composición corporal
-          </Text>
+          <Text style={styles.infoText}>{t('registerWeight.muscleHint')}</Text>
         </View>
 
-        {/* Notas */}
+        {/* Notes */}
         <View style={styles.section}>
-          <Text style={styles.label}>Notas</Text>
+          <Text style={styles.label}>{t('registerWeight.notesLabel')}</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
             value={notes}
             onChangeText={setNotes}
-            placeholder="Observaciones, cómo te sientes, etc."
+            placeholder={t('registerWeight.notesPlaceholder')}
             placeholderTextColor="#666"
             multiline
             numberOfLines={4}
@@ -302,7 +316,7 @@ export default function RegisterWeightScreen() {
           />
         </View>
 
-        {/* Botón Guardar */}
+        {/* Save button */}
         <TouchableOpacity
           style={[styles.saveButton, saving && styles.saveButtonDisabled]}
           onPress={handleSave}
@@ -311,7 +325,7 @@ export default function RegisterWeightScreen() {
           {saving ? (
             <ActivityIndicator color="#1a1a1a" />
           ) : (
-            <Text style={styles.saveButtonText}>Guardar Medición</Text>
+            <Text style={styles.saveButtonText}>{t('registerWeight.save')}</Text>
           )}
         </TouchableOpacity>
 
@@ -365,6 +379,7 @@ const styles = StyleSheet.create({
     color: '#ffb300',
     fontWeight: '600',
     marginBottom: 8,
+    textTransform: 'capitalize',
   },
   infoText: {
     fontSize: 12,
@@ -431,4 +446,3 @@ const styles = StyleSheet.create({
     color: '#999',
   },
 });
-

@@ -10,14 +10,20 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
+  Dimensions,
 } from 'react-native';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '../../../src/services/supabase';
+import { supabase } from '@/services/supabase';
 import { useCustomAlert } from '../../../src/components/CustomAlert';
 import { updateStudentWorkoutPlan } from '../../../src/services/trainerService';
+import { useTutorial } from '../../../src/contexts/TutorialContext';
+import { TutorialTooltip } from '../../../src/components/TutorialTooltip';
 
 interface DayData {
   dayNumber: number;
@@ -33,6 +39,7 @@ interface WeekData {
 export default function CustomPlanDaysScreen() {
   const { user } = useUser();
   const router = useRouter();
+  const { t } = useTranslation();
   const params = useLocalSearchParams();
   const equipment = JSON.parse((params.equipment as string) || '[]');
   const editingPlanId = params.planId as string | undefined;
@@ -49,6 +56,14 @@ export default function CustomPlanDaysScreen() {
   const [showWeekDropdown, setShowWeekDropdown] = useState(false);
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [isPlanCurrentlyActive, setIsPlanCurrentlyActive] = useState(false);
+
+  // Tutorial states
+  const { 
+    shouldShowTooltip,
+    completeTutorial,
+    markTooltipShown 
+  } = useTutorial();
+  const [showCustomPlanTooltips, setShowCustomPlanTooltips] = useState(false);
   
   // Refs para prevenir race conditions en AsyncStorage
   const isLoadingFromStorage = React.useRef(false);
@@ -89,6 +104,7 @@ export default function CustomPlanDaysScreen() {
             [{ text: 'OK' }],
             { icon: 'alert-circle', iconColor: '#F44336' }
           );
+          
           initializeEmptyPlan();
           return;
         }
@@ -121,7 +137,7 @@ export default function CustomPlanDaysScreen() {
         });
 
         // Extraer datos del plan
-        const planData = plan.plan_data;
+        const planData = plan.plan_data as { multi_week_structure?: any[]; weekly_structure?: any[] } | null;
         setPlanName(plan.plan_name);
 
         // Guardar planId en AsyncStorage
@@ -129,8 +145,8 @@ export default function CustomPlanDaysScreen() {
         await AsyncStorage.setItem('custom_plan_name', plan.plan_name);
 
         // Cargar estructura multi-semana si existe, sino usar weekly_structure
-        const multiWeekStructure = planData.multi_week_structure;
-        const weeklyStructure = planData.weekly_structure;
+        const multiWeekStructure = planData?.multi_week_structure;
+        const weeklyStructure = planData?.weekly_structure;
         
         console.log('🔍 Estructuras encontradas:', {
           hasMultiWeek: !!multiWeekStructure && multiWeekStructure.length > 0,
@@ -154,11 +170,9 @@ export default function CustomPlanDaysScreen() {
               
               // Validar que dayData tenga datos
               if (!dayData || !dayData.day) {
-                console.warn(`⚠️ Día ${dayNumber} tiene datos inválidos, saltando`);
                 continue;
               }
               
-              console.log(`    📆 Día ${dayNumber}: ${dayData.day}, ${dayData.exercises?.length || 0} ejercicios`);
               
               // Hacer copia profunda de ejercicios para evitar referencias compartidas
               const exercises = (dayData.exercises || []).map((ex: any, idx: number) => ({
@@ -212,11 +226,9 @@ export default function CustomPlanDaysScreen() {
             
             // Validar que dayData tenga datos
             if (!dayData || !dayData.day) {
-              console.warn(`⚠️ Día ${dayNumber} tiene datos inválidos, saltando`);
               continue;
             }
             
-            console.log(`  📆 Día ${dayNumber}: ${dayData.day}, ${dayData.exercises?.length || 0} ejercicios`);
             
             // Hacer copia profunda de ejercicios para evitar referencias compartidas
             const exercises = (dayData.exercises || []).map((ex: any, idx: number) => ({
@@ -264,9 +276,9 @@ export default function CustomPlanDaysScreen() {
       } catch (error) {
         console.error('❌ Error cargando plan:', error);
         showAlert(
-          'Error inesperado',
-          'Ocurrió un error al cargar el plan. Se iniciará un plan vacío.',
-          [{ text: 'OK' }],
+          t('customPlan.unexpectedError'),
+          t('customPlan.errorLoadingPlanEmpty'),
+          [{ text: t('common.ok') }],
           { icon: 'alert-circle', iconColor: '#F44336' }
         );
         initializeEmptyPlan();
@@ -337,6 +349,18 @@ export default function CustomPlanDaysScreen() {
     
     loadExistingPlan();
   }, [editingPlanId, user]);
+
+  // Mostrar tutorial la primera vez (usando ref para evitar reactivaciones)
+  const tutorialShownRef = React.useRef(false);
+  useEffect(() => {
+    if (!tutorialShownRef.current && shouldShowTooltip('CUSTOM_PLAN') && initialLoadComplete) {
+      tutorialShownRef.current = true;
+      const timer = setTimeout(() => {
+        setShowCustomPlanTooltips(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldShowTooltip, initialLoadComplete]);
 
   // Recargar datos cuando se regresa de la pantalla de detalle del día
   useFocusEffect(
@@ -507,7 +531,6 @@ export default function CustomPlanDaysScreen() {
     try {
       const key = `week_${currentWeek.weekNumber}_day_${newDayNumber}_data`;
       await AsyncStorage.setItem(key, JSON.stringify(newDay));
-      console.log('✅ Día vacío guardado en AsyncStorage:', key);
     } catch (error) {
       console.error('❌ Error guardando día en AsyncStorage:', error);
       showAlert(
@@ -519,11 +542,15 @@ export default function CustomPlanDaysScreen() {
     }
     
     showAlert(
-      '¡Listo!',
-      `Día ${newDayNumber} agregado a la Semana ${currentWeek.weekNumber}`,
-      [{ text: 'OK' }],
+      t('customPlan.dayAddedTitle'),
+      t('customPlan.dayAddedMessage', {
+        day: newDayNumber,
+        week: currentWeek.weekNumber,
+      }),
+      [{ text: t('common.ok') }],
       { icon: 'checkmark-circle', iconColor: '#4CAF50' }
     );
+    
   };
 
   const handleDeleteDay = async (dayNumber: number) => {
@@ -533,20 +560,23 @@ export default function CustomPlanDaysScreen() {
     // No permitir eliminar si es el único día
     if (currentWeek.days.length === 1) {
       showAlert(
-        'No se puede eliminar',
-        'Debe haber al menos un día en la semana. Si no quieres este día, elimina la semana completa.',
-        [{ text: 'OK' }],
+        t('customPlan.cannotDeleteDayTitle'),
+        t('customPlan.cannotDeleteDayMessage'),
+        [{ text: t('common.ok') }],
         { icon: 'alert-circle', iconColor: '#ffb300' }
       );
       return;
     }
     
     const dayToDelete = currentWeek.days.find(d => d.dayNumber === dayNumber);
-    const dayName = dayToDelete?.name || `Día ${dayNumber}`;
+    const dayName =
+  dayToDelete?.name ||
+  t('customPlan.dayFallbackName', { day: dayNumber });
+
     
     showAlert(
-      'Eliminar Día',
-      `¿Estás seguro de que quieres eliminar ${dayName}?\n\nEsta acción no se puede deshacer.`,
+      t('alerts.confirm'),
+      t('alerts.cannotUndo'),
       [
         {
           text: 'Cancelar',
@@ -576,19 +606,21 @@ export default function CustomPlanDaysScreen() {
               await AsyncStorage.removeItem(key);
               
               showAlert(
-                '¡Eliminado!',
-                `${dayName} ha sido eliminado correctamente.`,
-                [{ text: 'OK' }],
+                t('common.deleted'),
+                t('customPlan.dayDeleted', { dayName }),
+                [{ text: t('common.ok') }],
                 { icon: 'checkmark-circle', iconColor: '#4CAF50' }
               );
+              
             } catch (error) {
               console.error('Error eliminando día:', error);
               showAlert(
-                'Error',
-                'No se pudo eliminar el día. Intenta nuevamente.',
-                [{ text: 'OK' }],
+                t('common.error'),
+                t('customPlan.couldNotDeleteDayTryAgain'),
+                [{ text: t('common.ok') }],
                 { icon: 'alert-circle', iconColor: '#F44336' }
               );
+              
             }
           },
         },
@@ -601,45 +633,50 @@ export default function CustomPlanDaysScreen() {
     setShowWeekDropdown(false);
     
     showAlert(
-      'Agregar Semana',
-      '¿Quieres agregar una nueva semana a tu plan de entrenamiento?',
+      t('customPlan.addWeekTitle'),
+      t('customPlan.addWeekConfirm'),
       [
         {
-          text: 'Cancelar',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Agregar',
+          text: t('common.add'),
           onPress: async () => {
             const newWeekNumber = weeks.length + 1;
-            
+    
             // Nueva semana empieza con 1 día (el usuario puede agregar más)
-            const newWeekDays: DayData[] = [{
-              dayNumber: 1,
-              exercises: [],
-            }];
-            
+            const newWeekDays: DayData[] = [
+              {
+                dayNumber: 1,
+                exercises: [],
+              },
+            ];
+    
             const newWeek: WeekData = {
               weekNumber: newWeekNumber,
               days: newWeekDays,
             };
-            
+    
             const updatedWeeks = [...weeks, newWeek];
             setWeeks(updatedWeeks);
             setCurrentWeekIndex(updatedWeeks.length - 1); // Ir a la nueva semana
-            
+    
             // Guardar el número de semanas
             try {
-              await AsyncStorage.setItem('custom_plan_weeks_count', updatedWeeks.length.toString());
+              await AsyncStorage.setItem(
+                'custom_plan_weeks_count',
+                updatedWeeks.length.toString()
+              );
             } catch (error) {
               console.error('Error saving weeks count:', error);
-              // No mostrar alert aquí, es un error menor y la semana ya se agregó exitosamente
+              // Error menor: no mostrar alert (la semana ya se agregó)
             }
-            
+    
             showAlert(
-              '¡Listo!',
-              `Semana ${newWeekNumber} agregada exitosamente`,
-              [{ text: 'OK' }],
+              t('customPlan.weekAddedTitle'),
+              t('customPlan.weekAddedMessage', { week: newWeekNumber }),
+              [{ text: t('common.ok') }],
               { icon: 'checkmark-circle', iconColor: '#4CAF50' }
             );
           },
@@ -653,57 +690,63 @@ export default function CustomPlanDaysScreen() {
     const weekToDuplicate = weeks[weekIndex];
     
     showAlert(
-      'Duplicar Semana',
-      `¿Quieres duplicar la Semana ${weekToDuplicate.weekNumber}?\n\nSe copiará esta semana con todos sus ejercicios.`,
+      t('customPlan.duplicateWeekTitle'),
+      t('customPlan.duplicateWeekConfirm', { week: weekToDuplicate.weekNumber }),
       [
         {
-          text: 'Cancelar',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Duplicar',
+          text: t('customPlan.duplicate'),
           onPress: async () => {
             try {
               const newWeekNumber = weeks.length + 1;
-              
+    
               // Crear copia profunda de la semana con sus días y ejercicios
-              const duplicatedWeek: Week = {
+              const duplicatedWeek: WeekData = {
                 weekNumber: newWeekNumber,
-                days: weekToDuplicate.days.map(day => ({
+                days: weekToDuplicate.days.map((day) => ({
                   ...day,
-                  exercises: day.exercises.map(ex => ({ ...ex })), // Copia profunda de ejercicios
+                  exercises: day.exercises.map((ex) => ({ ...ex })), // Copia profunda de ejercicios
                 })),
               };
-              
+    
               // Agregar la nueva semana
               const updatedWeeks = [...weeks, duplicatedWeek];
               setWeeks(updatedWeeks);
-              
+    
               // Guardar datos duplicados en AsyncStorage
               for (const day of duplicatedWeek.days) {
                 const storageKey = `week_${newWeekNumber}_day_${day.dayNumber}_data`;
                 await AsyncStorage.setItem(storageKey, JSON.stringify(day));
               }
-              
+    
               // Actualizar contador de semanas
-              await AsyncStorage.setItem('custom_plan_weeks_count', updatedWeeks.length.toString());
-              
+              await AsyncStorage.setItem(
+                'custom_plan_weeks_count',
+                updatedWeeks.length.toString()
+              );
+    
               // Cambiar a la nueva semana duplicada
               setCurrentWeekIndex(updatedWeeks.length - 1);
               setShowWeekDropdown(false);
-              
+    
               showAlert(
-                '¡Duplicado!',
-                `Semana ${newWeekNumber} creada con todos los ejercicios de la Semana ${weekToDuplicate.weekNumber}`,
-                [{ text: 'OK' }],
+                t('customPlan.duplicatedTitle'),
+                t('customPlan.duplicatedMessage', {
+                  newWeek: newWeekNumber,
+                  sourceWeek: weekToDuplicate.weekNumber,
+                }),
+                [{ text: t('common.ok') }],
                 { icon: 'checkmark-circle', iconColor: '#4CAF50' }
               );
             } catch (error) {
               console.error('Error duplicating week:', error);
               showAlert(
-                'Error',
-                'No se pudo duplicar la semana',
-                [{ text: 'OK' }],
+                t('customPlan.duplicateWeekErrorTitle'),
+                t('customPlan.duplicateWeekErrorMessage'),
+                [{ text: t('common.ok') }],
                 { icon: 'alert-circle', iconColor: '#F44336' }
               );
             }
@@ -712,73 +755,78 @@ export default function CustomPlanDaysScreen() {
       ],
       { icon: 'copy', iconColor: '#ffb300' }
     );
+    
   };
 
   const handleDeleteWeek = async (weekIndex: number) => {
     if (weeks.length === 1) {
       showAlert(
-        'No se puede eliminar',
-        'Debe haber al menos una semana en el plan.',
-        [{ text: 'OK' }],
+        t('customPlan.cannotDeleteWeekTitle'),
+        t('customPlan.cannotDeleteWeekMessage'),
+        [{ text: t('common.ok') }],
         { icon: 'alert-circle', iconColor: '#ffb300' }
       );
+      
       return;
     }
 
     const weekToDelete = weeks[weekIndex];
     
     showAlert(
-      'Eliminar Semana',
-      `¿Estás seguro de que quieres eliminar la Semana ${weekToDelete.weekNumber}?\n\nSe perderán todos los ejercicios de esta semana.\n\nEsta acción no se puede deshacer.`,
+      t('customPlan.deleteWeekTitle'),
+      t('customPlan.deleteWeekConfirm', { week: weekToDelete.weekNumber }),
       [
         {
-          text: 'Cancelar',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Eliminar',
+          text: t('customPlan.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               // Eliminar la semana del estado
               const updatedWeeks = weeks.filter((_, index) => index !== weekIndex);
-              
+    
               // Renumerar las semanas restantes
               updatedWeeks.forEach((week, index) => {
                 week.weekNumber = index + 1;
               });
-              
+    
               setWeeks(updatedWeeks);
-              
+    
               // Ajustar el índice de la semana actual
               if (currentWeekIndex >= updatedWeeks.length) {
                 setCurrentWeekIndex(updatedWeeks.length - 1);
               } else if (currentWeekIndex > weekIndex) {
                 setCurrentWeekIndex(currentWeekIndex - 1);
               }
-              
+    
               // Limpiar AsyncStorage para la semana eliminada
               const weekNumber = weekToDelete.weekNumber;
               for (let day = 1; day <= 7; day++) {
                 await AsyncStorage.removeItem(`week_${weekNumber}_day_${day}_data`);
               }
-              
+    
               // Actualizar el contador de semanas
-              await AsyncStorage.setItem('custom_plan_weeks_count', updatedWeeks.length.toString());
-              
+              await AsyncStorage.setItem(
+                'custom_plan_weeks_count',
+                updatedWeeks.length.toString()
+              );
+    
               setShowWeekDropdown(false);
               showAlert(
-                '¡Eliminado!',
-                'Semana eliminada correctamente',
-                [{ text: 'OK' }],
+                t('customPlan.deletedTitle'),
+                t('customPlan.deletedWeekSuccess'),
+                [{ text: t('common.ok') }],
                 { icon: 'checkmark-circle', iconColor: '#4CAF50' }
               );
             } catch (error) {
               console.error('Error deleting week:', error);
               showAlert(
-                'Error',
-                'No se pudo eliminar la semana',
-                [{ text: 'OK' }],
+                t('customPlan.deleteWeekErrorTitle'),
+                t('customPlan.deleteWeekErrorMessage'),
+                [{ text: t('common.ok') }],
                 { icon: 'alert-circle', iconColor: '#F44336' }
               );
             }
@@ -787,6 +835,7 @@ export default function CustomPlanDaysScreen() {
       ],
       { icon: 'trash', iconColor: '#F44336' }
     );
+    
   };
 
   const handleSavePlan = () => {
@@ -797,9 +846,9 @@ export default function CustomPlanDaysScreen() {
     
     if (!hasAnyExercises) {
       showAlert(
-        'Plan vacío',
-        'Debes agregar al menos un ejercicio a algún día para guardar el plan.',
-        [{ text: 'OK' }],
+        t('customPlan.emptyPlan'),
+        t('customPlan.emptyPlanMessage'),
+        [{ text: t('common.ok') }],
         { icon: 'alert-circle', iconColor: '#ffb300' }
       );
       return;
@@ -816,15 +865,15 @@ export default function CustomPlanDaysScreen() {
     if (hasEmptyDays) {
       // Plan parcial - preguntar si quiere guardarlo así
       showAlert(
-        'Plan parcial',
-        `Has completado ${completedDays} de ${totalDays} días en ${weeks.length} ${weeks.length === 1 ? 'semana' : 'semanas'}.\n\n¿Quieres guardar el plan parcial? Podrás continuar editándolo después.`,
+        t('customPlan.partialPlan'),
+        t('customPlan.partialPlanMessage', { completed: completedDays, total: totalDays, weeks: weeks.length, weekLabel: weeks.length === 1 ? t('common.week') : t('common.weeks') }),
         [
           {
-            text: 'Cancelar',
+            text: t('common.cancel'),
             style: 'cancel',
           },
           {
-            text: 'Guardar como Borrador',
+            text: t('customPlan.saveAsDraft'),
             // Si el plan ya es activo, mantenerlo activo; si no, guardar como inactivo
             onPress: () => savePlanToDatabase(isPlanCurrentlyActive || false),
           },
@@ -854,11 +903,11 @@ export default function CustomPlanDaysScreen() {
         console.log('❓ Plan NO activo o es nuevo - preguntar al usuario');
         console.log('   Razón: editingPlanId=' + editingPlanId + ', isPlanCurrentlyActive=' + isPlanCurrentlyActive);
         showAlert(
-          '¿Activar este plan?',
-          '¿Quieres que este sea tu plan de entrenamiento activo?',
+          t('customPlan.activatePlanTitle'),
+          t('customPlan.activatePlanMessage'),
           [
             {
-              text: 'No',
+              text: t('common.no'),
               style: 'cancel',
               onPress: () => {
                 console.log('👤 Usuario eligió NO activar');
@@ -866,7 +915,7 @@ export default function CustomPlanDaysScreen() {
               },
             },
             {
-              text: 'Sí',
+              text: t('common.yes'),
               onPress: () => {
                 console.log('👤 Usuario eligió SÍ activar');
                 savePlanToDatabase(true);
@@ -875,6 +924,7 @@ export default function CustomPlanDaysScreen() {
           ],
           { icon: 'checkmark-done-circle', iconColor: '#4CAF50' }
         );
+        ;
       }
     }
   };
@@ -882,20 +932,21 @@ export default function CustomPlanDaysScreen() {
   const savePlanToDatabase = async (isActive: boolean) => {
     if (!user) {
       showAlert(
-        'Error',
-        'Usuario no autenticado',
-        [{ text: 'OK' }],
+        t('auth.errorTitle'),
+        t('auth.unauthenticated'),
+        [{ text: t('common.ok') }],
         { icon: 'alert-circle', iconColor: '#F44336' }
       );
+      
       return;
     }
 
     // Validar que el plan tenga un nombre
     if (!planName || planName.trim().length === 0) {
       showAlert(
-        'Nombre requerido',
-        'Por favor, ingresa un nombre para tu plan de entrenamiento.',
-        [{ text: 'OK' }],
+        t('customPlan.nameRequired'),
+        t('customPlan.nameRequiredMessage'),
+        [{ text: t('common.ok') }],
         { icon: 'create-outline', iconColor: '#ffb300' }
       );
       return;
@@ -934,11 +985,12 @@ export default function CustomPlanDaysScreen() {
 
       if (allWeeksData.length === 0) {
         showAlert(
-          'Error',
-          'No hay días con ejercicios para guardar',
-          [{ text: 'OK' }],
+          t('common.error'),
+          t('customPlan.noDaysWithExercises'),
+          [{ text: t('common.ok') }],
           { icon: 'alert-circle', iconColor: '#F44336' }
         );
+        
         setIsSaving(false);
         return;
       }
@@ -952,8 +1004,8 @@ export default function CustomPlanDaysScreen() {
         multi_week_structure: allWeeksData.map(week => ({
           week_number: week.weekNumber,
           days: week.days.map(day => ({
-            day: day.name || `Día ${day.dayNumber}`,
-            focus: day.name || `Día ${day.dayNumber}`,
+            day: day.name || t('customPlan.dayWithNumber', { number: day.dayNumber }),
+            focus: day.name || t('customPlan.dayWithNumber', { number: day.dayNumber }),            
             exercises: day.exercises.map((ex: any) => ({
               id: ex.id, // ← IMPORTANTE: Mantener el ID
               name: ex.name,
@@ -967,8 +1019,8 @@ export default function CustomPlanDaysScreen() {
         })),
         // Mantener weekly_structure para compatibilidad (primera semana)
         weekly_structure: allWeeksData[0]?.days.map(day => ({
-          day: day.name || `Día ${day.dayNumber}`,
-          focus: day.name || `Día ${day.dayNumber}`,
+          day: day.name || t('customPlan.dayFallbackName', { day: day.dayNumber }),
+          focus: day.name || t('customPlan.dayFallbackName', { day: day.dayNumber }),
           exercises: day.exercises.map((ex: any) => ({
             id: ex.id, // ← IMPORTANTE: Mantener el ID
             name: ex.name,
@@ -1013,17 +1065,25 @@ export default function CustomPlanDaysScreen() {
         // Si es modo entrenador, usar la función especial para actualizar plan del alumno
         if (isTrainerView && studentId) {
           console.log('👨‍🏫 Actualizando plan del alumno como entrenador');
+        
+          const weekUnit =
+            totalWeeks === 1
+              ? t('customPlan.week_singular')
+              : t('customPlan.week_plural');
+        
           const result = await updateStudentWorkoutPlan(
             user.id,
             studentId,
             planIdToUpdate,
             {
               plan_name: finalPlanName,
-              description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}`,
+              description: t('customPlan.planDescription', {
+                count: totalWeeks,
+                unit: weekUnit,
+              }),
               plan_data: planData,
             }
           );
-
           if (!result.success) {
             console.error('Error al actualizar plan del alumno:', result.error);
             showAlert(
@@ -1037,11 +1097,19 @@ export default function CustomPlanDaysScreen() {
           }
         } else {
           // Actualización normal para el propio usuario
+          const weekUnit =
+            totalWeeks === 1
+              ? t('customPlan.week_singular')
+              : t('customPlan.week_plural');
+        
           const { data, error } = await supabase
             .from('workout_plans')
             .update({
               plan_name: finalPlanName,
-              description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}`,
+              description: t('customPlan.planDescription', {
+                count: totalWeeks,
+                unit: weekUnit,
+              }),
               duration_weeks: planData.duration_weeks,
               plan_data: planData,
               is_active: isActive,
@@ -1050,19 +1118,20 @@ export default function CustomPlanDaysScreen() {
             .eq('user_id', user.id)
             .select('id')
             .single();
-
+        
           if (error) {
             console.error('Error al actualizar plan:', error);
             showAlert(
-              'Error',
-              'No se pudo actualizar el plan. Intenta nuevamente.',
-              [{ text: 'OK' }],
+              t('common.error'),
+              t('customPlan.updatePlanErrorMessage'),
+              [{ text: t('common.ok') }],
               { icon: 'alert-circle', iconColor: '#F44336' }
             );
             setIsSaving(false);
             return;
           }
         }
+        
 
         // Limpiar AsyncStorage después de actualizar
         for (let weekNum = 1; weekNum <= totalWeeks; weekNum++) {
@@ -1079,55 +1148,67 @@ export default function CustomPlanDaysScreen() {
         // Importante: Establecer isSaving a false ANTES del alert
         setIsSaving(false);
 
-        showAlert(
-          '¡Éxito!',
-          isTrainerView 
-            ? 'Plan del alumno actualizado correctamente'
-            : isActive 
-              ? 'Plan actualizado y activado exitosamente' 
-              : 'Plan actualizado exitosamente. Puedes activarlo desde "Mis planes de entrenamiento"',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                if (isTrainerView && studentId) {
-                  // Si es modo entrenador, volver a la pantalla del alumno
-                  router.back();
-                } else {
-                  // Si es modo normal, ir a la pestaña de entrenamientos
-                  router.push('/(tabs)/workout' as any);
-                }
-              },
+        const successMessage = isTrainerView
+        ? t('customPlan.trainerPlanUpdated')
+        : isActive
+          ? t('customPlan.planUpdatedAndActivated')
+          : t('customPlan.planUpdatedNotActivated');
+      
+      showAlert(
+        t('customPlan.successTitle'),
+        successMessage,
+        [
+          {
+            text: t('common.ok'),
+            onPress: () => {
+              if (isTrainerView && studentId) {
+                // Modo entrenador: volver a la pantalla del alumno
+                router.back();
+              } else {
+                // Modo normal: ir a entrenamientos
+                router.push('/(tabs)/workout' as any);
+              }
             },
-          ],
-          { icon: 'checkmark-circle', iconColor: '#4CAF50' }
-        );
+          },
+        ],
+        { icon: 'checkmark-circle', iconColor: '#4CAF50' }
+      );
+      
         return;
       }
 
       // Insertar el nuevo plan
-      const { data, error } = await supabase
-        .from('workout_plans')
-        .insert({
-          user_id: user.id,
-          plan_name: finalPlanName,
-          description: `Plan personalizado de ${totalWeeks} ${totalWeeks === 1 ? 'semana' : 'semanas'}`,
-          duration_weeks: planData.duration_weeks,
-          plan_data: planData,
-          is_active: isActive,
-          created_at: new Date().toISOString(),
-        })
-        .select('id')
-        .single();
-
+      const weekUnit =
+      totalWeeks === 1
+        ? t('customPlan.week_singular')
+        : t('customPlan.week_plural');
+    
+    const { data, error } = await supabase
+      .from('workout_plans')
+      .insert({
+        user_id: user.id,
+        plan_name: finalPlanName,
+        description: t('customPlan.planDescription', {
+          count: totalWeeks,
+          unit: weekUnit,
+        }),
+        duration_weeks: planData.duration_weeks,
+        plan_data: planData,
+        is_active: isActive,
+        created_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+    
       if (error) {
         console.error('Error al guardar plan:', error);
         showAlert(
-          'Error',
-          'No se pudo guardar el plan. Intenta nuevamente.',
-          [{ text: 'OK' }],
+          t('common.error'),
+          t('customPlan.savePlanErrorMessage'),
+          [{ text: t('common.ok') }],
           { icon: 'alert-circle', iconColor: '#F44336' }
         );
+        
         setIsSaving(false);
         return;
       }
@@ -1149,32 +1230,34 @@ export default function CustomPlanDaysScreen() {
       // Importante: Establecer isSaving a false ANTES del alert
       setIsSaving(false);
       
-      showAlert(
-        '¡Éxito!',
-        isActive 
-          ? 'Plan guardado y activado exitosamente' 
-          : 'Plan guardado exitosamente. Puedes activarlo desde "Mis planes de entrenamiento"',
-        [
-          {
-            text: 'OK',
-            onPress: () => {
-              // Ir a la pestaña de entrenamientos
-              router.push('/(tabs)/workout' as any);
-            },
-          },
-        ],
-        { icon: 'checkmark-circle', iconColor: '#4CAF50' }
-      );
-    } catch (error) {
-      console.error('Error inesperado al guardar plan:', error);
-      setIsSaving(false);
-      showAlert(
-        'Error',
-        'Ocurrió un error al guardar el plan',
-        [{ text: 'OK' }],
-        { icon: 'alert-circle', iconColor: '#F44336' }
-      );
-    }
+      const savedMessage = isActive
+  ? t('customPlan.planSavedAndActivated')
+  : t('customPlan.planSavedNotActivated');
+
+showAlert(
+  t('customPlan.successTitle'), // o t('common.success') si preferís
+  savedMessage,
+  [
+    {
+      text: t('common.ok'),
+      onPress: () => {
+        router.push('/(tabs)/workout' as any);
+      },
+    },
+  ],
+  { icon: 'checkmark-circle', iconColor: '#4CAF50' }
+);
+} catch (error) {
+  console.error('Error inesperado al guardar plan:', error);
+  setIsSaving(false);
+  showAlert(
+    t('common.error'),
+    t('customPlan.unexpectedSaveError'),
+    [{ text: t('common.ok') }],
+    { icon: 'alert-circle', iconColor: '#F44336' }
+  );
+}
+
   };
 
   return (
@@ -1198,7 +1281,7 @@ export default function CustomPlanDaysScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Días del Plan</Text>
+        <Text style={styles.headerTitle}>{t('customPlan.daysTitle')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -1214,24 +1297,24 @@ export default function CustomPlanDaysScreen() {
                 style={styles.planNameInput}
                 value={planName}
                 onChangeText={setPlanName}
-                placeholder="Nombre del plan (requerido)"
+                placeholder={t('customPlan.planNamePlaceholder')}
                 placeholderTextColor="#666"
                 autoFocus
                 onBlur={async () => {
                   // Si el nombre está vacío, mostrar alerta
                   if (planName.trim().length === 0) {
                     showAlert(
-                      'Nombre requerido',
-                      'El plan debe tener un nombre. Se usará un nombre por defecto.',
-                      [{ text: 'OK' }],
+                      t('customPlan.nameRequired'),
+                      t('customPlan.nameEmptyDefault'),
+                      [{ text: t('common.ok') }],
                       { icon: 'alert-circle', iconColor: '#ffb300' }
                     );
-                    setPlanName(`Plan Personalizado - ${new Date().toLocaleDateString()}`);
+                    setPlanName(`${t('customPlan.defaultPlanName')} - ${new Date().toLocaleDateString()}`);
                   }
                   setIsEditingPlanName(false);
                   // Guardar el nombre en AsyncStorage
                   try {
-                    await AsyncStorage.setItem('custom_plan_name', planName.trim() || `Plan Personalizado - ${new Date().toLocaleDateString()}`);
+                    await AsyncStorage.setItem('custom_plan_name', planName.trim() || `${t('customPlan.defaultPlanName')} - ${new Date().toLocaleDateString()}`);
                   } catch (error) {
                     console.error('Error saving plan name:', error);
                   }
@@ -1240,12 +1323,12 @@ export default function CustomPlanDaysScreen() {
                   // Si el nombre está vacío, mostrar alerta
                   if (planName.trim().length === 0) {
                     showAlert(
-                      'Nombre requerido',
-                      'El plan debe tener un nombre. Se usará un nombre por defecto.',
-                      [{ text: 'OK' }],
+                      t('customPlan.nameRequired'),
+                      t('customPlan.nameEmptyDefault'),
+                      [{ text: t('common.ok') }],
                       { icon: 'alert-circle', iconColor: '#ffb300' }
                     );
-                    setPlanName(`Plan Personalizado - ${new Date().toLocaleDateString()}`);
+                    setPlanName(`${t('customPlan.defaultPlanName')} - ${new Date().toLocaleDateString()}`);
                   }
                   setIsEditingPlanName(false);
                   // Guardar el nombre en AsyncStorage
@@ -1261,8 +1344,16 @@ export default function CustomPlanDaysScreen() {
                   setIsEditingPlanName(false);
                   // Guardar el nombre en AsyncStorage
                   try {
-                    await AsyncStorage.setItem('custom_plan_name', planName.trim() || `Plan Personalizado - ${new Date().toLocaleDateString()}`);
-                  } catch (error) {
+                    const formattedDate = new Date().toLocaleDateString();
+
+                    await AsyncStorage.setItem(
+                      'custom_plan_name',
+                      planName.trim() ||
+                        t('customPlan.defaultPlanNameWithDate', {
+                          date: formattedDate,
+                        })
+                    );
+                                      } catch (error) {
                     console.error('Error saving plan name:', error);
                   }
                 }}
@@ -1280,7 +1371,7 @@ export default function CustomPlanDaysScreen() {
               <View style={styles.planNameDisplayContent}>
                 <Ionicons name="fitness" size={20} color="#ffb300" />
                 <Text style={styles.planNameDisplayText} numberOfLines={1}>
-                  {planName || `Plan Personalizado - ${new Date().toLocaleDateString()}`}
+                {planName ||  t('customPlan.defaultPlanNameWithDate', {    date: new Date().toLocaleDateString(),  })}
                 </Text>
               </View>
               <Ionicons name="create-outline" size={18} color="#999" />
@@ -1296,9 +1387,12 @@ export default function CustomPlanDaysScreen() {
             activeOpacity={0.7}
           >
             <View style={styles.weekSelectorContent}>
-              <Text style={styles.weekSelectorTitle}>
-                Semana {weeks[currentWeekIndex]?.weekNumber || 1}
-              </Text>
+            <Text style={styles.weekSelectorTitle}>
+  {t('customPlan.weekTitle', {
+    week: weeks[currentWeekIndex]?.weekNumber || 1,
+  })}
+</Text>
+
               <Ionicons 
                 name={showWeekDropdown ? "chevron-up" : "chevron-down"} 
                 size={24} 
@@ -1341,15 +1435,25 @@ export default function CustomPlanDaysScreen() {
                           size={24} 
                           color={currentWeekIndex === index ? "#ffb300" : "#666"} 
                         />
-                        <Text style={[
-                          styles.weekDropdownItemText,
-                          currentWeekIndex === index && styles.weekDropdownItemTextActive
-                        ]}>
-                          Semana {week.weekNumber}
-                        </Text>
-                        <Text style={styles.weekDropdownItemDays}>
-                          {week.days.length} {week.days.length === 1 ? 'día' : 'días'}
-                        </Text>
+                       <Text
+  style={[
+    styles.weekDropdownItemText,
+    currentWeekIndex === index && styles.weekDropdownItemTextActive,
+  ]}
+>
+  {t('customPlan.weekTitle', { week: week.weekNumber })}
+</Text>
+
+<Text style={styles.weekDropdownItemDays}>
+  {t('customPlan.daysCount', {
+    count: week.days.length,
+    unit:
+      week.days.length === 1
+        ? t('customPlan.day_singular')
+        : t('customPlan.day_plural'),
+  })}
+</Text>
+
                       </View>
                     </TouchableOpacity>
                     
@@ -1382,17 +1486,19 @@ export default function CustomPlanDaysScreen() {
               >
                 <Ionicons name="add-circle" size={28} color="#ffb300" />
                 <Text style={styles.weekDropdownAddButtonText}>
-                  Agregar Semana
-                </Text>
+  {t('customPlan.addWeek')}
+</Text>
+
               </TouchableOpacity>
             </ScrollView>
           </View>
         )}
 
         <View style={styles.weekInfo}>
-          <Text style={styles.description}>
-            Selecciona cada día para agregar ejercicios
-          </Text>
+        <Text style={styles.description}>
+  {t('customPlan.selectDayDescription')}
+</Text>
+
         </View>
 
         <View style={styles.daysList}>
@@ -1402,9 +1508,10 @@ export default function CustomPlanDaysScreen() {
               style={styles.dayCard}
             >
               <View style={styles.dayCardHeader}>
-                <Text style={styles.dayCardTitle}>
-                  {day.name || `Día ${day.dayNumber}`}
-                </Text>
+              <Text style={styles.dayCardTitle}>
+  {day.name || t('customPlan.dayWithNumber', { number: day.dayNumber })}
+</Text>
+
                 <View style={styles.dayCardActions}>
                   <TouchableOpacity
                     style={styles.dayActionButton}
@@ -1431,8 +1538,15 @@ export default function CustomPlanDaysScreen() {
                   >
                     <Ionicons name="barbell" size={16} color="#ffb300" />
                     <Text style={styles.exerciseCount}>
-                      {day.exercises.length} {day.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}
-                    </Text>
+  {t('customPlan.exercisesCount', {
+    count: day.exercises.length,
+    unit:
+      day.exercises.length === 1
+        ? t('customPlan.exercise_singular')
+        : t('customPlan.exercise_plural'),
+  })}
+</Text>
+
                     <Ionicons 
                       name={expandedDays.has(`${weeks[currentWeekIndex].weekNumber}-${day.dayNumber}`) ? "chevron-up" : "chevron-down"} 
                       size={20} 
@@ -1455,8 +1569,15 @@ export default function CustomPlanDaysScreen() {
                               <View style={styles.exerciseDetailChip}>
                                 <Ionicons name="sync" size={12} color="#999" />
                                 <Text style={styles.exerciseDetailText}>
-                                  {exercise.sets} {exercise.sets === 1 ? 'serie' : 'series'}
-                                </Text>
+  {t('customPlan.setsCount', {
+    count: exercise.sets,
+    unit:
+      exercise.sets === 1
+        ? t('customPlan.set_singular')
+        : t('customPlan.set_plural'),
+  })}
+</Text>
+
                               </View>
                             </View>
                           </View>
@@ -1472,7 +1593,7 @@ export default function CustomPlanDaysScreen() {
                   activeOpacity={0.7}
                 >
                   <Ionicons name="add-circle-outline" size={32} color="#666" />
-                  <Text style={styles.emptyDayText}>Agregar ejercicios</Text>
+                  <Text style={styles.emptyDayText}>{t('customPlan.addExercises')}</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1486,7 +1607,7 @@ export default function CustomPlanDaysScreen() {
           disabled={isSaving}
         >
           <Ionicons name="add-circle-outline" size={24} color="#ffb300" />
-          <Text style={styles.addDayButtonText}>Agregar Día</Text>
+          <Text style={styles.addDayButtonText}>{t('customPlan.addDay')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -1497,12 +1618,15 @@ export default function CustomPlanDaysScreen() {
           {isSaving ? (
             <>
               <ActivityIndicator size="small" color="#1a1a1a" />
-              <Text style={styles.saveButtonText}>Guardando...</Text>
+              <Text style={styles.saveButtonText}>
+  {t('common.saving')}
+</Text>
+
             </>
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
-              <Text style={styles.saveButtonText}>Guardar Plan</Text>
+              <Text style={styles.saveButtonText}>{t('customPlan.savePlan')}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -1511,6 +1635,134 @@ export default function CustomPlanDaysScreen() {
       </ScrollView>
       
       <AlertComponent />
+
+      {/* Tutorial de plan personalizado */}
+      {showCustomPlanTooltips && (
+        <TutorialTooltip
+          visible={showCustomPlanTooltips}
+          steps={[
+            {
+              element: <View />,
+              title: t('tutorial.customPlan.title1'),
+              content: t('tutorial.customPlan.content1'),
+              placement: 'center',
+            },
+            {
+              element: <View />,
+              title: t('tutorial.customPlan.title2'),
+              content: t('tutorial.customPlan.content2'),
+              placement: 'center',
+              spotlightPosition: {
+                x: 20,
+                y: 141,
+                width: SCREEN_WIDTH - 40,
+                height: 57,
+                borderRadius: 12,
+              },
+            },
+            {
+              element: <View />,
+              title: t('tutorial.customPlan.title3'),
+              content: t('tutorial.customPlan.content3'),
+              placement: 'center',
+              spotlightPosition: {
+                x: 20,
+                y: 220,
+                width: SCREEN_WIDTH - 40,
+                height: 60,
+                borderRadius: 12,
+              },
+            },
+            {
+              element: <View />,
+              title: t('tutorial.customPlan.title4'),
+              content: t('tutorial.customPlan.content4'),
+              placement: 'center',
+              spotlightPosition: {
+                x: 20,
+                y: 370,
+                width: SCREEN_WIDTH - 37,
+                height: 165,
+                borderRadius: 16,
+              },
+            },
+            {
+              element: <View />,
+              title: t('tutorial.customPlan.title5'),
+              content: t('tutorial.customPlan.content5'),
+              placement: 'center',
+              spotlightPosition: {
+                x: SCREEN_WIDTH - 112,
+                y: 373,
+                width: 33,
+                height: 33,
+                borderRadius: 8,
+              },
+            },
+            {
+              element: <View />,
+              title: t('tutorial.customPlan.title6'),
+              content: t('tutorial.customPlan.content6'),
+              placement: 'center',
+              spotlightPosition: {
+                x: SCREEN_WIDTH - 69,
+                y: 372,
+                width: 33,
+                height: 33,
+                borderRadius: 8,
+              },
+            },
+            {
+              element: <View />,
+              title: t('tutorial.customPlan.title7'),
+              content: t('tutorial.customPlan.content7'),
+              placement: 'center',
+              spotlightPosition: {
+                x: 20,
+                y: 548,
+                width: SCREEN_WIDTH - 40,
+                height: 60,
+                borderRadius: 16,
+              },
+            },
+            {
+              element: <View />,
+              title: t('tutorial.customPlan.title8'),
+              content: t('tutorial.customPlan.content8'),
+              placement: 'center',
+              spotlightPosition: {
+                x: 20,
+                y: 632,
+                width: SCREEN_WIDTH - 40,
+                height: 56,
+                borderRadius: 16,
+              },
+            },
+            {
+              element: <View />,
+              title: t('tutorial.customPlan.title9'),
+              content: t('tutorial.customPlan.content9'),
+              placement: 'center',
+            },
+          ]}
+          onComplete={() => {
+            // Primero cerrar el modal, luego actualizar el contexto
+            setShowCustomPlanTooltips(false);
+            setTimeout(() => {
+              completeTutorial('CUSTOM_PLAN');
+              markTooltipShown('CUSTOM_PLAN');
+            }, 100);
+          }}
+          onSkip={() => {
+            // Primero cerrar el modal, luego actualizar el contexto
+            setShowCustomPlanTooltips(false);
+            setTimeout(() => {
+              completeTutorial('CUSTOM_PLAN');
+              markTooltipShown('CUSTOM_PLAN');
+            }, 100);
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

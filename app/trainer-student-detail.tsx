@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import {
   getStudentStats,
   getStudentActivePlan,
@@ -30,6 +31,7 @@ const PERIODS = {
 };
 
 export default function TrainerStudentDetailScreen() {
+  const { t } = useTranslation();
   const params = useLocalSearchParams();
   const { user } = useUser();
   const studentId = params.studentId as string;
@@ -119,7 +121,7 @@ export default function TrainerStudentDetailScreen() {
 
   const handleEditPlan = () => {
     if (!activePlan) {
-      Alert.alert('Sin Plan Activo', 'El alumno no tiene un plan activo para editar');
+      Alert.alert(t('trainer.noActivePlan'), t('trainer.studentNoActivePlan'));
       return;
     }
 
@@ -135,7 +137,7 @@ export default function TrainerStudentDetailScreen() {
 
   const handleViewAllWorkouts = () => {
     // Navegar a una vista de todos los entrenamientos del alumno
-    Alert.alert('Próximamente', 'Esta funcionalidad estará disponible pronto');
+    Alert.alert(t('trainer.comingSoon'), t('trainer.featureComingSoon'));
   };
 
   if (isLoading) {

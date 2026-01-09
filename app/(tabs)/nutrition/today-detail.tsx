@@ -16,12 +16,14 @@ import {
 } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '../../../src/services/supabase';
+import { supabase } from '@/services/supabase';
 import { MealLog, NutritionTarget } from '../../../src/types/nutrition';
 
 export default function TodayDetailScreen() {
   const { user } = useUser();
+  const { t } = useTranslation();
   const params = useLocalSearchParams();
   const selectedDate = (params.date as string) || new Date().toISOString().split('T')[0];
   const [isLoading, setIsLoading] = useState(true);
@@ -78,7 +80,7 @@ export default function TodayDetailScreen() {
       setTodayLogs((logsData || []) as MealLog[]);
     } catch (err) {
       console.error('Error loading today detail:', err);
-      Alert.alert('Error', 'No se pudieron cargar los datos.');
+      Alert.alert(t('common.error'), t('nutrition.couldNotLoadData'));
     } finally {
       setIsLoading(false);
     }
@@ -86,8 +88,8 @@ export default function TodayDetailScreen() {
 
   const handleDeleteLog = async (logId: string) => {
     Alert.alert(
-      'Eliminar comida',
-      '¿Estás seguro de eliminar este registro?',
+      t('nutrition.deleteMeal'),
+      t('nutrition.deleteMealConfirm'),
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -102,13 +104,13 @@ export default function TodayDetailScreen() {
               
               if (!error) {
                 await loadData();
-                Alert.alert('Eliminado', 'Registro eliminado correctamente.');
+                Alert.alert(t('nutrition.deleted'), t('nutrition.recordDeletedCorrectly'));
               } else {
-                Alert.alert('Error', 'No se pudo eliminar el registro.');
+                Alert.alert(t('common.error'), t('nutrition.couldNotDeleteRecord'));
               }
             } catch (err) {
               console.error('Error deleting log:', err);
-              Alert.alert('Error', 'Error al eliminar.');
+              Alert.alert(t('common.error'), t('nutrition.errorDeleting'));
             }
           },
         },
@@ -144,7 +146,7 @@ export default function TodayDetailScreen() {
       <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <StatusBar barStyle="light-content" />
         <ActivityIndicator size="large" color="#ffb300" />
-        <Text style={styles.loadingText}>Cargando...</Text>
+        <Text style={styles.loadingText}>{t('common.loading')}</Text>
       </SafeAreaView>
     );
   }
@@ -170,7 +172,7 @@ export default function TodayDetailScreen() {
 
         {/* Resumen de macros */}
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryTitle}>Resumen del día</Text>
+          <Text style={styles.summaryTitle}>{t('nutritionIndex.daySummary')}</Text>
           <View style={styles.summaryGrid}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{consumed.calories}</Text>
@@ -178,15 +180,15 @@ export default function TodayDetailScreen() {
             </View>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{consumed.protein_g}g</Text>
-              <Text style={styles.summaryLabel}>/ {todayTarget?.protein_g || 0}g proteína</Text>
+              <Text style={styles.summaryLabel}>/ {todayTarget?.protein_g || 0}g {t('nutritionPlan.protein')}</Text>
             </View>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{consumed.carbs_g}g</Text>
-              <Text style={styles.summaryLabel}>/ {todayTarget?.carbs_g || 0}g carbos</Text>
+              <Text style={styles.summaryLabel}>/ {todayTarget?.carbs_g || 0}g {t('nutritionPlan.carbs')}</Text>
             </View>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{consumed.fats_g}g</Text>
-              <Text style={styles.summaryLabel}>/ {todayTarget?.fats_g || 0}g grasas</Text>
+              <Text style={styles.summaryLabel}>/ {todayTarget?.fats_g || 0}g {t('nutritionPlan.fats')}</Text>
             </View>
           </View>
         </View>
@@ -194,7 +196,7 @@ export default function TodayDetailScreen() {
         {/* Comidas registradas */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Comidas registradas</Text>
+            <Text style={styles.sectionTitle}>{t('nutritionIndex.registeredMeals')}</Text>
             <TouchableOpacity 
               style={styles.addButton}
               onPress={() => router.push('/(tabs)/nutrition/log' as any)}
@@ -207,15 +209,15 @@ export default function TodayDetailScreen() {
             <View style={styles.emptyState}>
               <Ionicons name="restaurant-outline" size={64} color="#666666" />
               <Text style={styles.emptyText}>
-                {isToday ? 'No has registrado comidas hoy' : 'No hay comidas registradas en este día'}
+                {isToday ? t('nutritionIndex.noMealsToday') : t('nutritionIndex.noMealsThisDay')}
               </Text>
               {isToday && (
-                <TouchableOpacity 
-                  style={styles.emptyButton}
-                  onPress={() => router.push('/(tabs)/nutrition/log' as any)}
-                >
-                  <Text style={styles.emptyButtonText}>Registrar primera comida</Text>
-                </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.emptyButton}
+                onPress={() => router.push('/(tabs)/nutrition/log' as any)}
+              >
+                <Text style={styles.emptyButtonText}>{t('nutritionIndex.registerFirstMeal')}</Text>
+              </TouchableOpacity>
               )}
             </View>
           ) : (
@@ -254,15 +256,15 @@ export default function TodayDetailScreen() {
                     </View>
                     <View style={styles.logMacroItem}>
                       <Text style={styles.logMacroValue}>{log.protein_g}g</Text>
-                      <Text style={styles.logMacroLabel}>proteína</Text>
+                      <Text style={styles.logMacroLabel}>{t('nutritionPlan.protein')}</Text>
                     </View>
                     <View style={styles.logMacroItem}>
                       <Text style={styles.logMacroValue}>{log.carbs_g}g</Text>
-                      <Text style={styles.logMacroLabel}>carbos</Text>
+                      <Text style={styles.logMacroLabel}>{t('nutritionPlan.carbs')}</Text>
                     </View>
                     <View style={styles.logMacroItem}>
                       <Text style={styles.logMacroValue}>{log.fats_g}g</Text>
-                      <Text style={styles.logMacroLabel}>grasas</Text>
+                      <Text style={styles.logMacroLabel}>{t('nutritionPlan.fats')}</Text>
                     </View>
                   </View>
                 </View>

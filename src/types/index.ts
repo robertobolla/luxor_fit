@@ -107,11 +107,14 @@ export enum MuscleGroup {
 
 // Tipos de entrenamiento
 export interface Workout {
+  is_active?: boolean | null;
+
   id: string;
   user_id: string;
   name: string;
   description: string;
   exercises: WorkoutExercise[];
+  workout_exercises?: WorkoutExercise[]; // Alias usado en consultas de Supabase
   duration_minutes: number;
   difficulty: number; // 1-10
   created_at: string;

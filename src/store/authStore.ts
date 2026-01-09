@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { User, UserProfile } from '../types';
-import { supabase } from '../services/supabase';
+import { supabase } from '@/services/supabase';
 
 interface AuthState {
   user: User | null;
@@ -158,7 +158,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       const { data, error } = await supabase
-        .from('profiles')
+        .from('user_profiles')
         .upsert({
           user_id: user.id,
           ...profileData,

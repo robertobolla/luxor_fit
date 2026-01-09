@@ -20,8 +20,10 @@ import {
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 
 export default function SupportFormScreen() {
+  const { t } = useTranslation();
   const { type, title, placeholder } = useLocalSearchParams<{
     type: string;
     title: string;
@@ -46,7 +48,7 @@ export default function SupportFormScreen() {
 
   const handleSend = async () => {
     if (!message.trim()) {
-      Alert.alert('Campo vacío', 'Por favor escribe tu consulta antes de enviar.');
+      Alert.alert(t('support.emptyField'), t('support.writeMessage'));
       return;
     }
 
@@ -54,17 +56,17 @@ export default function SupportFormScreen() {
 
     try {
       // Preparar el asunto del email según el tipo
-      const subject = encodeURIComponent(`[${title}] - ${user?.emailAddresses?.[0]?.emailAddress || 'Usuario'}`);
+      const subject = encodeURIComponent(`[${title}] - ${user?.emailAddresses?.[0]?.emailAddress || t('common.user')}`);
       
       // Preparar el cuerpo del email con información del usuario
       const body = encodeURIComponent(
         `${message}\n\n` +
         `---\n` +
-        `Usuario: ${user?.fullName || 'No disponible'}\n` +
-        `Email: ${user?.emailAddresses?.[0]?.emailAddress || 'No disponible'}\n` +
-        `ID: ${user?.id || 'No disponible'}\n` +
-        `Tipo de consulta: ${title}\n` +
-        `Fecha: ${new Date().toLocaleString('es-ES')}`
+        `${t('common.user')}: ${user?.fullName || t('common.notAvailable')}\n` +
+        `Email: ${user?.emailAddresses?.[0]?.emailAddress || t('common.notAvailable')}\n` +
+        `ID: ${user?.id || t('common.notAvailable')}\n` +
+        `${t('support.queryType')}: ${title}\n` +
+        `${t('support.date')}: ${new Date().toLocaleString()}`
       );
 
       // Crear el enlace mailto
@@ -79,11 +81,11 @@ export default function SupportFormScreen() {
         // Mostrar confirmación después de abrir el cliente de email
         setTimeout(() => {
           Alert.alert(
-            '¡Gracias!',
-            'Se ha abierto tu aplicación de email. Por favor envía el mensaje para que podamos ayudarte.',
+            t('support.thanks'),
+            t('support.emailOpened'),
             [
               {
-                text: 'Entendido',
+                text: t('support.understood'),
                 onPress: () => {
                   setMessage('');
                   router.back();
@@ -95,17 +97,17 @@ export default function SupportFormScreen() {
       } else {
         // Si no puede abrir el cliente de email, mostrar instrucciones manuales
         Alert.alert(
-          'No se pudo abrir el email',
-          `Por favor envía tu consulta manualmente a:\nsoporte@luxorfitnessapp.com\n\nAsunto: ${decodeURIComponent(subject)}`,
+          t('support.couldNotOpenEmail'),
+          `${t('support.sendManually')}:\nsoporte@luxorfitnessapp.com\n\n${t('support.subject')}: ${decodeURIComponent(subject)}`,
           [
             {
-              text: 'Copiar email',
+              text: t('support.copyEmail'),
               onPress: () => {
                 // En una app real, aquí usarías Clipboard.setString
-                Alert.alert('Email copiado', 'soporte@luxorfitnessapp.com');
+                Alert.alert(t('support.emailCopied'), 'soporte@luxorfitnessapp.com');
               },
             },
-            { text: 'OK' },
+            { text: t('common.ok') },
           ]
         );
       }
@@ -130,7 +132,6 @@ export default function SupportFormScreen() {
           headerTintColor: '#ffffff',
           headerTitleStyle: { fontWeight: 'bold' },
           headerBackTitle: ' ',
-          headerBackTitleVisible: false,
         }}
       />
       <SafeAreaView style={styles.container}>

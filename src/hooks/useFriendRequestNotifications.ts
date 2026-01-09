@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '../services/supabase';
+import { supabase } from '../../src/services/supabase';
 import { sendFriendRequestNotification } from '../services/notificationService';
 
 /**

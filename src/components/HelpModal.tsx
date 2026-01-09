@@ -13,6 +13,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useTutorial } from '../contexts/TutorialContext';
 import { router } from 'expo-router';
 
@@ -25,44 +26,52 @@ interface Tutorial {
   route: string;
 }
 
-const tutorials: Tutorial[] = [
+const getTutorials = (t: any): Tutorial[] => [
   {
     id: 'home',
     screen: 'HOME',
-    title: 'Inicio',
-    description: 'Aprende a navegar por tu dashboard principal y ver tu resumen diario',
+    title: t('helpCenter.homeTitle'),
+    description: t('helpCenter.homeDesc'),
     icon: 'home',
     route: '/(tabs)/home',
   },
   {
     id: 'workout',
     screen: 'WORKOUT',
-    title: 'Planes de Entrenamiento',
-    description: 'Descubre cómo crear planes con IA o diseñar rutinas personalizadas',
+    title: t('helpCenter.workoutTitle'),
+    description: t('helpCenter.workoutDesc'),
     icon: 'barbell',
     route: '/(tabs)/workout',
   },
   {
+    id: 'custom_plan',
+    screen: 'CUSTOM_PLAN',
+    title: t('helpCenter.customPlanTitle'),
+    description: t('helpCenter.customPlanDesc'),
+    icon: 'create',
+    route: '/(tabs)/workout/custom-plan-days',
+  },
+  {
     id: 'nutrition',
     screen: 'NUTRITION',
-    title: 'Plan Nutricional',
-    description: 'Crea tu plan de comidas semanal y registra tus alimentos',
+    title: t('helpCenter.nutritionTitle'),
+    description: t('helpCenter.nutritionDesc'),
     icon: 'restaurant',
     route: '/(tabs)/nutrition',
   },
   {
     id: 'progress',
     screen: 'PROGRESS',
-    title: 'Progreso y Métricas',
-    description: 'Rastrea tu progreso con gráficos detallados y fotos de antes/después',
+    title: t('helpCenter.progressTitle'),
+    description: t('helpCenter.progressDesc'),
     icon: 'trending-up',
     route: '/(tabs)/dashboard',
   },
   {
     id: 'profile',
     screen: 'PROFILE',
-    title: 'Perfil y Configuración',
-    description: 'Personaliza tu perfil y ajusta la configuración de la app',
+    title: t('helpCenter.profileTitle'),
+    description: t('helpCenter.profileDesc'),
     icon: 'person',
     route: '/(tabs)/profile',
   },
@@ -74,28 +83,18 @@ interface HelpModalProps {
 }
 
 export function HelpModal({ visible, onClose }: HelpModalProps) {
-  const { hasCompletedTutorial, resetAllTutorials, completeTutorial } = useTutorial();
+  const { t } = useTranslation();
+  const tutorials = getTutorials(t);
+  const { hasCompletedTutorial, resetAllTutorials, resetTutorial } = useTutorial();
 
   const handleTutorialPress = async (tutorial: Tutorial) => {
     // Marcar como no completado para que se muestre de nuevo
-    await resetTutorialForScreen(tutorial.screen);
+    await resetTutorial(tutorial.screen);
     onClose();
     // Navegar a la pantalla correspondiente
     setTimeout(() => {
       router.push(tutorial.route as any);
     }, 300);
-  };
-
-  const resetTutorialForScreen = async (screen: string) => {
-    // Esta función resetea solo el tutorial de una pantalla específica
-    // Para simplificar, usamos el contexto existente
-    // En producción, podrías querer una función más granular
-    try {
-      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-      await AsyncStorage.removeItem(`tutorial_${screen.toLowerCase()}_completed`);
-    } catch (error) {
-      console.error('Error resetting tutorial:', error);
-    }
   };
 
   const handleResetAll = async () => {
@@ -117,7 +116,7 @@ export function HelpModal({ visible, onClose }: HelpModalProps) {
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Ionicons name="help-circle" size={28} color="#ffb300" />
-              <Text style={styles.headerTitle}>Centro de Ayuda</Text>
+              <Text style={styles.headerTitle}>{t('helpCenter.title')}</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Ionicons name="close" size={28} color="#ffffff" />
@@ -128,7 +127,7 @@ export function HelpModal({ visible, onClose }: HelpModalProps) {
             {/* Descripción */}
             <View style={styles.descriptionContainer}>
               <Text style={styles.description}>
-                Selecciona cualquier tutorial para volver a verlo. Te guiaremos paso a paso.
+                {t('helpCenter.selectTutorial')}
               </Text>
             </View>
 
@@ -151,7 +150,7 @@ export function HelpModal({ visible, onClose }: HelpModalProps) {
                       {completed && (
                         <View style={styles.completedBadge}>
                           <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
-                          <Text style={styles.completedBadgeText}>Visto</Text>
+                          <Text style={styles.completedBadgeText}>{t('helpCenter.watched')}</Text>
                         </View>
                       )}
                     </View>
@@ -169,12 +168,12 @@ export function HelpModal({ visible, onClose }: HelpModalProps) {
               activeOpacity={0.7}
             >
               <Ionicons name="refresh" size={20} color="#ff6b6b" />
-              <Text style={styles.resetButtonText}>Reiniciar todos los tutoriales</Text>
+              <Text style={styles.resetButtonText}>{t('helpCenter.resetAll')}</Text>
             </TouchableOpacity>
 
             {/* Sección de soporte adicional */}
             <View style={styles.supportSection}>
-              <Text style={styles.supportTitle}>¿Necesitas más ayuda?</Text>
+              <Text style={styles.supportTitle}>{t('helpCenter.needHelp')}</Text>
               <TouchableOpacity
                 style={styles.supportButton}
                 onPress={() => {
@@ -185,7 +184,7 @@ export function HelpModal({ visible, onClose }: HelpModalProps) {
                 }}
               >
                 <Ionicons name="mail" size={20} color="#ffb300" />
-                <Text style={styles.supportButtonText}>Contactar Soporte</Text>
+                <Text style={styles.supportButtonText}>{t('helpCenter.contactSupport')}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>

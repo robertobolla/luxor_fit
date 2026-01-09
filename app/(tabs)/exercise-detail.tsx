@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef,useMemo  } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,10 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import { saveExercise, getDaysWithExercise } from '@/services/exerciseService';
+import { supabase } from '../../src/services/supabase';
+
 
 const { width } = Dimensions.get('window');
 
@@ -31,29 +34,34 @@ interface Activity {
   hasGPS: boolean;
 }
 
-const MONITOR_ACTIVITIES: Activity[] = [
-  { id: 'running', name: 'Correr', icon: 'fitness', hasGPS: true },
-  { id: 'walking', name: 'Caminar', icon: 'walk', hasGPS: true },
-  { id: 'cycling', name: 'Bicicleta', icon: 'bicycle', hasGPS: true },
-  { id: 'hiking', name: 'Senderismo', icon: 'trail-sign', hasGPS: true },
+const getMonitorActivities = (t: any): Activity[] => [
+  { id: 'running', name: t('exerciseDetail.running'), icon: 'fitness', hasGPS: true },
+  { id: 'walking', name: t('exerciseDetail.walking'), icon: 'walk', hasGPS: true },
+  { id: 'cycling', name: t('exerciseDetail.cycling'), icon: 'bicycle', hasGPS: true },
+  { id: 'hiking', name: t('exerciseDetail.hiking'), icon: 'trail-sign', hasGPS: true },
 ];
 
-const MANUAL_ACTIVITIES: Activity[] = [
-  { id: 'weights', name: 'Pesas', icon: 'barbell', hasGPS: false },
-  { id: 'calisthenics', name: 'Calistenia', icon: 'body', hasGPS: false },
-  { id: 'soccer', name: 'Fútbol', icon: 'football', hasGPS: false },
-  { id: 'other', name: 'Otra actividad', icon: 'add-circle', hasGPS: false },
+const getManualActivities = (t: any): Activity[] => [
+  { id: 'weights', name: t('exerciseDetail.weights'), icon: 'barbell', hasGPS: false },
+  { id: 'calisthenics', name: t('exerciseDetail.calisthenics'), icon: 'body', hasGPS: false },
+  { id: 'soccer', name: t('exerciseDetail.soccer'), icon: 'football', hasGPS: false },
+  { id: 'other', name: t('exerciseDetail.otherActivity'), icon: 'add-circle', hasGPS: false },
 ];
 
 export default function ExerciseDetailScreen() {
   const { user } = useUser();
+  const { t } = useTranslation();
+
+  const MONITOR_ACTIVITIES = useMemo(() => getMonitorActivities(t), [t]);
+  const MANUAL_ACTIVITIES = useMemo(() => getManualActivities(t), [t]);
   
   const [viewMode, setViewMode] = useState<ViewMode>('week');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showAddModal, setShowAddModal] = useState(false);
   const [modalStep, setModalStep] = useState<ModalStep>('initial');
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
-  
+  const [targetDays, setTargetDays] = useState<number>(5); // meta semanal (se reemplaza con Supabase)
+
   // Estados para registro manual
   const [duration, setDuration] = useState('');
   const [intensity, setIntensity] = useState<IntensityLevel>('medium');
@@ -148,7 +156,7 @@ export default function ExerciseDetailScreen() {
       console.log('✅ Tracking GPS iniciado');
     } catch (error) {
       console.error('❌ Error al iniciar tracking GPS:', error);
-      Alert.alert('Error', 'No se pudo iniciar el tracking GPS');
+      Alert.alert(t('common.error'), t('exerciseDetail.couldNotStartGPS'));
     }
   };
 
@@ -219,6 +227,39 @@ export default function ExerciseDetailScreen() {
   useEffect(() => {
     loadExerciseDays();
   }, [currentDate, viewMode, user]);
+
+  type UserProfileDaysRow = {
+    available_days: number | null;
+  };
+  
+  useEffect(() => {
+    const loadTargetDays = async () => {
+      if (!user) return;
+  
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('available_days')
+        .eq('user_id', user.id)
+        .maybeSingle<UserProfileDaysRow>(); // 👈 importante
+  
+      if (error) {
+        console.log('Error loading available_days:', error.message);
+        return;
+      }
+  
+      const days = Number(data?.available_days);
+  
+      // fallback seguro
+      if (Number.isFinite(days) && days > 0) {
+        setTargetDays(days);
+      } else {
+        setTargetDays(5); // o el default que quieras
+      }
+    };
+  
+    loadTargetDays();
+  }, [user]);
+  
 
   // Effect para limpiar el tracking al desmontar
   useEffect(() => {
@@ -329,16 +370,25 @@ export default function ExerciseDetailScreen() {
   // Obtener el texto descriptivo
   const getExerciseText = () => {
     const count = getExerciseCount();
+  
     if (count === 0) {
-      return 'No has monitorizado ni registrado ningún ejercicio';
-    } else if (count === 1) {
-      return '¡Buen comienzo! Sigue así';
-    } else if (count < 5) {
-      return `¡Vas bien! ${5 - count} días más para alcanzar tu meta`;
-    } else {
-      return '¡Meta alcanzada! 🎉';
+      return t('exercise.noActivity');
     }
+  
+    if (count === 1) {
+      return t('exercise.goodStart');
+    }
+  
+    if (count < targetDays) {
+      return t('exercise.daysToGoal', {
+        days: targetDays - count,
+      });
+    }
+  
+    return t('exercise.goalAchieved') + ' 🎉';
   };
+  
+  
 
   const handleStartMonitoring = () => {
     setModalStep('selectMonitorActivity');
@@ -434,7 +484,7 @@ export default function ExerciseDetailScreen() {
 
   const handleSaveManualActivity = async () => {
     if (!duration) {
-      Alert.alert('Error', 'Por favor ingresa la duración de la actividad');
+      Alert.alert(t('common.error'), t('exerciseDetail.enterDuration'));
       return;
     }
     
@@ -645,7 +695,7 @@ export default function ExerciseDetailScreen() {
         {/* Estadística principal */}
         <View style={styles.statsCard}>
           <Text style={styles.statsNumber}>
-            {getExerciseCount()} <Text style={styles.statsGoal}>de 5</Text>
+          {getExerciseCount()} <Text style={styles.statsGoal}>de {targetDays}</Text>
           </Text>
           <Text style={styles.statsLabel}>días de ejercicio</Text>
           <Text style={styles.statsSubtext}>

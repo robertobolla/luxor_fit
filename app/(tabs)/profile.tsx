@@ -11,11 +11,13 @@ import {
   Dimensions,
   InteractionManager,
 } from 'react-native';
+import Constants from 'expo-constants';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser, useAuth } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '../../src/services/supabase';
+import { supabase } from '@/services/supabase';
 import { UserProfile } from '../../src/types';
 import { getClerkUserEmailSync } from '../../src/utils/clerkHelpers';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
@@ -24,10 +26,26 @@ import { uploadProfilePhoto, deleteProfilePhoto } from '../../src/services/profi
 
 const { width } = Dimensions.get('window');
 
+/**
+ * ✅ Extensión local del tipo del perfil para incluir el campo de foto.
+ * (No toca tus tipos globales, solo arregla el tipado en este archivo)
+ */
+type ProfileRow = UserProfile & {
+  profile_photo_url?: string | null;
+  email?: string | null;
+  username?: string | null;
+  name?: string | null;
+  gender?: 'male' | 'female' | 'other' | string | null;
+  age?: number | null;
+  height?: number | null;
+  weight?: number | null;
+};
+
 export default function ProfileScreen() {
+  const { t } = useTranslation();
   const { user, isLoaded: userLoaded } = useUser();
   const { signOut } = useAuth();
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<ProfileRow | null>(null);
   const { isLoading: loading, setLoading, executeAsync } = useLoadingState(true);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [showPhotoViewer, setShowPhotoViewer] = useState(false);
@@ -36,41 +54,41 @@ export default function ProfileScreen() {
   // Cargar perfil de Supabase
   const loadProfile = async () => {
     if (!user?.id) return;
-    
-    await executeAsync(async () => {
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('❌ Error al cargar perfil:', error);
-      } else if (data) {
-        setProfile(data);
-      }
-    }, { showError: false });
+    await executeAsync(
+      async () => {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error && (error as any).code !== 'PGRST116') {
+          console.error('❌ Error al cargar perfil:', error);
+        } else if (data) {
+          setProfile(data as ProfileRow);
+        }
+      },
+      { showError: false }
+    );
   };
 
   // Seleccionar foto de galería
   const handleSelectFromGallery = async () => {
     if (!user?.id) return;
-    
+
     try {
       console.log('📸 Abriendo galería...');
-      
+
       // Verificar y solicitar permisos si es necesario
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Permiso necesario',
-          'Necesitamos acceso a tu galería para seleccionar una foto de perfil'
-        );
+        Alert.alert(t('permissions.requiredTitle'), t('profileScreen.galleryPermissionMessage'));
         return;
       }
-      
+
       console.log('📸 Permisos otorgados, abriendo ImagePicker...');
-      
+
       // NO cerrar el modal antes - el ImagePicker debe abrirse primero
       // Usar exactamente el mismo formato que funciona en progress-photos.tsx
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -79,7 +97,7 @@ export default function ProfileScreen() {
         aspect: [1, 1],
         quality: 0.8,
       });
-      
+
       console.log('📸 ImagePicker retornó:', result);
       console.log('📸 Canceled:', result.canceled);
       console.log('📸 Assets:', result.assets?.length);
@@ -94,29 +112,26 @@ export default function ProfileScreen() {
     } catch (error: any) {
       console.error('❌ Error selecting image:', error);
       setShowPhotoModal(false);
-      Alert.alert('Error', error?.message || 'No se pudo seleccionar la imagen');
+      Alert.alert(t('common.error'), error?.message || t('profileScreen.selectPhotoError'));
     }
   };
 
   // Tomar foto con cámara
   const handleTakePhoto = async () => {
     if (!user?.id) return;
-    
+
     try {
       console.log('📷 Abriendo cámara...');
-      
+
       // Verificar y solicitar permisos si es necesario
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(
-          'Permiso necesario',
-          'Necesitamos acceso a tu cámara para tomar una foto de perfil'
-        );
+        Alert.alert(t('permissions.requiredTitle'), t('profileScreen.cameraPermissionMessage'));
         return;
       }
-      
+
       console.log('📷 Permisos otorgados, abriendo cámara...');
-      
+
       // NO cerrar el modal antes - la cámara debe abrirse primero
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
@@ -135,7 +150,7 @@ export default function ProfileScreen() {
     } catch (error: any) {
       console.error('❌ Error taking photo:', error);
       setShowPhotoModal(false);
-      Alert.alert('Error', error?.message || 'No se pudo tomar la foto');
+      Alert.alert(t('common.error'), error?.message || t('profileScreen.takePhotoError'));
     }
   };
 
@@ -146,36 +161,45 @@ export default function ProfileScreen() {
     setUploadingPhoto(true);
     try {
       const result = await uploadProfilePhoto(user.id, photoUri);
-      
+
       if (result.success) {
         console.log('✅ Foto subida exitosamente, URL:', result.photoUrl);
-        
+
         // Recargar perfil para mostrar la nueva foto
         await loadProfile();
-        
+
         // Forzar un pequeño delay para asegurar que el estado se actualice
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Verificar que el perfil se actualizó
-        const { data: updatedProfile } = await supabase
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        /**
+         * ✅ TIPADO EXPLÍCITO para que Supabase NO infiera `never`
+         */
+        const { data: updatedProfile } = (await supabase
           .from('user_profiles')
           .select('profile_photo_url')
           .eq('user_id', user.id)
-          .maybeSingle();
-        
+          .maybeSingle()) as {
+          data: { profile_photo_url: string | null } | null;
+        };
+
         console.log('📸 Perfil actualizado, nueva URL:', updatedProfile?.profile_photo_url);
-        
+
         if (updatedProfile) {
-          setProfile(prev => ({ ...prev, ...updatedProfile } as UserProfile));
+          setProfile((prev) =>
+            prev
+              ? { ...prev, profile_photo_url: updatedProfile.profile_photo_url }
+              : ({ profile_photo_url: updatedProfile.profile_photo_url } as ProfileRow)
+          );
         }
         
-        Alert.alert('¡Éxito!', 'Foto de perfil actualizada');
+
+        Alert.alert(t('profileScreen.photoUpdated'), t('profileScreen.photoUpdateSuccess'));
       } else {
-        Alert.alert('Error', result.error || 'No se pudo actualizar la foto de perfil');
+        Alert.alert(t('common.error'), result.error || t('profileScreen.photoUpdateError'));
       }
     } catch (error) {
       console.error('❌ Error uploading photo:', error);
-      Alert.alert('Error', 'No se pudo subir la foto');
+      Alert.alert(t('common.error'), t('profileScreen.photoUploadError'));
     } finally {
       setUploadingPhoto(false);
     }
@@ -185,36 +209,32 @@ export default function ProfileScreen() {
   const handleDeletePhoto = () => {
     if (!user?.id) return;
 
-    Alert.alert(
-      'Eliminar foto de perfil',
-      '¿Estás seguro de que quieres eliminar tu foto de perfil?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            setUploadingPhoto(true);
-            try {
-              const result = await deleteProfilePhoto(user.id);
-              
-              if (result.success) {
-                await loadProfile();
-                setShowPhotoModal(false);
-                Alert.alert('Foto eliminada', 'Tu foto de perfil ha sido eliminada');
-              } else {
-                Alert.alert('Error', result.error || 'No se pudo eliminar la foto');
-              }
-            } catch (error) {
-              console.error('❌ Error deleting photo:', error);
-              Alert.alert('Error', 'No se pudo eliminar la foto');
-            } finally {
-              setUploadingPhoto(false);
+    Alert.alert(t('profileScreen.deletePhotoTitle'), t('profileScreen.deletePhotoConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('common.delete'),
+        style: 'destructive',
+        onPress: async () => {
+          setUploadingPhoto(true);
+          try {
+            const result = await deleteProfilePhoto(user.id);
+
+            if (result.success) {
+              await loadProfile();
+              setShowPhotoModal(false);
+              Alert.alert(t('profileScreen.photoDeleted'), t('profileScreen.photoDeleteSuccess'));
+            } else {
+              Alert.alert(t('common.error'), result.error || t('profileScreen.photoDeleteError'));
             }
-          },
+          } catch (error) {
+            console.error('❌ Error deleting photo:', error);
+            Alert.alert(t('common.error'), t('profileScreen.photoDeleteError'));
+          } finally {
+            setUploadingPhoto(false);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   // Cargar al montar y al volver a enfocar
@@ -225,15 +245,20 @@ export default function ProfileScreen() {
   );
 
   // Obtener nombre y email para mostrar
-  const displayName = profile?.name || user?.firstName || user?.fullName || 'Usuario';
-  
+  const displayName = profile?.name || user?.firstName || user?.fullName || t('profile.userFallback');
+
   // Prioridad: email de perfil Supabase (guardado en onboarding) > email de Clerk > No especificado
   // Nota: Si el usuario se registró con OAuth (como TikTok), el email puede no estar disponible en Clerk
   const clerkEmail = getClerkUserEmailSync(user);
-  const displayEmail = profile?.email || clerkEmail || 'No especificado';
+  const displayEmail = profile?.email || clerkEmail || t('profile.notSpecified');
   const firstLetter = displayName.charAt(0).toUpperCase();
-  const profilePhotoUrl = (profile as any)?.profile_photo_url;
-  
+
+  // ✅ Ya no necesita any
+  const profilePhotoUrl = profile?.profile_photo_url ?? null;
+
+  const appVersion =
+    Constants.expoConfig?.version || (Constants as any).manifest?.version || '1.0.0';
+
   // Debug: Log para verificar la URL (debe estar antes de cualquier return)
   useEffect(() => {
     if (profilePhotoUrl) {
@@ -242,51 +267,47 @@ export default function ProfileScreen() {
   }, [profilePhotoUrl]);
 
   const handleSignOut = () => {
-    Alert.alert(
-      'Cerrar sesión',
-      '¿Estás seguro de que quieres cerrar sesión?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Cerrar sesión', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-              router.replace('/(auth)/login');
-            } catch (error) {
-              console.error('Error al cerrar sesión:', error);
-              Alert.alert('Error', 'No se pudo cerrar la sesión');
-            }
+    Alert.alert(t('common.logout'), t('auth.confirmLogout') || '¿Estás seguro de que quieres cerrar sesión?', [
+      { text: t('common.cancel'), style: 'cancel' },
+      {
+        text: t('common.logout'),
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await signOut();
+            router.replace('/(auth)/login');
+          } catch (error) {
+            console.error('Error al cerrar sesión:', error);
+            Alert.alert(t('common.error'), t('errors.unknownError'));
           }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const menuItems = [
     {
-      title: 'Editar perfil',
+      title: t('profile.editProfile'),
       icon: 'person-outline',
       onPress: () => router.push('/onboarding'),
     },
     {
-      title: 'Configuración',
+      title: t('common.settings'),
       icon: 'settings-outline',
       onPress: () => router.push('/settings'),
     },
     {
-      title: 'Notificaciones',
+      title: t('profile.notifications'),
       icon: 'notifications-outline',
       onPress: () => router.push('/notification-settings'),
     },
     {
-      title: 'Ayuda y soporte',
+      title: t('common.help'),
       icon: 'help-circle-outline',
       onPress: () => router.push('/help'),
     },
     {
-      title: 'Acerca de',
+      title: t('profile.about'),
       icon: 'information-circle-outline',
       onPress: () => router.push('/about'),
     },
@@ -303,7 +324,7 @@ export default function ProfileScreen() {
   if (loading) {
     return (
       <View style={styles.container}>
-        <LoadingOverlay visible={true} message="Cargando perfil..." fullScreen />
+        <LoadingOverlay visible={true} message={t('common.loading')} fullScreen />
       </View>
     );
   }
@@ -350,42 +371,46 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Información personal</Text>
+        <Text style={styles.sectionTitle}>{t('profile.personalInfo')}</Text>
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Email</Text>
+            <Text style={styles.infoLabel}>{t('auth.email')}</Text>
             <Text style={styles.infoValue}>{displayEmail}</Text>
           </View>
           <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Nombre</Text>
+            <Text style={styles.infoLabel}>{t('auth.name')}</Text>
             <Text style={styles.infoValue}>{displayName}</Text>
           </View>
           {profile?.username && (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Nombre de usuario</Text>
+              <Text style={styles.infoLabel}>Username</Text>
               <Text style={styles.infoValue}>@{profile.username}</Text>
             </View>
           )}
           {profile && (
             <>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Género</Text>
+                <Text style={styles.infoLabel}>{t('profile.gender')}</Text>
                 <Text style={styles.infoValue}>
-                  {profile.gender === 'male' ? 'Masculino' : 
-                   profile.gender === 'female' ? 'Femenino' : 
-                   profile.gender === 'other' ? 'Otro' : 'No especificado'}
+                  {profile.gender === 'male'
+                    ? t('profile.male')
+                    : profile.gender === 'female'
+                    ? t('profile.female')
+                    : profile.gender === 'other'
+                    ? t('profile.other')
+                    : '-'}
                 </Text>
               </View>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Edad</Text>
-                <Text style={styles.infoValue}>{profile.age} años</Text>
+                <Text style={styles.infoLabel}>{t('profile.age')}</Text>
+                <Text style={styles.infoValue}>{profile.age}</Text>
               </View>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Altura</Text>
+                <Text style={styles.infoLabel}>{t('profile.height')}</Text>
                 <Text style={styles.infoValue}>{profile.height} cm</Text>
               </View>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Peso</Text>
+                <Text style={styles.infoLabel}>{t('profile.weight')}</Text>
                 <Text style={styles.infoValue}>{profile.weight} kg</Text>
               </View>
             </>
@@ -394,14 +419,10 @@ export default function ProfileScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Configuración</Text>
+        <Text style={styles.sectionTitle}>{t('common.settings')}</Text>
         <View style={styles.menuContainer}>
           {menuItems.map((item, index) => (
-            <TouchableOpacity
-              key={index}
-              style={styles.menuItem}
-              onPress={item.onPress}
-            >
+            <TouchableOpacity key={index} style={styles.menuItem} onPress={item.onPress}>
               <View style={styles.menuItemLeft}>
                 <Ionicons name={item.icon as any} size={24} color="#ffb300" />
                 <Text style={styles.menuItemText}>{item.title}</Text>
@@ -415,13 +436,13 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
           <Ionicons name="log-out-outline" size={24} color="#F44336" />
-          <Text style={styles.signOutText}>Cerrar sesión</Text>
+          <Text style={styles.signOutText}>{t('common.logout')}</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>Luxor Fitness v1.0.0</Text>
-        <Text style={styles.footerText}>Hecho con ❤️ para tu fitness</Text>
+        <Text style={styles.footerText}>Luxor Fitness v{appVersion}</Text>
+        <Text style={styles.footerText}>{t('profileScreen.madeWithLove')}</Text>
       </View>
 
       {/* Modal para opciones de foto */}
@@ -433,8 +454,8 @@ export default function ProfileScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Foto de perfil</Text>
-            
+            <Text style={styles.modalTitle}>{t('profileScreen.photoTitle')}</Text>
+
             {profilePhotoUrl && (
               <TouchableOpacity
                 style={styles.modalOption}
@@ -444,7 +465,7 @@ export default function ProfileScreen() {
                 }}
               >
                 <Ionicons name="eye-outline" size={24} color="#ffb300" />
-                <Text style={styles.modalOptionText}>Ver foto</Text>
+                <Text style={styles.modalOptionText}>{t('profileScreen.viewPhoto')}</Text>
               </TouchableOpacity>
             )}
 
@@ -454,7 +475,7 @@ export default function ProfileScreen() {
               disabled={uploadingPhoto}
             >
               <Ionicons name="camera-outline" size={24} color="#ffb300" />
-              <Text style={styles.modalOptionText}>Tomar foto</Text>
+              <Text style={styles.modalOptionText}>{t('profileScreen.takePhoto')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -463,7 +484,7 @@ export default function ProfileScreen() {
               disabled={uploadingPhoto}
             >
               <Ionicons name="images-outline" size={24} color="#ffb300" />
-              <Text style={styles.modalOptionText}>Elegir de galería</Text>
+              <Text style={styles.modalOptionText}>{t('profileScreen.chooseFromGallery')}</Text>
             </TouchableOpacity>
 
             {profilePhotoUrl && (
@@ -474,7 +495,7 @@ export default function ProfileScreen() {
               >
                 <Ionicons name="trash-outline" size={24} color="#F44336" />
                 <Text style={[styles.modalOptionText, styles.modalOptionTextDanger]}>
-                  Eliminar foto
+                  {t('profileScreen.deletePhoto')}
                 </Text>
               </TouchableOpacity>
             )}
@@ -483,12 +504,12 @@ export default function ProfileScreen() {
               style={styles.modalCancelButton}
               onPress={() => setShowPhotoModal(false)}
             >
-              <Text style={styles.modalCancelText}>Cancelar</Text>
+              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
 
             {uploadingPhoto && (
               <View style={styles.uploadingOverlay}>
-                <Text style={styles.uploadingText}>Subiendo foto...</Text>
+                <Text style={styles.uploadingText}>{t('profileScreen.uploadingPhoto')}</Text>
               </View>
             )}
           </View>
@@ -503,19 +524,12 @@ export default function ProfileScreen() {
         onRequestClose={() => setShowPhotoViewer(false)}
       >
         <View style={styles.photoViewerOverlay}>
-          <TouchableOpacity
-            style={styles.photoViewerClose}
-            onPress={() => setShowPhotoViewer(false)}
-          >
+          <TouchableOpacity style={styles.photoViewerClose} onPress={() => setShowPhotoViewer(false)}>
             <Ionicons name="close" size={32} color="#ffffff" />
           </TouchableOpacity>
-          
+
           {profilePhotoUrl && (
-            <Image
-              source={{ uri: profilePhotoUrl }}
-              style={styles.photoViewerImage}
-              resizeMode="contain"
-            />
+            <Image source={{ uri: profilePhotoUrl }} style={styles.photoViewerImage} resizeMode="contain" />
           )}
 
           <TouchableOpacity
@@ -526,7 +540,7 @@ export default function ProfileScreen() {
             }}
           >
             <Ionicons name="camera" size={20} color="#1a1a1a" />
-            <Text style={styles.photoViewerEditText}>Editar foto</Text>
+            <Text style={styles.photoViewerEditText}>{t('profileScreen.editPhoto')}</Text>
           </TouchableOpacity>
         </View>
       </Modal>

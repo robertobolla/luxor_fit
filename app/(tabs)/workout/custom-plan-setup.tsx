@@ -11,30 +11,59 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Equipment } from '../../../src/types';
 
-const EQUIPMENT_LABELS_MAP: Record<Equipment, string> = {
-  [Equipment.NONE]: 'Solo peso corporal',
-  [Equipment.DUMBBELLS]: 'Mancuernas',
-  [Equipment.BARBELL]: 'Barra olímpica',
-  [Equipment.RESISTANCE_BANDS]: 'Bandas de resistencia',
-  [Equipment.PULL_UP_BAR]: 'Barra de dominadas',
-  [Equipment.BENCH]: 'Banco',
-  [Equipment.BENCH_DUMBBELLS]: 'Banco y mancuernas',
-  [Equipment.BENCH_BARBELL]: 'Banco con barra',
-  [Equipment.GYM_ACCESS]: 'Acceso a gimnasio',
-  [Equipment.KETTLEBELL]: 'Kettlebell',
-  [Equipment.CABLE_MACHINE]: 'Máquina de poleas',
-  [Equipment.SMITH_MACHINE]: 'Máquina Smith',
-  [Equipment.LEG_PRESS]: 'Prensa de piernas',
-  [Equipment.MEDICINE_BALL]: 'Balón medicinal',
-  [Equipment.YOGA_MAT]: 'Mat de yoga',
+// Equipment keys for translation lookup
+const EQUIPMENT_KEYS: Record<Equipment, string> = {
+  [Equipment.NONE]: 'none',
+  [Equipment.DUMBBELLS]: 'dumbbells',
+  [Equipment.BARBELL]: 'barbell',
+  [Equipment.RESISTANCE_BANDS]: 'resistance_bands',
+  [Equipment.PULL_UP_BAR]: 'pull_up_bar',
+  [Equipment.BENCH]: 'bench',
+  [Equipment.BENCH_DUMBBELLS]: 'bench_dumbbells',
+  [Equipment.BENCH_BARBELL]: 'bench_barbell',
+  [Equipment.GYM_ACCESS]: 'gym_access',
+  [Equipment.KETTLEBELL]: 'kettlebell',
+  [Equipment.CABLE_MACHINE]: 'cable_machine',
+  [Equipment.SMITH_MACHINE]: 'smith_machine',
+  [Equipment.LEG_PRESS]: 'leg_press',
+  [Equipment.MEDICINE_BALL]: 'medicine_ball',
+  [Equipment.YOGA_MAT]: 'yoga_mat',
 };
+
+// Orden personalizado de equipamiento (GYM_ACCESS primero)
+const EQUIPMENT_ORDER = [
+  Equipment.GYM_ACCESS,
+  Equipment.NONE,
+  Equipment.DUMBBELLS,
+  Equipment.BARBELL,
+  Equipment.RESISTANCE_BANDS,
+  Equipment.PULL_UP_BAR,
+  Equipment.BENCH,
+  Equipment.BENCH_DUMBBELLS,
+  Equipment.BENCH_BARBELL,
+  Equipment.KETTLEBELL,
+  Equipment.CABLE_MACHINE,
+  Equipment.SMITH_MACHINE,
+  Equipment.LEG_PRESS,
+  Equipment.MEDICINE_BALL,
+  Equipment.YOGA_MAT,
+];
+
+// Todos los equipamientos excepto GYM_ACCESS
+const ALL_EQUIPMENT_EXCEPT_GYM = EQUIPMENT_ORDER.filter(e => e !== Equipment.GYM_ACCESS);
 
 export default function CustomPlanSetupScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const [selectedEquipment, setSelectedEquipment] = useState<Equipment[]>([]);
+  
+  // Helper to get translated equipment label
+  const getEquipmentLabel = (eq: Equipment) => t(`equipment.${EQUIPMENT_KEYS[eq]}`);
+  const [previousSelection, setPreviousSelection] = useState<Equipment[]>([]);
 
   // Limpiar datos de planes anteriores cuando se monta el componente
   useEffect(() => {
@@ -76,16 +105,37 @@ export default function CustomPlanSetupScreen() {
   }, []);
 
   const toggleEquipment = (equipment: Equipment) => {
-    setSelectedEquipment(prev =>
-      prev.includes(equipment)
-        ? prev.filter(e => e !== equipment)
-        : [...prev, equipment]
-    );
+    if (equipment === Equipment.GYM_ACCESS) {
+      // Si GYM_ACCESS ya está seleccionado, deseleccionarlo y restaurar selección previa
+      if (selectedEquipment.includes(Equipment.GYM_ACCESS)) {
+        setSelectedEquipment(previousSelection);
+        setPreviousSelection([]);
+      } else {
+        // Guardar selección actual (sin GYM_ACCESS)
+        const currentSelection = selectedEquipment.filter(e => e !== Equipment.GYM_ACCESS);
+        setPreviousSelection(currentSelection);
+        // Seleccionar GYM_ACCESS + todos los demás equipamientos
+        setSelectedEquipment([Equipment.GYM_ACCESS, ...ALL_EQUIPMENT_EXCEPT_GYM]);
+      }
+    } else {
+      // Comportamiento normal para otros equipamientos
+      setSelectedEquipment(prev => {
+        if (prev.includes(equipment)) {
+          // Si GYM_ACCESS está activo y deseleccionamos algo, desactivar GYM_ACCESS también
+          if (prev.includes(Equipment.GYM_ACCESS)) {
+            return prev.filter(e => e !== equipment && e !== Equipment.GYM_ACCESS);
+          }
+          return prev.filter(e => e !== equipment);
+        } else {
+          return [...prev, equipment];
+        }
+      });
+    }
   };
 
   const handleContinue = () => {
     if (selectedEquipment.length === 0) {
-      Alert.alert('Error', 'Por favor selecciona al menos un tipo de equipamiento');
+      Alert.alert(t('common.error'), t('customPlan.selectEquipmentError'));
       return;
     }
 
@@ -112,35 +162,51 @@ export default function CustomPlanSetupScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Plan Personalizado</Text>
+        <Text style={styles.headerTitle}>{t('customPlan.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView style={styles.content}>
         {/* Equipamiento */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>¿Qué equipamiento tienes disponible?</Text>
-          <Text style={styles.sectionSubtitle}>Selecciona todo lo que tengas</Text>
+          <Text style={styles.sectionTitle}>{t('customPlan.whatEquipment')}</Text>
+          <Text style={styles.sectionSubtitle}>{t('customPlan.selectAllYouHave')}</Text>
           <View style={styles.equipmentGrid}>
-            {Object.values(Equipment).map(equipment => (
-              <TouchableOpacity
-                key={equipment}
-                style={[
-                  styles.equipmentButton,
-                  selectedEquipment.includes(equipment) && styles.equipmentButtonSelected,
-                ]}
-                onPress={() => toggleEquipment(equipment)}
-              >
-                <Text
+            {EQUIPMENT_ORDER.map(equipment => {
+              const isSelected = selectedEquipment.includes(equipment);
+              const isGymAccess = equipment === Equipment.GYM_ACCESS;
+              
+              return (
+                <TouchableOpacity
+                  key={equipment}
                   style={[
-                    styles.equipmentButtonText,
-                    selectedEquipment.includes(equipment) && styles.equipmentButtonTextSelected,
+                    styles.equipmentButton,
+                    isGymAccess && styles.gymAccessButton,
+                    isSelected && styles.equipmentButtonSelected,
+                    isGymAccess && isSelected && styles.gymAccessButtonSelected,
                   ]}
+                  onPress={() => toggleEquipment(equipment)}
                 >
-                  {EQUIPMENT_LABELS_MAP[equipment] || equipment}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  {isGymAccess && isSelected && (
+                    <Ionicons 
+                      name="fitness" 
+                      size={18} 
+                      color="#1a1a1a" 
+                      style={{ marginRight: 6 }} 
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.equipmentButtonText,
+                      isSelected && styles.equipmentButtonTextSelected,
+                      isGymAccess && isSelected && styles.gymAccessButtonText,
+                    ]}
+                  >
+                    {getEquipmentLabel(equipment)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -153,7 +219,7 @@ export default function CustomPlanSetupScreen() {
           onPress={handleContinue}
           disabled={selectedEquipment.length === 0}
         >
-          <Text style={styles.continueButtonText}>Continuar</Text>
+          <Text style={styles.continueButtonText}>{t('common.continue')}</Text>
           <Ionicons name="arrow-forward" size={24} color="#1a1a1a" />
         </TouchableOpacity>
 
@@ -254,30 +320,56 @@ const styles = StyleSheet.create({
   equipmentGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
     marginTop: 16,
     justifyContent: 'center',
     width: '100%',
   },
   equipmentButton: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 12,
     borderRadius: 12,
     backgroundColor: '#2a2a2a',
     borderWidth: 1,
     borderColor: '#333',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: '45%',
+    maxWidth: '48%',
+  },
+  gymAccessButton: {
+    width: '100%',
+    minWidth: '100%',
+    maxWidth: '100%',
   },
   equipmentButtonSelected: {
     backgroundColor: '#ffb300',
     borderColor: '#ffb300',
   },
+  gymAccessButtonSelected: {
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
+    shadowColor: '#ffb300',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 10,
+    borderWidth: 2,
+  },
   equipmentButtonText: {
     fontSize: 14,
     fontWeight: '600',
     color: '#ffffff',
+    textAlign: 'center',
   },
   equipmentButtonTextSelected: {
     color: '#1a1a1a',
+  },
+  gymAccessButtonText: {
+    fontSize: 15,
+    fontWeight: 'bold',
   },
   continueButton: {
     flexDirection: 'row',

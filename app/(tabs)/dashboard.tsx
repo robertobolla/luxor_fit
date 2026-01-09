@@ -13,8 +13,9 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser, useAuth } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import Svg, { Circle } from 'react-native-svg';
-import { supabase } from '@/services/supabase';
+import { supabase } from '../../src/services/supabase';
 import { getHealthDataForDate, requestHealthPermissions, hasHealthPermissions, resetPermissionsCache, showHealthDiagnosticsAlert, getHealthDiagnostics, HealthData } from '@/services/healthService';
 import { getExerciseDaysThisWeek, getGymDaysThisWeek } from '@/services/exerciseService';
 import { syncHealthDataToSupabase } from '@/services/healthSyncService';
@@ -86,6 +87,7 @@ function ProgressCircle({
 export default function DashboardScreen() {
   const { user } = useUser();
   const { signOut } = useAuth();
+  const { t } = useTranslation();
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
@@ -199,30 +201,30 @@ export default function DashboardScreen() {
             const hasData = healthData && (
               healthData.steps > 0 || 
               healthData.distance > 0 || 
-              healthData.activeEnergyBurned > 0
+              healthData.calories > 0
             );
             
             // Solo mostrar el modal si realmente no hay datos
             if (!hasData) {
-              const platformMessage = Platform.OS === 'ios' 
-                ? 'Ve a Configuración → Salud → Datos de Salud y Apps → Luxor Fitness para otorgar permisos.'
-                : 'Asegúrate de tener Google Fit instalado y conectado.';
-              
-              Alert.alert(
-                'Permisos de Salud',
-                'Para mostrar tus estadísticas reales (pasos, distancia, calorías), Luxor Fitness necesita acceso a tus datos de salud.\n\n' + platformMessage,
-                [
-                  { text: 'Más tarde', style: 'cancel' },
-                  { 
-                    text: 'Intentar de nuevo', 
-                    onPress: async () => {
-                      resetPermissionsCache();
+          const platformMessage = Platform.OS === 'ios' 
+            ? t('home.iosHealthPermissionsHelp')
+            : t('home.androidHealthPermissionsHelp');
+          
+          Alert.alert(
+            t('home.healthPermissions'),
+            t('home.healthPermissionsMessage') + '\n\n' + platformMessage,
+            [
+              { text: t('common.later'), style: 'cancel' },
+              { 
+                text: t('common.tryAgain'), 
+                onPress: async () => {
+                  resetPermissionsCache();
                       setPermissionsChecked(false); // Permitir re-verificar
-                      await requestHealthPermissions();
-                    }
-                  }
-                ]
-              );
+                  await requestHealthPermissions();
+                }
+              }
+            ]
+          );
             } else {
               console.log('✅ Datos de salud disponibles, permisos funcionando correctamente');
             }
@@ -290,11 +292,12 @@ export default function DashboardScreen() {
     await loadHealthData();
     
     // Mostrar mensaje de éxito
-    Alert.alert(
-      '✅ ¡Genial!',
-      'Tu check-in se completó exitosamente. Tu plan de nutrición ha sido actualizado.',
-      [{ text: 'OK' }]
-    );
+ Alert.alert(
+ '✅ ' + t('common.successTitle'),
+  t('nutrition.checkInSuccess'),
+  [{ text: t('common.ok') }]
+);
+
   };
 
   const loadHealthData = async () => {
@@ -322,7 +325,19 @@ export default function DashboardScreen() {
       // Obtener días de gimnasio de la semana actual (solo entrenamientos completados)
       const gymData = await getGymDaysThisWeek(user.id);
       
-      // Cargar foto de perfil
+      // Obtener peso actual del perfil del usuario
+      let userWeight = 0;
+      try {
+        const { data: profileData } = await supabase
+          .from('user_profiles')
+          .select('weight')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        
+        userWeight = profileData?.weight || 0;
+      } catch (error) {
+        console.error('Error al obtener peso del perfil:', error);
+      }
       
       // Log para debugging
       console.log('📊 Datos de salud obtenidos:', {
@@ -330,6 +345,7 @@ export default function DashboardScreen() {
         distancia: healthData.distance,
         calorías: healthData.calories,
         sueño: healthData.sleep,
+        peso: userWeight,
         fuente: healthData.source,
         fecha: dateStr,
       });
@@ -347,7 +363,7 @@ export default function DashboardScreen() {
         exerciseDaysGoal: 5,
         gymDays: gymData.days, // Días de gimnasio (solo entrenamientos completados)
         gymDaysGoal: gymData.goal, // Meta basada en el plan de entrenamiento activo
-        weight: healthData.weight || 78,
+        weight: userWeight,
         glucose: healthData.glucose || 0,
         mindfulnessDays: 2, // Esto requiere tracking manual
         food: healthData.food || 0,
@@ -418,9 +434,9 @@ export default function DashboardScreen() {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Buenos días';
-    if (hour < 18) return 'Buenas tardes';
-    return 'Buenas noches';
+    if (hour < 12) return t('home.goodMorning');
+    if (hour < 18) return t('home.goodAfternoon');
+    return t('home.goodEvening');
   };
 
   const handleSaveCustomization = async (config: DashboardConfig) => {
@@ -543,7 +559,7 @@ export default function DashboardScreen() {
   if (isCheckingOnboarding) {
     return (
       <View style={styles.container}>
-        <LoadingOverlay visible={true} message="Verificando perfil..." fullScreen />
+        <LoadingOverlay visible={true} message={t('commonUI.verifyingProfile')} fullScreen />
       </View>
     );
   }
@@ -660,12 +676,12 @@ export default function DashboardScreen() {
 
         {/* Sección de Recuperación */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recuperación</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.recovery')}</Text>
           
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Duración del sueño</Text>
+                <Text style={styles.cardTitle}>{t('dashboard.sleepDuration')}</Text>
                 <Text style={styles.cardValue}>
                   {stats.sleep > 0 ? `${stats.sleep.toFixed(1)} h` : 'No hay datos'}
                 </Text>
@@ -680,19 +696,19 @@ export default function DashboardScreen() {
 
         {/* Sección de Actividad */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Actividad</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.activity')}</Text>
           
           <TouchableOpacity 
             style={styles.card}
             onPress={() => router.push('/(tabs)/exercise-detail')}
           >
-            <Text style={styles.cardTitle}>Días de ejercicio</Text>
+            <Text style={styles.cardTitle}>{t('dashboard.exerciseDays')}</Text>
             <View style={styles.exerciseDaysContainer}>
               <View style={styles.exerciseDaysLeft}>
                 <Text style={styles.exerciseDaysNumber}>
                   {stats.exerciseDays} <Text style={styles.exerciseDaysGoal}>de {stats.exerciseDaysGoal}</Text>
                 </Text>
-                <Text style={styles.exerciseDaysLabel}>Esta semana</Text>
+                <Text style={styles.exerciseDaysLabel}>{t('dashboard.thisWeek')}</Text>
               </View>
               <View style={styles.weekDaysContainer}>
                 {weekDays.map((day, index) => (
@@ -712,13 +728,13 @@ export default function DashboardScreen() {
             style={styles.card}
             onPress={() => router.push('/gym-detail')}
           >
-            <Text style={styles.cardTitle}>Gimnasio</Text>
+            <Text style={styles.cardTitle}>{t('dashboard.gymnasiumDays')}</Text>
             <View style={styles.exerciseDaysContainer}>
               <View style={styles.exerciseDaysLeft}>
                 <Text style={styles.exerciseDaysNumber}>
                   {stats.gymDays} <Text style={styles.exerciseDaysGoal}>de {stats.gymDaysGoal}</Text>
                 </Text>
-                <Text style={styles.exerciseDaysLabel}>Esta semana</Text>
+                <Text style={styles.exerciseDaysLabel}>{t('dashboard.thisWeek')}</Text>
               </View>
               <View style={styles.weekDaysContainer}>
                 {weekDays.map((day, index) => (
@@ -741,7 +757,7 @@ export default function DashboardScreen() {
           >
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Pasos</Text>
+                <Text style={styles.cardTitle}>{t('dashboard.steps')}</Text>
                 <Text style={styles.cardValue}>{stats.steps.toLocaleString('es-ES')}</Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
                 <Text style={[styles.cardSubtitle, { fontSize: 11, marginTop: 4, color: healthDataSource === 'none' ? '#ff6b6b' : '#4ecdc4' }]}>
@@ -763,7 +779,7 @@ export default function DashboardScreen() {
                 onPress={() => showHealthDiagnosticsAlert()}
               >
                 <Ionicons name="help-circle-outline" size={16} color="#ffb300" />
-                <Text style={styles.diagnosticButtonText}>¿Por qué no veo mis pasos?</Text>
+                <Text style={styles.diagnosticButtonText}>{t('dashboard.whyNoSteps')}</Text>
               </TouchableOpacity>
             )}
           </TouchableOpacity>
@@ -774,7 +790,7 @@ export default function DashboardScreen() {
           >
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Distancia</Text>
+                <Text style={styles.cardTitle}>{t('dashboard.distance')}</Text>
                 <Text style={styles.cardValue}>{stats.distance.toFixed(1)} km</Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
@@ -795,7 +811,7 @@ export default function DashboardScreen() {
           >
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Energía quemada</Text>
+                <Text style={styles.cardTitle}>{t('dashboard.energyBurned')}</Text>
                 <Text style={styles.cardValue}>{stats.calories.toLocaleString('es-ES')} kcal</Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
@@ -816,9 +832,9 @@ export default function DashboardScreen() {
           >
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Nutrición</Text>
-                <Text style={styles.cardValue}>Plan de comidas</Text>
-                <Text style={styles.cardSubtitle}>Macros, agua y lecciones</Text>
+                <Text style={styles.cardTitle}>{t('dashboard.nutrition')}</Text>
+                <Text style={styles.cardValue}>{t('dashboard.mealPlan')}</Text>
+                <Text style={styles.cardSubtitle}>{t('dashboard.macrosWaterLessons')}</Text>
               </View>
               <View style={styles.iconCircle}>
                 <Ionicons name="restaurant" size={22} color="#ffb300" />
@@ -829,14 +845,14 @@ export default function DashboardScreen() {
 
         {/* Sección de Salud */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Salud</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.section.health')}</Text>
           
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Peso</Text>
+                <Text style={styles.cardTitle}>{t('dashboard.weight')}</Text>
                 <Text style={styles.cardValue}>
-                  {stats.weight ? `${stats.weight.toFixed(1)} kg` : 'No hay datos'}
+                  {stats.weight ? `${stats.weight.toFixed(1)} kg` : t('dashboard.noData')}
                 </Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
@@ -849,9 +865,9 @@ export default function DashboardScreen() {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Glucosa</Text>
+                <Text style={styles.cardTitle}>{t('dashboard.glucose')}</Text>
                 <Text style={styles.cardValue}>
-                  {stats.glucose ? `${stats.glucose} mg/dL` : 'No hay datos'}
+                  {stats.glucose ? `${stats.glucose} mg/dL` : t('dashboard.noData')}
                 </Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
@@ -864,14 +880,14 @@ export default function DashboardScreen() {
 
         {/* Sección de Estrés y mindfulness */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Estrés y mindfulness</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.section.stressAndMindfulness')}</Text>
           
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Días de mindfulness</Text>
-                <Text style={styles.cardValue}>Empezar</Text>
-                <Text style={styles.cardSubtitle}>Toca para configurar</Text>
+                <Text style={styles.cardTitle}>{t('dashboard.mindfulnessDays')}</Text>
+                <Text style={styles.cardValue}>{t('dashboard.start')}</Text>
+                <Text style={styles.cardSubtitle}>{t('dashboard.tapToConfigure')}</Text>
               </View>
               <View style={styles.iconCircle}>
                 <Ionicons name="flower" size={22} color="#ffb300" />
@@ -882,14 +898,14 @@ export default function DashboardScreen() {
 
         {/* Sección de Nutrición */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Nutrición</Text>
+          <Text style={styles.sectionTitle}>{t('dashboard.section.nutrition')}</Text>
           
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Comida</Text>
+                <Text style={styles.cardTitle}>{t('dashboard.food')}</Text>
                 <Text style={styles.cardValue}>
-                  {stats.food ? `${stats.food.toLocaleString('es-ES')} kcal` : 'No hay datos'}
+                  {stats.food ? `${stats.food.toLocaleString('es-ES')} kcal` : t('dashboard.noData')}
                 </Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
@@ -902,9 +918,9 @@ export default function DashboardScreen() {
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Agua</Text>
+                <Text style={styles.cardTitle}>{t('dashboard.water')}</Text>
                 <Text style={styles.cardValue}>
-                  {stats.water ? `${stats.water} ml` : 'No hay datos'}
+                  {stats.water ? `${stats.water} ml` : t('dashboard.noData')}
                 </Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>

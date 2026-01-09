@@ -50,14 +50,14 @@ export default function Layout() {
             for (const role of emailResult.data) {
               if (role.user_id !== user.id) {
                 console.log('🔄 Layout: Actualizando user_id para rol:', role.role_type);
-                await supabase
-                  .from('admin_roles')
-                  .update({ user_id: user.id })
+              await supabase
+                .from('admin_roles')
+                .update({ user_id: user.id })
                   .eq('email', userEmail)
                   .eq('role_type', role.role_type);
-              }
             }
           }
+        }
         }
         
         // Combinar TODOS los roles (por user_id Y por email)

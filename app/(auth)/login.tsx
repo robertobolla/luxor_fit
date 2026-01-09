@@ -2,151 +2,93 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from 'react-native';
-import { Link, router } from 'expo-router';
-import { useSignIn, useOAuth } from '@clerk/clerk-expo';
+import { router } from 'expo-router';
+import { useOAuth } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import * as WebBrowser from 'expo-web-browser';
+import { Ionicons } from '@expo/vector-icons';
+import { LanguageSelector } from '../../src/components/LanguageSelector';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
-  const { signIn, setActive, isLoaded } = useSignIn();
   const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
   const { startOAuthFlow: startTikTokOAuth } = useOAuth({ strategy: 'oauth_tiktok' });
+  const { startOAuthFlow: startAppleOAuth } = useOAuth({ strategy: 'oauth_apple' });
 
-  const handleOAuthSignIn = async (provider: 'google' | 'tiktok') => {
+  const handleOAuthSignIn = async (provider: 'google' | 'tiktok' | 'apple') => {
     try {
-      const startOAuth = provider === 'google' ? startGoogleOAuth : startTikTokOAuth;
+      setIsLoading(true);
+      const startOAuth = provider === 'google' ? startGoogleOAuth : provider === 'apple' ? startAppleOAuth : startTikTokOAuth;
       const { createdSessionId, setActive: setActiveSession } = await startOAuth();
 
-      if (createdSessionId) {
+      if (createdSessionId && setActiveSession) {
         await setActiveSession({ session: createdSessionId });
         router.replace('/');
+      } else {
+        Alert.alert(
+          t('common.error'),
+          t('auth.authenticationFailed')
+        );
+        
       }
     } catch (err: any) {
       console.error('OAuth error:', err);
-      Alert.alert('Error', err.errors?.[0]?.message || `Error al conectar con ${provider}`);
-    }
-  };
-
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
-      return;
-    }
-
-    if (!isLoaded) return;
-
-    setIsLoading(true);
-    try {
-      const result = await signIn.create({
-        identifier: email,
-        password,
-      });
-
-      if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId });
-        router.replace('/');
-      } else {
-        Alert.alert('Error', 'Error al iniciar sesión');
-      }
-    } catch (err: any) {
-      const errorMessage = err.errors?.[0]?.message || 'Error al iniciar sesión';
-      Alert.alert('Error', errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleResetPassword = async () => {
-    if (!email) {
-      Alert.alert('Error', 'Por favor ingresa tu email');
-      return;
-    }
-
-    if (!isLoaded || !signIn) return;
-
-    setIsLoading(true);
-    try {
-      // Intentar crear sign-in sin contraseña para verificar si el usuario existe
-      // y poder preparar el restablecimiento de contraseña
-      const result = await signIn.create({
-        identifier: email,
-      });
-
-      // Buscar el factor de restablecimiento de contraseña
-      const resetFactor = result.supportedFirstFactors?.find(
-        (f: any) => f.strategy === 'reset_password_email_code'
-      );
-
-      if (resetFactor) {
-        // Preparar el restablecimiento de contraseña
-        await signIn.prepareFirstFactor({
-          strategy: 'reset_password_email_code',
-          emailAddressId: resetFactor.emailAddressId,
-        });
-
-        Alert.alert(
-          'Email enviado',
-          'Se ha enviado un email a tu correo con instrucciones para restablecer tu contraseña. Revisa tu bandeja de entrada.'
-        );
-        setShowResetPassword(false);
-        setPassword(''); // Limpiar el campo de contraseña
-      } else {
-        Alert.alert(
-          'Error',
-          'No se pudo iniciar el proceso de restablecimiento. Por favor, intenta iniciar sesión con Google OAuth o contacta al soporte.'
-        );
-      }
-    } catch (err: any) {
-      const errorMessage = err.errors?.[0]?.message || 'Error al solicitar restablecimiento de contraseña';
-      const errorCode = err.errors?.[0]?.code;
+      console.error('Error details:', JSON.stringify(err, null, 2));
       
-      // Si el usuario no existe o hay otro error
-      if (errorCode === 'form_identifier_not_found' || errorMessage.includes('not found')) {
-        Alert.alert(
-          'Usuario no encontrado',
-          'No existe una cuenta con ese email. Puedes crear una cuenta nueva o intentar iniciar sesión con Google OAuth.'
-        );
-      } else {
-        Alert.alert('Error', errorMessage);
-      }
+      const errorMessage = err.errors?.[0]?.message 
+        || err.errors?.[0]?.longMessage 
+        || err.message 
+        || `Error al conectar con ${provider}. Verifica tu configuración.`;
+      
+      Alert.alert(t('common.error'), errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
-          <Text style={styles.title}>¡Bienvenido a Luxor Fitness!</Text>
+          <Text style={styles.title}>{t('auth.welcome')}</Text>
           <Text style={styles.subtitle}>
-            Tu entrenador personal con IA
+            {t('auth.subtitle')}
           </Text>
         </View>
 
         <View style={styles.form}>
           {/* Botones OAuth */}
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              style={styles.oauthButton}
+              onPress={() => handleOAuthSignIn('apple')}
+              disabled={isLoading}
+            >
+              <View style={styles.oauthButtonContent}>
+                <Ionicons name="logo-apple" size={24} color="#ffffff" />
+                <Text style={styles.oauthButtonText}>{t('auth.continueWithApple')}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.oauthButton}
             onPress={() => handleOAuthSignIn('google')}
             disabled={isLoading}
           >
-            <Text style={styles.oauthButtonText}>🔐 Continuar con Google</Text>
+            <View style={styles.oauthButtonContent}>
+              <Ionicons name="logo-google" size={24} color="#ffffff" />
+              <Text style={styles.oauthButtonText}>{t('auth.continueWithGoogle')}</Text>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -154,84 +96,19 @@ export default function LoginScreen() {
             onPress={() => handleOAuthSignIn('tiktok')}
             disabled={isLoading}
           >
-            <Text style={styles.oauthButtonText}>🎵 Continuar con TikTok</Text>
+            <View style={styles.oauthButtonContent}>
+              <Ionicons name="logo-tiktok" size={24} color="#ffffff" />
+              <Text style={styles.oauthButtonText}>{t('auth.continueWithTiktok')}</Text>
+            </View>
           </TouchableOpacity>
+        </View>
 
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>O con email</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="tu@email.com"
-              placeholderTextColor="#666"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Contraseña</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              placeholderTextColor="#666"
-              secureTextEntry
-            />
-          </View>
-
-          {email && (
-            <TouchableOpacity
-              style={styles.resetPasswordButton}
-              onPress={handleResetPassword}
-              disabled={isLoading}
-            >
-              <Text style={styles.resetPasswordText}>
-                Crear/Reestablecer contraseña
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          <TouchableOpacity
-            style={[styles.button, styles.primaryButton]}
-            onPress={handleLogin}
-            disabled={isLoading}
-          >
-            <Text style={styles.buttonText}>
-              {isLoading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.button, styles.secondaryButton]}
-            onPress={() => router.push('/(auth)/register')}
-            disabled={isLoading}
-          >
-            <Text style={styles.secondaryButtonText}>
-              Crear cuenta
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>¿No tienes cuenta? </Text>
-            <Link href="/(auth)/register" asChild>
-              <TouchableOpacity>
-                <Text style={styles.linkText}>Regístrate</Text>
-              </TouchableOpacity>
-            </Link>
-          </View>
+        {/* Selector de idioma en la parte inferior */}
+        <View style={styles.languageContainerBottom}>
+          <LanguageSelector style="compact" />
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -244,6 +121,11 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+  },
+  languageContainerBottom: {
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 16,
   },
   header: {
     alignItems: 'center',
@@ -328,6 +210,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#ffb300',
+  },
+  oauthButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   oauthButtonText: {
     color: '#ffffff',

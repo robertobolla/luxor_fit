@@ -2,7 +2,7 @@
 // WEEKLY RENEWAL MODAL - Modal para renovar plan semanal
 // ============================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -15,16 +15,41 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../services/supabase';
+import { supabase } from '@/services/supabase';
 
 interface WeeklyRenewalModalProps {
   visible: boolean;
   onClose: () => void;
-  onGenerate: (metrics: { weight: number; bodyFat?: number; muscle?: number }) => Promise<void>;
+  onGenerate: (metrics: {
+    weight: number;
+    bodyFat?: number;
+    muscle?: number;
+    adherence: number;
+  }) => Promise<void>;
   userId: string;
   lastWeekStart: string;
   lastWeekEnd: string;
 }
+
+type MealLogRow = {
+  datetime: string; // ISO
+  calories: number | null;
+  protein_g: number | null;
+};
+
+type NutritionTargetRow = {
+  date: string; // YYYY-MM-DD
+  calories: number;
+  protein_g: number;
+};
+
+type UserProfileMetricsRow = {
+  weight: number | null;
+  body_fat_percentage: number | null;
+  muscle_percentage: number | null;
+};
+
+const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 export default function WeeklyRenewalModal({
   visible,
@@ -37,7 +62,10 @@ export default function WeeklyRenewalModal({
   const [weight, setWeight] = useState('');
   const [bodyFat, setBodyFat] = useState('');
   const [muscle, setMuscle] = useState('');
+
+  // 👇 mantenemos el estado como nullable, pero NUNCA lo usamos directo para width
   const [adherence, setAdherence] = useState<number | null>(null);
+
   const [isGenerating, setIsGenerating] = useState(false);
   const [isLoadingAdherence, setIsLoadingAdherence] = useState(true);
 
@@ -46,71 +74,97 @@ export default function WeeklyRenewalModal({
       loadWeeklyAdherence();
       loadCurrentMetrics();
     }
-  }, [visible, lastWeekStart, lastWeekEnd]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, lastWeekStart, lastWeekEnd, userId]);
+
+  // ✅ porcentaje seguro 0..100 para UI (evita "null%")
+  const adherencePct = useMemo(() => clamp(adherence ?? 0, 0, 100), [adherence]);
+
+  const adherenceColor = useMemo(() => {
+    if (adherencePct >= 70) return '#4caf50';
+    if (adherencePct >= 50) return '#ffb300';
+    return '#FF6B6B';
+  }, [adherencePct]);
+
+  const adherenceText = useMemo(() => {
+    if (adherencePct >= 70) return 'Excelente';
+    if (adherencePct >= 50) return 'Buena';
+    return 'Baja';
+  }, [adherencePct]);
 
   // Cargar adherencia de la semana pasada
   const loadWeeklyAdherence = async () => {
     setIsLoadingAdherence(true);
     try {
-      // Calcular adherencia basada en logs vs targets
-      const { data: logsData } = await supabase
+      // Logs
+      const { data: logsData, error: logsError } = await supabase
         .from('meal_logs')
         .select('datetime, calories, protein_g')
         .eq('user_id', userId)
         .gte('datetime', `${lastWeekStart}T00:00:00`)
         .lte('datetime', `${lastWeekEnd}T23:59:59`);
 
-      const { data: targetsData } = await supabase
+      if (logsError) {
+        console.error('Error loading logs:', logsError);
+      }
+
+      // Targets
+      const { data: targetsData, error: targetsError } = await supabase
         .from('nutrition_targets')
         .select('date, calories, protein_g')
         .eq('user_id', userId)
         .gte('date', lastWeekStart)
         .lte('date', lastWeekEnd);
 
-      if (!logsData || !targetsData || targetsData.length === 0) {
+      if (targetsError) {
+        console.error('Error loading targets:', targetsError);
+      }
+
+      const logs = (logsData ?? []) as MealLogRow[];
+      const targets = (targetsData ?? []) as NutritionTargetRow[];
+
+      if (!targets.length) {
         setAdherence(0);
-        setIsLoadingAdherence(false);
         return;
       }
 
       // Agrupar logs por día
       const logsByDay: Record<string, { calories: number; protein: number }> = {};
-      logsData.forEach((log) => {
-        const date = log.datetime.split('T')[0];
-        if (!logsByDay[date]) {
-          logsByDay[date] = { calories: 0, protein: 0 };
-        }
-        logsByDay[date].calories += log.calories || 0;
-        logsByDay[date].protein += log.protein_g || 0;
+      logs.forEach((log) => {
+        const date = String(log.datetime).split('T')[0];
+        if (!logsByDay[date]) logsByDay[date] = { calories: 0, protein: 0 };
+        logsByDay[date].calories += log.calories ?? 0;
+        logsByDay[date].protein += log.protein_g ?? 0;
       });
 
       // Calcular adherencia por día
       let totalAdherence = 0;
       let daysWithTarget = 0;
 
-      targetsData.forEach((target) => {
+      targets.forEach((target) => {
         const dayLogs = logsByDay[target.date];
-        if (!dayLogs) {
-          return; // No hay logs para este día
-        }
+        if (!dayLogs) return;
 
         daysWithTarget++;
 
-        // Calcular adherencia de calorías (tolerancia de ±200 kcal)
+        // Calorías (±200)
         const calorieDiff = Math.abs(dayLogs.calories - target.calories);
-        const calorieAdherence = calorieDiff <= 200 ? 100 : Math.max(0, 100 - (calorieDiff - 200) / 10);
+        const calorieAdherence =
+          calorieDiff <= 200 ? 100 : Math.max(0, 100 - (calorieDiff - 200) / 10);
 
-        // Calcular adherencia de proteína (tolerancia de ±20g)
+        // Proteína (±20g)
         const proteinDiff = Math.abs(dayLogs.protein - target.protein_g);
-        const proteinAdherence = proteinDiff <= 20 ? 100 : Math.max(0, 100 - (proteinDiff - 20) / 2);
+        const proteinAdherence =
+          proteinDiff <= 20 ? 100 : Math.max(0, 100 - (proteinDiff - 20) / 2);
 
-        // Promedio de ambas adherencias
         const dayAdherence = (calorieAdherence + proteinAdherence) / 2;
         totalAdherence += dayAdherence;
       });
 
-      const avgAdherence = daysWithTarget > 0 ? Math.round(totalAdherence / daysWithTarget) : 0;
-      setAdherence(avgAdherence);
+      const avgAdherence =
+        daysWithTarget > 0 ? Math.round(totalAdherence / daysWithTarget) : 0;
+
+      setAdherence(clamp(avgAdherence, 0, 100));
     } catch (error) {
       console.error('Error loading weekly adherence:', error);
       setAdherence(0);
@@ -122,17 +176,27 @@ export default function WeeklyRenewalModal({
   // Cargar métricas actuales del usuario
   const loadCurrentMetrics = async () => {
     try {
-      // Obtener las métricas más recientes del usuario
-      const { data: profileData } = await supabase
+      const { data, error } = await supabase
         .from('user_profiles')
-        .select('weight_kg, body_fat_percentage, muscle_percentage')
+        .select('weight, body_fat_percentage, muscle_percentage')
         .eq('user_id', userId)
         .maybeSingle();
 
+      if (error) {
+        console.error('Error loading current metrics:', error);
+        return;
+      }
+
+      const profileData = data as UserProfileMetricsRow | null;
+
       if (profileData) {
-        setWeight(profileData.weight_kg?.toString() || '');
-        setBodyFat(profileData.body_fat_percentage?.toString() || '');
-        setMuscle(profileData.muscle_percentage?.toString() || '');
+        setWeight(profileData.weight != null ? String(profileData.weight) : '');
+        setBodyFat(
+          profileData.body_fat_percentage != null ? String(profileData.body_fat_percentage) : ''
+        );
+        setMuscle(
+          profileData.muscle_percentage != null ? String(profileData.muscle_percentage) : ''
+        );
       }
     } catch (error) {
       console.error('Error loading current metrics:', error);
@@ -140,23 +204,20 @@ export default function WeeklyRenewalModal({
   };
 
   const handleGenerate = async () => {
-    // Validar peso (obligatorio)
     const weightNum = parseFloat(weight);
-    if (!weight || isNaN(weightNum) || weightNum <= 0) {
+    if (!weight || Number.isNaN(weightNum) || weightNum <= 0) {
       Alert.alert('Error', 'Debes ingresar tu peso actual.');
       return;
     }
 
-    // Validar grasa corporal (opcional)
     const bodyFatNum = bodyFat ? parseFloat(bodyFat) : undefined;
-    if (bodyFat && (isNaN(bodyFatNum!) || bodyFatNum! < 0 || bodyFatNum! > 100)) {
+    if (bodyFat && (Number.isNaN(bodyFatNum!) || bodyFatNum! < 0 || bodyFatNum! > 100)) {
       Alert.alert('Error', 'El porcentaje de grasa corporal debe estar entre 0 y 100.');
       return;
     }
 
-    // Validar masa muscular (opcional)
     const muscleNum = muscle ? parseFloat(muscle) : undefined;
-    if (muscle && (isNaN(muscleNum!) || muscleNum! < 0 || muscleNum! > 100)) {
+    if (muscle && (Number.isNaN(muscleNum!) || muscleNum! < 0 || muscleNum! > 100)) {
       Alert.alert('Error', 'El porcentaje de masa muscular debe estar entre 0 y 100.');
       return;
     }
@@ -167,25 +228,18 @@ export default function WeeklyRenewalModal({
         weight: weightNum,
         bodyFat: bodyFatNum,
         muscle: muscleNum,
+        adherence: adherencePct, // ✅ siempre number
       });
       onClose();
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'No se pudo generar el plan.');
+      Alert.alert('Error', error?.message || 'No se pudo generar el plan.');
     } finally {
       setIsGenerating(false);
     }
   };
 
-  const adherenceColor = adherence !== null && adherence >= 70 ? '#4caf50' : adherence !== null && adherence >= 50 ? '#ffb300' : '#FF6B6B';
-  const adherenceText = adherence !== null && adherence >= 70 ? 'Excelente' : adherence !== null && adherence >= 50 ? 'Buena' : 'Baja';
-
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={onClose}
-    >
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
           {/* Header */}
@@ -197,7 +251,7 @@ export default function WeeklyRenewalModal({
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Adherencia de la semana pasada */}
+            {/* Adherencia */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Adherencia Semana Pasada</Text>
               {isLoadingAdherence ? (
@@ -205,23 +259,25 @@ export default function WeeklyRenewalModal({
               ) : (
                 <View style={styles.adherenceCard}>
                   <View style={styles.adherenceHeader}>
-                    <Text style={styles.adherencePercent}>{adherence}%</Text>
+                    <Text style={styles.adherencePercent}>{adherencePct}%</Text>
                     <View style={[styles.adherenceBadge, { backgroundColor: adherenceColor }]}>
                       <Text style={styles.adherenceBadgeText}>{adherenceText}</Text>
                     </View>
                   </View>
+
                   <View style={styles.adherenceBar}>
                     <View
                       style={[
                         styles.adherenceBarFill,
-                        { width: `${adherence}%`, backgroundColor: adherenceColor },
+                        { width: `${adherencePct}%`, backgroundColor: adherenceColor },
                       ]}
                     />
                   </View>
+
                   <Text style={styles.adherenceDescription}>
-                    {adherence! >= 70
+                    {adherencePct >= 70
                       ? '¡Excelente trabajo! Mantén tu plan actual.'
-                      : adherence! >= 50
+                      : adherencePct >= 50
                       ? 'Buen progreso, pero hay margen de mejora.'
                       : 'Intenta seguir más de cerca el plan esta semana.'}
                   </Text>
@@ -229,14 +285,13 @@ export default function WeeklyRenewalModal({
               )}
             </View>
 
-            {/* Métricas actuales */}
+            {/* Métricas */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Actualiza tus Métricas</Text>
               <Text style={styles.sectionDescription}>
                 Ingresa tus métricas actuales para ajustar tu plan nutricional.
               </Text>
 
-              {/* Peso */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Peso (kg) *</Text>
                 <TextInput
@@ -249,7 +304,6 @@ export default function WeeklyRenewalModal({
                 />
               </View>
 
-              {/* Grasa corporal */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Grasa Corporal (%) - Opcional</Text>
                 <TextInput
@@ -262,7 +316,6 @@ export default function WeeklyRenewalModal({
                 />
               </View>
 
-              {/* Masa muscular */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Masa Muscular (%) - Opcional</Text>
                 <TextInput
@@ -276,7 +329,6 @@ export default function WeeklyRenewalModal({
               </View>
             </View>
 
-            {/* Información adicional */}
             <View style={styles.infoCard}>
               <Ionicons name="information-circle" size={20} color="#ffb300" />
               <Text style={styles.infoText}>
@@ -285,15 +337,18 @@ export default function WeeklyRenewalModal({
             </View>
           </ScrollView>
 
-          {/* Footer con botones */}
+          {/* Warning */}
+          {!isLoadingAdherence && adherencePct < 50 && (
+            <View style={styles.warningCard}>
+              <Ionicons name="warning" size={20} color="#ff9500" />
+              <Text style={styles.warningText}>
+                Con una adherencia baja ({adherencePct}%), si solo ingresas tu peso, se mantendrá el
+                mismo plan. Para ajustes más precisos, registra también tu grasa corporal y masa muscular.
+              </Text>
+            </View>
+          )}
+
           <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={onClose}
-              disabled={isGenerating}
-            >
-              <Text style={styles.cancelButtonText}>Cancelar</Text>
-            </TouchableOpacity>
             <TouchableOpacity
               style={[styles.generateButton, isGenerating && styles.generateButtonDisabled]}
               onPress={handleGenerate}
@@ -302,10 +357,14 @@ export default function WeeklyRenewalModal({
               {isGenerating ? (
                 <ActivityIndicator size="small" color="#000" />
               ) : (
-                <Text style={styles.generateButtonText}>Generar Plan</Text>
+                <Text style={styles.generateButtonText}>Generar Plan de la Semana</Text>
               )}
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity onPress={onClose} style={styles.skipButton}>
+            <Text style={styles.skipButtonText}>Cerrar (no podré ver el plan semanal)</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </Modal>
@@ -438,18 +497,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#333',
   },
-  cancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#2a2a2a',
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-  },
   generateButton: {
     flex: 1,
     padding: 16,
@@ -465,5 +512,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#000',
   },
+  warningCard: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 149, 0, 0.15)',
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 149, 0, 0.3)',
+  },
+  warningText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#ff9500',
+    lineHeight: 18,
+  },
+  skipButton: {
+    padding: 16,
+    alignItems: 'center',
+  },
+  skipButtonText: {
+    fontSize: 14,
+    color: '#666',
+    textDecorationLine: 'underline',
+  },
 });
-

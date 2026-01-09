@@ -8,15 +8,18 @@
       "url": "https://u.expo.dev/39f4fe90-c5cc-4c8a-baeb-7424da1c4f10"
     },
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#0a0a0a"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.luxorfitness.app",
-      "buildNumber": "40",
+      "buildNumber": "44",
+      "icon": "./assets/icon.png",
       "infoPlist": {
         "NSHealthShareUsageDescription": "Luxor Fitness necesita acceso a tus datos de salud para mostrarte estadísticas personalizadas de pasos, calorías, distancia y sueño.",
         "NSHealthUpdateUsageDescription": "Luxor Fitness puede actualizar tus datos de salud cuando registres entrenamientos.",
@@ -33,7 +36,9 @@
       }
     },
     "android": {
+      "icon": "./assets/icon.png",
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0a0a0a"
       },
       "package": "com.luxorfitness.app",
@@ -46,7 +51,7 @@
       ],
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyDEXAMPLE_KEY_REPLACE_WITH_YOUR_REAL_KEY"
+          "apiKey": "${GOOGLE_MAPS_API_KEY}"
         }
       }
     },
@@ -76,10 +81,6 @@
           "healthSharePermission": "Luxor Fitness necesita acceso a tus datos de salud para mostrarte estadísticas personalizadas de pasos, calorías, distancia y sueño.",
           "healthUpdatePermission": "Luxor Fitness puede actualizar tus datos de salud cuando registres entrenamientos."
         }
-      ],
-      [
-        "react-native-google-fit",
-        {}
       ],
       [
         "expo-sensors",

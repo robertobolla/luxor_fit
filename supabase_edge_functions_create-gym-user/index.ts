@@ -1,5 +1,7 @@
+// @ts-nocheck
 // Edge Function para crear usuario en Clerk y asociarlo a un gimnasio
 // Requiere variables: CLERK_SECRET_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+// Nota: Este archivo usa Deno runtime, no TypeScript estándar
 
 // Headers CORS para permitir peticiones desde el dashboard
 const corsHeaders = {

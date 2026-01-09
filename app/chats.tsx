@@ -8,9 +8,11 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import ChatList from '../src/components/ChatList';
 
 export default function ChatsScreen() {
+  const { t } = useTranslation();
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />

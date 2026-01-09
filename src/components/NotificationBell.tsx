@@ -15,8 +15,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '@/services/supabase';
+import { supabase } from '../../src/services/supabase';
 import { useFocusEffect } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+
 
 interface Notification {
   id: string;
@@ -33,6 +35,7 @@ export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation();
 
   // Cargar notificaciones
   const loadNotifications = useCallback(async () => {
@@ -167,7 +170,10 @@ export default function NotificationBell() {
           <View style={styles.modalContent}>
             {/* Header */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>🔔 Notificaciones</Text>
+            <Text style={styles.modalTitle}>
+            🔔 {t('notifications.title')}
+</Text>
+
               <View style={styles.headerActions}>
                 {unreadCount > 0 && (
                   <TouchableOpacity
@@ -190,15 +196,15 @@ export default function NotificationBell() {
             {loading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#F7931E" />
-                <Text style={styles.loadingText}>Cargando notificaciones...</Text>
-              </View>
+                <Text style={styles.loadingText}>{t('notifications.loading')}</Text>
+                </View>
             ) : notifications.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="notifications-off-outline" size={64} color="#666" />
                 <Text style={styles.emptyText}>No tienes notificaciones</Text>
                 <Text style={styles.emptySubtext}>
-                  Aquí aparecerán tus notificaciones
-                </Text>
+  {t('notifications.emptySubtext')}
+</Text>
               </View>
             ) : (
               <ScrollView style={styles.notificationsList}>

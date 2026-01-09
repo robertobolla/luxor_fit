@@ -8,13 +8,13 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
-  SafeAreaView,
   StatusBar,
   Platform,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../src/services/supabase';
 import { computeAndSaveTargets, createOrUpdateMealPlan, getNutritionProfile } from '../src/services/nutrition';
@@ -22,6 +22,7 @@ import { validateUsernameFormat } from '../src/utils/formValidation';
 import { ConfirmModal } from '../src/components/CustomModal';
 
 export default function ProfileEditScreen() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const insets = useSafeAreaInsets();
   const [isLoading, setIsLoading] = useState(true);
@@ -108,13 +109,13 @@ export default function ProfileEditScreen() {
     if (trimmedUsername !== originalUsername) {
       // Si el username cambió, validar
       if (!trimmedUsername || trimmedUsername.length === 0) {
-        Alert.alert('Error', 'El nombre de usuario es requerido');
+        Alert.alert(t('common.error'), t('profileEdit.usernameRequired'));
         return;
       }
       
       const usernameValidation = validateUsernameFormat(trimmedUsername);
       if (!usernameValidation.isValid) {
-        Alert.alert('Error', usernameValidation.error || 'El nombre de usuario no es válido');
+        Alert.alert(t('common.error'), usernameValidation.error || t('profileEdit.invalidUsername'));
         setUsernameError(usernameValidation.error || '');
         return;
       }
@@ -130,18 +131,18 @@ export default function ProfileEditScreen() {
         
         if (checkError) {
           console.error('Error verificando username:', checkError);
-          Alert.alert('Error', 'No se pudo verificar el nombre de usuario. Intenta nuevamente.');
+          Alert.alert(t('common.error'), t('profileEdit.usernameCheckError'));
           return;
         }
         
         if (existingUsername) {
-          Alert.alert('Error', 'Este nombre de usuario ya está en uso. Por favor elige otro.');
-          setUsernameError('Este nombre de usuario ya está en uso');
+          Alert.alert(t('common.error'), t('profileEdit.usernameAlreadyTaken'));
+          setUsernameError(t('profileEdit.usernameAlreadyTaken'));
           return;
         }
       } catch (checkErr: any) {
         console.error('Error verificando username:', checkErr);
-        Alert.alert('Error', 'No se pudo verificar el nombre de usuario. Intenta nuevamente.');
+        Alert.alert(t('common.error'), t('profileEdit.usernameCheckError'));
         return;
       }
     }
@@ -152,22 +153,22 @@ export default function ProfileEditScreen() {
     const ageNum = parseInt(age);
 
     if (isNaN(weightNum) || weightNum <= 0 || weightNum > 300) {
-      Alert.alert('Error', 'El peso debe ser entre 1 y 300 kg.');
+      Alert.alert(t('common.error'), t('profileEdit.invalidWeight'));
       return;
     }
 
     if (isNaN(heightNum) || heightNum <= 0 || heightNum > 250) {
-      Alert.alert('Error', 'La altura debe ser entre 1 y 250 cm.');
+      Alert.alert(t('common.error'), t('profileEdit.invalidHeight'));
       return;
     }
 
     if (isNaN(ageNum) || ageNum < 13 || ageNum > 120) {
-      Alert.alert('Error', 'La edad debe ser entre 13 y 120 años.');
+      Alert.alert(t('common.error'), t('profileEdit.invalidAge'));
       return;
     }
 
     if (!hasChanges()) {
-      Alert.alert('Sin cambios', 'No has realizado ningún cambio.');
+      Alert.alert(t('profileEdit.noChanges'), t('profileEdit.noChangesMessage'));
       return;
     }
 
@@ -178,19 +179,19 @@ export default function ProfileEditScreen() {
       
       if (nutritionProfile) {
         Alert.alert(
-          'Actualizar plan de nutrición',
-          'Los cambios que realizaste afectan tu plan de nutrición. ¿Deseas guardar los cambios y adaptar tu dieta?',
+          t('profileEdit.updateNutritionPlan'),
+          t('profileEdit.nutritionImpactMessage'),
           [
             {
-              text: 'Cancelar cambios',
+              text: t('profileEdit.cancelChanges'),
               style: 'cancel',
               onPress: () => {
                 // No hacer nada, mantener datos originales
-                Alert.alert('Cambios cancelados', 'Tu perfil y dieta se mantienen sin cambios.');
+                Alert.alert(t('profileEdit.changesCancelled'), t('profileEdit.changesCancelledMessage'));
               },
             },
             {
-              text: 'Guardar y adaptar dieta',
+              text: t('profileEdit.saveAndAdaptDiet'),
               onPress: async () => {
                 await saveProfileAndAdaptDiet(weightNum, heightNum, ageNum);
               },
@@ -227,7 +228,7 @@ export default function ProfileEditScreen() {
         updateData.username = trimmedUsername;
       } else if (trimmedUsername !== originalUsername && trimmedUsername.length === 0 && originalUsername.length > 0) {
         // Si el usuario está intentando borrar el username, no permitirlo
-        Alert.alert('Error', 'El nombre de usuario es requerido y no puede estar vacío.');
+        Alert.alert(t('common.error'), t('profileEdit.usernameRequiredEmpty'));
         setIsSaving(false);
         return;
       }
@@ -239,15 +240,15 @@ export default function ProfileEditScreen() {
 
       if (error) {
         console.error('Error de Supabase al guardar perfil:', error);
-        throw new Error(error.message || 'Error al actualizar el perfil en la base de datos');
+        throw new Error(error.message || t('profileEdit.saveError'));
       }
 
-      Alert.alert('¡Guardado!', 'Tu perfil ha sido actualizado.');
+      Alert.alert(t('profileEdit.saved'), t('profileEdit.savedMessage'));
       router.push('/(tabs)/dashboard' as any);
     } catch (err: any) {
       console.error('Error saving profile:', err);
-      const errorMessage = err.message || 'No se pudo guardar el perfil.';
-      Alert.alert('Error', errorMessage);
+      const errorMessage = err.message || t('profileEdit.saveError');
+      Alert.alert(t('common.error'), errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -274,7 +275,7 @@ export default function ProfileEditScreen() {
         updateData.username = trimmedUsername;
       } else if (trimmedUsername !== originalUsername && trimmedUsername.length === 0 && originalUsername.length > 0) {
         // Si el usuario está intentando borrar el username, no permitirlo
-        Alert.alert('Error', 'El nombre de usuario es requerido y no puede estar vacío.');
+        Alert.alert(t('common.error'), t('profileEdit.usernameRequiredEmpty'));
         setIsSaving(false);
         return;
       }
@@ -286,7 +287,7 @@ export default function ProfileEditScreen() {
 
       if (error) {
         console.error('Error de Supabase al guardar perfil:', error);
-        throw new Error(error.message || 'Error al actualizar el perfil en la base de datos');
+        throw new Error(error.message || t('profileEdit.saveError'));
       }
 
       // 2. Recalcular targets de nutrición
@@ -322,12 +323,12 @@ export default function ProfileEditScreen() {
 
       await createOrUpdateMealPlan(user.id, mondayStr);
 
-      Alert.alert('¡Todo listo!', 'Tu perfil y plan de nutrición han sido actualizados.');
+      Alert.alert(t('profileEdit.allDone'), t('profileEdit.profileAndNutritionUpdated'));
       router.push('/(tabs)/dashboard' as any);
     } catch (err: any) {
       console.error('Error saving and adapting:', err);
-      const errorMessage = err.message || 'Hubo un problema al actualizar. Intenta nuevamente.';
-      Alert.alert('Error', errorMessage);
+      const errorMessage = err.message || t('profileEdit.updateError');
+      Alert.alert(t('common.error'), errorMessage);
     } finally {
       setIsSaving(false);
     }
@@ -335,18 +336,18 @@ export default function ProfileEditScreen() {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color="#ffb300" />
-        <Text style={styles.loadingText}>Cargando perfil...</Text>
-      </SafeAreaView>
+        <Text style={styles.loadingText}>{t('profileEdit.loading')}</Text>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" />
       {/* Header - Fuera del ScrollView para que siempre sea accesible */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
+      <View style={styles.header}>
         <TouchableOpacity 
           onPress={() => {
             if (hasChanges()) {
@@ -356,23 +357,24 @@ export default function ProfileEditScreen() {
             }
           }} 
           style={styles.backButton}
-          hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
+          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          activeOpacity={0.7}
         >
-          <Ionicons name="close" size={28} color="#ffffff" />
+          <Ionicons name="close" size={32} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Editar Perfil</Text>
+        <Text style={styles.headerTitle}>{t('profileEdit.title')}</Text>
         <View style={{ width: 44 }} />
       </View>
       <ScrollView contentContainerStyle={styles.scrollContent}>
 
         {/* Datos Básicos */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📊 Datos Básicos</Text>
+          <Text style={styles.sectionTitle}>{t('profileEdit.basicData')}</Text>
           
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Nombre de usuario</Text>
+            <Text style={styles.inputLabel}>{t('profileEdit.usernameLabel')}</Text>
             <Text style={{ color: '#666', fontSize: 12, marginBottom: 8 }}>
-              Este será tu identificador único en la red social
+              {t('profileEdit.usernameDescription')}
             </Text>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Text style={{ color: '#666', fontSize: 16, marginRight: 4 }}>@</Text>
@@ -402,7 +404,7 @@ export default function ProfileEditScreen() {
                         .maybeSingle();
                       
                       if (data) {
-                        setUsernameError('Este nombre de usuario ya está en uso');
+                        setUsernameError(t('profileEdit.usernameAlreadyTaken'));
                       }
                     } catch (error) {
                       console.error('Error verificando username:', error);
@@ -411,7 +413,7 @@ export default function ProfileEditScreen() {
                     }
                   }
                 }}
-                placeholder="juan_fitness"
+                placeholder={t('profileEdit.usernamePlaceholder')}
                 placeholderTextColor="#666"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -424,13 +426,13 @@ export default function ProfileEditScreen() {
               <Text style={{ color: '#ff4444', fontSize: 12, marginTop: 4 }}>{usernameError}</Text>
             )}
             {!usernameError && username.length >= 3 && !checkingUsername && username !== (originalData?.username || '') && (
-              <Text style={{ color: '#4CAF50', fontSize: 12, marginTop: 4 }}>✓ Disponible</Text>
+              <Text style={{ color: '#4CAF50', fontSize: 12, marginTop: 4 }}>{t('profileEdit.usernameAvailable')}</Text>
             )}
           </View>
           
           <View style={styles.inputRow}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Peso (kg)</Text>
+              <Text style={styles.inputLabel}>{t('profileEdit.weightLabel')}</Text>
               <TextInput
                 style={styles.input}
                 value={weight}
@@ -442,7 +444,7 @@ export default function ProfileEditScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Altura (cm)</Text>
+              <Text style={styles.inputLabel}>{t('profileEdit.heightLabel')}</Text>
               <TextInput
                 style={styles.input}
                 value={height}
@@ -454,7 +456,7 @@ export default function ProfileEditScreen() {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Edad</Text>
+              <Text style={styles.inputLabel}>{t('profileEdit.ageLabel')}</Text>
               <TextInput
                 style={styles.input}
                 value={age}
@@ -479,7 +481,7 @@ export default function ProfileEditScreen() {
             <>
               <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
               <Text style={styles.saveButtonText}>
-                {hasChanges() ? 'Guardar Cambios' : 'Sin Cambios'}
+                {hasChanges() ? t('profileEdit.saveChanges') : t('profileEdit.noChanges')}
               </Text>
             </>
           )}
@@ -487,7 +489,7 @@ export default function ProfileEditScreen() {
 
         {hasNutritionImpact() && hasChanges() && (
           <Text style={styles.warningText}>
-            ⚠️ Estos cambios afectarán tu plan de nutrición
+            {t('profileEdit.nutritionWarning')}
           </Text>
         )}
       </ScrollView>
@@ -496,10 +498,10 @@ export default function ProfileEditScreen() {
       <ConfirmModal
         visible={showExitConfirm}
         onClose={() => setShowExitConfirm(false)}
-        title="¿Descartar cambios?"
-        message="Tienes cambios sin guardar. ¿Estás seguro de que quieres salir sin guardar?"
-        confirmText="Descartar"
-        cancelText="Cancelar"
+        title={t('profileEdit.discardChanges')}
+        message={t('profileEdit.discardChangesMessage')}
+        confirmText={t('profileEdit.discard')}
+        cancelText={t('common.cancel')}
         confirmButtonStyle="danger"
         onConfirm={() => router.push('/(tabs)/dashboard' as any)}
       />
@@ -520,7 +522,7 @@ export default function ProfileEditScreen() {
           await saveProfileAndAdaptDiet(weightNum, heightNum, ageNum);
         }}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -537,9 +539,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 16,
-    backgroundColor: '#0a0a0a',
+    backgroundColor: '#1a1a1a',
     borderBottomWidth: 1,
     borderBottomColor: '#2a2a2a',
   },
@@ -549,7 +552,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 22,
-    backgroundColor: 'transparent',
+    backgroundColor: '#2a2a2a',
   },
   headerTitle: {
     fontSize: 24,
@@ -591,6 +594,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     borderWidth: 2,
     borderColor: '#ffb300',
+  },
+  inputError: {
+    borderColor: '#F44336',
   },
   optionsGrid: {
     flexDirection: 'row',

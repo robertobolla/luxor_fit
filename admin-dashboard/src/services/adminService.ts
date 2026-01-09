@@ -422,12 +422,12 @@ export async function getUserRole(userId: string, userEmail?: string): Promise<'
         for (const role of emailRoles) {
           if (role.user_id !== userId) {
             console.log('🔄 getUserRole - Actualizando user_id para rol:', role.role_type);
-            await supabase
-              .from('admin_roles')
-              .update({ user_id: userId })
+          await supabase
+            .from('admin_roles')
+            .update({ user_id: userId })
               .eq('email', userEmail)
               .eq('role_type', role.role_type);
-          }
+        }
         }
       }
     }
@@ -437,8 +437,8 @@ export async function getUserRole(userId: string, userEmail?: string): Promise<'
     const uniqueRoleTypes = [...new Set(allRoles.map(r => r.role_type))];
     
     console.log('✅ getUserRole - TODOS los roles combinados:', uniqueRoleTypes);
-    
-    // Priorizar roles: admin > empresario > socio
+        
+        // Priorizar roles: admin > empresario > socio
     if (uniqueRoleTypes.length > 0) {
       if (uniqueRoleTypes.includes('admin')) {
         console.log('✅ getUserRole - Rol final: admin (priorizado)');

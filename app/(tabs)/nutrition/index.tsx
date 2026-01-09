@@ -19,7 +19,8 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '../../../src/services/supabase';
+import { useTranslation } from 'react-i18next';
+import { supabase } from '@/services/supabase';
 import { LoadingOverlay } from '../../../src/components/LoadingOverlay';
 import { useLoadingState } from '../../../src/hooks/useLoadingState';
 import { SkeletonBox, SkeletonNutrition } from '../../../src/components/SkeletonLoaders';
@@ -35,10 +36,12 @@ import {
 } from '../../../src/services/nutrition';
 import NutritionAdjustmentModal from '../../../src/components/NutritionAdjustmentModal';
 import WeeklyRenewalModal from '../../../src/components/WeeklyRenewalModal';
+import PlanAdjustmentModal from '../../../src/components/PlanAdjustmentModal';
 import { useNutritionStore } from '../../../src/store/nutritionStore';
 import { NutritionTarget, MealLog } from '../../../src/types/nutrition';
 import { useTutorial } from '@/contexts/TutorialContext';
 import { HelpModal } from '@/components/HelpModal';
+import { TutorialTooltip } from '@/components/TutorialTooltip';
 
 // Componente memoizado para las tarjetas de semana
 const WeekCard = React.memo(({ 
@@ -50,6 +53,7 @@ const WeekCard = React.memo(({
   isCurrent?: boolean; 
   onPress: () => void;
 }) => {
+  const { t } = useTranslation();
   const weekStartDate = useMemo(() => {
     // Parsear como fecha local para evitar problemas de UTC
     const [year, month, day] = week.weekStart.split('-').map(Number);
@@ -80,11 +84,11 @@ const WeekCard = React.memo(({
     >
       <View style={styles.weekCardHeader}>
         <Text style={styles.weekCardTitle}>
-          {isCurrent ? 'Esta Semana' : dateRange}
+          {isCurrent ? t('nutritionIndex.thisWeek') : dateRange}
         </Text>
         {isCurrent ? (
           <View style={styles.currentBadge}>
-            <Text style={styles.currentBadgeText}>Actual</Text>
+            <Text style={styles.currentBadgeText}>{t('nutritionIndex.current')}</Text>
           </View>
         ) : null}
       </View>
@@ -92,12 +96,12 @@ const WeekCard = React.memo(({
         <Text style={styles.weekCardDate}>{dateRange}</Text>
       )}
       {!isCurrent && (
-        <Text style={styles.weekCardSubtitle}>Semana pasada</Text>
+        <Text style={styles.weekCardSubtitle}>{t('nutritionIndex.lastWeek')}</Text>
       )}
       
       {/* Adherencia */}
       <View style={styles.adherenceContainer}>
-        <Text style={styles.adherenceLabel}>Adherencia</Text>
+        <Text style={styles.adherenceLabel}>{t('nutrition.adherence')}</Text>
         <View style={styles.adherenceBar}>
           <View
             style={[
@@ -115,19 +119,19 @@ const WeekCard = React.memo(({
       {/* Resumen */}
       <View style={styles.weekSummary}>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Calorías:</Text>
+          <Text style={styles.summaryLabel}>{t('nutritionIndex.calories')}</Text>
           <Text style={styles.summaryValue}>
             {week.avgCalories} / {week.targetCalories}
           </Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Comidas:</Text>
+          <Text style={styles.summaryLabel}>{t('nutritionIndex.meals')}</Text>
           <Text style={styles.summaryValue}>
             {week.loggedMeals} / {week.expectedMeals}
           </Text>
         </View>
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Días:</Text>
+          <Text style={styles.summaryLabel}>{t('nutritionIndex.days')}</Text>
           <Text style={styles.summaryValue}>{week.daysLogged} / 7</Text>
         </View>
       </View>
@@ -205,10 +209,12 @@ const WeeklyHistoryScrollView = React.memo(({
   weeklyHistory,
   onSelectDate,
   onPressNextWeek,
+  onNavigateToPlan,
 }: {
   weeklyHistory: WeekSummary[];
   onSelectDate: (date: string) => void;
   onPressNextWeek: () => void;
+  onNavigateToPlan: (weekStart?: string) => void;
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -288,7 +294,7 @@ const WeeklyHistoryScrollView = React.memo(({
           key={week.weekStart}
           week={week}
           isCurrent={false}
-          onPress={() => router.push(`/(tabs)/nutrition/plan?weekStart=${week.weekStart}` as any)}
+          onPress={() => onNavigateToPlan(week.weekStart)}
         />
       ))}
 
@@ -298,7 +304,7 @@ const WeeklyHistoryScrollView = React.memo(({
           key={currentWeek.weekStart}
           week={currentWeek}
           isCurrent={true}
-          onPress={() => router.push(`/(tabs)/nutrition/plan?weekStart=${currentWeek.weekStart}` as any)}
+          onPress={() => onNavigateToPlan(currentWeek.weekStart)}
         />
       )}
 
@@ -310,6 +316,7 @@ const WeeklyHistoryScrollView = React.memo(({
 
 export default function NutritionHomeScreen() {
   const { user } = useUser();
+  const { t, i18n } = useTranslation();
   const { isLoading, setLoading, executeAsync } = useLoadingState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [todayTarget, setTodayTarget] = useState<NutritionTarget | null>(null);
@@ -329,9 +336,20 @@ export default function NutritionHomeScreen() {
   const [customPrompts, setCustomPrompts] = useState<string[]>([]);
   const [newPrompt, setNewPrompt] = useState('');
   const [showWeeklyRenewalModal, setShowWeeklyRenewalModal] = useState(false);
+  const [pendingWeeklyRenewal, setPendingWeeklyRenewal] = useState(false);
+  const [showPlanAdjustmentModal, setShowPlanAdjustmentModal] = useState(false);
+  const [planAdjustmentData, setPlanAdjustmentData] = useState<any>(null);
 
   // Tutorial states
-  const { showHelpModal, setShowHelpModal, hasCompletedTutorial } = useTutorial();
+  const { 
+    showHelpModal, 
+    setShowHelpModal, 
+    hasCompletedTutorial,
+    shouldShowTooltip,
+    completeTutorial,
+    markTooltipShown 
+  } = useTutorial();
+  const [showNutritionTooltips, setShowNutritionTooltips] = useState(false);
   const [lastWeekData, setLastWeekData] = useState<{ weekStart: string; weekEnd: string } | null>(null);
 
   useEffect(() => {
@@ -342,6 +360,16 @@ export default function NutritionHomeScreen() {
       checkWeeklyRenewal();
     }
   }, [user]);
+
+  // Mostrar tooltips la primera vez
+  useEffect(() => {
+    if (shouldShowTooltip('NUTRITION') && user?.id && !isLoading) {
+      const timer = setTimeout(() => {
+        setShowNutritionTooltips(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldShowTooltip, user, isLoading]);
 
   // Recargar datos cada vez que la pantalla recibe focus
   useFocusEffect(
@@ -418,12 +446,24 @@ export default function NutritionHomeScreen() {
     yesterday.setDate(yesterday.getDate() - 1);
     
     if (dateStr === today.toISOString().split('T')[0]) {
-      return 'Hoy';
+      return t('commonUI.today');
     } else if (dateStr === yesterday.toISOString().split('T')[0]) {
-      return 'Ayer';
+      return t('commonUI.yesterday');
     } else {
-      const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-      const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+      const days = [
+        t('weekDays.sunday'),
+        t('weekDays.monday'),
+        t('weekDays.tuesday'),
+        t('weekDays.wednesday'),
+        t('weekDays.thursday'),
+        t('weekDays.friday'),
+        t('weekDays.saturday')
+      ];
+      const months = [
+        t('months.jan'), t('months.feb'), t('months.mar'), t('months.apr'),
+        t('months.may'), t('months.jun'), t('months.jul'), t('months.aug'),
+        t('months.sep'), t('months.oct'), t('months.nov'), t('months.dec')
+      ];
       return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
     }
   };
@@ -491,8 +531,8 @@ export default function NutritionHomeScreen() {
         console.log('🔄 Perfil del usuario ha cambiado, regenerando plan...');
         
         Alert.alert(
-          'Perfil actualizado',
-          'Detectamos cambios importantes en tu perfil (altura, objetivo, nivel de actividad, etc.). Es necesario recalcular tus calorías y macros.',
+          t('nutrition.profileUpdated'),
+          t('nutrition.profileUpdatedMessage'),
           [
             {
               text: 'Solo recalcular calorías',
@@ -552,13 +592,13 @@ export default function NutritionHomeScreen() {
       // Guardar el nuevo hash
       await saveProfileHash(newHash);
 
-      Alert.alert('¡Calorías actualizadas!', 'Tus objetivos de calorías y macros han sido recalculados.');
+      Alert.alert(t('nutrition.caloriesUpdated'), t('nutrition.caloriesUpdatedMessage'));
       
       // Recargar datos
       loadNutritionData();
     } catch (err: any) {
       console.error('Error recalculating targets:', err);
-      Alert.alert('Error', 'No se pudieron recalcular las calorías. Intenta nuevamente.');
+      Alert.alert(t('common.error'), t('nutrition.recalcError'));
     } finally {
       setIsInitializing(false);
     }
@@ -639,13 +679,13 @@ export default function NutritionHomeScreen() {
       // Guardar el nuevo hash
       await saveProfileHash(newHash);
 
-      Alert.alert('¡Plan regenerado!', 'Tu plan de nutrición ha sido actualizado con tu nuevo perfil.');
+      Alert.alert(t('nutrition.planRegenerated'), t('nutrition.planRegeneratedMessage'));
       
       // Recargar datos
       loadNutritionData();
     } catch (err: any) {
       console.error('Error regenerating plan:', err);
-      Alert.alert('Error', 'No se pudo regenerar el plan. Intenta nuevamente.');
+      Alert.alert(t('common.error'), t('nutrition.regenerateError'));
     } finally {
       setIsInitializing(false);
     }
@@ -676,12 +716,12 @@ export default function NutritionHomeScreen() {
           }
         }
         
+        const typedPlanData = planData as { userData?: any; fitness_level?: string; goals?: string[]; activity_types?: string[]; available_days?: number; days_per_week?: number } | null;
         const workoutPlanData = {
-          fitness_level: planData.userData?.fitness_level || planData.fitness_level,
-          goals: planData.userData?.goals || planData.goals || [],
-          activity_types: planData.userData?.activity_types || planData.activity_types || [],
-          available_days: planData.userData?.available_days || planData.available_days || planData.days_per_week,
-          session_duration: planData.userData?.session_duration || planData.session_duration,
+          fitness_level: typedPlanData?.userData?.fitness_level || typedPlanData?.fitness_level,
+          goals: typedPlanData?.userData?.goals || typedPlanData?.goals || [],
+          activity_types: typedPlanData?.userData?.activity_types || typedPlanData?.activity_types || [],
+          available_days: typedPlanData?.userData?.available_days || typedPlanData?.available_days || typedPlanData?.days_per_week,
         };
         
         setActivePlanData(workoutPlanData);
@@ -689,8 +729,8 @@ export default function NutritionHomeScreen() {
       } else {
         // No hay plan activo, mostrar cartel
         Alert.alert(
-          'No hay plan activo',
-          'No tienes un plan de entrenamiento activo. Crea un plan de entrenamiento para poder generar una dieta basada en ese plan.',
+          t('nutrition.noActivePlan'),
+          t('nutrition.noActivePlanMessage'),
           [
             {
               text: 'Cerrar',
@@ -707,23 +747,23 @@ export default function NutritionHomeScreen() {
       }
     } catch (err: any) {
       console.error('Error checking active plan:', err);
-      Alert.alert('Error', 'No se pudo verificar el plan activo. Intenta nuevamente.');
+      Alert.alert(t('common.error'), t('nutrition.verifyPlanError'));
     }
   };
 
   const addPrompt = () => {
     if (!newPrompt.trim()) {
-      Alert.alert('Error', 'Escribe una preferencia.');
+      Alert.alert(t('common.error'), t('nutrition.writePreference'));
       return;
     }
 
     if (newPrompt.length > 80) {
-      Alert.alert('Error', 'Máximo 80 caracteres por preferencia.');
+      Alert.alert(t('common.error'), t('nutrition.maxCharsPreference'));
       return;
     }
 
     if (customPrompts.length >= 10) {
-      Alert.alert('Error', 'Máximo 10 preferencias.');
+      Alert.alert(t('common.error'), t('nutrition.maxPreferences'));
       return;
     }
 
@@ -740,26 +780,26 @@ export default function NutritionHomeScreen() {
 
     // Validaciones
     if (mealsPerDay < 1 || mealsPerDay > 6) {
-      Alert.alert('Error', 'Las comidas por día deben estar entre 1 y 6.');
+      Alert.alert(t('common.error'), t('nutrition.mealsPerDayError'));
       return;
     }
 
     if (customPrompts.length > 10) {
-      Alert.alert('Error', 'Máximo 10 preferencias personalizadas.');
+      Alert.alert(t('common.error'), t('nutrition.maxPreferencesError'));
       return;
     }
 
     // Confirmar antes de generar
     Alert.alert(
-      '¿Generar nuevo plan?',
-      '¿Estás seguro de generar un nuevo plan? Se borrarán los datos del plan nutricional anterior.',
+      t('nutrition.generateNewPlan'),
+      t('nutrition.generateNewPlanConfirm'),
       [
         {
-          text: 'Cancelar',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Generar',
+          text: t('common.generate'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -793,7 +833,7 @@ export default function NutritionHomeScreen() {
               }
             } catch (err: any) {
               console.error('Error saving configuration:', err);
-              Alert.alert('Error', 'No se pudo guardar la configuración. Intenta nuevamente.');
+              Alert.alert(t('common.error'), t('nutrition.saveConfigError'));
             }
           },
         },
@@ -831,12 +871,12 @@ export default function NutritionHomeScreen() {
 
         // Extraer datos relevantes del plan para usar en la generación de dieta
         // Priorizar userData si existe (datos del formulario), sino usar datos directos del plan
+        const typedPlanData2 = planData as { userData?: any; fitness_level?: string; goals?: string[]; activity_types?: string[]; available_days?: number; days_per_week?: number } | null;
         workoutPlanData = {
-          fitness_level: planData.userData?.fitness_level || planData.fitness_level,
-          goals: planData.userData?.goals || planData.goals || [],
-          activity_types: planData.userData?.activity_types || planData.activity_types || [],
-          available_days: planData.userData?.available_days || planData.available_days || planData.days_per_week,
-          session_duration: planData.userData?.session_duration || planData.session_duration,
+          fitness_level: typedPlanData2?.userData?.fitness_level || typedPlanData2?.fitness_level,
+          goals: typedPlanData2?.userData?.goals || typedPlanData2?.goals || [],
+          activity_types: typedPlanData2?.userData?.activity_types || typedPlanData2?.activity_types || [],
+          available_days: typedPlanData2?.userData?.available_days || typedPlanData2?.available_days || typedPlanData2?.days_per_week,
         };
         console.log('📋 Usando datos del plan activo para generar dieta:', workoutPlanData);
       }
@@ -872,11 +912,11 @@ export default function NutritionHomeScreen() {
       // Regenerar plan (pasar datos del plan activo si corresponde)
       await createOrUpdateMealPlan(user.id, mondayStr, workoutPlanData);
 
-      Alert.alert('¡Listo!', 'Tu nuevo plan de comidas ha sido generado.');
+      Alert.alert(t('nutrition.ready'), t('nutrition.mealPlanGenerated'));
       loadNutritionData();
     } catch (err: any) {
       console.error('Error regenerating plan:', err);
-      Alert.alert('Error', 'No se pudo regenerar el plan. Intenta nuevamente.');
+      Alert.alert(t('common.error'), t('nutrition.regenerateError'));
     } finally {
       setIsInitializing(false);
     }
@@ -899,9 +939,8 @@ export default function NutritionHomeScreen() {
   /**
    * Verificar si necesitamos mostrar el modal de renovación semanal
    * Se muestra cuando:
-   * 1. Es lunes
-   * 2. La semana anterior tiene un plan completo
-   * 3. No se ha mostrado el modal hoy (usar AsyncStorage para persistir)
+   * 1. Hay un plan de la semana pasada
+   * 2. No hay plan para la semana actual
    */
   const checkWeeklyRenewal = async () => {
     if (!user?.id) return;
@@ -910,12 +949,15 @@ export default function NutritionHomeScreen() {
       const today = new Date();
       const dayOfWeek = today.getDay();
       
-      // Solo mostrar en lunes (1) o domingo (0) si es cerca de medianoche
-      if (dayOfWeek !== 1) return;
+      // Calcular el lunes de la semana actual
+      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const thisMonday = new Date(today);
+      thisMonday.setDate(today.getDate() + diff);
+      const thisMondayStr = thisMonday.toISOString().split('T')[0];
 
-      // Calcular la semana pasada
-      const lastMonday = new Date(today);
-      lastMonday.setDate(today.getDate() - 7);
+      // Calcular el lunes y domingo de la semana pasada
+      const lastMonday = new Date(thisMonday);
+      lastMonday.setDate(thisMonday.getDate() - 7);
       const lastSunday = new Date(lastMonday);
       lastSunday.setDate(lastMonday.getDate() + 6);
 
@@ -933,18 +975,18 @@ export default function NutritionHomeScreen() {
       if (!lastWeekPlan) return; // No hay plan de la semana pasada
 
       // Verificar si ya existe un plan para esta semana
-      const thisMonday = today.toISOString().split('T')[0];
       const { data: thisWeekPlan } = await supabase
         .from('meal_plans')
         .select('id')
         .eq('user_id', user.id)
-        .eq('week_start', thisMonday)
+        .eq('week_start', thisMondayStr)
         .maybeSingle();
 
       if (thisWeekPlan) return; // Ya hay plan para esta semana
 
-      // Mostrar modal de renovación
+      // Mostrar modal de renovación y marcar que hay renovación pendiente
       setLastWeekData({ weekStart: lastWeekStart, weekEnd: lastWeekEnd });
+      setPendingWeeklyRenewal(true);
       setShowWeeklyRenewalModal(true);
     } catch (err) {
       console.error('Error checking weekly renewal:', err);
@@ -952,23 +994,67 @@ export default function NutritionHomeScreen() {
   };
 
   /**
-   * Generar plan de la siguiente semana con ajustes basados en métricas
+   * Función para navegar al plan semanal verificando si hay renovación pendiente
+   */
+  const handleNavigateToPlan = (weekStart?: string) => {
+    if (pendingWeeklyRenewal) {
+      // Si hay renovación pendiente, mostrar modal
+      setShowWeeklyRenewalModal(true);
+      return;
+    }
+    
+    // Si no hay renovación pendiente, navegar al plan
+    if (weekStart) {
+      router.push(`/(tabs)/nutrition/plan?weekStart=${weekStart}` as any);
+    } else {
+      router.push('/(tabs)/nutrition/plan' as any);
+    }
+  };
+
+  /**
+   * Generar plan de la siguiente semana con ajustes basados en métricas y adherencia
    */
   const handleWeeklyRenewal = async (metrics: {
     weight: number;
     bodyFat?: number;
     muscle?: number;
+    adherence: number;
   }) => {
     if (!user?.id) return;
 
     try {
       console.log('📊 Generando plan semanal con nuevas métricas:', metrics);
+      
+      const hasBodyComposition = !!(metrics.bodyFat && metrics.muscle);
+      const isLowAdherence = metrics.adherence < 50;
+      
+      // Determinar tipo de ajuste
+      let adjustmentType: 'repeat' | 'basic' | 'full' = 'full';
+      if (isLowAdherence && !hasBodyComposition) {
+        adjustmentType = 'repeat';
+      } else if (!hasBodyComposition) {
+        adjustmentType = 'basic';
+      }
 
-      // 1. Actualizar métricas en user_profiles
+      // 1. Obtener targets actuales antes del ajuste
+      const { data: currentTargets } = await supabase
+        .from('nutrition_targets')
+        .select('calories, protein_g, carbs_g, fats_g')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const oldCalories = currentTargets?.calories || 2000;
+      const oldProtein = currentTargets?.protein_g || 150;
+      const oldCarbs = currentTargets?.carbs_g || 250;
+      const oldFats = currentTargets?.fats_g || 65;
+
+      // 2. Actualizar métricas en user_profiles
       const { error: updateError } = await supabase
         .from('user_profiles')
         .update({
-          weight_kg: metrics.weight,
+          weight: metrics.weight,
           body_fat_percentage: metrics.bodyFat || null,
           muscle_percentage: metrics.muscle || null,
         })
@@ -979,12 +1065,6 @@ export default function NutritionHomeScreen() {
         throw new Error('No se pudieron actualizar las métricas.');
       }
 
-      // 2. Obtener el perfil nutricional actual
-      const profile = await getNutritionProfile(user.id);
-      if (!profile) {
-        throw new Error('No se encontró el perfil nutricional.');
-      }
-
       // 3. Calcular la semana actual (lunes de esta semana)
       const today = new Date();
       const dayOfWeek = today.getDay();
@@ -993,25 +1073,124 @@ export default function NutritionHomeScreen() {
       thisMonday.setDate(today.getDate() + diff);
       const mondayStr = thisMonday.toISOString().split('T')[0];
 
-      // 4. Generar targets para la semana con las nuevas métricas
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(thisMonday);
-        date.setDate(thisMonday.getDate() + i);
-        const dateStr = date.toISOString().split('T')[0];
-        await computeAndSaveTargets(user.id, dateStr);
+      let newCalories = oldCalories;
+      let newProtein = oldProtein;
+      let newCarbs = oldCarbs;
+      let newFats = oldFats;
+
+      if (adjustmentType === 'repeat') {
+        // Solo copiar el plan de la semana pasada sin cambios
+        console.log('📋 Adherencia baja, repitiendo plan anterior');
+        
+        // Copiar targets de la semana pasada
+        const lastMonday = new Date(thisMonday);
+        lastMonday.setDate(lastMonday.getDate() - 7);
+        const lastMondayStr = lastMonday.toISOString().split('T')[0];
+        
+        const { data: lastWeekTargets } = await supabase
+          .from('nutrition_targets')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('date', lastMondayStr)
+          .order('date', { ascending: true })
+          .limit(7);
+
+        if (lastWeekTargets && lastWeekTargets.length > 0) {
+          for (let i = 0; i < 7; i++) {
+            const date = new Date(thisMonday);
+            date.setDate(thisMonday.getDate() + i);
+            const dateStr = date.toISOString().split('T')[0];
+            
+            const sourceTarget = lastWeekTargets[i % lastWeekTargets.length];
+            await supabase
+              .from('nutrition_targets')
+              .upsert({
+                user_id: user.id,
+                date: dateStr,
+                calories: sourceTarget.calories,
+                protein_g: sourceTarget.protein_g,
+                carbs_g: sourceTarget.carbs_g,
+                fats_g: sourceTarget.fats_g,
+              });
+          }
+        }
+        
+        // Copiar plan de comidas de la semana pasada
+        const lastWeekEnd = new Date(thisMonday);
+        lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+        const lastWeekStartStr = lastMonday.toISOString().split('T')[0];
+        
+        const { data: lastPlan } = await supabase
+          .from('meal_plans')
+          .select('plan_json')
+          .eq('user_id', user.id)
+          .eq('week_start', lastWeekStartStr)
+          .maybeSingle();
+
+        if (lastPlan) {
+          await supabase
+            .from('meal_plans')
+            .upsert({
+              user_id: user.id,
+              week_start: mondayStr,
+              plan_json: lastPlan.plan_json,
+            });
+        }
+      } else {
+        // 4. Generar targets para la semana con las nuevas métricas
+        for (let i = 0; i < 7; i++) {
+          const date = new Date(thisMonday);
+          date.setDate(thisMonday.getDate() + i);
+          const dateStr = date.toISOString().split('T')[0];
+          await computeAndSaveTargets(user.id, dateStr);
+        }
+
+        // 5. Generar el plan de comidas para la semana
+        await createOrUpdateMealPlan(user.id, mondayStr);
+        
+        // 6. Obtener los nuevos targets generados
+        const { data: newTargets } = await supabase
+          .from('nutrition_targets')
+          .select('calories, protein_g, carbs_g, fats_g')
+          .eq('user_id', user.id)
+          .eq('date', mondayStr)
+          .maybeSingle();
+
+        if (newTargets) {
+          newCalories = newTargets.calories;
+          newProtein = newTargets.protein_g;
+          newCarbs = newTargets.carbs_g;
+          newFats = newTargets.fats_g;
+        }
       }
 
-      // 5. Generar el plan de comidas para la semana
-      await createOrUpdateMealPlan(user.id, mondayStr);
+      // 7. Marcar que no hay renovación pendiente
+      setPendingWeeklyRenewal(false);
 
-      // 6. Recargar datos
+      // 8. Recargar datos
       await loadNutritionData();
       await loadWeeklyHistory();
 
-      Alert.alert(
-        '¡Plan Generado! 🎉',
-        'Tu nuevo plan nutricional está listo. Las métricas y el plan se han ajustado automáticamente.'
-      );
+      // 9. Mostrar modal de ajuste
+      const calorieChange = newCalories - oldCalories;
+      const calorieChangePercent = Math.round((calorieChange / oldCalories) * 100);
+      
+      setPlanAdjustmentData({
+        type: adjustmentType,
+        calorieChange,
+        calorieChangePercent,
+        proteinChange: newProtein - oldProtein,
+        carbsChange: newCarbs - oldCarbs,
+        fatsChange: newFats - oldFats,
+        oldCalories,
+        newCalories,
+        oldProtein,
+        newProtein,
+        adherence: metrics.adherence,
+        hasBodyComposition,
+      });
+      setShowPlanAdjustmentModal(true);
+      
     } catch (error: any) {
       console.error('Error generating weekly plan:', error);
       throw error;
@@ -1031,11 +1210,11 @@ export default function NutritionHomeScreen() {
         // Redirigir a settings para configurar
         setLoading(false);
         Alert.alert(
-          'Configuración Requerida',
-          'Necesitas configurar tu perfil nutricional primero.',
+          t('nutrition.configRequired'),
+          t('nutrition.configRequiredMessage'),
           [
             {
-              text: 'Configurar',
+              text: t('common.configure'),
               onPress: () => router.push('/(tabs)/nutrition/settings' as any),
             },
           ]
@@ -1120,7 +1299,7 @@ export default function NutritionHomeScreen() {
       setTodayWater(waterData?.water_ml || 0);
     } catch (err) {
       console.error('Error loading nutrition data:', err);
-      Alert.alert('Error', 'No se pudieron cargar los datos de nutrición. Intenta nuevamente.');
+      Alert.alert(t('common.error'), t('nutrition.loadNutritionError'));
     } finally {
       setLoading(false);
     }
@@ -1168,10 +1347,10 @@ export default function NutritionHomeScreen() {
         }
       }
 
-      Alert.alert('¡Listo!', 'Tu plan nutricional ha sido generado.');
+      Alert.alert(t('nutrition.ready'), t('nutrition.planInitialized'));
     } catch (err) {
       console.error('Error initializing week:', err);
-      Alert.alert('Error', 'No se pudo inicializar tu plan semanal.');
+      Alert.alert(t('common.error'), t('nutrition.initError'));
     } finally {
       setIsInitializing(false);
     }
@@ -1223,16 +1402,8 @@ export default function NutritionHomeScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => {
-              // Navegar al dashboard
-              router.push('/(tabs)/dashboard' as any);
-            }} 
-            style={styles.backButton}
-          >
-            <Ionicons name="arrow-back" size={24} color="#ffffff" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Nutrición</Text>
+          <View style={styles.backButton} />
+          <Text style={styles.headerTitle}>{t('nutritionIndex.title')}</Text>
           <TouchableOpacity
             onPress={() => setShowHelpModal(true)}
             style={styles.helpButton}
@@ -1246,10 +1417,10 @@ export default function NutritionHomeScreen() {
           <View style={styles.actionsGrid}>
             <TouchableOpacity
               style={styles.actionCard}
-              onPress={() => router.push('/(tabs)/nutrition/plan' as any)}
+              onPress={() => handleNavigateToPlan()}
             >
               <Ionicons name="restaurant" size={32} color="#ffb300" />
-              <Text style={styles.actionText}>Ver Plan Nutricional</Text>
+              <Text style={styles.actionText}>{t('nutritionIndex.viewPlan')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1257,9 +1428,9 @@ export default function NutritionHomeScreen() {
               onPress={() => router.push(`/(tabs)/nutrition/log?date=${selectedDate}` as any)}
             >
               <Ionicons name="add-circle-outline" size={32} color="#ffb300" />
-              <Text style={styles.actionText}>Registrar Comida</Text>
+              <Text style={styles.actionText}>{t('nutritionIndex.logMeal')}</Text>
               {selectedDate !== new Date().toISOString().split('T')[0] && (
-                <Text style={styles.actionSubtext}>Para el día seleccionado</Text>
+                <Text style={styles.actionSubtext}>{t('nutritionIndex.forSelectedDay')}</Text>
               )}
             </TouchableOpacity>
 
@@ -1268,7 +1439,7 @@ export default function NutritionHomeScreen() {
               onPress={() => router.push('/(tabs)/nutrition/grocery' as any)}
             >
               <Ionicons name="cart" size={32} color="#ffb300" />
-              <Text style={styles.actionText}>Lista de Compras</Text>
+              <Text style={styles.actionText}>{t('nutritionIndex.shoppingList')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1276,7 +1447,7 @@ export default function NutritionHomeScreen() {
               onPress={() => router.push('/(tabs)/register-weight' as any)}
             >
               <Ionicons name="body" size={32} color="#ffb300" />
-              <Text style={styles.actionText}>Registrar Medición</Text>
+              <Text style={styles.actionText}>{t('nutritionIndex.registerMeasurement')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -1284,12 +1455,7 @@ export default function NutritionHomeScreen() {
               onPress={handleGenerateNewPlan}
             >
               <Ionicons name="create" size={32} color="#ffb300" />
-              <Text style={styles.actionText}>Generar Plan Nutricional</Text>
-              {!hasCompletedTutorial('NUTRITION') && !activePlanData && (
-                <View style={styles.newBadge}>
-                  <Text style={styles.newBadgeText}>Nuevo</Text>
-                </View>
-              )}
+              <Text style={styles.actionText}>{t('nutritionIndex.generatePlan')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1319,7 +1485,7 @@ export default function NutritionHomeScreen() {
           >
           <View style={styles.macrosCard}>
             <View style={styles.macroRow}>
-              <Text style={styles.macroLabel}>Calorías</Text>
+              <Text style={styles.macroLabel}>{t('nutrition.calories')}</Text>
               <Text style={styles.macroValue}>
                 {consumed.calories} / {todayTarget?.calories || 0} kcal
               </Text>
@@ -1337,7 +1503,7 @@ export default function NutritionHomeScreen() {
             </View>
 
             <View style={styles.macroRow}>
-              <Text style={styles.macroLabel}>Proteína</Text>
+              <Text style={styles.macroLabel}>{t('nutrition.protein')}</Text>
               <Text style={styles.macroValue}>
                 {consumed.protein_g}g / {todayTarget?.protein_g || 0}g
               </Text>
@@ -1355,7 +1521,7 @@ export default function NutritionHomeScreen() {
             </View>
 
             <View style={styles.macroRow}>
-              <Text style={styles.macroLabel}>Carbohidratos</Text>
+              <Text style={styles.macroLabel}>{t('nutrition.carbs')}</Text>
               <Text style={styles.macroValue}>
                 {consumed.carbs_g}g / {todayTarget?.carbs_g || 0}g
               </Text>
@@ -1373,7 +1539,7 @@ export default function NutritionHomeScreen() {
             </View>
 
             <View style={styles.macroRow}>
-              <Text style={styles.macroLabel}>Grasas</Text>
+              <Text style={styles.macroLabel}>{t('nutrition.fats')}</Text>
               <Text style={styles.macroValue}>
                 {consumed.fats_g}g / {todayTarget?.fats_g || 0}g
               </Text>
@@ -1395,7 +1561,7 @@ export default function NutritionHomeScreen() {
             onPress={() => router.push(`/(tabs)/nutrition/today-detail?date=${selectedDate}` as any)}
             style={styles.detailButton}
           >
-            <Text style={styles.detailButtonText}>Ver detalle completo</Text>
+            <Text style={styles.detailButtonText}>{t('nutritionIndex.viewFullDetail')}</Text>
             <Ionicons name="chevron-forward" size={20} color="#ffb300" />
           </TouchableOpacity>
         </View>
@@ -1409,7 +1575,7 @@ export default function NutritionHomeScreen() {
         >
           <View style={styles.modalContainer}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Seleccionar fecha</Text>
+              <Text style={styles.modalTitle}>{t('nutritionIndex.selectDate')}</Text>
               <ScrollView style={styles.dateList}>
                 {Array.from({ length: 30 }, (_, i) => {
                   const date = new Date();
@@ -1433,7 +1599,7 @@ export default function NutritionHomeScreen() {
                 style={styles.modalCloseButton}
                 onPress={() => setShowDatePicker(false)}
               >
-                <Text style={styles.modalCloseButtonText}>Cerrar</Text>
+                <Text style={styles.modalCloseButtonText}>{t('common.close')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1441,7 +1607,7 @@ export default function NutritionHomeScreen() {
 
         {/* Hidratación */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>💧 Hidratación</Text>
+          <Text style={styles.sectionTitle}>{t('nutritionIndex.hydration')}</Text>
           <View style={styles.waterCard}>
             <Ionicons name="water" size={40} color="#ffb300" />
             <Text style={styles.waterText}>
@@ -1452,14 +1618,14 @@ export default function NutritionHomeScreen() {
               onPress={() => router.push(`/(tabs)/nutrition/log?type=water&date=${selectedDate}` as any)}
             >
               <Ionicons name="add-circle" size={28} color="#ffb300" />
-              <Text style={styles.addWaterText}>Agregar agua</Text>
+              <Text style={styles.addWaterText}>{t('nutritionIndex.addWater')}</Text>
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Historial Semanal */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📅 Historial Semanal</Text>
+          <Text style={styles.sectionTitle}>📅 {t('nutritionIndex.weeklyHistory')}</Text>
           {loadingHistory ? (
             <ScrollView 
               horizontal 
@@ -1475,6 +1641,7 @@ export default function NutritionHomeScreen() {
               weeklyHistory={weeklyHistory}
               onSelectDate={setSelectedDate}
               onPressNextWeek={() => setShowNextWeekModal(true)}
+              onNavigateToPlan={handleNavigateToPlan}
             />
           )}
         </View>
@@ -1501,6 +1668,18 @@ export default function NutritionHomeScreen() {
         />
       )}
 
+      {/* Modal de ajuste de plan */}
+      {planAdjustmentData && (
+        <PlanAdjustmentModal
+          visible={showPlanAdjustmentModal}
+          onClose={() => {
+            setShowPlanAdjustmentModal(false);
+            setPlanAdjustmentData(null);
+          }}
+          adjustmentData={planAdjustmentData}
+        />
+      )}
+
       {/* Modal de semana futura */}
       <Modal
         visible={showNextWeekModal}
@@ -1512,19 +1691,26 @@ export default function NutritionHomeScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Ionicons name="calendar-outline" size={32} color="#ffb300" />
-              <Text style={styles.modalTitle}>Próxima Semana</Text>
+              <Text style={styles.modalTitle}>
+  {t('nutrition.nextWeek')}
+</Text>
             </View>
             <Text style={styles.modalMessage}>
-              El plan de la próxima semana se habilitará el lunes siguiente y se generará automáticamente en base a la información recolectada de la semana actual.
-            </Text>
-            <Text style={styles.modalSubtext}>
-              Tu plan de nutrición se ajustará automáticamente según tu progreso, adherencia y resultados de esta semana.
-            </Text>
+  {t('nutrition.nextWeekInfo')}
+</Text>
+
+<Text style={styles.modalSubtext}>
+  {t('nutrition.autoAdjustInfo')}
+</Text>
+
             <TouchableOpacity
               style={styles.modalCloseButton}
               onPress={() => setShowNextWeekModal(false)}
             >
-              <Text style={styles.modalCloseButtonText}>Entendido</Text>
+              <Text style={styles.modalCloseButtonText}>
+  {t('common.gotIt')}
+</Text>
+
             </TouchableOpacity>
           </View>
         </View>
@@ -1540,12 +1726,12 @@ export default function NutritionHomeScreen() {
           // Este callback se ejecuta cuando el modal se cierra completamente
         }}
       >
-        <View style={styles.modalOverlay} pointerEvents="box-none">
-          <View style={styles.modalContent} pointerEvents="box-none">
+        <View style={styles.selectionModalOverlay} pointerEvents="box-none">
+          <View style={styles.selectionModalContent} pointerEvents="box-none">
             <View pointerEvents="auto">
-              <Text style={styles.modalTitle}>¿Cómo quieres crear tu plan?</Text>
-              <Text style={styles.modalSubtitle}>
-                Elige el método que prefieras para generar tu plan de nutrición
+              <Text style={styles.selectionModalTitle}>{t('nutrition.howToCreatePlan')}</Text>
+              <Text style={styles.selectionModalSubtitle}>
+                {t('nutrition.chooseMethod')}
               </Text>
               
               <TouchableOpacity
@@ -1564,9 +1750,9 @@ export default function NutritionHomeScreen() {
                 <View style={styles.optionIconContainer}>
                   <Ionicons name="restaurant" size={28} color="#ffb300" />
                 </View>
-                <Text style={styles.selectionOptionTitlePrimary}>Basada en plan activo</Text>
+                <Text style={styles.selectionOptionTitlePrimary}>{t('nutrition.basedOnActivePlan')}</Text>
                 <Text style={styles.selectionOptionDescriptionPrimary}>
-                  Genera tu dieta usando los parámetros de tu plan de entrenamiento activo
+                  {t('nutrition.basedOnActivePlanDesc')}
                 </Text>
               </TouchableOpacity>
 
@@ -1591,18 +1777,18 @@ export default function NutritionHomeScreen() {
                 <View style={styles.optionIconContainer}>
                   <Ionicons name="settings" size={28} color="#ffb300" />
                 </View>
-                <Text style={styles.selectionOptionTitleSecondary}>Con objetivos diferentes</Text>
+                <Text style={styles.selectionOptionTitleSecondary}>{t('nutrition.withDifferentGoals')}</Text>
                 <Text style={styles.selectionOptionDescriptionSecondary}>
-                  Configura objetivos y preferencias personalizadas para tu plan de nutrición
+                  {t('nutrition.withDifferentGoalsDesc')}
                 </Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.modalCloseButton}
+                style={styles.selectionModalCloseButton}
                 onPress={() => setShowSelectionModal(false)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.modalCloseButtonText}>Cancelar</Text>
+                <Text style={styles.selectionModalCloseButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1620,7 +1806,7 @@ export default function NutritionHomeScreen() {
           <View style={styles.generatePlanModalContent} pointerEvents="box-none">
             <View pointerEvents="auto">
               <View style={styles.generatePlanModalHeader}>
-                <Text style={styles.generatePlanModalTitle}>Generar Plan de Nutrición</Text>
+                <Text style={styles.generatePlanModalTitle}>{t('nutrition.generatePlan')}</Text>
                 <TouchableOpacity
                   onPress={() => setShowGeneratePlanModal(false)}
                   style={styles.generatePlanModalCloseButton}
@@ -1637,56 +1823,50 @@ export default function NutritionHomeScreen() {
               {/* Información del Plan Activo */}
               {activePlanData && (
                 <View style={styles.generatePlanSection}>
-                  <Text style={styles.generatePlanSectionTitle}>📋 Plan de Entrenamiento Activo</Text>
+                  <Text style={styles.generatePlanSectionTitle}>📋 {t('nutrition.activeWorkoutPlan')}</Text>
                   <View style={styles.generatePlanInfoCard}>
                     <View style={styles.generatePlanInfoRow}>
-                      <Text style={styles.generatePlanInfoLabel}>Nivel de Fitness:</Text>
-                      <Text style={styles.generatePlanInfoValue}>
-                        {activePlanData.fitness_level === 'beginner' ? 'Principiante' :
-                         activePlanData.fitness_level === 'intermediate' ? 'Intermedio' :
-                         activePlanData.fitness_level === 'advanced' ? 'Avanzado' :
-                         activePlanData.fitness_level || 'N/A'}
-                      </Text>
+                    <Text style={styles.generatePlanInfoLabel}>
+  {t('nutrition.fitnessLevelLabel')}
+</Text>
+
+<Text style={styles.generatePlanInfoValue}>
+  {activePlanData.fitness_level
+    ? t(`fitnessLevels.${activePlanData.fitness_level}`)
+    : t('common.notAvailable')}
+</Text>
+
                     </View>
                     <View style={styles.generatePlanInfoRow}>
-                      <Text style={styles.generatePlanInfoLabel}>Objetivos:</Text>
-                      <View style={styles.generatePlanTagsContainer}>
-                        {(activePlanData.goals || []).map((goal: string, index: number) => {
-                          const goalMap: { [key: string]: string } = {
-                            weight_loss: 'Bajar grasa',
-                            muscle_gain: 'Ganar músculo',
-                            strength: 'Aumentar fuerza',
-                            endurance: 'Mejorar resistencia',
-                            flexibility: 'Flexibilidad',
-                            general_fitness: 'Forma general',
-                          };
-                          return (
-                            <View key={index} style={styles.generatePlanTag}>
-                              <Text style={styles.generatePlanTagText}>{goalMap[goal] || goal}</Text>
-                            </View>
-                          );
-                        })}
-                      </View>
+                    <Text style={styles.generatePlanInfoLabel}>
+  {t('workout.goalsLabel')}
+</Text>
+<View style={styles.generatePlanTagsContainer}>
+  {(activePlanData.goals || []).map((goal: string, index: number) => (
+    <View key={index} style={styles.generatePlanTag}>
+      <Text style={styles.generatePlanTagText}>
+        {t(`fitnessGoals.${goal}`)}
+      </Text>
+    </View>
+  ))}
+</View>
+
                     </View>
                     <View style={styles.generatePlanInfoRow}>
-                      <Text style={styles.generatePlanInfoLabel}>Tipos de Actividad:</Text>
-                      <View style={styles.generatePlanTagsContainer}>
-                        {(activePlanData.activity_types || []).map((activity: string, index: number) => {
-                          const activityMap: { [key: string]: string } = {
-                            cardio: 'Cardio',
-                            strength: 'Fuerza',
-                            sports: 'Deportes',
-                            yoga: 'Yoga/Pilates',
-                            hiit: 'HIIT',
-                            mixed: 'Mixto',
-                          };
-                          return (
-                            <View key={index} style={styles.generatePlanTag}>
-                              <Text style={styles.generatePlanTagText}>{activityMap[activity] || activity}</Text>
-                            </View>
-                          );
-                        })}
-                      </View>
+                    <Text style={styles.generatePlanInfoLabel}>
+  {t('workout.activityTypes')}
+</Text>
+
+<View style={styles.generatePlanTagsContainer}>
+  {(activePlanData.activity_types || []).map((activity: string, index: number) => (
+    <View key={index} style={styles.generatePlanTag}>
+      <Text style={styles.generatePlanTagText}>
+        {t(`activityTypes.${activity}`)}
+      </Text>
+    </View>
+  ))}
+</View>
+
                     </View>
                     <View style={styles.generatePlanInfoRow}>
                       <Text style={styles.generatePlanInfoLabel}>Días por Semana:</Text>
@@ -1732,22 +1912,26 @@ export default function NutritionHomeScreen() {
 
               {/* Preferencias personalizadas */}
               <View style={styles.generatePlanSection}>
-                <Text style={styles.generatePlanSectionTitle}>✨ Preferencias Personalizadas</Text>
-                <Text style={styles.generatePlanSectionHelper}>
-                  Estas preferencias afectarán tu plan de comidas. Ejemplos: "prefiero platos rápidos",
-                  "evitar picantes", "más opciones con pescado", "budget bajo".
-                </Text>
+              <Text style={styles.generatePlanSectionTitle}>
+  {t('nutrition.preferencesTitle')}
+</Text>
+
+<Text style={styles.generatePlanSectionHelper}>
+  {t('nutrition.preferencesHelper')}
+</Text>
+
 
                 <View style={styles.generatePlanInputContainer}>
-                  <TextInput
-                    style={styles.generatePlanInput}
-                    value={newPrompt}
-                    onChangeText={setNewPrompt}
-                    placeholder="Ej: prefiero comidas rápidas"
-                    placeholderTextColor="#666666"
-                    maxLength={80}
-                    onSubmitEditing={addPrompt}
-                  />
+                <TextInput
+  style={styles.generatePlanInput}
+  value={newPrompt}
+  onChangeText={setNewPrompt}
+  placeholder={t('nutrition.preferencesPlaceholder')}
+  placeholderTextColor="#666666"
+  maxLength={80}
+  onSubmitEditing={addPrompt}
+/>
+
                   <TouchableOpacity style={styles.generatePlanAddButton} onPress={addPrompt}>
                     <Ionicons name="add" size={24} color="#ffffff" />
                   </TouchableOpacity>
@@ -1765,8 +1949,12 @@ export default function NutritionHomeScreen() {
                 </View>
 
                 <Text style={styles.generatePlanPromptsCount}>
-                  {customPrompts.length} / 10 preferencias
-                </Text>
+  {t('nutrition.preferencesCount', {
+    count: customPrompts.length,
+    max: 10,
+  })}
+</Text>
+
               </View>
 
               {/* Botón generar */}
@@ -1780,7 +1968,9 @@ export default function NutritionHomeScreen() {
                 ) : (
                   <>
                     <Ionicons name="create" size={24} color="#1a1a1a" />
-                    <Text style={styles.generatePlanButtonText}>Generar Plan Nutricional</Text>
+                    <Text style={styles.generatePlanButtonText}>
+  {t('nutrition.generatePlan')}
+</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -1797,6 +1987,43 @@ export default function NutritionHomeScreen() {
         visible={showHelpModal}
         onClose={() => setShowHelpModal(false)}
       />
+
+      {/* Tooltips de tutorial */}
+      {showNutritionTooltips && (
+        <TutorialTooltip
+          visible={showNutritionTooltips}
+          steps={[
+            {
+              element: <View />,
+              title: t('tutorial.nutrition.title1'),
+              content: t('tutorial.nutrition.content1'),
+              placement: 'center',
+            },
+            {
+              element: <View />,
+              title: t('tutorial.nutrition.title2'),
+              content: t('tutorial.nutrition.content2'),
+              placement: 'center',
+            },
+            {
+              element: <View />,
+              title: t('tutorial.nutrition.title3'),
+              content: t('tutorial.nutrition.content3'),
+              placement: 'center',
+            },
+          ]}
+          onComplete={() => {
+            setShowNutritionTooltips(false);
+            completeTutorial('NUTRITION');
+            markTooltipShown('NUTRITION');
+          }}
+          onSkip={() => {
+            setShowNutritionTooltips(false);
+            completeTutorial('NUTRITION');
+            markTooltipShown('NUTRITION');
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -1926,23 +2153,6 @@ const styles = StyleSheet.create({
   actionCardWide: {
     minWidth: '100%',
     flex: 0,
-  },
-  newBadge: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: '#ff6b6b',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#0a0a0a',
-  },
-  newBadgeText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
   },
   actionText: {
     fontSize: 14,
@@ -2349,14 +2559,14 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
   },
   // Estilos del modal de selección (iguales al de entrenamiento)
-  modalOverlay: {
+  selectionModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  modalContent: {
+  selectionModalContent: {
     backgroundColor: '#2a2a2a',
     borderRadius: 20,
     padding: 32,
@@ -2364,14 +2574,14 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     alignItems: 'center',
   },
-  modalTitle: {
+  selectionModalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#ffffff',
     marginBottom: 8,
     textAlign: 'center',
   },
-  modalSubtitle: {
+  selectionModalSubtitle: {
     fontSize: 14,
     color: '#999',
     textAlign: 'center',
@@ -2430,11 +2640,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
-  modalCloseButton: {
+  selectionModalCloseButton: {
     marginTop: 8,
     paddingVertical: 12,
   },
-  modalCloseButtonText: {
+  selectionModalCloseButtonText: {
     color: '#999',
     fontSize: 16,
     fontWeight: '600',

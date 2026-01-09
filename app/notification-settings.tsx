@@ -14,6 +14,7 @@ import { useUser } from '@clerk/clerk-expo';
 import { router, Stack } from 'expo-router';
 import { smartNotificationService } from '../src/services/smartNotifications';
 import * as Notifications from 'expo-notifications';
+import { useTranslation } from 'react-i18next';
 
 interface NotificationSettings {
   enabled: boolean;
@@ -31,6 +32,7 @@ interface NotificationSettings {
 
 export default function NotificationSettingsScreen() {
   const { user } = useUser();
+  const { t } = useTranslation();
   const [settings, setSettings] = useState<NotificationSettings>({
     enabled: true,
     workoutReminders: true,
@@ -56,9 +58,9 @@ export default function NotificationSettingsScreen() {
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert(
-          'Permisos requeridos',
-          'Las notificaciones están deshabilitadas. Puedes habilitarlas en la configuración del dispositivo.',
-          [{ text: 'OK' }]
+          t('notifications.permissionsRequired'),
+          t('notifications.enableInSettings'),
+          [{ text: t('common.ok') }]
         );
       }
     } catch (error) {
@@ -91,10 +93,10 @@ export default function NotificationSettingsScreen() {
         await smartNotificationService.scheduleSmartNotifications(user.id);
       }
       
-      Alert.alert('Éxito', 'Configuración guardada correctamente');
+      Alert.alert(t('common.success'), t('notifications.settingsSaved'));
     } catch (error) {
       console.error('Error guardando configuración:', error);
-      Alert.alert('Error', 'No se pudo guardar la configuración');
+      Alert.alert(t('common.error'), t('notifications.settingsSaveError'));
     } finally {
       setIsLoading(false);
     }
@@ -106,7 +108,7 @@ export default function NotificationSettingsScreen() {
         user?.id || '',
         'workout_completed'
       );
-      Alert.alert('Notificación enviada', 'Revisa tu centro de notificaciones');
+      Alert.alert(t('notifications.notificationSent'), t('notifications.checkCenter'));
     } catch (error) {
       console.error('Error enviando notificación de prueba:', error);
     }
@@ -181,31 +183,34 @@ export default function NotificationSettingsScreen() {
     <>
       <Stack.Screen 
         options={{ 
-          headerShown: true,
-          title: 'Notificaciones',
-          headerStyle: { backgroundColor: '#1a1a1a' },
-          headerTintColor: '#ffffff',
-          headerTitleStyle: { color: '#ffffff' },
-          headerBackTitle: ' ',
-          headerBackTitleVisible: false,
+          headerShown: false,
         }} 
       />
       <SafeAreaView style={styles.container}>
+        {/* Custom Header */}
+        <View style={styles.customHeader}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={28} color="#ffffff" />
+          </TouchableOpacity>
+          <Text style={styles.customHeaderTitle}>{t('notifications.settingsTitle')}</Text>
+          <View style={{ width: 28 }} />
+        </View>
+
         <ScrollView style={styles.scrollView}>
           <View style={styles.header}>
-            <Text style={styles.title}>Notificaciones Inteligentes</Text>
+            <Text style={styles.title}>{t('notifications.smartNotifications')}</Text>
             <Text style={styles.subtitle}>
-              Recibe recordatorios personalizados basados en tu adherencia y progreso
+              {t('notifications.smartSubtitle')}
             </Text>
           </View>
 
       {/* Configuración General */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Configuración General</Text>
+        <Text style={styles.sectionTitle}>{t('notifications.generalSettings')}</Text>
         
         <SettingRow
-          title="Notificaciones habilitadas"
-          subtitle="Activar/desactivar todas las notificaciones"
+          title={t('notifications.enabled')}
+          subtitle={t('notifications.enabledSubtitle')}
           value={settings.enabled}
           onValueChange={(value) => updateSetting('enabled', value)}
           icon="notifications"
@@ -214,43 +219,43 @@ export default function NotificationSettingsScreen() {
 
       {/* Tipos de Notificaciones */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Tipos de Notificaciones</Text>
+        <Text style={styles.sectionTitle}>{t('notifications.notificationTypes')}</Text>
         
         <SettingRow
-          title="Recordatorios de entrenamiento"
-          subtitle="Te avisa cuando llevas días sin entrenar"
+          title={t('notifications.workoutReminders')}
+          subtitle={t('notifications.workoutRemindersSubtitle')}
           value={settings.workoutReminders}
           onValueChange={(value) => updateSetting('workoutReminders', value)}
           icon="fitness"
         />
 
         <SettingRow
-          title="Celebraciones de racha"
-          subtitle="Felicitaciones por días consecutivos"
+          title={t('notifications.streakCelebrations')}
+          subtitle={t('notifications.streakCelebrationsSubtitle')}
           value={settings.streakCelebrations}
           onValueChange={(value) => updateSetting('streakCelebrations', value)}
           icon="flame"
         />
 
         <SettingRow
-          title="Recordatorios de meta semanal"
-          subtitle="Te ayuda a cumplir tus objetivos semanales"
+          title={t('notifications.weeklyGoals')}
+          subtitle={t('notifications.weeklyGoalsSubtitle')}
           value={settings.weeklyGoals}
           onValueChange={(value) => updateSetting('weeklyGoals', value)}
           icon="target"
         />
 
         <SettingRow
-          title="Horario óptimo"
-          subtitle="Sugerencias basadas en tu horario habitual"
+          title={t('notifications.optimalTiming')}
+          subtitle={t('notifications.optimalTimingSubtitle')}
           value={settings.optimalTiming}
           onValueChange={(value) => updateSetting('optimalTiming', value)}
           icon="time"
         />
 
         <SettingRow
-          title="Recordatorios de PR"
-          subtitle="Motivación para superar tus records"
+          title={t('notifications.prReminders')}
+          subtitle={t('notifications.prRemindersSubtitle')}
           value={settings.prReminders}
           onValueChange={(value) => updateSetting('prReminders', value)}
           icon="trophy"
@@ -259,11 +264,11 @@ export default function NotificationSettingsScreen() {
 
       {/* Horarios Silenciosos */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Horarios Silenciosos</Text>
+        <Text style={styles.sectionTitle}>{t('notifications.quietHours')}</Text>
         
         <SettingRow
-          title="Activar horarios silenciosos"
-          subtitle="No recibir notificaciones en horarios específicos"
+          title={t('notifications.quietHoursEnabled')}
+          subtitle={t('notifications.quietHoursSubtitle')}
           value={settings.quietHours.enabled}
           onValueChange={(value) => updateQuietHours('enabled', value)}
           icon="moon"
@@ -271,12 +276,12 @@ export default function NotificationSettingsScreen() {
 
         {settings.quietHours.enabled && (
           <View style={styles.timeSettings}>
-            <Text style={styles.timeLabel}>Desde:</Text>
+            <Text style={styles.timeLabel}>{t('notifications.from')}</Text>
             <TouchableOpacity style={styles.timeButton}>
               <Text style={styles.timeText}>{settings.quietHours.start}</Text>
             </TouchableOpacity>
             
-            <Text style={styles.timeLabel}>Hasta:</Text>
+            <Text style={styles.timeLabel}>{t('notifications.until')}</Text>
             <TouchableOpacity style={styles.timeButton}>
               <Text style={styles.timeText}>{settings.quietHours.end}</Text>
             </TouchableOpacity>
@@ -291,7 +296,7 @@ export default function NotificationSettingsScreen() {
           onPress={testNotification}
         >
           <Ionicons name="send" size={20} color="#ffb300" />
-          <Text style={styles.testButtonText}>Probar notificación</Text>
+          <Text style={styles.testButtonText}>{t('notifications.testNotification')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -300,20 +305,16 @@ export default function NotificationSettingsScreen() {
           disabled={isLoading}
         >
           <Text style={styles.saveButtonText}>
-            {isLoading ? 'Guardando...' : 'Guardar configuración'}
+            {isLoading ? t('common.loading') : t('notifications.saveSettings')}
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* Información adicional */}
       <View style={styles.infoSection}>
-        <Text style={styles.infoTitle}>💡 Cómo funcionan las notificaciones inteligentes</Text>
+        <Text style={styles.infoTitle}>{t('notifications.howItWorks')}</Text>
         <Text style={styles.infoText}>
-          • Analizamos tu patrón de entrenamiento y adherencia{'\n'}
-          • Te enviamos recordatorios solo cuando los necesitas{'\n'}
-          • Celebramos tus logros y rachas{'\n'}
-          • Respetamos tus horarios silenciosos{'\n'}
-          • Evitamos el spam con cooldowns inteligentes
+          {t('notifications.howItWorksText')}
         </Text>
       </View>
       </ScrollView>
@@ -326,6 +327,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a1a1a',
+  },
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  backButton: {
+    padding: 4,
+  },
+  customHeaderTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
   },
   scrollView: {
     flex: 1,

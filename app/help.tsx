@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 
 type SupportOption = {
   id: string;
@@ -23,31 +24,34 @@ type SupportOption = {
   placeholder: string;
 };
 
-const supportOptions: SupportOption[] = [
+const getSupportOptions = (t: any): SupportOption[] => [
   {
     id: 'suggestion',
-    title: 'Enviar sugerencias',
-    description: 'Comparte tus ideas para mejorar la app',
+    title: t('help.suggestion'),
+    description: t('help.suggestionDesc'),
     icon: 'bulb-outline',
-    placeholder: 'Cuéntanos tu idea o sugerencia para mejorar Fitness Luxor App. ¡Todas las ideas son bienvenidas!',
+    placeholder: t('help.suggestionPlaceholder'),
   },
   {
     id: 'bug',
-    title: 'Informe de errores',
-    description: 'Reporta un problema o error en la app',
+    title: t('help.bugReport'),
+    description: t('help.bugReportDesc'),
     icon: 'bug-outline',
-    placeholder: 'Describe el error que encontraste: ¿Qué estabas haciendo? ¿Qué esperabas que pasara? ¿Qué pasó en realidad?',
+    placeholder: t('help.bugReportPlaceholder'),
   },
   {
     id: 'help',
-    title: 'Consigue ayuda',
-    description: 'Obtén asistencia con dudas o problemas',
+    title: t('help.getHelp'),
+    description: t('help.getHelpDesc'),
     icon: 'help-circle-outline',
-    placeholder: '¿En qué podemos ayudarte? Describe tu pregunta o problema con el mayor detalle posible.',
+    placeholder: t('help.getHelpPlaceholder'),
   },
 ];
 
 export default function HelpScreen() {
+  const { t } = useTranslation();
+  const supportOptions = getSupportOptions(t);
+
   const handleOptionPress = (option: SupportOption) => {
     router.push({
       pathname: '/support-form',
@@ -63,24 +67,28 @@ export default function HelpScreen() {
     <>
       <Stack.Screen
         options={{
-          headerShown: true,
-          title: 'Ayuda y soporte',
-          headerStyle: { backgroundColor: '#1a1a1a' },
-          headerTintColor: '#ffffff',
-          headerTitleStyle: { fontWeight: 'bold' },
-          headerBackTitle: ' ',
-          headerBackTitleVisible: false,
+          headerShown: false,
         }}
       />
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
+        
+        {/* Custom Header */}
+        <View style={styles.customHeader}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={28} color="#ffffff" />
+          </TouchableOpacity>
+          <Text style={styles.customHeaderTitle}>{t('help.title')}</Text>
+          <View style={{ width: 28 }} />
+        </View>
+
         <ScrollView contentContainerStyle={styles.scrollContent}>
           {/* Header */}
           <View style={styles.headerSection}>
             <Ionicons name="chatbubbles" size={64} color="#ffb300" />
-            <Text style={styles.headerTitle}>¿Cómo podemos ayudarte?</Text>
+            <Text style={styles.headerTitle}>{t('help.helpTitle')}</Text>
             <Text style={styles.headerSubtitle}>
-              Selecciona una opción para contactarnos
+              {t('help.selectOption')}
             </Text>
           </View>
 
@@ -111,12 +119,12 @@ export default function HelpScreen() {
           {/* Contact Info */}
           <View style={styles.contactInfo}>
             <Ionicons name="mail" size={20} color="#888888" />
-            <Text style={styles.contactText}>soporte@luxorfitnessapp.com</Text>
+            <Text style={styles.contactText}>{t('help.supportEmail')}</Text>
           </View>
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              Respondemos todas las consultas en un plazo de 24-48 horas
+              {t('help.responseTime')}
             </Text>
           </View>
         </ScrollView>
@@ -129,6 +137,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0a0a0a',
+  },
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1a1a1a',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2a2a',
+  },
+  backButton: {
+    padding: 4,
+  },
+  customHeaderTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
   },
   scrollContent: {
     padding: 20,

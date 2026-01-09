@@ -984,7 +984,8 @@ async function generateAIMealPlan(
     activity_types?: string[];
     available_days?: number;
     session_duration?: number;
-  } | null
+  } | null,
+  language: 'es' | 'en' = 'es'
 ): Promise<WeekPlan> {
   try {
     // Construir el contexto del usuario con composición corporal
@@ -1063,7 +1064,7 @@ NOTA: Tienes acceso a 200 alimentos diferentes (IDs 1-200). Si necesitas otros a
 
 REGLAS ESTRICTAS:
 1. SOLO usa alimentos de la lista anterior (usa el ID del alimento)
-2. NUNCA uses food_id undefined, null, o fuera del rango 1-200
+       2. NUNCA uses food_id undefined, null, o fuera del rango 1-200
 3. NUNCA uses grams undefined, null, o menor a 1
 4. Respeta EXACTAMENTE las preferencias y exclusiones del usuario
 5. Si el usuario dice "sin pescado" o "evitar pescado", NO incluyas ningún alimento con tag "pescado"

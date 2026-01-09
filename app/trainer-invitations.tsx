@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import {
   getPendingTrainerInvitations,
   respondToTrainerInvitation,
@@ -30,6 +31,7 @@ interface TrainerInvitation {
 }
 
 export default function TrainerInvitationsScreen() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [invitations, setInvitations] = useState<TrainerInvitation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,10 +89,10 @@ export default function TrainerInvitationsScreen() {
         );
         await loadInvitations();
       } else {
-        Alert.alert('Error', result.error || 'No se pudo procesar la invitación');
+        Alert.alert(t('common.error'), result.error || t('workout.errorProcessingInvitation'));
       }
     } catch (error) {
-      Alert.alert('Error', 'Ocurrió un error al procesar la invitación');
+      Alert.alert(t('common.error'), t('workout.unexpectedErrorProcessingInvitation'));
     } finally {
       setRespondingTo(null);
     }

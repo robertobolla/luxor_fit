@@ -17,12 +17,14 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
 import { logMeal, logWater, calculateFoodMacros } from '../../../src/services/nutrition';
 import { LoadingOverlay } from '../../../src/components/LoadingOverlay';
 
 export default function MealLogScreen() {
   const { user } = useUser();
+  const { t } = useTranslation();
   const params = useLocalSearchParams();
   const isWaterLog = params.type === 'water';
 
@@ -39,13 +41,13 @@ export default function MealLogScreen() {
 
   const handleCalculateWithAI = async () => {
     if (!mealName.trim() || !weightGrams) {
-      Alert.alert('Error', 'Ingresa el nombre del alimento y su peso.');
+      Alert.alert(t('common.error'), t('nutrition.enterFoodAndWeight'));
       return;
     }
 
     const weight = parseInt(weightGrams);
     if (isNaN(weight) || weight <= 0) {
-      Alert.alert('Error', 'El peso debe ser un número positivo.');
+      Alert.alert(t('common.error'), t('nutrition.weightMustBePositive'));
       return;
     }
 
@@ -58,13 +60,13 @@ export default function MealLogScreen() {
         setProtein(result.data.protein_g.toString());
         setCarbs(result.data.carbs_g.toString());
         setFats(result.data.fats_g.toString());
-        Alert.alert('✅ ¡Calculado!', 'Los macros se calcularon automáticamente con IA.');
+        Alert.alert(t('nutrition.calculated'), t('nutrition.macrosCalculatedWithAI'));
       } else {
-        Alert.alert('Error', result.error || 'No se pudieron calcular los macros.');
+        Alert.alert(t('common.error'), result.error || t('nutrition.couldNotCalculateMacros'));
       }
     } catch (err: any) {
       console.error('Error calculating macros:', err);
-      Alert.alert('Error', err.message || 'Error inesperado.');
+      Alert.alert(t('common.error'), err.message || t('errors.unknownError'));
     } finally {
       setIsCalculating(false);
     }
@@ -74,7 +76,7 @@ export default function MealLogScreen() {
     if (!user?.id) return;
 
     if (!mealName.trim() || !calories || !protein || !carbs || !fats) {
-      Alert.alert('Error', 'Completa todos los campos.');
+      Alert.alert(t('common.error'), t('nutrition.completeAllFields'));
       return;
     }
 
@@ -106,8 +108,8 @@ export default function MealLogScreen() {
         // Éxito
         setIsSaving(false);
         setIsRetrying(false);
-        Alert.alert('¡Guardado!', 'Comida registrada correctamente.', [
-          { text: 'OK', onPress: () => router.push('/(tabs)/nutrition' as any) },
+        Alert.alert(t('nutrition.saved'), t('nutrition.mealLoggedCorrectly'), [
+          { text: t('common.ok'), onPress: () => router.push('/(tabs)/nutrition' as any) },
         ]);
         return;
       } catch (error) {
@@ -131,14 +133,14 @@ export default function MealLogScreen() {
     
     if (isNetworkError) {
       Alert.alert(
-        'Error de conexión',
-        'No se pudo conectar al servidor. Verifica tu conexión a internet e intenta nuevamente.',
+        t('errors.networkError'),
+        t('errors.networkErrorMessage'),
         [{ text: 'OK' }]
       );
     } else {
       Alert.alert(
-        'Error',
-        `No se pudo registrar la comida: ${errorMessage}`,
+        t('common.error'),
+        `${t('nutrition.couldNotLogMeal')}: ${errorMessage}`,
         [{ text: 'OK' }]
       );
     }
@@ -148,7 +150,7 @@ export default function MealLogScreen() {
     if (!user?.id) return;
 
     if (!waterAmount || parseInt(waterAmount) <= 0) {
-      Alert.alert('Error', 'Ingresa una cantidad válida de agua (ml).');
+      Alert.alert(t('common.error'), t('nutrition.enterValidWaterAmount'));
       return;
     }
 
@@ -158,15 +160,15 @@ export default function MealLogScreen() {
       const result = await logWater(user.id, today, parseInt(waterAmount));
 
       if (result.success) {
-        Alert.alert('¡Guardado!', 'Agua registrada correctamente.', [
-          { text: 'OK', onPress: () => router.push('/(tabs)/nutrition' as any) },
+        Alert.alert(t('nutrition.saved'), t('nutrition.waterLoggedCorrectly'), [
+          { text: t('common.ok'), onPress: () => router.push('/(tabs)/nutrition' as any) },
         ]);
       } else {
-        Alert.alert('Error', result.error || 'No se pudo registrar el agua.');
+        Alert.alert(t('common.error'), result.error || t('nutrition.couldNotLogWater'));
       }
     } catch (err: any) {
       console.error('Error logging water:', err);
-      Alert.alert('Error', err.message || 'Error inesperado.');
+      Alert.alert(t('common.error'), err.message || t('errors.unknownError'));
     } finally {
       setIsSaving(false);
     }
@@ -176,7 +178,7 @@ export default function MealLogScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
-        <LoadingOverlay visible={isSaving} message="Guardando agua..." />
+        <LoadingOverlay visible={isSaving} message={t('commonUI.savingWater')} />
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.header}>
             <TouchableOpacity 
@@ -188,7 +190,9 @@ export default function MealLogScreen() {
             >
               <Ionicons name="arrow-back" size={24} color="#ffffff" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Registrar Agua</Text>
+            <Text style={styles.headerTitle}>
+  {t('nutrition.registerWater')}
+</Text>
             <View style={{ width: 24 }} />
           </View>
 
@@ -209,7 +213,9 @@ export default function MealLogScreen() {
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Cantidad (ml)</Text>
+          <Text style={styles.inputLabel}>
+  {t('nutrition.waterAmount')}
+</Text>
             <TextInput
               style={styles.input}
               value={waterAmount}
@@ -230,9 +236,10 @@ export default function MealLogScreen() {
             ) : (
               <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
             )}
-            <Text style={styles.saveButtonText}>
-              {isSaving ? 'Guardando...' : 'Registrar Agua'}
-            </Text>
+       <Text style={styles.saveButtonText}>
+  {isSaving ? t('common.saving') : t('nutrition.logWater')}
+</Text>
+
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -242,45 +249,45 @@ export default function MealLogScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <LoadingOverlay visible={isSaving || isRetrying} message="Guardando comida..." />
+      <LoadingOverlay visible={isSaving || isRetrying} message={t('commonUI.savingMeal')} />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.push('/(tabs)/nutrition' as any)} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Registrar Comida</Text>
+          <Text style={styles.headerTitle}>{t('nutrition.logMeal')}</Text>
           <View style={{ width: 24 }} />
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Detalles</Text>
+          <Text style={styles.sectionTitle}>{t('mealLog.details')}</Text>
           
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Nombre del alimento</Text>
+            <Text style={styles.inputLabel}>{t('mealLog.foodName')}</Text>
             <TextInput
               style={styles.input}
               value={mealName}
               onChangeText={setMealName}
-              placeholder="Ej: Pechuga de pollo"
+              placeholder={t('mealLog.foodNamePlaceholder')}
               placeholderTextColor="#666666"
             />
             <Text style={styles.helperText}>
-              💡 Ingresa un alimento a la vez para cálculos precisos
+              {t('mealLog.hint')}
             </Text>
           </View>
 
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Peso (gramos)</Text>
+            <Text style={styles.inputLabel}>{t('mealLog.weight')}</Text>
             <TextInput
               style={styles.input}
               value={weightGrams}
               onChangeText={setWeightGrams}
-              placeholder="Ej: 300"
+              placeholder={t('mealLog.weightPlaceholder')}
               placeholderTextColor="#666666"
               keyboardType="number-pad"
             />
             <Text style={styles.helperText}>
-              Peso del alimento cocido (o especifica "crudo")
+              {t('mealLog.weightHint')}
             </Text>
           </View>
 
@@ -294,20 +301,21 @@ export default function MealLogScreen() {
             ) : (
               <>
                 <Ionicons name="sparkles" size={20} color="#1a1a1a" />
-                <Text style={styles.aiButtonText}>Calcular con IA</Text>
+                <Text style={styles.aiButtonText}>{t('mealLog.calculateWithAI')}</Text>
               </>
             )}
           </TouchableOpacity>
 
           <View style={styles.divider}>
             <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>o ingresa manualmente</Text>
+            <Text style={styles.dividerText}>{t('mealLog.orManually')}</Text>
             <View style={styles.dividerLine} />
           </View>
 
           <View style={styles.macroInputsRow}>
             <View style={[styles.inputContainer, { flex: 1 }]}>
-              <Text style={styles.inputLabel}>Calorías</Text>
+            <Text style={styles.inputLabel}>{t('nutrition.calories')}</Text>
+
               <TextInput
                 style={styles.input}
                 value={calories}
@@ -319,8 +327,8 @@ export default function MealLogScreen() {
             </View>
 
             <View style={[styles.inputContainer, { flex: 1 }]}>
-              <Text style={styles.inputLabel}>Proteína (g)</Text>
-              <TextInput
+            <Text style={styles.inputLabel}>{t('nutrition.protein')}</Text>
+            <TextInput
                 style={styles.input}
                 value={protein}
                 onChangeText={setProtein}
@@ -333,8 +341,8 @@ export default function MealLogScreen() {
 
           <View style={styles.macroInputsRow}>
             <View style={[styles.inputContainer, { flex: 1 }]}>
-              <Text style={styles.inputLabel}>Carbos (g)</Text>
-              <TextInput
+            <Text style={styles.inputLabel}>{t('nutrition.carbs')}</Text>
+            <TextInput
                 style={styles.input}
                 value={carbs}
                 onChangeText={setCarbs}
@@ -345,8 +353,8 @@ export default function MealLogScreen() {
             </View>
 
             <View style={[styles.inputContainer, { flex: 1 }]}>
-              <Text style={styles.inputLabel}>Grasas (g)</Text>
-              <TextInput
+            <Text style={styles.inputLabel}>{t('nutrition.fats')}</Text>
+            <TextInput
                 style={styles.input}
                 value={fats}
                 onChangeText={setFats}
@@ -366,12 +374,12 @@ export default function MealLogScreen() {
           {(isSaving || isRetrying) ? (
             <>
               <ActivityIndicator size="small" color="#1a1a1a" />
-              <Text style={styles.saveButtonText}>Guardando...</Text>
+              <Text style={styles.saveButtonText}>{t('mealLog.savingButtonText')}</Text>
             </>
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
-              <Text style={styles.saveButtonText}>Registrar Comida</Text>
+              <Text style={styles.saveButtonText}>{t('mealLog.registerMeal')}</Text>
             </>
           )}
         </TouchableOpacity>
