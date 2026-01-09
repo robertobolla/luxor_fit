@@ -527,19 +527,6 @@ export default function NutritionSettingsScreen() {
       </View>
 
       <View style={styles.activePlanRow}>
-        <Text style={styles.activePlanLabel}>{t('nutritionSettings.activityTypes')}:</Text>
-        <View style={styles.activePlanTagsContainer}>
-          {(activePlanData.activity_types || []).map((activity: string, index: number) => (
-            <View key={index} style={styles.activePlanTag}>
-              <Text style={styles.activePlanTagText}>
-                {t(`activityTypes.${activity}`)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
-
-      <View style={styles.activePlanRow}>
         <Text style={styles.activePlanLabel}>{t('nutritionSettings.daysPerWeek')}:</Text>
         <Text style={styles.activePlanValue}>
           {activePlanData.available_days || 0} {t('common.days')}

@@ -1853,22 +1853,6 @@ export default function NutritionHomeScreen() {
 
                     </View>
                     <View style={styles.generatePlanInfoRow}>
-                    <Text style={styles.generatePlanInfoLabel}>
-  {t('workout.activityTypes')}
-</Text>
-
-<View style={styles.generatePlanTagsContainer}>
-  {(activePlanData.activity_types || []).map((activity: string, index: number) => (
-    <View key={index} style={styles.generatePlanTag}>
-      <Text style={styles.generatePlanTagText}>
-        {t(`activityTypes.${activity}`)}
-      </Text>
-    </View>
-  ))}
-</View>
-
-                    </View>
-                    <View style={styles.generatePlanInfoRow}>
                       <Text style={styles.generatePlanInfoLabel}>Días por Semana:</Text>
                       <Text style={styles.generatePlanInfoValue}>{activePlanData.available_days || 0} días</Text>
                     </View>

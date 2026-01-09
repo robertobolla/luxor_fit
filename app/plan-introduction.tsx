@@ -89,10 +89,6 @@ export default function PlanIntroductionScreen() {
     return t(`fitnessGoals.${goal}`) || goal;
   };
 
-  const getActivityTypeText = (activity: string) => {
-    return t(`activityTypes.${activity}`) || activity;
-  };
-
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -154,12 +150,6 @@ export default function PlanIntroductionScreen() {
               <Text style={styles.profileLabel}>Objetivos:</Text>
               <Text style={styles.profileValue}>
                 {userData.goals.map(getGoalText).join(', ')}
-              </Text>
-            </View>
-            <View style={styles.profileRow}>
-              <Text style={styles.profileLabel}>Actividades:</Text>
-              <Text style={styles.profileValue}>
-                {userData.activity_types.map(getActivityTypeText).join(', ')}
               </Text>
             </View>
             <View style={styles.profileRow}>
