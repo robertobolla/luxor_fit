@@ -186,21 +186,53 @@ export default function WorkoutGeneratorScreen() {
         return true;
       case 1: // goals
         return formData.goals.length > 0;
-      case 2: // activity_types
-        return formData.activity_types.length > 0;
-      case 3: // availability
+      case 2: // availability (days per week)
         return true;
-      case 4: // session_duration
+      case 3: // session_duration
         return true;
-      case 5: // equipment
+      case 4: // equipment
         return formData.equipment.length > 0;
       default:
         return true;
     }
   };
 
+  // Inferir tipos de actividad basándose en los objetivos seleccionados
+  const inferActivityTypes = (goals: FitnessGoal[]): ActivityType[] => {
+    const activitySet = new Set<ActivityType>();
+    
+    goals.forEach(goal => {
+      switch (goal) {
+        case FitnessGoal.MUSCLE_GAIN:
+        case FitnessGoal.STRENGTH:
+          activitySet.add(ActivityType.STRENGTH);
+          break;
+        case FitnessGoal.WEIGHT_LOSS:
+          activitySet.add(ActivityType.CARDIO);
+          activitySet.add(ActivityType.HIIT);
+          break;
+        case FitnessGoal.ENDURANCE:
+          activitySet.add(ActivityType.CARDIO);
+          break;
+        case FitnessGoal.FLEXIBILITY:
+          activitySet.add(ActivityType.YOGA);
+          break;
+        case FitnessGoal.GENERAL_FITNESS:
+          activitySet.add(ActivityType.MIXED);
+          break;
+      }
+    });
+    
+    // Si no hay actividades inferidas, usar mixed como fallback
+    if (activitySet.size === 0) {
+      activitySet.add(ActivityType.MIXED);
+    }
+    
+    return Array.from(activitySet);
+  };
+
   const nextFormStep = () => {
-    if (formStep < 5) {
+    if (formStep < 4) {
       setFormStep(formStep + 1);
     } else {
       // Último paso, generar plan
@@ -225,15 +257,6 @@ export default function WorkoutGeneratorScreen() {
     }));
   };
 
-  const toggleActivityType = (activityType: ActivityType) => {
-    setFormData(prev => ({
-      ...prev,
-      activity_types: prev.activity_types.includes(activityType)
-        ? prev.activity_types.filter(a => a !== activityType)
-        : [...prev.activity_types, activityType]
-    }));
-  };
-
   const toggleEquipment = (equipment: Equipment) => {
     setFormData(prev => ({
       ...prev,
@@ -255,12 +278,15 @@ export default function WorkoutGeneratorScreen() {
     setError('');
 
     try {
+      // Inferir tipos de actividad basándose en los objetivos
+      const inferredActivityTypes = inferActivityTypes(formData.goals);
+      
       // Combinar datos del perfil con datos del formulario
       const workoutData: UserProfile = {
         ...userProfile,
         fitness_level: formData.fitness_level,
         goals: formData.goals,
-        activity_types: formData.activity_types,
+        activity_types: inferredActivityTypes,
         available_days: formData.available_days,
         session_duration: formData.session_duration,
         equipment: formData.equipment,
@@ -527,31 +553,6 @@ export default function WorkoutGeneratorScreen() {
                   formData.goals.includes(goal) && styles.formOptionTextSelected
                 ]}>
                   {getGoalText(goal)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        ),
-      },
-      {
-        title: t('workoutGenerator.whatActivitiesDoYouPrefer'),
-        subtitle: t('workoutGenerator.selectAllYouLike'),
-        content: (
-          <View>
-            {Object.values(ActivityType).map((activity) => (
-              <TouchableOpacity
-                key={activity}
-                style={[
-                  styles.formOptionButton,
-                  formData.activity_types.includes(activity) && styles.formOptionButtonSelected
-                ]}
-                onPress={() => toggleActivityType(activity)}
-              >
-                <Text style={[
-                  styles.formOptionText,
-                  formData.activity_types.includes(activity) && styles.formOptionTextSelected
-                ]}>
-                  {t(`workoutGenerator.activity_${activity}`)}
                 </Text>
               </TouchableOpacity>
             ))}
