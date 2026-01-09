@@ -10,6 +10,8 @@ import {
 import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
+
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,7 +31,7 @@ export default function DistanceDetailScreen() {
   const [totalDistance, setTotalDistance] = useState(0);
   const [averageDistance, setAverageDistance] = useState(0);
   const [goalDistance] = useState(8.05); // Meta en km
-
+  const { t } = useTranslation();
   // Cargar datos de distancia según el modo de vista
   useEffect(() => {
     loadDistanceData();
@@ -156,57 +158,76 @@ export default function DistanceDetailScreen() {
   const formatPeriod = () => {
     const now = new Date();
     const isToday = currentDate.toDateString() === now.toDateString();
-    
+    const locale = i18n.language?.startsWith('es') ? 'es-ES' : 'en-US';
+  
     switch (viewMode) {
-      case 'day':
-        if (isToday) return 'Hoy';
+      case 'day': {
+        if (isToday) return t('common.today');
+  
         const yesterday = new Date(now);
         yesterday.setDate(now.getDate() - 1);
-        if (currentDate.toDateString() === yesterday.toDateString()) return 'Ayer';
-        return currentDate.toLocaleDateString('es-ES', { 
-          weekday: 'long', 
-          day: 'numeric', 
-          month: 'short' 
+        if (currentDate.toDateString() === yesterday.toDateString()) return t('common.yesterday');
+  
+        return currentDate.toLocaleDateString(locale, {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'short',
         });
-      
-      case 'week':
+      }
+  
+      case 'week': {
         const currentDay = currentDate.getDay();
         const weekStart = new Date(currentDate);
         weekStart.setDate(currentDate.getDate() - currentDay);
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
-        
+  
         const nowDay = now.getDay();
         const nowWeekStart = new Date(now);
         nowWeekStart.setDate(now.getDate() - nowDay);
-        
+  
         if (weekStart.toDateString() === nowWeekStart.toDateString()) {
-          return 'Esta semana';
+          return t('common.thisWeek');
         }
-        
+  
+        const startMonth = weekStart.toLocaleDateString(locale, { month: 'short' });
+        const endMonth = weekEnd.toLocaleDateString(locale, { month: 'short' });
+  
         if (weekStart.getMonth() === weekEnd.getMonth()) {
-          return `${weekStart.getDate()} - ${weekEnd.getDate()} ${weekStart.toLocaleDateString('es-ES', { month: 'short' })}`;
-        } else {
-          return `${weekStart.getDate()} ${weekStart.toLocaleDateString('es-ES', { month: 'short' })} - ${weekEnd.getDate()} ${weekEnd.toLocaleDateString('es-ES', { month: 'short' })}`;
+          return t('distance.weekRangeSameMonth', {
+            startDay: weekStart.getDate(),
+            endDay: weekEnd.getDate(),
+            month: startMonth,
+          });
         }
-      
-      case 'month':
-        if (currentDate.getFullYear() === now.getFullYear() && 
-            currentDate.getMonth() === now.getMonth()) {
-          return 'Este mes';
+  
+        return t('distance.weekRangeDifferentMonths', {
+          startDay: weekStart.getDate(),
+          startMonth,
+          endDay: weekEnd.getDate(),
+          endMonth,
+        });
+      }
+  
+      case 'month': {
+        if (currentDate.getFullYear() === now.getFullYear() && currentDate.getMonth() === now.getMonth()) {
+          return t('common.thisMonth');
         }
-        return currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-      
-      case 'year':
+        return currentDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+      }
+  
+      case 'year': {
         if (currentDate.getFullYear() === now.getFullYear()) {
-          return 'Este año';
+          return t('common.thisYear');
         }
         return currentDate.getFullYear().toString();
-      
+      }
+  
       default:
         return '';
     }
   };
+  
 
   const isCurrentPeriod = () => {
     const now = new Date();
@@ -247,15 +268,21 @@ export default function DistanceDetailScreen() {
   const getStatusText = () => {
     if (viewMode === 'day') {
       const remaining = goalDistance - averageDistance;
+  
       if (remaining > 0) {
-        return `Estás a ${remaining.toFixed(2)} kilómetros de alcanzar tu objetivo diario`;
-      } else {
-        return `¡Objetivo alcanzado! 🎉`;
+        return t('distance.dailyGoalRemainingKm', {
+          km: remaining.toFixed(2),
+        });
       }
-    } else {
-      return `Hasta ahora, has recorrido un total de ${totalDistance.toFixed(2)} km.`;
+  
+      return t('distance.dailyGoalAchieved');
     }
+  
+    return t('distance.totalDistanceSoFarKm', {
+      km: totalDistance.toFixed(2),
+    });
   };
+  
 
   const renderChart = () => {
     // Usar un valor máximo fijo para la escala del gráfico
@@ -364,13 +391,14 @@ export default function DistanceDetailScreen() {
     if (viewMode === 'week') {
       return (
         <View style={styles.summarySection}>
-          <Text style={styles.summaryTitle}>Esta semana</Text>
+<Text style={styles.summaryTitle}>{t('common.thisWeek')}</Text>
+
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Hoy</Text>
+            <Text style={styles.summaryLabel}>{t('common.today')}</Text>
             <Text style={styles.summaryValue}>2.77</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Ayer</Text>
+            <Text style={styles.summaryLabel}>{t('common.yesterday')}</Text>
             <Text style={styles.summaryValue}>0</Text>
           </View>
           <View style={styles.summaryRow}>
@@ -386,7 +414,7 @@ export default function DistanceDetailScreen() {
         <View style={styles.summarySection}>
           <Text style={styles.summaryTitle}>October</Text>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Esta semana</Text>
+            <Text style={styles.summaryLabel}>{t('common.thisWeek')}</Text>
             <Text style={styles.summaryValue}>2.77</Text>
           </View>
           <View style={styles.summaryRow}>
@@ -433,7 +461,7 @@ export default function DistanceDetailScreen() {
           <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard' as any)}>
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Distancia</Text>
+          <Text style={styles.headerTitle}>{t('distance.title')}</Text>
           <TouchableOpacity>
             <Ionicons name="ellipsis-horizontal" size={24} color="#ffffff" />
           </TouchableOpacity>
@@ -446,7 +474,7 @@ export default function DistanceDetailScreen() {
             onPress={() => setViewMode('day')}
           >
             <Text style={[styles.tabText, viewMode === 'day' && styles.tabTextActive]}>
-              Día
+            {t('common.day')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -454,7 +482,7 @@ export default function DistanceDetailScreen() {
             onPress={() => setViewMode('week')}
           >
             <Text style={[styles.tabText, viewMode === 'week' && styles.tabTextActive]}>
-              Semana
+            {t('common.week')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -462,7 +490,8 @@ export default function DistanceDetailScreen() {
             onPress={() => setViewMode('month')}
           >
             <Text style={[styles.tabText, viewMode === 'month' && styles.tabTextActive]}>
-              Mes
+            {t('common.month')}
+
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -470,7 +499,7 @@ export default function DistanceDetailScreen() {
             onPress={() => setViewMode('year')}
           >
             <Text style={[styles.tabText, viewMode === 'year' && styles.tabTextActive]}>
-              Año
+            {t('common.year')}
             </Text>
           </TouchableOpacity>
         </View>

@@ -10,8 +10,9 @@ import {
 import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 type ViewMode = 'day' | 'week' | 'month' | 'year';
 
@@ -23,6 +24,8 @@ interface StepData {
 
 export default function StepsDetailScreen() {
   const { user } = useUser();
+  const { t } = useTranslation();
+
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [stepsData, setStepsData] = useState<StepData[]>([]);
@@ -40,7 +43,7 @@ export default function StepsDetailScreen() {
     // Por ahora usamos datos simulados
     const data = generateMockData();
     setStepsData(data);
-    
+
     const total = data.reduce((sum, item) => sum + item.value, 0);
     setTotalSteps(total);
     setAverageSteps(Math.round(total / (data.length || 1)));
@@ -61,15 +64,17 @@ export default function StepsDetailScreen() {
             value: Math.floor(Math.random() * 1000),
           };
         });
-      
+
       case 'week':
         // Datos por día de la semana
+        // Ojo: tus labels eran ES (D L M M J V S). Los dejamos como estaban.
+        // Si querés, después los hacemos dependientes del locale.
         const weekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
         return weekDays.map((day, i) => ({
           label: day,
           value: i === 5 ? 187 : Math.floor(Math.random() * 5000), // Viernes tiene datos reales
         }));
-      
+
       case 'month':
         // Datos por día del mes
         const daysInMonth = new Date(
@@ -81,15 +86,15 @@ export default function StepsDetailScreen() {
           label: `${i + 1}`,
           value: Math.floor(Math.random() * 8000),
         }));
-      
+
       case 'year':
-        // Datos por mes del año
+        // Datos por mes del año (tus labels eran ES: E F M A M J J A S O N D)
         const months = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
         return months.map((month) => ({
           label: month,
           value: Math.floor(Math.random() * 150000),
         }));
-      
+
       default:
         return [];
     }
@@ -136,53 +141,62 @@ export default function StepsDetailScreen() {
   const formatPeriod = () => {
     const now = new Date();
     const isToday = currentDate.toDateString() === now.toDateString();
-    
+
     switch (viewMode) {
-      case 'day':
-        if (isToday) return 'Hoy';
+      case 'day': {
+        if (isToday) return t('stepsDetail.period.today');
+
         const yesterday = new Date(now);
         yesterday.setDate(now.getDate() - 1);
-        if (currentDate.toDateString() === yesterday.toDateString()) return 'Ayer';
-        return currentDate.toLocaleDateString('es-ES', { 
-          weekday: 'long', 
-          day: 'numeric', 
-          month: 'short' 
+        if (currentDate.toDateString() === yesterday.toDateString()) return t('stepsDetail.period.yesterday');
+
+        // Mantengo tu formato original pero con locale configurable
+        return currentDate.toLocaleDateString(t('common.locale'), {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'short',
         });
-      
-      case 'week':
+      }
+
+      case 'week': {
         const currentDay = currentDate.getDay();
         const weekStart = new Date(currentDate);
         weekStart.setDate(currentDate.getDate() - currentDay);
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
-        
+
         const nowDay = now.getDay();
         const nowWeekStart = new Date(now);
         nowWeekStart.setDate(now.getDate() - nowDay);
-        
+
         if (weekStart.toDateString() === nowWeekStart.toDateString()) {
-          return 'Esta semana';
+          return t('stepsDetail.period.thisWeek');
         }
-        
+
         if (weekStart.getMonth() === weekEnd.getMonth()) {
-          return `${weekStart.getDate()} - ${weekEnd.getDate()} ${weekStart.toLocaleDateString('es-ES', { month: 'short' })}`;
+          return `${weekStart.getDate()} - ${weekEnd.getDate()} ${weekStart.toLocaleDateString(t('common.locale'), { month: 'short' })}`;
         } else {
-          return `${weekStart.getDate()} ${weekStart.toLocaleDateString('es-ES', { month: 'short' })} - ${weekEnd.getDate()} ${weekEnd.toLocaleDateString('es-ES', { month: 'short' })}`;
+          return `${weekStart.getDate()} ${weekStart.toLocaleDateString(t('common.locale'), { month: 'short' })} - ${weekEnd.getDate()} ${weekEnd.toLocaleDateString(t('common.locale'), { month: 'short' })}`;
         }
-      
-      case 'month':
-        if (currentDate.getFullYear() === now.getFullYear() && 
-            currentDate.getMonth() === now.getMonth()) {
-          return 'Este mes';
+      }
+
+      case 'month': {
+        if (
+          currentDate.getFullYear() === now.getFullYear() &&
+          currentDate.getMonth() === now.getMonth()
+        ) {
+          return t('stepsDetail.period.thisMonth');
         }
-        return currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-      
-      case 'year':
+        return currentDate.toLocaleDateString(t('common.locale'), { month: 'long', year: 'numeric' });
+      }
+
+      case 'year': {
         if (currentDate.getFullYear() === now.getFullYear()) {
-          return 'Este año';
+          return t('stepsDetail.period.thisYear');
         }
         return currentDate.getFullYear().toString();
-      
+      }
+
       default:
         return '';
     }
@@ -190,109 +204,108 @@ export default function StepsDetailScreen() {
 
   const isCurrentPeriod = () => {
     const now = new Date();
-    
+
     switch (viewMode) {
       case 'day':
         return currentDate.toDateString() === now.toDateString();
-      
-      case 'week':
+
+      case 'week': {
         const nowDay = now.getDay();
         const nowWeekStart = new Date(now);
         nowWeekStart.setDate(now.getDate() - nowDay);
         nowWeekStart.setHours(0, 0, 0, 0);
-        
+
         const currentDay = currentDate.getDay();
         const currentWeekStart = new Date(currentDate);
         currentWeekStart.setDate(currentDate.getDate() - currentDay);
         currentWeekStart.setHours(0, 0, 0, 0);
-        
+
         return nowWeekStart.getTime() === currentWeekStart.getTime();
-      
+      }
+
       case 'month':
-        return currentDate.getFullYear() === now.getFullYear() && 
+        return currentDate.getFullYear() === now.getFullYear() &&
                currentDate.getMonth() === now.getMonth();
-      
+
       case 'year':
         return currentDate.getFullYear() === now.getFullYear();
-      
+
       default:
         return false;
     }
   };
 
   const getUnitLabel = () => {
+    // En tu código había un typo en year: "paso al día"
+    // Lo pasamos a t() para corregir por idioma.
     switch (viewMode) {
       case 'day':
-        return 'pasos al día (media)';
       case 'week':
-        return 'pasos al día (media)';
       case 'month':
-        return 'pasos al día (media)';
+        return t('stepsDetail.unit.avgStepsPerDay');
       case 'year':
-        return 'paso al día (media)';
+        return t('stepsDetail.unit.avgStepsPerDay'); // mismo texto
       default:
-        return 'pasos';
+        return t('stepsDetail.unit.steps');
     }
   };
 
   const getStatusText = () => {
+    const locale = t('common.locale');
     if (viewMode === 'day') {
       const remaining = goalSteps - totalSteps;
       if (remaining > 0) {
-        return `Estás a ${remaining.toLocaleString()} pasos de alcanzar tu objetivo diario`;
-      } else {
-        return `¡Objetivo alcanzado! 🎉`;
-      }
-    } else {
-      return `Hasta ahora, has dado un total de ${totalSteps.toLocaleString()} pasos.`;
+        return t('stepsDetail.status.remaining', {
+          remaining: remaining.toLocaleString(locale),
+        });      }
+      return t('stepsDetail.status.achieved');
     }
+    return t('stepsDetail.status.totalSoFar', {
+      total: totalSteps.toLocaleString(locale),
+    });
   };
 
   const renderChart = () => {
     const maxValue = Math.max(...stepsData.map(d => d.value), goalSteps);
     const chartHeight = 220;
-    
-    // Calcular ancho de barra según el modo
+
     const getBarWidth = () => {
       switch (viewMode) {
         case 'day':
-          return 24; // Barras aún más anchas para 24 horas
+          return 24;
         case 'week':
-          return 40; // Barras más anchas para 7 días
+          return 40;
         case 'month':
-          return 14; // Barras medianas para ~30 días
+          return 14;
         case 'year':
-          return 35; // Barras anchas para 12 meses
+          return 35;
         default:
           return 30;
       }
     };
-    
+
     const barWidth = getBarWidth();
-    const barSpacing = viewMode === 'day' ? 4 : 8; // Menos espacio para vista de día
+    const barSpacing = viewMode === 'day' ? 4 : 8;
     const totalWidth = stepsData.length * (barWidth + barSpacing) + 40;
     const shouldScroll = totalWidth > width - 40;
-    
+
     return (
       <View style={styles.chartWrapper}>
-        {/* Etiquetas del eje Y */}
         <View style={styles.yAxisLabels}>
           <Text style={styles.yAxisLabel}>{(maxValue / 1000).toFixed(0)}k</Text>
           <Text style={styles.yAxisLabel}>{(maxValue / 2000).toFixed(0)}k</Text>
           <Text style={styles.yAxisLabel}>0</Text>
         </View>
-        
+
         <View style={styles.chartContainer}>
-          {/* Línea de objetivo (solo en vista diaria y semanal) */}
           {(viewMode === 'day' || viewMode === 'week') && (
             <View style={[styles.goalLine, { top: 10 + (chartHeight * (1 - goalSteps / maxValue)) }]}>
               <View style={styles.goalLineDashed} />
             </View>
           )}
-          
-          {/* Gráfico de barras */}
-          <ScrollView 
-            horizontal 
+
+          <ScrollView
+            horizontal
             showsHorizontalScrollIndicator={false}
             scrollEnabled={shouldScroll}
             contentContainerStyle={[
@@ -305,20 +318,20 @@ export default function StepsDetailScreen() {
               const isToday = viewMode === 'week' && index === 5; // Viernes
               const isCurrentMonth = viewMode === 'year' && index === 9; // Octubre
               const isCurrentHour = viewMode === 'day' && index === 8; // 8:00 destacado
-              
+
               return (
-                <View 
-                  key={index} 
+                <View
+                  key={index}
                   style={[
-                    styles.barContainer, 
-                    { 
+                    styles.barContainer,
+                    {
                       width: barWidth,
                       marginHorizontal: barSpacing / 2
                     }
                   ]}
                 >
                   <View style={[
-                    styles.bar, 
+                    styles.bar,
                     { height: Math.max(barHeight, 3) },
                     (isToday || isCurrentMonth || isCurrentHour) && styles.barHighlighted
                   ]} />
@@ -345,63 +358,72 @@ export default function StepsDetailScreen() {
     if (viewMode === 'week') {
       return (
         <View style={styles.summarySection}>
-          <Text style={styles.summaryTitle}>Esta semana</Text>
+          <Text style={styles.summaryTitle}>{t('stepsDetail.summary.thisWeekTitle')}</Text>
+
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Hoy</Text>
+            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.today')}</Text>
             <Text style={styles.summaryValue}>187</Text>
           </View>
+
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Ayer</Text>
+            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.yesterday')}</Text>
             <Text style={styles.summaryValue}>0</Text>
           </View>
+
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Wed, 15 Oct</Text>
+            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleDateWeek')}</Text>
             <Text style={styles.summaryValue}>0</Text>
           </View>
         </View>
       );
     }
-    
+
     if (viewMode === 'month') {
       return (
         <View style={styles.summarySection}>
-          <Text style={styles.summaryTitle}>October</Text>
+          <Text style={styles.summaryTitle}>{t('stepsDetail.summary.sampleMonthTitle')}</Text>
+
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Esta semana</Text>
+            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.thisWeek')}</Text>
             <Text style={styles.summaryValue}>31</Text>
           </View>
+
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>5 - 11 Oct</Text>
+            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleRange1')}</Text>
             <Text style={styles.summaryValue}>0</Text>
           </View>
+
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>28 Sep - 4 Oct</Text>
+            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleRange2')}</Text>
             <Text style={styles.summaryValue}>0</Text>
           </View>
         </View>
       );
     }
-    
+
     if (viewMode === 'year') {
       return (
         <View style={styles.summarySection}>
-          <Text style={styles.summaryTitle}>2025</Text>
+          <Text style={styles.summaryTitle}>{t('stepsDetail.summary.sampleYearTitle')}</Text>
+
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>October</Text>
+            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleMonth1')}</Text>
             <Text style={styles.summaryValue}>11</Text>
           </View>
+
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>September</Text>
+            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleMonth2')}</Text>
             <Text style={styles.summaryValue}>0</Text>
           </View>
+
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>August</Text>
+            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleMonth3')}</Text>
             <Text style={styles.summaryValue}>0</Text>
           </View>
         </View>
       );
     }
-    
+
     return null;
   };
 
@@ -411,87 +433,89 @@ export default function StepsDetailScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard' as any)}>
-          <Ionicons name="arrow-back" size={24} color="#ffffff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Pasos</Text>
-        <TouchableOpacity>
-          <Ionicons name="ellipsis-horizontal" size={24} color="#ffffff" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Tabs: Día / Semana / Mes / Año - FIJAS */}
-      <View style={styles.tabsContainer}>
-        <TouchableOpacity
-          style={[styles.tab, viewMode === 'day' && styles.tabActive]}
-          onPress={() => setViewMode('day')}
-        >
-          <Text style={[styles.tabText, viewMode === 'day' && styles.tabTextActive]}>
-            Día
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, viewMode === 'week' && styles.tabActive]}
-          onPress={() => setViewMode('week')}
-        >
-          <Text style={[styles.tabText, viewMode === 'week' && styles.tabTextActive]}>
-            Semana
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, viewMode === 'month' && styles.tabActive]}
-          onPress={() => setViewMode('month')}
-        >
-          <Text style={[styles.tabText, viewMode === 'month' && styles.tabTextActive]}>
-            Mes
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, viewMode === 'year' && styles.tabActive]}
-          onPress={() => setViewMode('year')}
-        >
-          <Text style={[styles.tabText, viewMode === 'year' && styles.tabTextActive]}>
-            Año
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView style={styles.content}>
-
-        {/* Navegación de período */}
-        <View style={styles.periodNav}>
-          <TouchableOpacity onPress={goToPreviousPeriod}>
-            <Ionicons name="chevron-back" size={24} color="#ffffff" />
+          <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard' as any)}>
+            <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.periodText}>{formatPeriod()}</Text>
-          {!isCurrentPeriod() ? (
-            <TouchableOpacity onPress={goToNextPeriod}>
-              <Ionicons name="chevron-forward" size={24} color="#ffffff" />
+          <Text style={styles.headerTitle}>{t('stepsDetail.title')}</Text>
+          <TouchableOpacity>
+            <Ionicons name="ellipsis-horizontal" size={24} color="#ffffff" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Tabs: Day / Week / Month / Year */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, viewMode === 'day' && styles.tabActive]}
+            onPress={() => setViewMode('day')}
+          >
+            <Text style={[styles.tabText, viewMode === 'day' && styles.tabTextActive]}>
+              {t('stepsDetail.tabs.day')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, viewMode === 'week' && styles.tabActive]}
+            onPress={() => setViewMode('week')}
+          >
+            <Text style={[styles.tabText, viewMode === 'week' && styles.tabTextActive]}>
+              {t('stepsDetail.tabs.week')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, viewMode === 'month' && styles.tabActive]}
+            onPress={() => setViewMode('month')}
+          >
+            <Text style={[styles.tabText, viewMode === 'month' && styles.tabTextActive]}>
+              {t('stepsDetail.tabs.month')}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tab, viewMode === 'year' && styles.tabActive]}
+            onPress={() => setViewMode('year')}
+          >
+            <Text style={[styles.tabText, viewMode === 'year' && styles.tabTextActive]}>
+              {t('stepsDetail.tabs.year')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.content}>
+          {/* Period navigation */}
+          <View style={styles.periodNav}>
+            <TouchableOpacity onPress={goToPreviousPeriod}>
+              <Ionicons name="chevron-back" size={24} color="#ffffff" />
             </TouchableOpacity>
-          ) : (
-            <View style={{ width: 24 }} />
-          )}
-        </View>
 
-        {/* Estadística principal */}
-        <View style={styles.statsCard}>
-          <Text style={styles.statsNumber}>
-            {averageSteps.toLocaleString()}
-          </Text>
-          <Text style={styles.statsLabel}>{getUnitLabel()}</Text>
-          <Text style={styles.statsSubtext}>
-            {getStatusText()}
-          </Text>
-        </View>
+            <Text style={styles.periodText}>{formatPeriod()}</Text>
 
-        {/* Gráfico */}
-        {renderChart()}
+            {!isCurrentPeriod() ? (
+              <TouchableOpacity onPress={goToNextPeriod}>
+                <Ionicons name="chevron-forward" size={24} color="#ffffff" />
+              </TouchableOpacity>
+            ) : (
+              <View style={{ width: 24 }} />
+            )}
+          </View>
 
-        {/* Resumen por período */}
-        {renderPeriodSummary()}
+          {/* Main stat */}
+          <View style={styles.statsCard}>
+            <Text style={styles.statsNumber}>
+              {averageSteps.toLocaleString(t('common.locale'))}
+            </Text>
+            <Text style={styles.statsLabel}>{getUnitLabel()}</Text>
+            <Text style={styles.statsSubtext}>{getStatusText()}</Text>
+          </View>
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
+          {/* Chart */}
+          {renderChart()}
+
+          {/* Summary */}
+          {renderPeriodSummary()}
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
       </View>
     </>
   );
@@ -679,4 +703,3 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
 });
-

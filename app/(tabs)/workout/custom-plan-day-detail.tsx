@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../../src/services/supabase';
 import { useCustomAlert } from '../../../src/components/CustomAlert';
@@ -72,6 +73,7 @@ interface Exercise {
 
 export default function CustomPlanDayDetailScreen() {
   const router = useRouter();
+  const { t, i18n  } = useTranslation();
   const params = useLocalSearchParams();
   const { showAlert, AlertComponent } = useCustomAlert();
   
@@ -98,8 +100,10 @@ export default function CustomPlanDayDetailScreen() {
   const dayData = parseSafeJSON(params.dayData as string, { exercises: [] });
 
   const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [dayName, setDayName] = useState<string>(`Día ${dayNumber}`);
-  const [isEditingDayName, setIsEditingDayName] = useState(false);
+  const [dayName, setDayName] = useState<string>(
+    t('customPlan.dayWithNumber', { number: dayNumber })
+  );
+    const [isEditingDayName, setIsEditingDayName] = useState(false);
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [sets, setSets] = useState('');
@@ -259,7 +263,8 @@ export default function CustomPlanDayDetailScreen() {
   // Resetear estado cuando cambia el dayNumber
   useEffect(() => {
     setExercises([]);
-    setDayName(`Día ${dayNumber}`);
+    setDayName(t('workout.dayName', { day: dayNumber }));
+
     setIsEditingDayName(false);
     setEditingExercise(null);
     setSets('');
@@ -296,11 +301,12 @@ export default function CustomPlanDayDetailScreen() {
   const handleRemoveSet = (index: number) => {
     if (setTypes.length <= 1) {
       showAlert(
-        'Error',
-        'Debe haber al menos 1 serie',
-        [{ text: 'OK' }],
+        t('common.error'),
+        t('customPlan.minOneSetRequired'),
+        [{ text: t('common.ok') }],
         { icon: 'alert-circle', iconColor: '#F44336' }
       );
+      
       return;
     }
     
@@ -459,9 +465,9 @@ export default function CustomPlanDayDetailScreen() {
     const numSets = setTypes.length;
     if (numSets === 0) {
       showAlert(
-        'Error',
-        'Debes agregar al menos 1 serie',
-        [{ text: 'OK' }],
+        t('common.error'),
+        t('customPlan.atLeastOneSet'),
+        [{ text: t('common.ok') }],
         { icon: 'alert-circle', iconColor: '#F44336' }
       );
       return;
@@ -479,9 +485,9 @@ export default function CustomPlanDayDetailScreen() {
       const repsValue = parseInt(reps[i]);
       if (!repsValue || repsValue === 0) {
         showAlert(
-          'Error',
-          `Debes ingresar repeticiones para la serie ${i + 1}`,
-          [{ text: 'OK' }],
+          t('common.error'),
+          t('customPlan.repsRequiredForSet', { setNumber: i + 1 }),
+          [{ text: t('common.ok') }],
           { icon: 'alert-circle', iconColor: '#F44336' }
         );
         return;
@@ -543,13 +549,11 @@ export default function CustomPlanDayDetailScreen() {
 
   const handleDeleteExercise = (exerciseId: string) => {
     showAlert(
-      'Eliminar ejercicio',
-      '¿Estás seguro de que quieres eliminar este ejercicio?',
+      t('customPlan.deleteExerciseTitle'),
+  t('customPlan.deleteExerciseConfirm'),
       [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.delete'), style: 'destructive',
           onPress: () => {
             setExercises(exercises.filter(ex => ex.id !== exerciseId));
             // Marcar que hay cambios locales sin guardar
@@ -670,7 +674,7 @@ export default function CustomPlanDayDetailScreen() {
               if (savedDayData.name) {
                 setDayName(savedDayData.name);
               } else {
-                setDayName(`Día ${dayNumber}`);
+                setDayName(t('customPlan.dayWithNumber', { day: dayNumber }));
               }
               if (savedDayData.exercises) {
                 setExercises(savedDayData.exercises);
@@ -680,7 +684,7 @@ export default function CustomPlanDayDetailScreen() {
             }
             } else if (isMounted) {
               // Si no hay datos guardados, usar los valores por defecto
-              setDayName(`Día ${dayNumber}`);
+              setDayName(t('customPlan.dayWithNumber', { day: dayNumber }));
               setExercises([]);
             }
           }
@@ -688,7 +692,7 @@ export default function CustomPlanDayDetailScreen() {
           console.error('Error loading day data:', error);
           // En caso de error, usar valores por defecto
           if (isMounted) {
-            setDayName(`Día ${dayNumber}`);
+            setDayName(t('customPlan.dayWithNumber', { day: dayNumber }));
             setExercises([]);
           }
         }
@@ -731,7 +735,7 @@ export default function CustomPlanDayDetailScreen() {
               if (!isSavingToStorage.current) {
                 isSavingToStorage.current = true;
                 try {
-                  const currentDayName = dayName || `Día ${dayNumber}`;
+                  const currentDayName = dayName || t('workout.dayName', { day: dayNumber });
                   const dayDataToSave = {
                     dayNumber,
                     name: currentDayName,
@@ -841,7 +845,7 @@ export default function CustomPlanDayDetailScreen() {
             if (isMounted && loadedExercises.length === 0) {
               // Si no hay datos guardados, usar los valores por defecto
               console.log('📝 Inicializando día vacío');
-              setDayName(`Día ${dayNumber}`);
+              setDayName(t('workout.dayName', { day: dayNumber }));
               setExercises([]);
             } else if (isMounted) {
               console.log('✅ Usando ejercicios de parámetros:', loadedExercises.length);
@@ -852,7 +856,7 @@ export default function CustomPlanDayDetailScreen() {
           console.error('❌ Error loading day data:', error);
           // En caso de error, usar valores por defecto
           if (isMounted) {
-            setDayName(`Día ${dayNumber}`);
+            setDayName(t('workout.dayName', { day: dayNumber }));
             setExercises([]);
             loadedExercises = [];
           }
@@ -913,13 +917,13 @@ export default function CustomPlanDayDetailScreen() {
                 const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
                 if (dayDataStr) {
                   const dayData = parseSafeJSON(dayDataStr, { dayNumber, exercises: [] });
-                  dayData.name = dayName.trim() || `Día ${dayNumber}`;
+                  dayData.name = dayName.trim() || t('workout.dayName', { day: dayNumber });
                   await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayData));
                 } else {
                   // Si no hay datos guardados, crear un nuevo objeto
                   const dayDataToSave = {
                     dayNumber,
-                    name: dayName.trim() || `Día ${dayNumber}`,
+                    name: dayName.trim() || t('workout.dayName', { day: dayNumber }),
                     exercises: exercises,
                   };
                   await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
@@ -935,13 +939,13 @@ export default function CustomPlanDayDetailScreen() {
                 const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
                 if (dayDataStr) {
                   const dayData = parseSafeJSON(dayDataStr, { dayNumber, exercises: [] });
-                  dayData.name = dayName.trim() || `Día ${dayNumber}`;
+                  dayData.name = dayName.trim() ||  t('workout.dayName', { day: dayNumber }),
                   await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayData));
                 } else {
                   // Si no hay datos guardados, crear un nuevo objeto
                   const dayDataToSave = {
                     dayNumber,
-                    name: dayName.trim() || `Día ${dayNumber}`,
+                    name: dayName.trim() || t('workout.dayName', { day: dayNumber }),
                     exercises: exercises,
                   };
                   await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
@@ -951,7 +955,7 @@ export default function CustomPlanDayDetailScreen() {
               }
             }}
             autoFocus
-            placeholder={`Día ${dayNumber}`}
+            placeholder={t('workout.dayPlaceholder', { day: dayNumber })}
             placeholderTextColor="#999"
           />
         ) : (
@@ -970,7 +974,7 @@ export default function CustomPlanDayDetailScreen() {
           style={styles.saveButton}
           onPress={handleSave}
         >
-          <Text style={styles.saveButtonText}>Guardar</Text>
+          <Text style={styles.saveButtonText}>{t('customPlan.save')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -984,7 +988,9 @@ export default function CustomPlanDayDetailScreen() {
           >
             <View style={styles.restTimerToggleContent}>
               <Ionicons name="timer-outline" size={20} color="#ffb300" />
-              <Text style={styles.restTimerToggleText}>Activar tiempo de descanso</Text>
+              <Text style={styles.restTimerToggleText}>
+  {t('customPlan.enableRestTimer')}
+</Text>
             </View>
             <View style={[
               styles.toggleSwitch,
@@ -1001,10 +1007,9 @@ export default function CustomPlanDayDetailScreen() {
         {exercises.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="fitness-outline" size={64} color="#666" />
-            <Text style={styles.emptyStateText}>No hay ejercicios agregados</Text>
-            <Text style={styles.emptyStateSubtext}>
-              Agrega ejercicios para este día
-            </Text>
+            <Text style={styles.emptyStateText}>{t('customPlan.noExercisesAdded')}</Text>
+<Text style={styles.emptyStateSubtext}>{t('customPlan.addExercisesForThisDay')}</Text>
+
           </View>
         ) : (
           <View style={styles.exercisesList}>
@@ -1014,9 +1019,9 @@ export default function CustomPlanDayDetailScreen() {
               // ============================================================================
               <DraggableFlatList
                 data={exercises}
-                onDragEnd={({ data }) => handleReorderExercises(data)}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item: exercise, drag, isActive, getIndex }) => {
+                onDragEnd={({ data }: { data: Exercise[] }) => handleReorderExercises(data)}
+                keyExtractor={(item: Exercise) => item.id}
+                renderItem={({ item: exercise, drag, isActive, getIndex }: { item: Exercise; drag: () => void; isActive: boolean; getIndex: () => number | undefined }) => {
                   const exerciseIdx = getIndex() ?? 0;
                   console.log(`🏋️ Renderizando ejercicio ${exerciseIdx + 1}: ${exercise.name} (ID: ${exercise.id})`);
                   return (
@@ -1066,7 +1071,7 @@ export default function CustomPlanDayDetailScreen() {
                           activeOpacity={0.7}
                         >
                           <Ionicons name="timer-outline" size={18} color="#ffb300" />
-                          <Text style={styles.restTimerLabel}>Temporizador de Descanso:</Text>
+                          <Text style={styles.restTimerLabel}>{t('customPlan.restTimerLabel')}</Text>
                           <Text style={styles.restTimerValue}>
                             {formatRestTime(exercise.rest_seconds || 120)}
                           </Text>
@@ -1083,7 +1088,10 @@ export default function CustomPlanDayDetailScreen() {
                           <View style={styles.setsHeaderLeft}>
                             <Ionicons name="list" size={16} color="#999" />
                             <Text style={styles.setsHeaderText}>
-                              {exercise.sets} {exercise.sets === 1 ? 'serie' : 'series'}
+                            {t('customPlan.setsCount', {
+  count: exercise.sets,
+  unit: exercise.sets === 1 ? t('customPlan.set_singular') : t('customPlan.set_plural'),
+})}
                             </Text>
                             <Ionicons
                               name={expandedExercises.has(exercise.id) ? "chevron-up" : "chevron-down"}
@@ -1094,7 +1102,7 @@ export default function CustomPlanDayDetailScreen() {
                         </TouchableOpacity>
                         {expandedExercises.has(exercise.id) && (
                           <View style={styles.setsGrid}>
-                            {(exercise.setTypes || []).map((setInfo, idx) => {
+                            {(exercise.setTypes || []).map((setInfo: SetInfo, idx: number) => {
                             // Calcular label de la serie
                             const label = (() => {
                               switch (setInfo.type) {
@@ -1133,18 +1141,18 @@ export default function CustomPlanDayDetailScreen() {
                                   </View>
                                   <View style={styles.setBadgeContent}>
                                     {setInfo.type === 'warmup' ? (
-                                      <Text style={styles.setBadgeReps}>Calentamiento</Text>
+                                      <Text style={styles.setBadgeReps}>{t('customPlan.warmupLabel')}</Text>
                                     ) : setInfo.type === 'failure' ? (
                                       <View style={styles.setBadgeInfo}>
                                         <Text style={styles.setBadgeReps}>
                                           {setInfo.reps || 0} reps
                                         </Text>
-                                        <Text style={styles.setBadgeFailureText}>al fallo</Text>
-                                      </View>
+                                        <Text style={styles.setBadgeFailureText}>{t('customPlan.toFailure')}</Text>
+                                        </View>
                                     ) : (
                                       <View style={styles.setBadgeInfo}>
                                         <Text style={styles.setBadgeReps}>
-                                          {setInfo.reps || 0} reps
+                                        {t('customPlan.repsShort', { reps: setInfo.reps || 0 })}
                                         </Text>
                                         {setInfo.rir !== null && setInfo.rir !== undefined && (
                                           <Text style={styles.setBadgeRir}>RIR {setInfo.rir}</Text>
@@ -1275,13 +1283,17 @@ export default function CustomPlanDayDetailScreen() {
                             </View>
                             <View style={styles.setBadgeContent}>
                               {setInfo.type === 'warmup' ? (
-                                <Text style={styles.setBadgeReps}>Calentamiento</Text>
+                                <Text style={styles.setBadgeReps}>
+  {t('customPlan.warmup')}
+</Text>
                               ) : setInfo.type === 'failure' ? (
                                 <View style={styles.setBadgeInfo}>
                                   <Text style={styles.setBadgeReps}>
                                     {setInfo.reps || 0} reps
                                   </Text>
-                                  <Text style={styles.setBadgeFailureText}>al fallo</Text>
+                                  <Text style={styles.setBadgeFailureText}>
+  {t('customPlan.toFailure')}
+</Text>
                                 </View>
                               ) : (
                                 <View style={styles.setBadgeInfo}>
@@ -1313,7 +1325,7 @@ export default function CustomPlanDayDetailScreen() {
           onPress={handleAddExercise}
         >
           <Ionicons name="add-circle" size={24} color="#ffb300" />
-          <Text style={styles.addButtonText}>Agregar Ejercicio</Text>
+          <Text style={styles.addButtonText}>{t('customPlan.addExercise')}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -1348,11 +1360,12 @@ export default function CustomPlanDayDetailScreen() {
                 nestedScrollEnabled={true}
               >
                 <Text style={styles.modalTitle}>
-                  Configurar {editingExercise?.name}
+                {t('customPlan.configureExercise', { name: editingExercise?.name ?? '' })}
                 </Text>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Series</Text>
+                 
+<Text style={styles.label}>{t('customPlan.setsLabel')}</Text>
                   
                   {setTypes.length > 0 ? (
                     <View>
@@ -1398,7 +1411,8 @@ export default function CustomPlanDayDetailScreen() {
                               // Para calentamiento, mostrar texto informativo en lugar de inputs
                               <View style={styles.warmupPlaceholder}>
                                 <Text style={styles.warmupPlaceholderText}>
-                                  Peso ligero de activación
+                                {t('customPlan.warmupHint')}
+
                                 </Text>
                               </View>
                             ) : (
@@ -1433,8 +1447,9 @@ export default function CustomPlanDayDetailScreen() {
                     </View>
                   ) : (
                     <Text style={styles.emptySeriesText}>
-                      Agrega series para este ejercicio
-                    </Text>
+  {t('customPlan.addSetsForThisExercise')}
+</Text>
+
                   )}
                   
                   {/* Botón Agregar Serie abajo */}
@@ -1444,7 +1459,7 @@ export default function CustomPlanDayDetailScreen() {
                     activeOpacity={0.7}
                   >
                     <Ionicons name="add-circle" size={22} color="#ffb300" />
-                    <Text style={styles.addSetButtonText}>Agregar Serie</Text>
+                    <Text style={styles.addSetButtonText}>{t('customPlan.addSet')}</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -1457,13 +1472,13 @@ export default function CustomPlanDayDetailScreen() {
                       setReps([]);
                     }}
                   >
-                    <Text style={styles.modalButtonCancelText}>Cancelar</Text>
+                    <Text style={styles.modalButtonCancelText}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.modalButton, styles.modalButtonSave]}
                     onPress={handleSaveExercise}
                   >
-                    <Text style={styles.modalButtonSaveText}>Guardar</Text>
+                    <Text style={styles.modalButtonSaveText}>{t('common.save')}</Text>
                   </TouchableOpacity>
                 </View>
               </ScrollView>
@@ -1502,7 +1517,7 @@ export default function CustomPlanDayDetailScreen() {
               console.log('🛑 Click dentro del contenido - no cerrar');
             }}
           >
-            <Text style={styles.setTypeModalTitle}>Seleccionar Tipo de Serie</Text>
+            <Text style={styles.setTypeModalTitle}>{t('customPlan.selectSetType')}</Text>
             
             <View style={styles.setTypeOptionsContainer}>
               <TouchableOpacity
@@ -1514,11 +1529,18 @@ export default function CustomPlanDayDetailScreen() {
                 activeOpacity={0.7}
               >
                 <View style={[styles.setTypeIconLarge, styles.setTypeIconWarmup]}>
-                  <Text style={styles.setTypeIconTextLarge}>C</Text>
+                <Text style={styles.setTypeIconTextLarge}>
+  {i18n.language.startsWith('en') ? 'W' : 'C'}
+</Text>
                 </View>
                 <View style={styles.setTypeInfo}>
-                  <Text style={styles.setTypeOptionText}>Calentamiento</Text>
-                  <Text style={styles.setTypeOptionDesc}>Peso ligero para activar músculos</Text>
+                <Text style={styles.setTypeOptionText}>
+  {t('customPlan.setTypeWarmup')}
+</Text>
+<Text style={styles.setTypeOptionDesc}>
+  {t('customPlan.setTypeWarmupDesc')}
+</Text>
+
                 </View>
               </TouchableOpacity>
 
@@ -1534,8 +1556,13 @@ export default function CustomPlanDayDetailScreen() {
                   <Text style={styles.setTypeIconTextLarge}>1</Text>
                 </View>
                 <View style={styles.setTypeInfo}>
-                  <Text style={styles.setTypeOptionText}>Normal</Text>
-                  <Text style={styles.setTypeOptionDesc}>Serie estándar con repeticiones</Text>
+                <Text style={styles.setTypeOptionText}>
+  {t('customPlan.setType.normal')}
+</Text>
+<Text style={styles.setTypeOptionDesc}>
+  {t('customPlan.setType.normalDesc')}
+</Text>
+
                 </View>
               </TouchableOpacity>
 
@@ -1551,8 +1578,13 @@ export default function CustomPlanDayDetailScreen() {
                   <Text style={styles.setTypeIconTextLarge}>F</Text>
                 </View>
                 <View style={styles.setTypeInfo}>
-                  <Text style={styles.setTypeOptionText}>Al Fallo</Text>
-                  <Text style={styles.setTypeOptionDesc}>Hasta no poder más</Text>
+                <Text style={styles.setTypeOptionText}>
+  {t('customPlan.setType.failure')}
+</Text>
+<Text style={styles.setTypeOptionDesc}>
+  {t('customPlan.setType.failureDesc')}
+</Text>
+
                 </View>
               </TouchableOpacity>
 
@@ -1568,8 +1600,12 @@ export default function CustomPlanDayDetailScreen() {
                   <Text style={styles.setTypeIconTextLarge}>D</Text>
                 </View>
                 <View style={styles.setTypeInfo}>
-                  <Text style={styles.setTypeOptionText}>Drop</Text>
-                  <Text style={styles.setTypeOptionDesc}>Reducir peso y continuar</Text>
+                <Text style={styles.setTypeOptionText}>
+  {t('customPlan.setType.drop')}
+</Text>
+<Text style={styles.setTypeOptionDesc}>
+  {t('customPlan.setType.dropDesc')}
+</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -1582,7 +1618,9 @@ export default function CustomPlanDayDetailScreen() {
                 setSelectedSetIndex(-1);
               }}
             >
-              <Text style={styles.setTypeModalCloseText}>Cancelar</Text>
+<Text style={styles.setTypeModalCloseText}>
+  {t('common.cancel')}
+</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>
@@ -1606,7 +1644,9 @@ export default function CustomPlanDayDetailScreen() {
           >
             <View style={styles.restTimerModalHeader}>
               <Ionicons name="settings" size={24} color="#ffb300" />
-              <Text style={styles.restTimerModalTitle}>Temporizador de Descanso</Text>
+              <Text style={styles.restTimerModalTitle}>
+  {t('workout.restTimerTitle')}
+</Text>
             </View>
 
             {/* Selector de Tiempo */}
@@ -1638,13 +1678,13 @@ export default function CustomPlanDayDetailScreen() {
                 style={styles.restTimerCancelButton}
                 onPress={() => setShowRestTimerModal(false)}
               >
-                <Text style={styles.restTimerCancelButtonText}>Cancelar</Text>
+                <Text style={styles.restTimerCancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.restTimerSaveButton}
                 onPress={handleSaveRestTime}
               >
-                <Text style={styles.restTimerSaveButtonText}>Guardar</Text>
+                <Text style={styles.restTimerSaveButtonText}>{t('common.save')}</Text>
               </TouchableOpacity>
             </View>
           </Pressable>

@@ -40,6 +40,7 @@ export interface EmpresarioStats {
   active_members: number;
   new_members_30d: number;
   members_with_active_subscription: number;
+  is_active?: boolean;
 }
 
 export interface GymMember {
@@ -55,6 +56,39 @@ export interface GymMember {
   subscription_status: string | null;
   has_workout_plan: boolean;
   subscription_expires_at: string | null;
+}
+
+export interface StudentStats {
+  workout_count: number;
+  active_plan?: {
+    id: string;
+    plan_name: string;
+    description: string;
+    plan_data: any;
+    created_at: string;
+  };
+  recent_workouts: Array<{
+    id: string;
+    completed_at: string;
+    duration_minutes: number;
+    notes?: string;
+  }>;
+  body_metrics?: {
+    current_weight: number;
+    body_fat_percentage?: number;
+    muscle_percentage?: number;
+    recorded_at: string;
+  };
+  nutrition_stats?: {
+    avg_calories: number;
+    avg_protein: number;
+    avg_carbs: number;
+    avg_fats: number;
+  };
+  steps_stats?: {
+    avg_steps: number;
+    total_steps: number;
+  };
 }
 
 
@@ -355,23 +389,71 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
 /**
  * Obtiene el rol de un usuario
  */
-export async function getUserRole(userId: string): Promise<'admin' | 'socio' | 'empresario' | 'user'> {
+export async function getUserRole(userId: string, userEmail?: string): Promise<'admin' | 'socio' | 'empresario' | 'user'> {
   try {
-    const { data, error } = await supabase
+    console.log('🔍 getUserRole - userId:', userId, 'email:', userEmail);
+    
+    // Obtener roles por user_id
+    const { data: rolesByUserId, error } = await supabase
       .from('admin_roles')
       .select('role_type')
       .eq('user_id', userId)
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle();
+      .eq('is_active', true);
 
-    if (error || !data) {
-      return 'user';
+    if (error) {
+      console.error('❌ getUserRole error:', error);
     }
 
-    return data.role_type as 'admin' | 'socio' | 'empresario';
+    // SIEMPRE buscar también por email para combinar roles
+    let rolesByEmail: any[] = [];
+    if (userEmail) {
+      console.log('🔍 getUserRole - Buscando también por email:', userEmail);
+      const { data: emailRoles } = await supabase
+        .from('admin_roles')
+        .select('role_type, user_id')
+        .eq('email', userEmail)
+        .eq('is_active', true);
+      
+      if (emailRoles && emailRoles.length > 0) {
+        console.log('✅ getUserRole - Encontrado por email:', emailRoles.map(r => r.role_type));
+        rolesByEmail = emailRoles;
+        
+        // Actualizar user_id para roles que tengan user_id diferente
+        for (const role of emailRoles) {
+          if (role.user_id !== userId) {
+            console.log('🔄 getUserRole - Actualizando user_id para rol:', role.role_type);
+          await supabase
+            .from('admin_roles')
+            .update({ user_id: userId })
+              .eq('email', userEmail)
+              .eq('role_type', role.role_type);
+        }
+        }
+      }
+    }
+    
+    // Combinar TODOS los roles (por user_id Y por email)
+    const allRoles = [...(rolesByUserId || []), ...rolesByEmail];
+    const uniqueRoleTypes = [...new Set(allRoles.map(r => r.role_type))];
+    
+    console.log('✅ getUserRole - TODOS los roles combinados:', uniqueRoleTypes);
+        
+        // Priorizar roles: admin > empresario > socio
+    if (uniqueRoleTypes.length > 0) {
+      if (uniqueRoleTypes.includes('admin')) {
+        console.log('✅ getUserRole - Rol final: admin (priorizado)');
+        return 'admin';
+      }
+      if (uniqueRoleTypes.includes('empresario')) return 'empresario';
+      if (uniqueRoleTypes.includes('socio')) return 'socio';
+      return uniqueRoleTypes[0] as 'admin' | 'socio' | 'empresario';
+    }
+
+    // Si no se encontró ningún rol
+    console.log('⚠️ getUserRole - No se encontró rol, retornando "user"');
+    return 'user';
   } catch (error) {
-    console.error('Error obteniendo rol:', error);
+    console.error('💥 getUserRole exception:', error);
     return 'user';
   }
 }
@@ -425,15 +507,26 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
     }
 
     // Obtener TODOS los usuarios de admin_roles (admins, socios, empresarios)
+    // No filtramos por is_active para mostrar todos los usuarios (activos e inactivos)
     const { data: adminRolesData, error: adminRolesError } = await supabase
       .from('admin_roles')
       .select('user_id, email, name, role_type, created_at')
-      .eq('is_active', true)
       .order('created_at', { ascending: false });
 
     if (adminRolesError) {
       console.error('Error obteniendo admin_roles:', adminRolesError);
     }
+
+    console.log('🔍 DEBUG getUsers - admin_roles data:', {
+      total: adminRolesData?.length || 0,
+      empresarios: adminRolesData?.filter(ar => ar.role_type === 'empresario').length || 0,
+      data: adminRolesData?.filter(ar => ar.role_type === 'empresario').map(ar => ({
+        user_id: ar.user_id,
+        email: ar.email,
+        name: ar.name,
+        role_type: ar.role_type
+      }))
+    });
 
     // Crear un mapa de todos los user_ids únicos para contar total
     const allUserIds = new Set<string>();
@@ -462,8 +555,31 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
         role_type: ar.role_type as 'admin' | 'socio' | 'empresario',
       }));
 
+    console.log('🔍 DEBUG getUsers - adminUsersAsProfiles:', {
+      total: adminUsersAsProfiles.length,
+      empresarios: adminUsersAsProfiles.filter(u => u.role_type === 'empresario').length,
+      empresariosData: adminUsersAsProfiles.filter(u => u.role_type === 'empresario').map(u => ({
+        user_id: u.user_id,
+        email: u.email,
+        name: u.name,
+        role_type: u.role_type
+      }))
+    });
+
     // Combinar usuarios de user_profiles con usuarios de admin_roles
     const allUsersData = [...(usersData || []), ...adminUsersAsProfiles];
+
+    console.log('🔍 DEBUG getUsers - allUsersData antes de ordenar:', {
+      total: allUsersData.length,
+      empresarios: allUsersData.filter(u => u.role_type === 'empresario').length,
+      empresariosData: allUsersData.filter(u => u.role_type === 'empresario').map(u => ({
+        user_id: u.user_id,
+        email: u.email,
+        name: u.name,
+        role_type: u.role_type,
+        created_at: u.created_at
+      }))
+    });
 
     // Ordenar por fecha de creación descendente
     allUsersData.sort((a, b) => 
@@ -472,6 +588,15 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
 
     // Paginar manualmente (ya que combinamos dos fuentes)
     const paginatedUsers = allUsersData.slice(from, to + 1);
+
+    console.log('🔍 DEBUG getUsers - paginación:', {
+      page,
+      from,
+      to,
+      totalUsers: allUsersData.length,
+      paginatedCount: paginatedUsers.length,
+      empresariosEnPagina: paginatedUsers.filter(u => u.role_type === 'empresario').length
+    });
 
     // Obtener información adicional para estos usuarios
     const userIds = paginatedUsers.map(u => u.user_id);
@@ -495,6 +620,18 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
       ...user,
       role_type: roleMap.get(user.user_id) || 'user' as 'admin' | 'socio' | 'empresario' | 'user',
     }));
+
+    console.log('🔍 DEBUG getUsers - resultado final:', {
+      totalRetornado: usersWithRoles.length,
+      empresarios: usersWithRoles.filter(u => u.role_type === 'empresario').length,
+      empresariosData: usersWithRoles.filter(u => u.role_type === 'empresario').map(u => ({
+        user_id: u.user_id,
+        email: u.email,
+        name: u.name,
+        role_type: u.role_type
+      })),
+      totalUniqueUserIds: allUserIds.size
+    });
 
     return {
       users: usersWithRoles as UserProfile[],
@@ -576,7 +713,7 @@ async function enrichUsersWithSubscriptionInfo(usersData: any[]): Promise<UserPr
   // Obtener información de suscripciones activas
   const { data: subscriptionData } = await supabase
     .from('v_user_subscription')
-    .select('user_id, is_active, is_gym_member')
+    .select('user_id, has_active_subscription, is_active_gym_member')
     .in('user_id', userIds);
 
   // Obtener roles de admin_roles
@@ -597,8 +734,8 @@ async function enrichUsersWithSubscriptionInfo(usersData: any[]): Promise<UserPr
     const gym = (gymData || []).find(g => g.user_id === user.user_id);
     const gymInfo = (gymsData || []).find(g => g.user_id === gym?.empresario_id);
 
-    const isActive = subscriptionStatus?.is_active || false;
-    const isGymMember = subscriptionStatus?.is_gym_member || false;
+    const isActive = subscriptionStatus?.has_active_subscription || false;
+    const isGymMember = subscriptionStatus?.is_active_gym_member || false;
     
     // Calcular pago mensual
     let monthlyPayment = 0;
@@ -631,19 +768,81 @@ async function enrichUsersWithSubscriptionInfo(usersData: any[]): Promise<UserPr
  */
 export async function searchUsers(query: string): Promise<UserProfile[]> {
   try {
-    const { data, error } = await supabase
+    // Buscar en user_profiles
+    const { data: usersData, error: usersError } = await supabase
       .from('user_profiles')
       .select('*')
       .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
       .order('created_at', { ascending: false })
       .limit(50);
 
-    if (error) {
-      console.error('Error buscando usuarios:', error);
-      return [];
+    if (usersError) {
+      console.error('Error buscando usuarios:', usersError);
     }
 
-    return (data || []) as UserProfile[];
+    // Buscar también en admin_roles (admins, socios, empresarios)
+    const { data: adminRolesData, error: adminRolesError } = await supabase
+      .from('admin_roles')
+      .select('user_id, email, name, role_type, created_at')
+      .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (adminRolesError) {
+      console.error('Error buscando en admin_roles:', adminRolesError);
+    }
+
+    // Convertir admin_roles a formato UserProfile
+    const adminUsersAsProfiles: UserProfile[] = (adminRolesData || [])
+      .filter(ar => !usersData?.some(u => u.user_id === ar.user_id)) // Excluir los que ya están en user_profiles
+      .map(ar => ({
+        id: ar.user_id,
+        user_id: ar.user_id,
+        name: ar.name,
+        email: ar.email,
+        age: null,
+        height: null,
+        weight: null,
+        fitness_level: null,
+        goals: [],
+        activity_types: [],
+        available_days: null,
+        session_duration: null,
+        equipment: [],
+        created_at: ar.created_at || new Date().toISOString(),
+        updated_at: ar.created_at || new Date().toISOString(),
+        role_type: ar.role_type as 'admin' | 'socio' | 'empresario',
+      }));
+
+    // Combinar resultados
+    const allResults = [...(usersData || []), ...adminUsersAsProfiles];
+    
+    // Ordenar por fecha de creación
+    allResults.sort((a, b) => 
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    // Enriquecer con información de suscripción
+    const enrichedResults = await enrichUsersWithSubscriptionInfo(allResults.slice(0, 50));
+
+    // Obtener roles para los usuarios encontrados
+    const userIds = enrichedResults.map(u => u.user_id);
+    const { data: rolesData } = await supabase
+      .from('admin_roles')
+      .select('user_id, role_type')
+      .in('user_id', userIds);
+
+    // Crear mapa de roles
+    const roleMap = new Map<string, 'admin' | 'socio' | 'empresario'>();
+    (rolesData || []).forEach(r => roleMap.set(r.user_id, r.role_type as 'admin' | 'socio' | 'empresario'));
+
+    // Agregar información de rol a cada usuario
+    const resultsWithRoles = enrichedResults.map(user => ({
+      ...user,
+      role_type: roleMap.get(user.user_id) || 'user' as 'admin' | 'socio' | 'empresario' | 'user',
+    }));
+
+    return resultsWithRoles as UserProfile[];
   } catch (error) {
     console.error('Error inesperado buscando usuarios:', error);
     return [];
@@ -678,16 +877,205 @@ export async function getEmpresarios(): Promise<Empresario[]> {
  */
 export async function getEmpresariosStats(): Promise<EmpresarioStats[]> {
   try {
-    const { data, error } = await supabase
+    const { data, error} = await supabase
       .from('empresario_stats')
       .select('*')
       .order('active_members', { ascending: false });
 
     if (error) throw error;
-    return (data || []) as EmpresarioStats[];
+    
+    // Enriquecer con is_active desde admin_roles
+    const empresarioIds = (data || []).map(e => e.empresario_id);
+    const { data: rolesData } = await supabase
+      .from('admin_roles')
+      .select('user_id, is_active')
+      .in('user_id', empresarioIds);
+    
+    const activeStatusMap = new Map<string, boolean>();
+    (rolesData || []).forEach(r => activeStatusMap.set(r.user_id, r.is_active));
+    
+    const enrichedData = (data || []).map(emp => ({
+      ...emp,
+      is_active: activeStatusMap.get(emp.empresario_id) ?? true,
+    }));
+    
+    return enrichedData as EmpresarioStats[];
   } catch (error) {
     console.error('Error obteniendo estadísticas de empresarios:', error);
     return [];
+  }
+}
+
+/**
+ * Obtiene estadísticas del dashboard para un empresario específico
+ */
+export async function getEmpresarioDashboardStats(empresarioId: string): Promise<any> {
+  try {
+    const { data, error } = await supabase
+      .rpc('get_empresario_dashboard_stats', {
+        p_empresario_id: empresarioId
+      });
+
+    if (error) {
+      console.error('Error obteniendo estadísticas del dashboard:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error en getEmpresarioDashboardStats:', error);
+    throw error;
+  }
+}
+
+/**
+ * Envía un mensaje masivo del gimnasio
+ */
+export async function sendGymMessage(
+  empresarioId: string,
+  senderName: string,
+  messageTitle: string,
+  messageBody: string,
+  recipientType: 'all' | 'selected',
+  recipientIds: string[] | null
+): Promise<any> {
+  try {
+    const { data, error } = await supabase
+      .rpc('send_gym_message', {
+        p_empresario_id: empresarioId,
+        p_sender_name: senderName,
+        p_message_title: messageTitle,
+        p_message_body: messageBody,
+        p_recipient_type: recipientType,
+        p_recipient_ids: recipientIds
+      });
+
+    if (error) {
+      console.error('Error enviando mensaje:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error en sendGymMessage:', error);
+    throw error;
+  }
+}
+
+/**
+ * Obtiene el historial de mensajes enviados por un empresario
+ */
+export async function getEmpresarioMessagesHistory(empresarioId: string): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .rpc('get_empresario_messages_history', {
+        p_empresario_id: empresarioId,
+        p_limit: 50
+      });
+
+    if (error) {
+      console.error('Error obteniendo historial de mensajes:', error);
+      throw error;
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error en getEmpresarioMessagesHistory:', error);
+    return [];
+  }
+}
+
+/**
+ * Obtiene las notificaciones de un usuario
+ */
+export async function getUserNotifications(
+  userId: string,
+  limit: number = 20,
+  unreadOnly: boolean = false
+): Promise<any[]> {
+  try {
+    const { data, error } = await supabase
+      .rpc('get_user_notifications', {
+        p_user_id: userId,
+        p_limit: limit,
+        p_unread_only: unreadOnly
+      });
+
+    if (error) {
+      console.error('Error obteniendo notificaciones:', error);
+      throw error;
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('Error en getUserNotifications:', error);
+    return [];
+  }
+}
+
+/**
+ * Marca una notificación como leída
+ */
+export async function markNotificationAsRead(notificationId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .rpc('mark_notification_as_read', {
+        p_notification_id: notificationId
+      });
+
+    if (error) {
+      console.error('Error marcando notificación como leída:', error);
+      return false;
+    }
+
+    return data || false;
+  } catch (error) {
+    console.error('Error en markNotificationAsRead:', error);
+    return false;
+  }
+}
+
+/**
+ * Marca todas las notificaciones como leídas
+ */
+export async function markAllNotificationsAsRead(userId: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .rpc('mark_all_notifications_as_read', {
+        p_user_id: userId
+      });
+
+    if (error) {
+      console.error('Error marcando todas las notificaciones como leídas:', error);
+      return 0;
+    }
+
+    return data || 0;
+  } catch (error) {
+    console.error('Error en markAllNotificationsAsRead:', error);
+    return 0;
+  }
+}
+
+/**
+ * Obtiene el contador de notificaciones no leídas
+ */
+export async function getUnreadNotificationsCount(userId: string): Promise<number> {
+  try {
+    const { data, error } = await supabase
+      .rpc('get_unread_notifications_count', {
+        p_user_id: userId
+      });
+
+    if (error) {
+      console.error('Error obteniendo contador de notificaciones:', error);
+      return 0;
+    }
+
+    return data || 0;
+  } catch (error) {
+    console.error('Error en getUnreadNotificationsCount:', error);
+    return 0;
   }
 }
 
@@ -762,6 +1150,27 @@ export async function updateEmpresario(empresarioId: string, empresarioData: Par
     return data;
   } catch (error) {
     console.error('Error actualizando empresario:', error);
+    throw error;
+  }
+}
+
+/**
+ * Activa o desactiva un empresario
+ */
+export async function toggleEmpresarioStatus(empresarioId: string, isActive: boolean) {
+  try {
+    const { data, error } = await supabase
+      .from('admin_roles')
+      .update({ is_active: isActive })
+      .eq('user_id', empresarioId)
+      .eq('role_type', 'empresario')
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error actualizando estado del empresario:', error);
     throw error;
   }
 }
@@ -1567,6 +1976,52 @@ export async function getDashboardAlerts(): Promise<DashboardAlert[]> {
   } catch (error) {
     console.error('Error obteniendo alertas:', error);
     return [];
+  }
+}
+
+/**
+ * Obtener estadísticas detalladas de un usuario (para empresarios)
+ */
+export async function getStudentStats(
+  empresarioId: string,
+  studentId: string,
+  startDate?: string,
+  endDate?: string
+): Promise<StudentStats | null> {
+  try {
+    console.log('🔵 getStudentStats - llamando RPC con:', {
+      p_trainer_id: empresarioId,
+      p_student_id: studentId,
+      p_start_date: startDate || '2020-01-01',
+      p_end_date: endDate || new Date().toISOString().split('T')[0],
+    });
+
+    const { data, error } = await supabase.rpc('get_student_stats', {
+      p_trainer_id: empresarioId, // ID del empresario
+      p_student_id: studentId,
+      p_start_date: startDate || '2020-01-01',
+      p_end_date: endDate || new Date().toISOString().split('T')[0],
+    });
+
+    if (error) {
+      console.error('❌ Error getting student stats:', error);
+      return null;
+    }
+
+    if (!data) {
+      console.error('❌ No data returned from get_student_stats');
+      return null;
+    }
+
+    console.log('✅ Stats obtenidas exitosamente:', data);
+    console.log('✅ Tipo de data:', typeof data);
+    console.log('✅ Data stringified:', JSON.stringify(data, null, 2));
+    
+    // La función RPC devuelve un JSON, necesitamos parsearlo correctamente
+    return data as StudentStats;
+  } catch (error: any) {
+    console.error('💥 Exception getting student stats:', error);
+    return null;
   }
 }
 

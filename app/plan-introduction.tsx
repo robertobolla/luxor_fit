@@ -11,9 +11,11 @@ import {
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { generatePlanIntroduction } from '../src/services/aiService';
 
 export default function PlanIntroductionScreen() {
+  const { t, i18n } = useTranslation();
   const params = useLocalSearchParams();
   const [isLoading, setIsLoading] = useState(true);
   const [introduction, setIntroduction] = useState('');
@@ -56,17 +58,20 @@ export default function PlanIntroductionScreen() {
       setIsLoading(true);
       setError('');
 
+      // Obtener el idioma actual del usuario
+      const currentLanguage = i18n.language.startsWith('en') ? 'en' : 'es';
+
       // Llamar al servicio de IA para generar la introducción
-      const result = await generatePlanIntroduction(userData);
+      const result = await generatePlanIntroduction(userData, currentLanguage);
 
       if (result.success && result.introduction) {
         setIntroduction(result.introduction);
       } else {
-        setError(result.error || 'No se pudo generar la introducción');
+        setError(result.error || t('planIntroduction.couldNotGenerate'));
       }
     } catch (err) {
       console.error('Error al generar introducción:', err);
-      setError('Ocurrió un error inesperado');
+      setError(t('planIntroduction.unexpectedError'));
     } finally {
       setIsLoading(false);
     }
@@ -77,36 +82,15 @@ export default function PlanIntroductionScreen() {
   };
 
   const getFitnessLevelText = (level: string) => {
-    switch (level) {
-      case 'beginner': return 'Principiante';
-      case 'intermediate': return 'Intermedio';
-      case 'advanced': return 'Avanzado';
-      default: return level;
-    }
+    return t(`fitnessLevels.${level}`) || level;
   };
 
   const getGoalText = (goal: string) => {
-    const goalMap: { [key: string]: string } = {
-      weight_loss: 'Perder peso',
-      muscle_gain: 'Ganar músculo',
-      strength: 'Aumentar fuerza',
-      endurance: 'Mejorar resistencia',
-      flexibility: 'Flexibilidad',
-      general_fitness: 'Forma general',
-    };
-    return goalMap[goal] || goal;
+    return t(`fitnessGoals.${goal}`) || goal;
   };
 
   const getActivityTypeText = (activity: string) => {
-    const activityMap: { [key: string]: string } = {
-      cardio: 'Cardio',
-      strength: 'Fuerza',
-      sports: 'Deportes',
-      yoga: 'Yoga/Pilates',
-      hiit: 'HIIT',
-      mixed: 'Mixto',
-    };
-    return activityMap[activity] || activity;
+    return t(`activityTypes.${activity}`) || activity;
   };
 
   if (isLoading) {
@@ -116,10 +100,10 @@ export default function PlanIntroductionScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ffb300" />
           <Text style={styles.loadingText}>
-            Analizando tus datos y creando tu plan personalizado...
+            {t('planIntroduction.analyzingData')}
           </Text>
           <Text style={styles.loadingSubtext}>
-            Esto puede tomar unos segundos
+            {t('planIntroduction.mayTakeSeconds')}
           </Text>
         </View>
       </SafeAreaView>
@@ -311,7 +295,7 @@ const styles = StyleSheet.create({
   skipButtonText: {
     color: '#888',
     fontSize: 14,
-    textDecoration: 'underline',
+    textDecorationLine: 'underline',
   },
   scrollView: {
     flex: 1,

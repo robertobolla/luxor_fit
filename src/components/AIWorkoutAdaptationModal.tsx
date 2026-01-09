@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { AIWorkoutAdapterService } from '../services/aiWorkoutAdapter';
 
 interface AIWorkoutAdaptationModalProps {
@@ -28,59 +29,64 @@ export const AIWorkoutAdaptationModal: React.FC<AIWorkoutAdaptationModalProps> =
   workoutPlan,
   userId,
 }) => {
+  const { t, i18n } = useTranslation();
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [suggestions] = useState([
-    "No incluyas ejercicios de pecho plano porque me duele por una lesión",
-    "Cambia todos los ejercicios de piernas por ejercicios de peso corporal",
-    "Reduce las series a 2 por ejercicio porque tengo poco tiempo",
-    "Agrega más ejercicios de core y estabilidad",
-    "Elimina los ejercicios que requieren mancuernas",
-    "Incluye más ejercicios de estiramiento y movilidad",
-    "Cambia los ejercicios de espalda por alternativas sin peso",
-    "Agrega ejercicios de rehabilitación para hombro",
-  ]);
+  const suggestions = [
+    t('aiAdaptation.suggestion1'),
+    t('aiAdaptation.suggestion2'),
+    t('aiAdaptation.suggestion3'),
+    t('aiAdaptation.suggestion4'),
+    t('aiAdaptation.suggestion5'),
+    t('aiAdaptation.suggestion6'),
+    t('aiAdaptation.suggestion7'),
+    t('aiAdaptation.suggestion8'),
+  ];
 
   const handleAdaptWorkout = async () => {
     if (!prompt.trim()) {
-      Alert.alert('Error', 'Por favor escribe una instrucción para adaptar tu entrenamiento.');
+      Alert.alert(t('common.error'), t('aiAdaptation.emptyPrompt'));
       return;
     }
 
     setIsLoading(true);
     
     try {
+      // Obtener el idioma actual del usuario
+      const currentLanguage = i18n.language.startsWith('en') ? 'en' : 'es';
+
       const result = await AIWorkoutAdapterService.adaptWorkoutPlan({
         workoutPlanId: workoutPlan.id,
         userId,
         adaptationPrompt: prompt.trim(),
         currentPlan: workoutPlan.plan_data,
+        language: currentLanguage,
       });
 
       if (result.success) {
         Alert.alert(
-          '¡Éxito!',
+          t('aiAdaptation.success'),
           result.message,
           [
             {
-              text: 'Ver Plan Adaptado',
+              text: t('aiAdaptation.viewAdaptedPlan'),
               onPress: () => {
                 onSuccess(result.adaptedPlan);
                 onClose();
               },
             },
             {
-              text: 'Cerrar',
+              text: t('aiAdaptation.close'),
               onPress: onClose,
             },
           ]
         );
       } else {
-        Alert.alert('Error', result.message);
+        Alert.alert(t('common.error'), result.message);
       }
     } catch (error) {
       console.error('Error adaptando entrenamiento:', error);
-      Alert.alert('Error', 'No se pudo adaptar el entrenamiento. Intenta de nuevo.');
+      Alert.alert(t('common.error'), t('aiAdaptation.adaptError'));
     } finally {
       setIsLoading(false);
     }
@@ -103,7 +109,7 @@ export const AIWorkoutAdaptationModal: React.FC<AIWorkoutAdaptationModalProps> =
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
             <Ionicons name="close" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.title}>Adaptar con IA</Text>
+          <Text style={styles.title}>{t('aiAdaptation.title')}</Text>
           <View style={styles.placeholder} />
         </View>
 
@@ -112,18 +118,18 @@ export const AIWorkoutAdaptationModal: React.FC<AIWorkoutAdaptationModalProps> =
           <View style={styles.descriptionContainer}>
             <Ionicons name="bulb" size={24} color="#ffb300" />
             <Text style={styles.description}>
-              Describe cómo quieres adaptar tu entrenamiento. La IA modificará tu plan actual según tus necesidades específicas.
+              {t('aiAdaptation.description')}
             </Text>
           </View>
 
           {/* Input de prompt */}
           <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>Instrucciones para la IA:</Text>
+            <Text style={styles.inputLabel}>{t('aiAdaptation.instructionsLabel')}</Text>
             <TextInput
               style={styles.textInput}
               value={prompt}
               onChangeText={setPrompt}
-              placeholder="Ej: No incluyas ejercicios de pecho plano porque me duele por una lesión"
+              placeholder={t('aiAdaptation.placeholder')}
               placeholderTextColor="#666666"
               multiline
               numberOfLines={4}
@@ -133,7 +139,7 @@ export const AIWorkoutAdaptationModal: React.FC<AIWorkoutAdaptationModalProps> =
 
           {/* Sugerencias */}
           <View style={styles.suggestionsContainer}>
-            <Text style={styles.suggestionsTitle}>💡 Sugerencias:</Text>
+            <Text style={styles.suggestionsTitle}>{t('aiAdaptation.suggestionsTitle')}</Text>
             {suggestions.map((suggestion, index) => (
               <TouchableOpacity
                 key={index}
@@ -150,7 +156,7 @@ export const AIWorkoutAdaptationModal: React.FC<AIWorkoutAdaptationModalProps> =
           <View style={styles.infoContainer}>
             <Ionicons name="information-circle" size={20} color="#888888" />
             <Text style={styles.infoText}>
-              La IA mantendrá la estructura de tu plan pero adaptará ejercicios, series, repeticiones y otros aspectos según tus instrucciones.
+              {t('aiAdaptation.infoText')}
             </Text>
           </View>
         </ScrollView>
@@ -167,7 +173,7 @@ export const AIWorkoutAdaptationModal: React.FC<AIWorkoutAdaptationModalProps> =
             ) : (
               <>
                 <Ionicons name="sparkles" size={20} color="#ffffff" />
-                <Text style={styles.adaptButtonText}>Adaptar Entrenamiento</Text>
+                <Text style={styles.adaptButtonText}>{t('aiAdaptation.adaptButton')}</Text>
               </>
             )}
           </TouchableOpacity>

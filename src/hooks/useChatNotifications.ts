@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useUser } from '@clerk/clerk-expo';
 import { subscribeToAllUserMessages, Message } from '../services/chatService';
-import { supabase } from '../services/supabase';
+import { supabase } from '../../src/services/supabase';
 import {
   sendMessageNotification,
   sendWorkoutSharedNotification,

@@ -18,6 +18,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import * as ImagePicker from 'expo-image-picker';
 import {
   getChatMessages,
@@ -44,9 +45,10 @@ import { setCurrentChatForNotifications } from '../src/hooks/useChatNotification
 export default function ChatScreen() {
   const params = useLocalSearchParams();
   const { user } = useUser();
+  const { t } = useTranslation();
   const chatId = params.chatId as string;
   const otherUserId = params.otherUserId as string;
-  const otherUserName = params.otherUserName as string || 'Usuario';
+  const otherUserName = params.otherUserName as string || t('chatScreen.user');
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [filteredMessages, setFilteredMessages] = useState<Message[]>([]);
@@ -206,36 +208,36 @@ export default function ChatScreen() {
       .maybeSingle();
 
     if (!sharedWorkout) {
-      Alert.alert('Error', 'No se encontró el entrenamiento compartido');
+      Alert.alert(t('common.error'), t('chat.workoutNotFound'));
       return;
     }
 
     Alert.alert(
-      'Aceptar Entrenamiento',
-      '¿Quieres activar este entrenamiento como tu plan activo?',
+      t('chat.acceptWorkout'),
+      t('chat.activateAsPlan'),
       [
         {
-          text: 'Solo aceptar',
+          text: t('chat.justAccept'),
           onPress: async () => {
             const result = await acceptSharedWorkout(sharedWorkout.id, user.id, false);
             if (result.success) {
               loadPendingWorkouts();
               loadMessages(); // Recargar mensajes para ver la actualización
             } else {
-              Alert.alert('Error', result.error || 'No se pudo aceptar el entrenamiento');
+              Alert.alert(t('common.error'), result.error || t('chat.couldNotAccept'));
             }
           },
         },
         {
-          text: 'Aceptar y activar',
+          text: t('chat.acceptAndActivate'),
           onPress: async () => {
             const result = await acceptSharedWorkout(sharedWorkout.id, user.id, true);
             if (result.success) {
-              Alert.alert('Éxito', 'Entrenamiento aceptado y activado como tu plan actual');
+              Alert.alert(t('common.success'), t('chat.workoutAcceptedActivated'));
               loadPendingWorkouts();
               loadMessages();
             } else {
-              Alert.alert('Error', result.error || 'No se pudo aceptar el entrenamiento');
+              Alert.alert(t('common.error'), result.error || t('chat.couldNotAccept'));
             }
           },
         },
@@ -256,11 +258,11 @@ export default function ChatScreen() {
       .maybeSingle();
 
     if (!sharedWorkout) {
-      Alert.alert('Error', 'No se encontró el entrenamiento compartido');
+      Alert.alert(t('common.error'), t('chat.workoutNotFound'));
       return;
     }
 
-    Alert.alert('Rechazar Entrenamiento', '¿Estás seguro de rechazar este entrenamiento?', [
+    Alert.alert(t('chat.rejectWorkout'), t('chat.rejectWorkoutMessage'), [
       {
         text: 'Rechazar',
         style: 'destructive',
@@ -270,7 +272,7 @@ export default function ChatScreen() {
             loadPendingWorkouts();
             loadMessages();
           } else {
-            Alert.alert('Error', result.error || 'No se pudo rechazar el entrenamiento');
+            Alert.alert(t('common.error'), result.error || t('chat.couldNotReject'));
           }
         },
       },
@@ -304,7 +306,7 @@ export default function ChatScreen() {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }, 100);
     } else {
-      Alert.alert('Error', result.error || 'No se pudo enviar el mensaje');
+      Alert.alert(t('common.error'), result.error || t('chat.couldNotSendMessage'));
       setMessageText(text); // Restaurar el texto
     }
   };
@@ -321,24 +323,24 @@ export default function ChatScreen() {
       .limit(10);
 
     if (!plans || plans.length === 0) {
-      Alert.alert('Sin planes', 'No tienes planes de entrenamiento para compartir');
+      Alert.alert(t('chat.noPlans'), t('chat.noPlanToShare'));
       return;
     }
 
     // Mostrar selector de planes (simplificado - puedes mejorarlo con un modal)
     const planNames = plans.map((p) => p.plan_name);
     Alert.alert(
-      'Compartir Entrenamiento',
-      'Selecciona un plan para compartir',
+      t('chat.shareWorkout'),
+      t('chat.selectPlanToShare'),
       [
         ...plans.map((plan, index) => ({
           text: plan.plan_name,
           onPress: async () => {
             const result = await shareWorkout(user.id, otherUserId, plan.id);
             if (result.success) {
-              Alert.alert('Éxito', 'Entrenamiento compartido correctamente');
+              Alert.alert(t('common.success'), t('chat.workoutSharedSuccess'));
             } else {
-              Alert.alert('Error', result.error || 'No se pudo compartir el entrenamiento');
+              Alert.alert(t('common.error'), result.error || t('chat.couldNotShare'));
             }
           },
         })),
@@ -410,14 +412,14 @@ export default function ChatScreen() {
             scrollViewRef.current?.scrollToEnd({ animated: true });
           }, 100);
         } else {
-          Alert.alert('Error', 'No se pudo enviar la imagen');
+          Alert.alert(t('common.error'), t('chat.couldNotSendImage'));
         }
       } else {
-        Alert.alert('Error', uploadResult.error || 'No se pudo subir la imagen');
+        Alert.alert(t('common.error'), uploadResult.error || t('chat.couldNotUploadImage'));
       }
     } catch (error: any) {
       console.error('Error procesando imagen:', error);
-      Alert.alert('Error', error?.message || 'No se pudo procesar la imagen');
+      Alert.alert(t('common.error'), error?.message || t('chat.couldNotProcessImage'));
     } finally {
       setIsUploadingImage(false);
     }
@@ -436,7 +438,7 @@ export default function ChatScreen() {
       
       if (status !== 'granted') {
         setShowImageOptions(false);
-        Alert.alert('Permiso necesario', 'Necesitamos acceso a tu galería para enviar imágenes');
+        Alert.alert(t('chat.permissionRequired'), t('chat.galleryAccess'));
         return;
       }
 
@@ -462,7 +464,7 @@ export default function ChatScreen() {
     } catch (error: any) {
       console.error('❌ Error seleccionando imagen:', error);
       setShowImageOptions(false);
-      Alert.alert('Error', error?.message || 'No se pudo seleccionar la imagen');
+      Alert.alert(t('common.error'), error?.message || t('chat.couldNotSelectImage'));
     }
   };
 
@@ -479,7 +481,7 @@ export default function ChatScreen() {
       
       if (status !== 'granted') {
         setShowImageOptions(false);
-        Alert.alert('Permiso necesario', 'Necesitamos acceso a tu cámara para tomar fotos');
+        Alert.alert(t('chat.permissionRequired'), t('chat.cameraAccess'));
         return;
       }
 
@@ -504,7 +506,7 @@ export default function ChatScreen() {
     } catch (error: any) {
       console.error('❌ Error tomando foto:', error);
       setShowImageOptions(false);
-      Alert.alert('Error', error?.message || 'No se pudo tomar la foto');
+      Alert.alert(t('common.error'), error?.message || t('chat.couldNotTakePhoto'));
     }
   };
 
@@ -600,7 +602,7 @@ export default function ChatScreen() {
           ) : messages.length === 0 ? (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No hay mensajes aún</Text>
-              <Text style={styles.emptySubtext}>Envía el primer mensaje para comenzar</Text>
+              <Text style={styles.emptySubtext}>{t('chatScreen.sendFirstMessage')}</Text>
             </View>
           ) : (
             filteredMessages.map((message) => {
@@ -705,7 +707,7 @@ export default function ChatScreen() {
             style={styles.input}
             value={messageText}
             onChangeText={handleTextChange}
-            placeholder="Escribe un mensaje..."
+            placeholder={t('chatScreen.messagePlaceholder')}
             placeholderTextColor="#666"
             multiline
             maxLength={500}

@@ -15,6 +15,7 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import {
   searchUsersByUsername,
   sendFriendRequest,
@@ -29,6 +30,7 @@ import { getOrCreateChat } from '../src/services/chatService';
 
 export default function FriendsScreen() {
   const { user } = useUser();
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [friends, setFriends] = useState<Friendship[]>([]);
@@ -77,10 +79,10 @@ export default function FriendsScreen() {
 
     const result = await sendFriendRequest(user.id, friendId);
     if (result.success) {
-      Alert.alert('Éxito', 'Solicitud de amistad enviada');
+      Alert.alert(t('common.success'), t('friends.requestSent'));
       handleSearch(); // Refrescar resultados
     } else {
-      Alert.alert('Error', result.error || 'No se pudo enviar la solicitud');
+      Alert.alert(t('common.error'), result.error || t('friends.couldNotSendRequest'));
     }
   };
 
@@ -89,11 +91,11 @@ export default function FriendsScreen() {
 
     const result = await acceptFriendRequest(friendshipId, user.id);
     if (result.success) {
-      Alert.alert('Éxito', 'Solicitud aceptada');
+      Alert.alert(t('common.success'), t('friends.requestAccepted'));
       loadPendingRequests();
       loadFriends();
     } else {
-      Alert.alert('Error', result.error || 'No se pudo aceptar la solicitud');
+      Alert.alert(t('common.error'), result.error || t('friends.couldNotAccept'));
     }
   };
 
@@ -104,7 +106,7 @@ export default function FriendsScreen() {
     if (result.success) {
       loadPendingRequests();
     } else {
-      Alert.alert('Error', result.error || 'No se pudo rechazar la solicitud');
+      Alert.alert(t('common.error'), result.error || t('friends.couldNotReject'));
     }
   };
 
@@ -132,7 +134,7 @@ export default function FriendsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Amigos</Text>
+        <Text style={styles.headerTitle}>{t('friends.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -143,7 +145,7 @@ export default function FriendsScreen() {
           onPress={() => setActiveTab('friends')}
         >
           <Text style={[styles.tabText, activeTab === 'friends' && styles.tabTextActive]}>
-            Amigos ({friends.length})
+            {t('friends.friendsTab')} ({friends.length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -151,7 +153,7 @@ export default function FriendsScreen() {
           onPress={() => setActiveTab('requests')}
         >
           <Text style={[styles.tabText, activeTab === 'requests' && styles.tabTextActive]}>
-            Solicitudes ({pendingRequests.length})
+            {t('friends.requestsTab')} ({pendingRequests.length})
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -159,7 +161,7 @@ export default function FriendsScreen() {
           onPress={() => setActiveTab('search')}
         >
           <Text style={[styles.tabText, activeTab === 'search' && styles.tabTextActive]}>
-            Buscar
+            {t('friends.searchTab')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -173,7 +175,7 @@ export default function FriendsScreen() {
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Buscar por nombre de usuario..."
+                placeholder={t('friends.searchPlaceholder')}
                 placeholderTextColor="#666"
                 onSubmitEditing={handleSearch}
                 autoCapitalize="none"
@@ -205,7 +207,7 @@ export default function FriendsScreen() {
                         </View>
                       )}
                       <View style={styles.userDetails}>
-                        <Text style={styles.userName}>{user.name || 'Usuario'}</Text>
+                        <Text style={styles.userName}>{user.name || t('friends.userNotFound')}</Text>
                         <Text style={styles.userUsername}>@{user.username}</Text>
                       </View>
                     </View>
@@ -228,8 +230,8 @@ export default function FriendsScreen() {
             {friends.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="people-outline" size={48} color="#666" />
-                <Text style={styles.emptyText}>No tienes amigos aún</Text>
-                <Text style={styles.emptySubtext}>Busca usuarios para agregar como amigos</Text>
+                <Text style={styles.emptyText}>{t('friends.noFriends')}</Text>
+                <Text style={styles.emptySubtext}>{t('friends.noFriendsDesc')}</Text>
               </View>
             ) : (
               friends.map((friendship) => {
@@ -252,13 +254,13 @@ export default function FriendsScreen() {
                         </View>
                       )}
                       <View style={styles.userDetails}>
-                        <Text style={styles.userName}>{friend.name || 'Usuario'}</Text>
+                        <Text style={styles.userName}>{friend.name || t('friends.userNotFound')}</Text>
                         <Text style={styles.userUsername}>@{friend.username}</Text>
                       </View>
                     </View>
                     <TouchableOpacity
                       style={styles.chatButton}
-                      onPress={() => handleStartChat(friend.user_id, friend.name || 'Usuario')}
+                      onPress={() => handleStartChat(friendship.friend_id, friend.name || t('friends.userNotFound'))}
                     >
                       <Ionicons name="chatbubble" size={20} color="#ffb300" />
                     </TouchableOpacity>
@@ -275,7 +277,7 @@ export default function FriendsScreen() {
             {pendingRequests.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="mail-outline" size={48} color="#666" />
-                <Text style={styles.emptyText}>No tienes solicitudes pendientes</Text>
+                <Text style={styles.emptyText}>{t('friends.noRequests')}</Text>
               </View>
             ) : (
               pendingRequests.map((request) => {
@@ -298,7 +300,7 @@ export default function FriendsScreen() {
                         </View>
                       )}
                       <View style={styles.userDetails}>
-                        <Text style={styles.userName}>{requester.name || 'Usuario'}</Text>
+                        <Text style={styles.userName}>{requester.name || t('friends.userNotFound')}</Text>
                         <Text style={styles.userUsername}>@{requester.username}</Text>
                       </View>
                     </View>

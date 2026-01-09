@@ -29,7 +29,11 @@ export default function AdminTools() {
   useEffect(() => {
     async function loadRole() {
       if (user?.id) {
-        const role = await getUserRole(user.id);
+        const userEmail = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress;
+        console.log('🔍 AdminTools: Cargando rol para user_id:', user.id);
+        console.log('🔍 AdminTools: Email del usuario:', userEmail);
+        const role = await getUserRole(user.id, userEmail);
+        console.log('✅ AdminTools: Rol obtenido:', role);
         setUserRole(role);
       }
       setLoading(false);
@@ -183,12 +187,11 @@ export default function AdminTools() {
         
         setRoleUsers(regularUsers);
       } else {
-        // Obtener usuarios con rol especial
+        // Obtener usuarios con rol especial (activos e inactivos)
         const { data } = await supabase
           .from('admin_roles')
-          .select('user_id, name, email, role_type, created_at')
+          .select('user_id, name, email, role_type, created_at, is_active')
           .eq('role_type', role)
-          .eq('is_active', true)
           .order('created_at', { ascending: false });
         
         const users = (data || []).map(u => ({
@@ -208,6 +211,7 @@ export default function AdminTools() {
           created_at: u.created_at,
           updated_at: u.created_at,
           role_type: role,
+          is_active: u.is_active,
         }));
         
         setRoleUsers(users);
@@ -441,10 +445,24 @@ export default function AdminTools() {
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <strong style={{ color: '#fff', display: 'block', marginBottom: '4px' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                            <strong style={{ color: '#fff' }}>
                             {roleUser.name || 'Sin nombre'}
                           </strong>
+                            {(roleUser as any).is_active === false && (
+                              <span style={{
+                                background: 'rgba(244, 67, 54, 0.2)',
+                                color: '#f44336',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: '600',
+                              }}>
+                                Inactivo
+                              </span>
+                            )}
+                          </div>
                           <p style={{ color: '#999', fontSize: '13px', margin: 0 }}>
                             {roleUser.email || 'Sin email'}
                           </p>

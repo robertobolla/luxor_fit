@@ -145,7 +145,9 @@ CREATE OR REPLACE FUNCTION get_student_stats(
 )
 RETURNS JSON AS $$
 DECLARE
-  v_has_permission BOOLEAN;
+  v_has_permission BOOLEAN := false;
+  v_is_admin BOOLEAN := false;
+  v_is_empresario BOOLEAN := false;
   v_workout_count INTEGER;
   v_active_plan JSON;
   v_recent_workouts JSON;
@@ -153,13 +155,44 @@ DECLARE
   v_nutrition_stats JSON;
   v_steps_stats JSON;
 BEGIN
-  -- Verificar que el entrenador tenga una relación aceptada con el alumno
+  -- Verificar si es admin (los admins pueden ver TODO)
   SELECT EXISTS (
-    SELECT 1 FROM public.trainer_student_relationships
-    WHERE trainer_id = p_trainer_id 
-      AND student_id = p_student_id 
-      AND status = 'accepted'
-  ) INTO v_has_permission;
+    SELECT 1 FROM public.admin_roles
+    WHERE user_id = p_trainer_id 
+      AND role_type = 'admin'
+      AND is_active = true
+  ) INTO v_is_admin;
+
+  IF v_is_admin THEN
+    -- Los admins tienen permiso automático para ver cualquier usuario
+    v_has_permission := true;
+  ELSE
+    -- Verificar si es empresario del alumno
+    SELECT EXISTS (
+      SELECT 1 FROM public.admin_roles
+      WHERE user_id = p_trainer_id 
+        AND role_type = 'empresario'
+        AND is_active = true
+    ) INTO v_is_empresario;
+
+    IF v_is_empresario THEN
+      -- Verificar que el alumno sea miembro de su gimnasio
+      SELECT EXISTS (
+        SELECT 1 FROM public.gym_members
+        WHERE empresario_id = p_trainer_id 
+          AND user_id = p_student_id
+          AND is_active = true
+      ) INTO v_has_permission;
+    ELSE
+      -- Si no es admin ni empresario, verificar relación de entrenador
+      SELECT EXISTS (
+        SELECT 1 FROM public.trainer_student_relationships
+        WHERE trainer_id = p_trainer_id 
+          AND student_id = p_student_id 
+          AND status = 'accepted'
+      ) INTO v_has_permission;
+    END IF;
+  END IF;
 
   IF NOT v_has_permission THEN
     RETURN json_build_object(

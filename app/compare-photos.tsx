@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
 import {
   getUserPhotos,
@@ -24,6 +25,7 @@ const { width } = Dimensions.get('window');
 const photoWidth = (width - 48) / 2;
 
 export default function ComparePhotosScreen() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [photos, setPhotos] = useState<ProgressPhoto[]>([]);
   const [selectedBefore, setSelectedBefore] = useState<ProgressPhoto | null>(null);
@@ -54,8 +56,8 @@ export default function ComparePhotosScreen() {
   const handleSelectAfter = (photo: ProgressPhoto) => {
     if (selectedBefore && new Date(photo.photo_date) <= new Date(selectedBefore.photo_date)) {
       Alert.alert(
-        'Fecha inválida',
-        'La foto "Después" debe ser posterior a la foto "Antes"'
+        t('common.error'),
+        t('comparePhotos.errorSelectPhotos')
       );
       return;
     }
@@ -69,7 +71,7 @@ export default function ComparePhotosScreen() {
 
   const handleAnalyze = async () => {
     if (!selectedBefore || !selectedAfter) {
-      Alert.alert('Error', 'Selecciona dos fotos para comparar');
+      Alert.alert(t('common.error'), t('comparePhotos.errorSelectPhotos'));
       return;
     }
 
@@ -86,13 +88,13 @@ export default function ComparePhotosScreen() {
         await saveAIAnalysis(selectedAfter.id, result);
       } else {
         Alert.alert(
-          'Error',
-          'No se pudo analizar las fotos. Intenta nuevamente.'
+          t('common.error'),
+          t('comparePhotos.errorAnalyzing')
         );
       }
     } catch (error) {
       console.error('❌ Error analyzing:', error);
-      Alert.alert('Error', 'Ocurrió un error al analizar las fotos');
+      Alert.alert(t('common.error'), t('comparePhotos.errorAnalyzing'));
     } finally {
       setAnalyzing(false);
     }

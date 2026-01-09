@@ -3,15 +3,20 @@ import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Linking } from 'react-native';
-import { ClerkProviderWrapper } from '../src/clerk.tsx';
+import { I18nextProvider } from 'react-i18next';
+import i18n from '../src/i18n';
+import { ClerkProviderWrapper } from '../src/clerk';
 import { useUser, useAuth } from '@clerk/clerk-expo';
 import { setupUserNotifications, setupNotificationListeners } from '../src/services/notificationService';
+import { registerForPushNotificationsAsync } from '../src/services/pushNotificationService';
 import { useSubscription } from '../src/hooks/useSubscription';
 import { useChatNotifications } from '../src/hooks/useChatNotifications';
 import { useFriendRequestNotifications } from '../src/hooks/useFriendRequestNotifications';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { SplashScreen } from '../src/components/SplashScreen';
 import { AlertProvider } from '../src/contexts/AlertContext';
+import { TutorialProvider } from '../src/contexts/TutorialContext';
+import { LanguageProvider } from '../src/contexts/LanguageContext';
 
 function NotificationSetup() {
   const { user } = useUser();
@@ -27,6 +32,17 @@ function NotificationSetup() {
     if (user?.id) {
       // Configurar notificaciones cuando el usuario inicia sesión
       setupUserNotifications(user.id);
+      
+      // Registrar dispositivo para push notifications del gimnasio
+      registerForPushNotificationsAsync(user.id).then((token) => {
+        if (token) {
+          console.log('✅ Dispositivo registrado para push notifications:', token);
+        } else {
+          console.log('⚠️ No se pudo obtener el push token');
+        }
+      }).catch((error) => {
+        console.error('❌ Error registrando dispositivo para push notifications:', error);
+      });
     }
   }, [user]);
 
@@ -57,6 +73,10 @@ function NotificationSetup() {
       } else if (data.type === 'friend_request') {
         // Navegar a pantalla de amigos cuando se hace clic en solicitud de amistad
         router.push('/(tabs)/friends' as any);
+      } else if (data.type === 'gym_message') {
+        // Navegar al home cuando se hace clic en notificación del gimnasio
+        // El icono de notificaciones está en el home screen
+        router.push('/(tabs)/home');
       }
     });
 
@@ -83,11 +103,10 @@ function SubscriptionGate() {
         console.log('🔗 Deep link recibido:', urlString);
         
         // Parsear el deep link luxorfitness://home?session_id=... o fitmind://paywall/success?session_id=...
-        // Soporta ambos esquemas para compatibilidad
+        // Soporta esquema de URL de la app
         const isLuxorFitnessLink = urlString.includes('luxorfitness://');
-        const isFitMindLink = urlString.includes('fitmind://') && urlString.includes('paywall/success');
         
-        if (isLuxorFitnessLink || isFitMindLink) {
+        if (isLuxorFitnessLink) {
           // Extraer session_id de la URL
           // El formato puede ser luxorfitness://home?session_id=... o fitmind://paywall/success?session_id=...
           let sessionId: string | null = null;
@@ -218,20 +237,26 @@ function SubscriptionGate() {
 export default function RootLayout() {
   return (
     <ErrorBoundary>
-      <ClerkProviderWrapper>
-        <AlertProvider>
-        <SafeAreaProvider>
-          <NotificationSetup />
-          <SubscriptionGate />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-            }}
-          />
-          <StatusBar style="light" />
-        </SafeAreaProvider>
-        </AlertProvider>
-      </ClerkProviderWrapper>
+      <I18nextProvider i18n={i18n}>
+        <LanguageProvider>
+          <ClerkProviderWrapper>
+            <AlertProvider>
+              <TutorialProvider>
+                <SafeAreaProvider>
+                  <NotificationSetup />
+                  <SubscriptionGate />
+                  <Stack
+                    screenOptions={{
+                      headerShown: false,
+                    }}
+                  />
+                  <StatusBar style="light" />
+                </SafeAreaProvider>
+              </TutorialProvider>
+            </AlertProvider>
+          </ClerkProviderWrapper>
+        </LanguageProvider>
+      </I18nextProvider>
     </ErrorBoundary>
   );
 }

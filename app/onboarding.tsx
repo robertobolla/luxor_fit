@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useUser, useAuth } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '../src/services/supabase';
 import { Gender } from '../src/types';
 import { getClerkUserEmail } from '../src/utils/clerkHelpers';
@@ -27,6 +28,7 @@ const STEPS = [
 export default function OnboardingScreen() {
   const { user } = useUser();
   const { signOut } = useAuth();
+  const { t } = useTranslation();
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -186,14 +188,14 @@ export default function OnboardingScreen() {
 
   const handleComplete = async () => {
     if (!user) {
-      Alert.alert('Error', 'No se pudo identificar al usuario. Por favor, inicia sesión nuevamente.');
+      Alert.alert(t('common.error'), t('onboarding.userNotIdentified'));
       router.replace('/(auth)/login');
       return;
     }
 
     // Validar formulario antes de enviar
     if (!validateForm()) {
-      Alert.alert('Campos inválidos', 'Por favor, corrige los errores en el formulario antes de continuar.');
+      Alert.alert(t('onboarding.invalidFields'), t('onboarding.correctErrors'));
       return;
     }
 
@@ -217,7 +219,7 @@ export default function OnboardingScreen() {
       await proceedWithSave(finalEmail);
     } catch (error) {
       console.error('❌ Error inesperado:', error);
-      Alert.alert('Error', 'Ocurrió un error inesperado. Por favor, intenta nuevamente.');
+      Alert.alert(t('common.error'), t('errors.unknownError'));
     } finally {
       setIsSubmitting(false);
     }
@@ -229,6 +231,13 @@ export default function OnboardingScreen() {
   };
 
   const proceedWithSave = async (userEmail: string | null) => {
+    if (!user?.id) {
+      Alert.alert(t('common.error'), t('onboarding.userNotFound'));
+      return;
+    }
+
+    const userId = user.id; // Guardar en constante para evitar problemas de tipos en callbacks
+
     try {
       console.log('💾 Guardando perfil en Supabase...');
 
@@ -238,22 +247,22 @@ export default function OnboardingScreen() {
           .from('user_profiles')
           .select('user_id, name, created_at')
           .eq('email', userEmail)
-          .neq('user_id', user.id)
+          .neq('user_id', userId)
           .maybeSingle();
 
         if (existingProfile) {
           console.warn('⚠️ Usuario duplicado detectado:', {
             email: userEmail,
             existing_user_id: existingProfile.user_id,
-            current_user_id: user.id,
+            current_user_id: userId,
           });
           
           Alert.alert(
-            'Cuenta existente',
-            `Ya existe una cuenta con el email ${userEmail}. Por favor, inicia sesión con esa cuenta en lugar de crear una nueva.`,
+            t('onboarding.existingAccount'),
+            t('onboarding.existingAccountMessage', { email: userEmail }),
             [
               {
-                text: 'Cerrar sesión',
+                text: t('common.logout'),
                 style: 'destructive',
                 onPress: async () => {
                   // Cerrar sesión y redirigir al login
@@ -267,7 +276,7 @@ export default function OnboardingScreen() {
                 }
               },
               {
-                text: 'Cancelar',
+                text: t('common.cancel'),
                 style: 'cancel',
                 onPress: () => {
                   // No hacer nada, el usuario cancela
@@ -288,17 +297,23 @@ export default function OnboardingScreen() {
   };
 
   const continueWithSave = async (userEmail: string | null) => {
+    if (!user?.id) {
+      Alert.alert(t('common.error'), t('onboarding.userNotFound'));
+      return;
+    }
+    const userId = user.id;
+
     try {
       // Validar username antes de guardar
       if (!formData.username || formData.username.trim().length === 0) {
-        Alert.alert('Error', 'El nombre de usuario es requerido');
+        Alert.alert(t('common.error'), t('onboarding.usernameRequired'));
         setCurrentStep(STEPS.indexOf('personal_info'));
         return;
       }
       
       const usernameValidation = validateUsernameFormat(formData.username);
       if (!usernameValidation.isValid) {
-        Alert.alert('Error', usernameValidation.error || 'El nombre de usuario no es válido');
+        Alert.alert(t('common.error'), usernameValidation.error || t('onboarding.invalidUsername'));
         setCurrentStep(STEPS.indexOf('personal_info'));
         setFieldErrors(prev => ({ ...prev, username: usernameValidation.error || '' }));
         return;
@@ -309,11 +324,11 @@ export default function OnboardingScreen() {
         .from('user_profiles')
         .select('username')
         .eq('username', formData.username.toLowerCase().trim())
-        .neq('user_id', user.id)
+        .neq('user_id', userId)
         .maybeSingle();
       
       if (existingUsername) {
-        Alert.alert('Error', 'Este nombre de usuario ya está en uso. Por favor elige otro.');
+        Alert.alert(t('common.error'), t('onboarding.usernameInUse'));
         setCurrentStep(STEPS.indexOf('personal_info'));
         setFieldErrors(prev => ({ ...prev, username: 'Este nombre de usuario ya está en uso' }));
         return;
@@ -321,7 +336,7 @@ export default function OnboardingScreen() {
 
       // Preparar datos base
       const profileData: any = {
-        user_id: user.id,
+        user_id: userId,
         email: userEmail,
         username: formData.username.toLowerCase().trim(),
         name: formData.name,
@@ -357,13 +372,13 @@ export default function OnboardingScreen() {
           
           if (retryError) {
             console.error('❌ Error al guardar:', retryError);
-            Alert.alert('Error', 'No se pudo guardar tu perfil. Por favor, intenta nuevamente.');
+            Alert.alert(t('common.error'), t('onboarding.saveError'));
             throw retryError;
           } else {
             console.log('✅ Perfil guardado exitosamente (sin campos de composición)');
           }
         } else {
-          Alert.alert('Error', 'No se pudo guardar tu perfil. Por favor, intenta nuevamente.');
+          Alert.alert(t('common.error'), t('onboarding.saveError'));
           throw error;
         }
       }
@@ -385,7 +400,7 @@ export default function OnboardingScreen() {
             // Actualizar el user_id del empresario con el user_id real de Clerk
             await supabase
               .from('admin_roles')
-              .update({ user_id: user.id })
+              .update({ user_id: userId })
               .eq('email', userEmail)
               .eq('role_type', 'empresario');
             
@@ -404,7 +419,7 @@ export default function OnboardingScreen() {
             // Actualizar el user_id del socio con el user_id real de Clerk
             await supabase
               .from('admin_roles')
-              .update({ user_id: user.id })
+              .update({ user_id: userId })
               .eq('email', userEmail)
               .eq('role_type', 'socio');
             
@@ -417,7 +432,7 @@ export default function OnboardingScreen() {
           const { data: gymMemberData } = await supabase
             .from('gym_members')
             .select('user_id, empresario_id')
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .maybeSingle();
 
           // Si no está en gym_members pero hay un registro pendiente para este email
@@ -431,7 +446,7 @@ export default function OnboardingScreen() {
               .from('user_profiles')
               .select('user_id, email')
               .eq('email', userEmail)
-              .eq('user_id', user.id)
+              .eq('user_id', userId)
               .maybeSingle();
 
             if (profileWithEmail) {
@@ -454,7 +469,7 @@ export default function OnboardingScreen() {
       router.replace('/(tabs)/dashboard');
     } catch (error) {
       console.error('❌ Error al guardar:', error);
-      Alert.alert('Error', 'Ocurrió un error al guardar. Por favor, intenta nuevamente.');
+      Alert.alert(t('common.error'), t('onboarding.saveError'));
     }
   };
 
@@ -465,18 +480,18 @@ export default function OnboardingScreen() {
         return (
           <View style={styles.stepContainer}>
             <Text style={styles.title}>
-              {isEditing ? '✏️ Editar perfil' : '¡Bienvenido a Luxor Fitness!'}
+              {isEditing ? t('onboarding.editProfile') : t('auth.welcome')}
             </Text>
             <Text style={styles.subtitle}>
               {isEditing 
-                ? 'Actualiza tu información personal y preferencias'
-                : 'Vamos a personalizar tu experiencia de entrenamiento con IA'
+                ? t('onboarding.updateInformation')
+                : t('onboarding.customizeExperience')
               }
             </Text>
             <Text style={styles.description}>
               {isEditing
-                ? 'Revisa y modifica los datos que necesites. Tus datos actuales están pre-cargados como referencia.'
-                : 'Te haremos algunas preguntas para crear el plan perfecto para ti'
+                ? t('onboarding.reviewModify')
+                : t('onboarding.someQuestions')
               }
             </Text>
           </View>
@@ -485,7 +500,7 @@ export default function OnboardingScreen() {
       case 'personal_info':
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>Información personal</Text>
+            <Text style={styles.stepTitle}>{t('onboardingSteps.personalInfo')}</Text>
             {/* Solo mostrar campo de email si NO tiene email en Clerk */}
             {!hasClerkEmail && (
               <View style={styles.inputGroup}>
@@ -746,7 +761,7 @@ export default function OnboardingScreen() {
         return (
           <View style={styles.stepContainer}>
             <Text style={styles.stepTitle}>¿Cuál es tu género?</Text>
-            <Text style={styles.stepSubtitle}>Esto nos ayuda a personalizar mejor tu plan</Text>
+            <Text style={styles.stepSubtitle}>{t('onboarding.helpPersonalize')}</Text>
             {[Gender.MALE, Gender.FEMALE].map((gender) => (
               <TouchableOpacity
                 key={gender}
@@ -879,13 +894,13 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 16,
+    top: 80,
     right: 16,
     zIndex: 10,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },

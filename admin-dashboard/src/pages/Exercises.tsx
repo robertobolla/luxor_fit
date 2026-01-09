@@ -28,7 +28,7 @@ const EQUIPMENT_LABELS: Record<string, string> = {
 };
 
 const GOAL_LABELS: Record<string, string> = {
-  weight_loss: 'Perder peso',
+  weight_loss: 'Bajar grasa',
   muscle_gain: 'Ganar músculo',
   strength: 'Aumentar fuerza',
   endurance: 'Mejorar resistencia',
@@ -58,6 +58,7 @@ interface ExerciseVideoRow {
   goals?: string[] | null;
   activity_types?: string[] | null;
   uses_time?: boolean | null;
+  key_points?: string[] | null;
 }
 
 const DEFAULT_PAGE_SIZE = 20;

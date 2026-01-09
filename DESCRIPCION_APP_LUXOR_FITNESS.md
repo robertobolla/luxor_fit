@@ -1,8 +1,8 @@
-# 📱 Descripción Completa de Luxor Fitness (FitMind)
+# 📱 Descripción Completa de Fitness Luxor App
 
 ## 🎯 Visión General
 
-**Luxor Fitness** (también conocido como FitMind) es una aplicación móvil de fitness integral desarrollada con React Native y Expo que combina inteligencia artificial, seguimiento de salud, nutrición personalizada y funcionalidades sociales para crear una experiencia completa de entrenamiento personalizado.
+**Fitness Luxor App** es una aplicación móvil de fitness integral desarrollada con React Native y Expo que combina inteligencia artificial, seguimiento de salud, nutrición personalizada y funcionalidades sociales para crear una experiencia completa de entrenamiento personalizado.
 
 ---
 

@@ -2,103 +2,92 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
-  KeyboardAvoidingView,
   Platform,
   ScrollView,
 } from 'react-native';
-import { Link, router } from 'expo-router';
-import { useSignUp, useOAuth } from '@clerk/clerk-expo';
+import { router } from 'expo-router';
+import { useOAuth } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import * as WebBrowser from 'expo-web-browser';
+import { Ionicons } from '@expo/vector-icons';
+import { LanguageSelector } from '../../src/components/LanguageSelector';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function RegisterScreen() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
-  const { signUp, setActive, isLoaded } = useSignUp();
   const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
   const { startOAuthFlow: startTikTokOAuth } = useOAuth({ strategy: 'oauth_tiktok' });
+  const { startOAuthFlow: startAppleOAuth } = useOAuth({ strategy: 'oauth_apple' });
 
-  const handleOAuthSignIn = async (provider: 'google' | 'tiktok') => {
+  const handleOAuthSignIn = async (provider: 'google' | 'tiktok' | 'apple') => {
     try {
-      const startOAuth = provider === 'google' ? startGoogleOAuth : startTikTokOAuth;
+      setIsLoading(true);
+      const startOAuth = provider === 'google' ? startGoogleOAuth : provider === 'apple' ? startAppleOAuth : startTikTokOAuth;
       const { createdSessionId, setActive: setActiveSession } = await startOAuth();
 
-      if (createdSessionId) {
+      if (createdSessionId && setActiveSession) {
         await setActiveSession({ session: createdSessionId });
         router.replace('/onboarding');
-      }
+      } else {
+        Alert.alert(
+          t('common.error'),
+          t('auth.authenticationFailed')
+        );
+              }
     } catch (err: any) {
       console.error('OAuth error:', err);
-      Alert.alert('Error', err.errors?.[0]?.message || `Error al conectar con ${provider}`);
-    }
-  };
-
-  const handleRegister = async () => {
-    if (!email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Por favor completa todos los campos');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Las contraseñas no coinciden');
-      return;
-    }
-
-    if (password.length < 6) {
-      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres');
-      return;
-    }
-
-    if (!isLoaded) return;
-
-    setIsLoading(true);
-    try {
-      const result = await signUp.create({
-        emailAddress: email,
-        password,
-      });
-
-      if (result.status === 'complete') {
-        await setActive({ session: result.createdSessionId });
-        router.replace('/onboarding');
-      } else {
-        Alert.alert('Error', 'Error al crear cuenta');
-      }
-    } catch (err: any) {
-      Alert.alert('Error', err.errors?.[0]?.message || 'Error al crear cuenta');
+      console.error('Error details:', JSON.stringify(err, null, 2));
+      
+      const errorMessage = err.errors?.[0]?.message 
+        || err.errors?.[0]?.longMessage 
+        || err.message 
+        || `Error al conectar con ${provider}. Verifica tu configuración.`;
+      
+      Alert.alert(t('common.error'), errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
-          <Text style={styles.title}>Crear cuenta</Text>
+          <Text style={styles.title}>{t('auth.createAccount')}</Text>
           <Text style={styles.subtitle}>
-            Únete a la revolución del fitness con IA
+            {t('auth.subtitle')}
           </Text>
         </View>
 
         <View style={styles.form}>
           {/* Botones OAuth */}
+          {Platform.OS === 'ios' && (
+            <TouchableOpacity
+              style={styles.oauthButton}
+              onPress={() => handleOAuthSignIn('apple')}
+              disabled={isLoading}
+            >
+              <View style={styles.oauthButtonContent}>
+                <Ionicons name="logo-apple" size={24} color="#ffffff" />
+                <Text style={styles.oauthButtonText}>{t('auth.continueWithApple')}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={styles.oauthButton}
             onPress={() => handleOAuthSignIn('google')}
             disabled={isLoading}
           >
-            <Text style={styles.oauthButtonText}>🔐 Continuar con Google</Text>
+            <View style={styles.oauthButtonContent}>
+              <Ionicons name="logo-google" size={24} color="#ffffff" />
+              <Text style={styles.oauthButtonText}>{t('auth.continueWithGoogle')}</Text>
+            </View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -106,74 +95,19 @@ export default function RegisterScreen() {
             onPress={() => handleOAuthSignIn('tiktok')}
             disabled={isLoading}
           >
-            <Text style={styles.oauthButtonText}>🎵 Continuar con TikTok</Text>
+            <View style={styles.oauthButtonContent}>
+              <Ionicons name="logo-tiktok" size={24} color="#ffffff" />
+              <Text style={styles.oauthButtonText}>{t('auth.continueWithTiktok')}</Text>
+            </View>
           </TouchableOpacity>
+        </View>
 
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>O con email</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="tu@email.com"
-              placeholderTextColor="#666"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Contraseña</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="••••••••"
-              placeholderTextColor="#666"
-              secureTextEntry
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Confirmar contraseña</Text>
-            <TextInput
-              style={styles.input}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="••••••••"
-              placeholderTextColor="#666"
-              secureTextEntry
-            />
-          </View>
-
-          <TouchableOpacity
-            style={[styles.button, styles.primaryButton]}
-            onPress={handleRegister}
-            disabled={isLoading}
-          >
-            <Text style={styles.buttonText}>
-              {isLoading ? 'Creando cuenta...' : 'Crear Cuenta'}
-            </Text>
-          </TouchableOpacity>
-
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>¿Ya tienes cuenta? </Text>
-            <Link href="/(auth)/login" asChild>
-              <TouchableOpacity>
-                <Text style={styles.linkText}>Inicia sesión</Text>
-              </TouchableOpacity>
-            </Link>
-          </View>
+        {/* Selector de idioma en la parte inferior */}
+        <View style={styles.languageContainerBottom}>
+          <LanguageSelector style="compact" />
         </View>
       </ScrollView>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -186,6 +120,11 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: 24,
+  },
+  languageContainerBottom: {
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 16,
   },
   header: {
     alignItems: 'center',
@@ -260,6 +199,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: '#ffb300',
+  },
+  oauthButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   oauthButtonText: {
     color: '#ffffff',

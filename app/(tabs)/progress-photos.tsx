@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
 import * as ImagePicker from 'expo-image-picker';
 import {
@@ -20,6 +21,7 @@ import {
   uploadProgressPhoto,
   checkPhotoReminder,
   deleteProgressPhoto,
+  canUploadPhoto,
 } from '@/services/progressPhotos';
 import { ProgressPhoto, PhotoType, PhotoReminder } from '@/types/progressPhotos';
 import { useRetry } from '@/hooks/useRetry';
@@ -27,7 +29,11 @@ import { useRetry } from '@/hooks/useRetry';
 const { width } = Dimensions.get('window');
 const photoSize = (width - 48) / 2; // 2 columnas con padding
 
+// ✅ Tipos seguros para sesión (solo las 3 vistas válidas)
+type SessionPhotoType = Extract<PhotoType, 'front' | 'side' | 'back'>;
+
 export default function ProgressPhotosScreen() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [photos, setPhotos] = useState<ProgressPhoto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,9 +42,27 @@ export default function ProgressPhotosScreen() {
   const [selectedPhoto, setSelectedPhoto] = useState<ProgressPhoto | null>(null);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [sessionModalVisible, setSessionModalVisible] = useState(false);
-  const [currentSession, setCurrentSession] = useState<{ front?: ProgressPhoto; back?: ProgressPhoto; side?: ProgressPhoto }>({});
-  const [sessionUploading, setSessionUploading] = useState<{ [K in PhotoType]?: boolean }>({});
-  const requiredViews: PhotoType[] = ['front', 'side', 'back'];
+
+  // ✅ Evita error de indexado cuando PhotoType incluye "other"
+  const [currentSession, setCurrentSession] = useState<
+    Partial<Record<SessionPhotoType, ProgressPhoto>>
+  >({});
+
+  const [sessionUploading, setSessionUploading] = useState<
+    Partial<Record<SessionPhotoType, boolean>>
+  >({});
+
+  const [uploadRestriction, setUploadRestriction] = useState<{
+    canUpload: boolean;
+    message: string;
+    daysUntilNext: number;
+  }>({
+    canUpload: true,
+    message: '',
+    daysUntilNext: 0,
+  });
+
+  const requiredViews: SessionPhotoType[] = ['front', 'side', 'back'];
   const uploadParamsRef = useRef<{ uri: string; type: PhotoType; notes?: string } | null>(null);
 
   // Hook para retry en subida de fotos
@@ -49,13 +73,7 @@ export default function ProgressPhotosScreen() {
       }
 
       const params = uploadParamsRef.current;
-      const result = await uploadProgressPhoto(
-        user.id,
-        params.uri,
-        params.type,
-        undefined,
-        params.notes
-      );
+      const result = await uploadProgressPhoto(user.id, params.uri, params.type, undefined, params.notes);
 
       if (!result.success) {
         throw new Error(result.error || 'No se pudo subir la foto');
@@ -76,15 +94,18 @@ export default function ProgressPhotosScreen() {
 
     setLoading(true);
     try {
-      const [photosData, reminderData] = await Promise.all([
+      const [photosData, reminderData, uploadStatus] = await Promise.all([
         getUserPhotos(user.id),
         checkPhotoReminder(user.id),
+        canUploadPhoto(user.id),
       ]);
 
       setPhotos(photosData);
       setReminder(reminderData);
+      setUploadRestriction(uploadStatus);
       console.log('📸 Fotos cargadas:', photosData.length);
       console.log('📅 Recordatorio:', reminderData);
+      console.log('🔒 Restricción de subida:', uploadStatus);
     } catch (error) {
       console.error('❌ Error loading data:', error);
     } finally {
@@ -102,10 +123,7 @@ export default function ProgressPhotosScreen() {
   const requestPermissions = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert(
-        'Permisos necesarios',
-        'Necesitamos acceso a tu cámara para tomar fotos de progreso'
-      );
+      Alert.alert(t('progressPhotos.cameraPermissionTitle'), t('progressPhotos.cameraPermissionText'));
       return false;
     }
     return true;
@@ -113,15 +131,21 @@ export default function ProgressPhotosScreen() {
 
   // Tomar foto o seleccionar de galería (flujo simple)
   const handleAddPhoto = async () => {
-    Alert.alert(
-      'Nueva sesión de fotos',
-      'Captura frente, espalda y costado para una comparación ideal.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: '🧭 Sesión (3 vistas)', onPress: () => setSessionModalVisible(true) },
-        { text: '📷 Foto rápida (frente)', onPress: () => takePhoto('front') },
-      ]
-    );
+    // Verificar si puede subir fotos
+    if (!uploadRestriction.canUpload) {
+      Alert.alert(
+        t('progressPhotos.uploadRestrictionTitle'),
+        uploadRestriction.message + '\n\n' + t('progressPhotos.uploadRestrictionNote'),
+        [{ text: t('progressPhotos.understood') }]
+      );
+      return;
+    }
+
+    Alert.alert(t('progressPhotos.newPhotoSession'), t('progressPhotos.captureInstructions'), [
+      { text: t('progressPhotos.cancel'), style: 'cancel' },
+      { text: t('progressPhotos.sessionMode'), onPress: () => setSessionModalVisible(true) },
+      { text: t('progressPhotos.quickMode'), onPress: () => takePhoto('front') },
+    ]);
   };
 
   const takePhoto = async (type: PhotoType) => {
@@ -158,24 +182,29 @@ export default function ProgressPhotosScreen() {
 
     // Preguntar tipo de foto y notas
     Alert.prompt(
-      'Agregar notas',
-      'Agrega notas opcionales sobre esta foto (peso, cómo te sientes, etc.)',
+      t('progressPhotos.addNotes'),
+      t('progressPhotos.notesPlaceholder'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('progressPhotos.cancel'), style: 'cancel' },
         {
-          text: 'Subir',
-          onPress: async (notes) => {
+          text: t('progressPhotos.upload'),
+          // ✅ Evita "notes implicitly has an 'any' type"
+          onPress: async (notes?: string) => {
             setUploading(true);
             try {
               // Configurar parámetros en ref para el hook
               uploadParamsRef.current = { uri, type, notes };
-              
+
               const result = await uploadPhotoWithRetry.executeWithRetry();
 
               if (result) {
-                Alert.alert('✅ Éxito', 'Foto subida correctamente');
-                // Actualizar estado de sesión si está abierta
-                if (sessionModalVisible && result.photo) {
+                Alert.alert(t('progressPhotos.successTitle'), t('progressPhotos.photoUploadedSuccess'));
+                // Actualizar estado de sesión si está abierta (solo para tipos de sesión)
+                if (
+                  sessionModalVisible &&
+                  result.photo &&
+                  (type === 'front' || type === 'side' || type === 'back')
+                ) {
                   setCurrentSession((prev) => ({ ...prev, [type]: result.photo! }));
                 }
                 loadData();
@@ -200,35 +229,28 @@ export default function ProgressPhotosScreen() {
   };
 
   const handleDeletePhoto = async (photo: ProgressPhoto) => {
-    Alert.alert(
-      'Eliminar foto',
-      '¿Estás seguro de que quieres eliminar esta foto?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Eliminar',
-          style: 'destructive',
-          onPress: async () => {
-            const success = await deleteProgressPhoto(photo.id, photo.photo_url);
-            if (success) {
-              Alert.alert('✅ Eliminada', 'Foto eliminada correctamente');
-              setShowPhotoModal(false);
-              loadData();
-            } else {
-              Alert.alert('❌ Error', 'No se pudo eliminar la foto');
-            }
-          },
+    Alert.alert(t('progressPhotos.deletePhotoTitle'), t('progressPhotos.deletePhotoConfirm'), [
+      { text: t('progressPhotos.cancel'), style: 'cancel' },
+      {
+        text: t('progressPhotos.delete'),
+        style: 'destructive',
+        onPress: async () => {
+          const success = await deleteProgressPhoto(photo.id, photo.photo_url);
+          if (success) {
+            Alert.alert(t('progressPhotos.photoDeletedTitle'), t('progressPhotos.photoDeletedSuccess'));
+            setShowPhotoModal(false);
+            loadData();
+          } else {
+            Alert.alert(t('progressPhotos.deleteErrorTitle'), t('progressPhotos.deleteErrorMsg'));
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleCompare = () => {
     if (photos.length < 2) {
-      Alert.alert(
-        'Necesitas más fotos',
-        'Sube al menos 2 fotos para poder compararlas'
-      );
+      Alert.alert(t('progressPhotos.needMorePhotosTitle'), t('progressPhotos.needMorePhotosText'));
       return;
     }
     router.push('/compare-photos' as any);
@@ -236,7 +258,7 @@ export default function ProgressPhotosScreen() {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('es-ES', {
+    return date.toLocaleDateString(t('common.locale') || 'en-US', {
       day: 'numeric',
       month: 'short',
       year: 'numeric',
@@ -249,14 +271,16 @@ export default function ProgressPhotosScreen() {
     today.setHours(0, 0, 0, 0);
     const photoDate = new Date(dateString);
     photoDate.setHours(0, 0, 0, 0);
-    
+
     const diffDays = Math.floor((today.getTime() - photoDate.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (diffDays === 0) return 'Hoy';
-    if (diffDays === 1) return 'Ayer';
-    if (diffDays < 7) return `Hace ${diffDays} días`;
-    
-    return date.toLocaleDateString('es-ES', {
+
+    if (diffDays === 0) return t('progressPhotos.today');
+    if (diffDays === 1) return t('progressPhotos.yesterday');
+
+    // ✅ Faltaba el return acá
+    if (diffDays < 7) return t('progressPhotos.daysAgo', { count: diffDays });
+
+    return date.toLocaleDateString(t('common.locale') || 'en-US', {
       day: 'numeric',
       month: 'short',
     });
@@ -265,7 +289,7 @@ export default function ProgressPhotosScreen() {
   // Agrupar fotos por fecha
   const groupPhotosByDate = () => {
     const grouped: { [date: string]: ProgressPhoto[] } = {};
-    
+
     photos.forEach((photo) => {
       const date = photo.photo_date;
       if (!grouped[date]) {
@@ -297,17 +321,17 @@ export default function ProgressPhotosScreen() {
   };
 
   const getTypeLabel = (type: PhotoType) => {
-    if (type === 'front') return 'Frente';
-    if (type === 'back') return 'Espalda';
-    if (type === 'side') return 'Costado';
-    return 'Otra';
+    if (type === 'front') return t('progressPhotos.typeFront');
+    if (type === 'back') return t('progressPhotos.typeBack');
+    if (type === 'side') return t('progressPhotos.typeSide');
+    return t('progressPhotos.typeOther');
   };
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#ffb300" />
-        <Text style={styles.loadingText}>Cargando fotos...</Text>
+        <Text style={styles.loadingText}>{t('progressPhotos.loadingPhotos')}</Text>
       </View>
     );
   }
@@ -319,7 +343,7 @@ export default function ProgressPhotosScreen() {
         <TouchableOpacity onPress={() => router.push('/(tabs)/progress' as any)}>
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Fotos de Progreso</Text>
+        <Text style={styles.headerTitle}>{t('progressPhotos.title')}</Text>
         <TouchableOpacity onPress={handleCompare}>
           <Ionicons name="git-compare-outline" size={24} color="#ffb300" />
         </TouchableOpacity>
@@ -331,10 +355,9 @@ export default function ProgressPhotosScreen() {
           <View style={styles.reminderCard}>
             <Ionicons name="camera" size={32} color="#ffb300" />
             <View style={styles.reminderTextContainer}>
-              <Text style={styles.reminderTitle}>📸 ¡Es hora de una foto!</Text>
+              <Text style={styles.reminderTitle}>📸 {t('progressPhotos.reminderTitle')}</Text>
               <Text style={styles.reminderText}>
-                Han pasado {reminder.daysSinceLastPhoto} días desde tu última foto.
-                Documenta tu progreso cada 2 semanas.
+                {t('progressPhotos.reminderText', { days: reminder.daysSinceLastPhoto })}
               </Text>
             </View>
           </View>
@@ -344,20 +367,33 @@ export default function ProgressPhotosScreen() {
         {(() => {
           const today = new Date().toISOString().split('T')[0];
           const todays = photos.filter((p) => p.photo_date === today);
-          const missing = requiredViews.filter((t) => !todays.some((p) => p.photo_type === t));
+          const missing = requiredViews.filter((tpe) => !todays.some((p) => p.photo_type === tpe));
           if (missing.length === 0) return null;
-          const label = (t: PhotoType) => (t === 'front' ? 'Frente' : t === 'back' ? 'Espalda' : 'Costado');
+          const label = (tpe: PhotoType) =>
+            tpe === 'front'
+              ? t('progressPhotos.typeFront')
+              : tpe === 'back'
+              ? t('progressPhotos.typeBack')
+              : t('progressPhotos.typeSide');
           return (
             <View style={styles.missingCard}>
               <Ionicons name="alert-circle" size={24} color="#ffd54a" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.missingTitle}>Completa las vistas de hoy</Text>
-                <Text style={styles.missingText}>Faltan: {missing.map(label).join(', ')}</Text>
+                <Text style={styles.missingTitle}>{t('progressPhotos.completeTodayViewsTitle')}</Text>
+                <Text style={styles.missingText}>
+                  {t('progressPhotos.missingViews', { views: missing.map(label).join(', ') })}
+                </Text>
               </View>
               <View style={styles.missingActions}>
-                {missing.map((t) => (
-                  <TouchableOpacity key={t} style={styles.missingBtn} onPress={() => { setSessionModalVisible(true); }}>
-                    <Text style={styles.missingBtnText}>{label(t)}</Text>
+                {missing.map((tpe) => (
+                  <TouchableOpacity
+                    key={tpe}
+                    style={styles.missingBtn}
+                    onPress={() => {
+                      setSessionModalVisible(true);
+                    }}
+                  >
+                    <Text style={styles.missingBtnText}>{label(tpe)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -367,16 +403,22 @@ export default function ProgressPhotosScreen() {
 
         {/* Botón agregar foto */}
         <TouchableOpacity
-          style={styles.addButton}
+          style={[styles.addButton, !uploadRestriction.canUpload && styles.addButtonDisabled]}
           onPress={handleAddPhoto}
-          disabled={uploading}
+          disabled={uploading || !uploadRestriction.canUpload}
         >
           {uploading ? (
             <ActivityIndicator size="small" color="#1a1a1a" />
           ) : (
             <>
-              <Ionicons name="add-circle" size={32} color="#1a1a1a" />
-              <Text style={styles.addButtonText}>Nueva sesión (frente, espalda, costado)</Text>
+              <Ionicons
+                name={uploadRestriction.canUpload ? 'add-circle' : 'time'}
+                size={32}
+                color={uploadRestriction.canUpload ? '#1a1a1a' : '#666'}
+              />
+              <Text style={[styles.addButtonText, !uploadRestriction.canUpload && styles.addButtonTextDisabled]}>
+                {uploadRestriction.canUpload ? t('progressPhotos.newSessionButton') : uploadRestriction.message}
+              </Text>
             </>
           )}
         </TouchableOpacity>
@@ -385,10 +427,8 @@ export default function ProgressPhotosScreen() {
         {photos.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="images-outline" size={64} color="#666" />
-            <Text style={styles.emptyTitle}>No hay fotos aún</Text>
-            <Text style={styles.emptyText}>
-              Agrega tu primera foto para comenzar a documentar tu progreso
-            </Text>
+            <Text style={styles.emptyTitle}>{t('progressPhotos.emptyTitle')}</Text>
+            <Text style={styles.emptyText}>{t('progressPhotos.emptyText')}</Text>
           </View>
         ) : (
           <View style={styles.photosContainer}>
@@ -402,7 +442,7 @@ export default function ProgressPhotosScreen() {
 
                 {/* Fila con 3 columnas (Frente, Costado, Espalda) */}
                 <View style={styles.photoRow}>
-                  {(['front', 'side', 'back'] as PhotoType[]).map((type) => {
+                  {(['front', 'side', 'back'] as SessionPhotoType[]).map((type) => {
                     const photo = getPhotoByType(group.photos, type);
                     return (
                       <View key={type} style={styles.photoColumn}>
@@ -414,15 +454,8 @@ export default function ProgressPhotosScreen() {
 
                         {/* Foto o placeholder */}
                         {photo ? (
-                          <TouchableOpacity
-                            style={styles.photoCardGrouped}
-                            onPress={() => handlePhotoPress(photo)}
-                          >
-                            <Image
-                              source={{ uri: photo.photo_url }}
-                              style={styles.photoImageGrouped}
-                              resizeMode="cover"
-                            />
+                          <TouchableOpacity style={styles.photoCardGrouped} onPress={() => handlePhotoPress(photo)}>
+                            <Image source={{ uri: photo.photo_url }} style={styles.photoImageGrouped} resizeMode="cover" />
                             {photo.weight_kg && (
                               <View style={styles.photoWeightBadge}>
                                 <Text style={styles.photoWeightText}>{photo.weight_kg} kg</Text>
@@ -435,7 +468,7 @@ export default function ProgressPhotosScreen() {
                         ) : (
                           <View style={styles.photoPlaceholder}>
                             <Ionicons name="image-outline" size={32} color="#555" />
-                            <Text style={styles.placeholderText}>Sin foto</Text>
+                            <Text style={styles.placeholderText}>{t('progressPhotos.noPhoto')}</Text>
                           </View>
                         )}
                       </View>
@@ -466,22 +499,22 @@ export default function ProgressPhotosScreen() {
               <TouchableOpacity onPress={() => setSessionModalVisible(false)} style={styles.sessionCloseBtn}>
                 <Ionicons name="close" size={22} color="#ffffff" />
               </TouchableOpacity>
-              <Text style={styles.sessionTitle}>Sesión de fotos (3 vistas)</Text>
+              <Text style={styles.sessionTitle}>{t('progressPhotos.sessionTitle')}</Text>
               <View style={{ width: 22 }} />
             </View>
-            <Text style={styles.sessionSubtitle}>Captura cada vista para comparar después</Text>
+            <Text style={styles.sessionSubtitle}>{t('progressPhotos.sessionSubtitle')}</Text>
 
             {/* Tips del asistente */}
             <View style={styles.tipsBox}>
-              <Text style={styles.tipsTitle}>Consejos rápidos</Text>
-              <Text style={styles.tipItem}>• 📐 Fondo uniforme y buena iluminación frontal</Text>
-              <Text style={styles.tipItem}>• 🦶 Pies al ancho de hombros; postura relajada</Text>
-              <Text style={styles.tipItem}>• 👕 Misma ropa si es posible, misma distancia a la cámara</Text>
-              <Text style={styles.tipItem}>• 🔁 Repite siempre las 3 vistas: Frente, Costado, Espalda</Text>
+              <Text style={styles.tipsTitle}>{t('progressPhotos.quickTipsTitle')}</Text>
+              <Text style={styles.tipItem}>• 📐 {t('progressPhotos.tip1')}</Text>
+              <Text style={styles.tipItem}>• 🦶 {t('progressPhotos.tip2')}</Text>
+              <Text style={styles.tipItem}>• 👕 {t('progressPhotos.tip3')}</Text>
+              <Text style={styles.tipItem}>• 🔁 {t('progressPhotos.tip4')}</Text>
             </View>
 
             <View style={styles.sessionGrid}>
-              {(['front','side','back'] as PhotoType[]).map((type) => (
+              {(['front', 'side', 'back'] as SessionPhotoType[]).map((type) => (
                 <View key={type} style={styles.sessionItem}>
                   <Text style={styles.sessionLabel}>
                     {type === 'front' ? 'Frente' : type === 'back' ? 'Espalda' : 'Costado'}
@@ -492,15 +525,18 @@ export default function ProgressPhotosScreen() {
                       onPress={() => takePhoto(type)}
                       disabled={!!sessionUploading[type]}
                     >
-                      <Ionicons name={currentSession[type] ? 'checkmark-circle' : 'camera'} size={20} color={currentSession[type] ? '#1a1a1a' : '#1a1a1a'} />
-                      <Text style={styles.sessionButtonText}>{currentSession[type] ? 'Listo' : 'Tomar'}</Text>
+                      <Ionicons
+                        name={currentSession[type] ? 'checkmark-circle' : 'camera'}
+                        size={20}
+                        color="#1a1a1a"
+                      />
+                      <Text style={styles.sessionButtonText}>
+                        {currentSession[type] ? t('progressPhotos.done') : t('progressPhotos.take')}
+                      </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.sessionSecondary}
-                      onPress={() => pickFromGallery(type)}
-                    >
+                    <TouchableOpacity style={styles.sessionSecondary} onPress={() => pickFromGallery(type)}>
                       <Ionicons name="image" size={18} color="#ffb300" />
-                      <Text style={styles.sessionSecondaryText}>Galería</Text>
+                      <Text style={styles.sessionSecondaryText}>{t('progressPhotos.gallery')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -509,14 +545,18 @@ export default function ProgressPhotosScreen() {
 
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
               <TouchableOpacity
-                style={[styles.finishButton, { flex: 1 }, !(currentSession.front || currentSession.side || currentSession.back) && { opacity: 0.5 }]}
+                style={[
+                  styles.finishButton,
+                  { flex: 1 },
+                  !(currentSession.front || currentSession.side || currentSession.back) && { opacity: 0.5 },
+                ]}
                 disabled={!(currentSession.front || currentSession.side || currentSession.back)}
                 onPress={() => {
                   setSessionModalVisible(false);
                   setCurrentSession({});
                 }}
               >
-                <Text style={styles.finishButtonText}>Finalizar sesión</Text>
+                <Text style={styles.finishButtonText}>{t('progressPhotos.finishSession')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.cancelButton, { flex: 1 }]}
@@ -525,7 +565,7 @@ export default function ProgressPhotosScreen() {
                   setCurrentSession({});
                 }}
               >
-                <Text style={styles.cancelButtonText}>Cancelar</Text>
+                <Text style={styles.cancelButtonText}>{t('progressPhotos.cancel')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -540,44 +580,24 @@ export default function ProgressPhotosScreen() {
         onRequestClose={() => setShowPhotoModal(false)}
       >
         <View style={styles.modalContainer}>
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowPhotoModal(false)}
-          />
+          <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowPhotoModal(false)} />
           {selectedPhoto && (
             <View style={styles.modalContent}>
-              <Image
-                source={{ uri: selectedPhoto.photo_url }}
-                style={styles.modalImage}
-                resizeMode="contain"
-              />
+              <Image source={{ uri: selectedPhoto.photo_url }} style={styles.modalImage} resizeMode="contain" />
               <View style={styles.modalInfo}>
-                <Text style={styles.modalDate}>
-                  {formatDate(selectedPhoto.photo_date)}
-                </Text>
+                <Text style={styles.modalDate}>{formatDate(selectedPhoto.photo_date)}</Text>
                 {selectedPhoto.weight_kg && (
-                  <Text style={styles.modalWeight}>
-                    Peso: {selectedPhoto.weight_kg} kg
-                  </Text>
+                  <Text style={styles.modalWeight}>{t('progressPhotos.weightLabel', { weight: selectedPhoto.weight_kg })}</Text>
                 )}
-                {selectedPhoto.notes && (
-                  <Text style={styles.modalNotes}>{selectedPhoto.notes}</Text>
-                )}
+                {selectedPhoto.notes && <Text style={styles.modalNotes}>{selectedPhoto.notes}</Text>}
               </View>
               <View style={styles.modalActions}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.deleteButton]}
-                  onPress={() => handleDeletePhoto(selectedPhoto)}
-                >
+                <TouchableOpacity style={[styles.modalButton, styles.deleteButton]} onPress={() => handleDeletePhoto(selectedPhoto)}>
                   <Ionicons name="trash-outline" size={20} color="#ffffff" />
-                  <Text style={styles.modalButtonText}>Eliminar</Text>
+                  <Text style={styles.modalButtonText}>{t('progressPhotos.delete')}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.closeButton]}
-                  onPress={() => setShowPhotoModal(false)}
-                >
-                  <Text style={styles.modalButtonText}>Cerrar</Text>
+                <TouchableOpacity style={[styles.modalButton, styles.closeButton]} onPress={() => setShowPhotoModal(false)}>
+                  <Text style={styles.modalButtonText}>{t('progressPhotos.close')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -656,10 +676,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 8,
   },
+  addButtonDisabled: {
+    backgroundColor: '#2a2a2a',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
   addButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: '#1a1a1a',
+  },
+  addButtonTextDisabled: {
+    color: '#888',
+    fontSize: 14,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -1047,4 +1076,3 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
 });
-

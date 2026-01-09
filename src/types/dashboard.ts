@@ -8,6 +8,7 @@ export type MetricType =
   | 'calories'
   | 'sleep'
   | 'exercise'
+  | 'gym'
   | 'weight'
   | 'glucose'
   | 'mindfulness'

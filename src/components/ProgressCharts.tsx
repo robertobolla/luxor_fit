@@ -315,11 +315,11 @@ export const ProgressComparisonCard = React.memo(function ProgressComparisonCard
             <Text
               style={[
                 styles.comparisonChange,
-                { color: getChangeColor(-current.bodyFatChange) },
+                { color: getChangeColor(-(current.bodyFatChange ?? 0)) },
               ]}
             >
               {formatChange(
-                current.bodyFatChange ? -current.bodyFatChange : undefined,
+                current.bodyFatChange !== undefined ? -current.bodyFatChange : undefined,
                 '%'
               )}
             </Text>

@@ -14,6 +14,7 @@ import {
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/services/supabase';
 import { generateWorkoutPlan } from '../../src/services/aiService';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
@@ -21,23 +22,23 @@ import { useRetry } from '../../src/hooks/useRetry';
 import { useLoadingState } from '../../src/hooks/useLoadingState';
 import { FitnessLevel, FitnessGoal, Equipment, ActivityType } from '../../src/types';
 
-// Mapeo de etiquetas para equipamiento
-const EQUIPMENT_LABELS: Record<Equipment, string> = {
-  [Equipment.NONE]: 'Solo peso corporal',
-  [Equipment.DUMBBELLS]: 'Mancuernas',
-  [Equipment.BARBELL]: 'Barra olímpica',
-  [Equipment.RESISTANCE_BANDS]: 'Bandas de resistencia',
-  [Equipment.PULL_UP_BAR]: 'Barra de dominadas',
-  [Equipment.BENCH]: 'Banco',
-  [Equipment.BENCH_DUMBBELLS]: 'Banco y mancuernas',
-  [Equipment.BENCH_BARBELL]: 'Banco con barra',
-  [Equipment.GYM_ACCESS]: 'Acceso a gimnasio',
-  [Equipment.KETTLEBELL]: 'Kettlebell',
-  [Equipment.CABLE_MACHINE]: 'Máquina de poleas',
-  [Equipment.SMITH_MACHINE]: 'Máquina Smith',
-  [Equipment.LEG_PRESS]: 'Prensa de piernas',
-  [Equipment.MEDICINE_BALL]: 'Balón medicinal',
-  [Equipment.YOGA_MAT]: 'Mat de yoga',
+// Equipment keys for translation lookup
+const EQUIPMENT_KEYS: Record<Equipment, string> = {
+  [Equipment.NONE]: 'none',
+  [Equipment.DUMBBELLS]: 'dumbbells',
+  [Equipment.BARBELL]: 'barbell',
+  [Equipment.RESISTANCE_BANDS]: 'resistance_bands',
+  [Equipment.PULL_UP_BAR]: 'pull_up_bar',
+  [Equipment.BENCH]: 'bench',
+  [Equipment.BENCH_DUMBBELLS]: 'bench_dumbbells',
+  [Equipment.BENCH_BARBELL]: 'bench_barbell',
+  [Equipment.GYM_ACCESS]: 'gym_access',
+  [Equipment.KETTLEBELL]: 'kettlebell',
+  [Equipment.CABLE_MACHINE]: 'cable_machine',
+  [Equipment.SMITH_MACHINE]: 'smith_machine',
+  [Equipment.LEG_PRESS]: 'leg_press',
+  [Equipment.MEDICINE_BALL]: 'medicine_ball',
+  [Equipment.YOGA_MAT]: 'yoga_mat',
 };
 
 interface UserProfile {
@@ -58,6 +59,11 @@ interface UserProfile {
 export default function WorkoutGeneratorScreen() {
   const { user } = useUser();
   const router = useRouter();
+  const { t } = useTranslation();
+  
+  // Helper functions for translations
+  const getEquipmentLabel = (eq: Equipment) => t(`equipment.${EQUIPMENT_KEYS[eq]}`);
+  const getGoalLabel = (goal: string) => t(`fitnessGoals.${goal}`);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -152,7 +158,7 @@ export default function WorkoutGeneratorScreen() {
   const handleStartGeneration = () => {
     // Validar que tenga datos básicos del perfil
     if (!userProfile) {
-      Alert.alert('Error', 'No se pudo cargar tu perfil');
+      Alert.alert(t('common.error'), t('workoutGenerator.couldNotLoadProfile'));
       return;
     }
     // Limpiar estado del plan anterior
@@ -239,7 +245,7 @@ export default function WorkoutGeneratorScreen() {
 
   const handleGeneratePlan = async () => {
     if (!userProfile) {
-      Alert.alert('Error', 'No se pudo cargar tu perfil');
+      Alert.alert(t('common.error'), t('workoutGenerator.couldNotLoadProfile'));
       return;
     }
 
@@ -282,7 +288,7 @@ export default function WorkoutGeneratorScreen() {
           } catch (saveError) {
             if (attempt === 2) {
               // Último intento falló
-              Alert.alert('Advertencia', 'El plan se generó pero no se pudo guardar. Intenta guardarlo manualmente.');
+              Alert.alert(t('common.warning'), t('workoutGenerator.planNotSaved'));
             } else {
               // Esperar antes del siguiente intento
               await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
@@ -296,11 +302,11 @@ export default function WorkoutGeneratorScreen() {
           
           // Mostrar alerta para activar el plan
           Alert.alert(
-            '¡Plan Creado!',
-            '¿Quieres activar este plan de entrenamiento ahora?',
+            t('workoutGenerator.planCreated'),
+            t('workoutGenerator.activatePlanQuestion'),
             [
               {
-                text: 'No, ver después',
+                text: t('workoutGenerator.viewLater'),
                 style: 'cancel',
                 onPress: () => {
                   // Limpiar estados y navegar a la pestaña Entrenar
@@ -312,8 +318,9 @@ export default function WorkoutGeneratorScreen() {
                 },
               },
               {
-                text: 'Sí, activar',
+                text: t('workoutGenerator.yesActivate'),
                 onPress: async () => {
+                  if (!user || !planId) return;
                   try {
                     // Activar el plan
                     const { error: rpcError } = await supabase.rpc('activate_workout_plan', {
@@ -323,7 +330,7 @@ export default function WorkoutGeneratorScreen() {
 
                     if (rpcError) {
                       console.error('Error activando plan:', rpcError);
-                      Alert.alert('Error', 'No se pudo activar el plan, pero puedes activarlo manualmente desde la pestaña Entrenar.');
+                      Alert.alert(t('common.error'), t('workoutGenerator.couldNotActivatePlan'));
                     }
                     
                     // Limpiar estados y navegar a la pestaña Entrenar
@@ -334,7 +341,7 @@ export default function WorkoutGeneratorScreen() {
                     router.replace('/(tabs)/workout' as any);
                   } catch (err) {
                     console.error('Error activando plan:', err);
-                    Alert.alert('Error', 'No se pudo activar el plan.');
+                    Alert.alert(t('common.error'), t('workoutGenerator.couldNotActivatePlan'));
                   }
                 },
               },
@@ -421,7 +428,7 @@ export default function WorkoutGeneratorScreen() {
 
         if (error) {
           console.error('Error activando plan:', error);
-          Alert.alert('Advertencia', 'El plan se guardó pero no se pudo activar. Puedes activarlo manualmente desde la lista.');
+          Alert.alert(t('common.warning'), t('workoutGenerator.planSavedNotActivated'));
         } else {
           console.log('✅ Plan activado correctamente');
         }
@@ -451,44 +458,32 @@ export default function WorkoutGeneratorScreen() {
 
   const handleUsePlan = () => {
     Alert.alert(
-      '¡Plan Guardado!',
-      'Tu plan de entrenamiento ha sido guardado. Podrás verlo en la sección de Entrenamientos.',
+      t('workoutGenerator.planSavedTitle'),
+      t('workoutGenerator.planSavedMessage'),
       [
         {
-          text: 'Ver Entrenamientos',
+          text: t('workoutGenerator.viewWorkouts'),
           onPress: () => router.replace('/(tabs)/workout'),
         },
       ]
     );
+    
   };
 
   const getFitnessLevelText = (level: string) => {
-    const map: { [key: string]: string } = {
-      beginner: 'Principiante',
-      intermediate: 'Intermedio',
-      advanced: 'Avanzado',
-    };
-    return map[level] || level;
+    return t(`fitnessLevels.${level}`) || level;
   };
 
   const getGoalText = (goal: string) => {
-    const map: { [key: string]: string } = {
-      weight_loss: 'Perder peso',
-      muscle_gain: 'Ganar músculo',
-      strength: 'Aumentar fuerza',
-      endurance: 'Mejorar resistencia',
-      flexibility: 'Flexibilidad',
-      general_fitness: 'Forma general',
-    };
-    return map[goal] || goal;
+    return t(`fitnessGoals.${goal}`) || goal;
   };
 
   // Render del formulario
   const renderForm = () => {
     const formSteps = [
       {
-        title: '¿Cuál es tu nivel de fitness?',
-        subtitle: 'Selecciona el nivel que mejor te describe',
+        title: t('workoutGenerator.whatIsYourLevel'),
+        subtitle: t('workoutGenerator.selectLevelDescription'),
         content: (
           <View>
             {Object.values(FitnessLevel).map((level) => (
@@ -504,9 +499,9 @@ export default function WorkoutGeneratorScreen() {
                   styles.formOptionText,
                   formData.fitness_level === level && styles.formOptionTextSelected
                 ]}>
-                  {level === FitnessLevel.BEGINNER && 'Principiante - Nuevo en el fitness'}
-                  {level === FitnessLevel.INTERMEDIATE && 'Intermedio - Algunos meses de experiencia'}
-                  {level === FitnessLevel.ADVANCED && 'Avanzado - Años de experiencia'}
+                  {level === FitnessLevel.BEGINNER && t('workoutGenerator.beginnerDesc')}
+                  {level === FitnessLevel.INTERMEDIATE && t('workoutGenerator.intermediateDesc')}
+                  {level === FitnessLevel.ADVANCED && t('workoutGenerator.advancedDesc')}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -514,8 +509,8 @@ export default function WorkoutGeneratorScreen() {
         ),
       },
       {
-        title: '¿Cuáles son tus objetivos?',
-        subtitle: 'Selecciona todos los que apliquen',
+        title: t('workoutGenerator.whatAreYourGoals'),
+        subtitle: t('workoutGenerator.selectAllThatApply'),
         content: (
           <View>
             {Object.values(FitnessGoal).map((goal) => (
@@ -531,12 +526,7 @@ export default function WorkoutGeneratorScreen() {
                   styles.formOptionText,
                   formData.goals.includes(goal) && styles.formOptionTextSelected
                 ]}>
-                  {goal === FitnessGoal.WEIGHT_LOSS && 'Perder peso'}
-                  {goal === FitnessGoal.MUSCLE_GAIN && 'Ganar músculo'}
-                  {goal === FitnessGoal.STRENGTH && 'Aumentar fuerza'}
-                  {goal === FitnessGoal.ENDURANCE && 'Mejorar resistencia'}
-                  {goal === FitnessGoal.FLEXIBILITY && 'Flexibilidad/Movilidad'}
-                  {goal === FitnessGoal.GENERAL_FITNESS && 'Mantener forma general'}
+                  {getGoalText(goal)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -544,8 +534,8 @@ export default function WorkoutGeneratorScreen() {
         ),
       },
       {
-        title: '¿Qué tipo de actividades prefieres?',
-        subtitle: 'Selecciona todas las que te gusten',
+        title: t('workoutGenerator.whatActivitiesDoYouPrefer'),
+        subtitle: t('workoutGenerator.selectAllYouLike'),
         content: (
           <View>
             {Object.values(ActivityType).map((activity) => (
@@ -561,12 +551,7 @@ export default function WorkoutGeneratorScreen() {
                   styles.formOptionText,
                   formData.activity_types.includes(activity) && styles.formOptionTextSelected
                 ]}>
-                  {activity === ActivityType.CARDIO && '🏃 Cardio (correr, nadar, bici)'}
-                  {activity === ActivityType.STRENGTH && '💪 Fuerza (pesas, calistenia)'}
-                  {activity === ActivityType.SPORTS && '⚽ Deportes (fútbol, basketball)'}
-                  {activity === ActivityType.YOGA && '🧘 Yoga/Pilates'}
-                  {activity === ActivityType.HIIT && '🔥 HIIT (entrenamiento intenso)'}
-                  {activity === ActivityType.MIXED && '🎯 Mixto (de todo un poco)'}
+                  {t(`workoutGenerator.activity_${activity}`)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -574,7 +559,7 @@ export default function WorkoutGeneratorScreen() {
         ),
       },
       {
-        title: '¿Cuántos días puedes entrenar por semana?',
+        title: t('workoutGenerator.howManyDaysPerWeek'),
         subtitle: '',
         content: (
           <View>
@@ -591,7 +576,7 @@ export default function WorkoutGeneratorScreen() {
                   styles.formOptionText,
                   formData.available_days === days && styles.formOptionTextSelected
                 ]}>
-                  {days} {days === 1 ? 'día' : 'días'} por semana
+                  {days} {days === 1 ? t('workoutGenerator.day') : t('workoutGenerator.days')} {t('common.perWeek')}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -599,24 +584,24 @@ export default function WorkoutGeneratorScreen() {
         ),
       },
       {
-        title: '¿Cuánto tiempo tienes por sesión?',
+        title: t('workoutGenerator.howLongPerSession'),
         subtitle: '',
         content: (
           <View>
-            {[15, 30, 45, 60, 90].map((minutes) => (
+            {[15, 30, 45, 60, 90].map((mins) => (
               <TouchableOpacity
-                key={minutes}
+                key={mins}
                 style={[
                   styles.formOptionButton,
-                  formData.session_duration === minutes && styles.formOptionButtonSelected
+                  formData.session_duration === mins && styles.formOptionButtonSelected
                 ]}
-                onPress={() => setFormData(prev => ({ ...prev, session_duration: minutes }))}
+                onPress={() => setFormData(prev => ({ ...prev, session_duration: mins }))}
               >
                 <Text style={[
                   styles.formOptionText,
-                  formData.session_duration === minutes && styles.formOptionTextSelected
+                  formData.session_duration === mins && styles.formOptionTextSelected
                 ]}>
-                  {minutes} minutos
+                  {mins} {t('workoutGenerator.minutes')}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -624,8 +609,8 @@ export default function WorkoutGeneratorScreen() {
         ),
       },
       {
-        title: '¿Qué equipamiento tienes disponible?',
-        subtitle: 'Selecciona todo lo que tengas',
+        title: t('workoutGenerator.whatEquipmentDoYouHave'),
+        subtitle: t('customPlan.selectAllYouHave'),
         content: (
           <View>
             {Object.values(Equipment).map((equipment) => (
@@ -641,7 +626,7 @@ export default function WorkoutGeneratorScreen() {
                   styles.formOptionText,
                   formData.equipment.includes(equipment) && styles.formOptionTextSelected
                 ]}>
-                  {EQUIPMENT_LABELS[equipment] || equipment}
+                  {getEquipmentLabel(equipment)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -682,7 +667,9 @@ export default function WorkoutGeneratorScreen() {
           <View style={styles.formFooter}>
             {formStep > 0 && (
               <TouchableOpacity style={styles.formBackButton} onPress={prevFormStep}>
-                <Text style={styles.formBackButtonText}>Atrás</Text>
+<Text style={styles.formBackButtonText}>
+  {t('common.back')}
+</Text>
               </TouchableOpacity>
             )}
             <View style={{ flex: 1 }} />
@@ -694,9 +681,12 @@ export default function WorkoutGeneratorScreen() {
               onPress={nextFormStep}
               disabled={!canProceedForm()}
             >
-              <Text style={styles.formNextButtonText}>
-                {formStep === formSteps.length - 1 ? 'Generar Plan' : 'Siguiente'}
-              </Text>
+           <Text style={styles.formNextButtonText}>
+  {formStep === formSteps.length - 1
+    ? t('workoutGenerator.generatePlan')
+    : t('common.next')}
+</Text>
+
             </TouchableOpacity>
           </View>
         </SafeAreaView>
@@ -710,7 +700,9 @@ export default function WorkoutGeneratorScreen() {
         <StatusBar barStyle="light-content" />
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ffb300" />
-          <Text style={styles.loadingText}>Cargando tu perfil...</Text>
+          <Text style={styles.loadingText}>
+  {t('workoutGenerator.loadingProfile')}
+</Text>
         </View>
       </SafeAreaView>
     );
@@ -728,7 +720,9 @@ export default function WorkoutGeneratorScreen() {
             style={styles.backButton}
             onPress={() => router.push('/(tabs)/workout' as any)}
           >
-            <Text style={styles.backButtonText}>Volver</Text>
+<Text style={styles.backButtonText}>
+  {t('common.back')}
+</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -741,16 +735,17 @@ export default function WorkoutGeneratorScreen() {
         <StatusBar barStyle="light-content" />
         <View style={styles.generatingContainer}>
           <Ionicons name="fitness" size={80} color="#ffb300" />
-          <LoadingOverlay visible={true} message="Generando plan con IA..." />
+          <LoadingOverlay visible={true} message={t('commonUI.generatingPlanAI')} />
           <Text style={styles.generatingTitle}>
-            Generando plan con IA...
+            {t('workoutGenerator.generatingTitle')}
           </Text>
           <Text style={styles.generatingSubtext}>
-            Analizando tus objetivos, nivel de fitness y disponibilidad
+            {t('workoutGenerator.analyzingYourGoals')}
           </Text>
           <Text style={styles.generatingSubtext}>
-            Esto puede tomar 10-20 segundos
-          </Text>
+  {t('workoutGenerator.mayTakeSeconds')}
+</Text>
+
         </View>
       </SafeAreaView>
     );
@@ -771,7 +766,10 @@ export default function WorkoutGeneratorScreen() {
             >
               <Ionicons name="close" size={28} color="#ffffff" />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Tu Plan Generado</Text>
+            <Text style={styles.headerTitle}>
+  {t('workoutGenerator.generatedPlanTitle')}
+</Text>
+
             <View style={{ width: 28 }} />
           </View>
 
@@ -784,21 +782,30 @@ export default function WorkoutGeneratorScreen() {
               <View style={styles.planStat}>
                 <Ionicons name="calendar" size={24} color="#ffb300" />
                 <Text style={styles.planStatText}>
-                  {generatedPlan.duration_weeks} semanas
-                </Text>
+  {generatedPlan.duration_weeks}{' '}
+  {generatedPlan.duration_weeks === 1
+    ? t('workoutGenerator.week')
+    : t('workoutGenerator.weeks')}
+</Text>
+
               </View>
               <View style={styles.planStat}>
                 <Ionicons name="fitness" size={24} color="#ffb300" />
                 <Text style={styles.planStatText}>
-                  {generatedPlan.days_per_week} días/semana
-                </Text>
+  {generatedPlan.days_per_week}{' '}
+  {generatedPlan.days_per_week === 1
+    ? t('workoutGenerator.dayPerWeek')
+    : t('workoutGenerator.daysPerWeek')}
+</Text>
               </View>
             </View>
           </View>
 
           {/* Weekly Schedule */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>📅 Estructura Semanal</Text>
+          <Text style={styles.sectionTitle}>
+  📅 {t('workoutGenerator.weeklyStructure')}
+</Text>
             {generatedPlan.weekly_structure?.map((day: any, index: number) => (
               <View key={index} style={styles.dayCard}>
                 <View style={styles.dayHeader}>
@@ -877,7 +884,9 @@ export default function WorkoutGeneratorScreen() {
           {/* Key Principles */}
           {generatedPlan.key_principles && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>🎯 Principios Clave</Text>
+<Text style={styles.sectionTitle}>
+  🎯 {t('workoutGenerator.keyPrinciplesTitle')}
+</Text>
               <View style={styles.principlesCard}>
                 {generatedPlan.key_principles.map((principle: string, index: number) => (
                   <Text key={index} style={styles.principleText}>
@@ -891,7 +900,10 @@ export default function WorkoutGeneratorScreen() {
           {/* Progression */}
           {generatedPlan.progression && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>📈 Progresión</Text>
+              <Text style={styles.sectionTitle}>
+  📈 {t('workoutGenerator.progressionTitle')}
+</Text>
+
               <View style={styles.progressionCard}>
                 <Text style={styles.progressionText}>{generatedPlan.progression}</Text>
               </View>
@@ -901,7 +913,9 @@ export default function WorkoutGeneratorScreen() {
           {/* Recommendations */}
           {generatedPlan.recommendations && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>💡 Recomendaciones</Text>
+<Text style={styles.sectionTitle}>
+  💡 {t('workoutGenerator.recommendationsTitle')}
+</Text>
               <View style={styles.recommendationsCard}>
                 {generatedPlan.recommendations.map((rec: string, index: number) => (
                   <Text key={index} style={styles.recommendationText}>
@@ -914,7 +928,9 @@ export default function WorkoutGeneratorScreen() {
 
           {/* Use Plan Button */}
           <TouchableOpacity style={styles.usePlanButton} onPress={handleUsePlan}>
-            <Text style={styles.usePlanButtonText}>Usar este Plan</Text>
+          <Text style={styles.usePlanButtonText}>
+  {t('workoutGenerator.usePlan')}
+</Text>
             <Ionicons name="arrow-forward" size={24} color="#1a1a1a" />
           </TouchableOpacity>
 
@@ -931,25 +947,32 @@ export default function WorkoutGeneratorScreen() {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <Ionicons name="checkmark-circle" size={64} color="#ffb300" />
-              <Text style={styles.modalTitle}>¡Plan Generado!</Text>
-              <Text style={styles.modalText}>
-                Tu plan de entrenamiento ha sido creado exitosamente.
-              </Text>
-              <Text style={styles.modalQuestion}>
-                ¿Quieres activar este plan ahora?
-              </Text>
+              <Text style={styles.modalTitle}>
+  {t('workoutGenerator.planGenerated')}
+</Text>
+<Text style={styles.modalText}>
+  {t('workoutGenerator.planGeneratedSuccess')}
+</Text>
+<Text style={styles.modalQuestion}>
+  {t('workoutGenerator.activatePlanNow')}
+</Text>
+
               <View style={styles.modalButtons}>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonSecondary]}
                   onPress={() => handleActivatePlan(false)}
                 >
-                  <Text style={styles.modalButtonSecondaryText}>Más tarde</Text>
+                  <Text style={styles.modalButtonSecondaryText}>
+  {t('workoutGenerator.later')}
+</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalButton, styles.modalButtonPrimary]}
                   onPress={() => handleActivatePlan(true)}
                 >
-                  <Text style={styles.modalButtonPrimaryText}>Activar</Text>
+                  <Text style={styles.modalButtonPrimaryText}>
+  {t('workoutGenerator.activate')}
+</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -973,7 +996,10 @@ export default function WorkoutGeneratorScreen() {
           >
             <Ionicons name="arrow-back" size={28} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Generar Plan</Text>
+          <Text style={styles.headerTitle}>
+  {t('workoutGenerator.generatePlan')}
+</Text>
+
           <View style={{ width: 28 }} />
         </View>
 
@@ -981,40 +1007,47 @@ export default function WorkoutGeneratorScreen() {
         <View style={styles.intro}>
           <Ionicons name="sparkles" size={48} color="#ffb300" />
           <Text style={styles.introTitle}>
-            Plan de Entrenamiento con IA
-          </Text>
-          <Text style={styles.introDescription}>
-            Generaremos un plan personalizado basado en evidencia científica usando tus datos
-          </Text>
+  {t('workoutGenerator.introTitle')}
+</Text>
+
+<Text style={styles.introDescription}>
+  {t('workoutGenerator.introDescription')}
+</Text>
+
         </View>
 
         {/* What to Expect */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>✨ Qué Incluye</Text>
+        <Text style={styles.sectionTitle}>
+  ✨ {t('workoutGenerator.whatIsIncluded')}
+</Text>
+
           <View style={styles.featuresCard}>
             <View style={styles.featureItem}>
               <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
-                Plan semanal estructurado adaptado a tu disponibilidad
-              </Text>
+  {t('workoutGenerator.featureWeeklyPlan')}
+</Text>
+
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
-                Ejercicios específicos basados en tu equipamiento
-              </Text>
+  {t('workoutGenerator.featureEquipmentBasedExercises')}
+</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
-                Progresión gradual según tu nivel de fitness
-              </Text>
+  {t('workoutGenerator.featureProgression')}
+</Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
-                Recomendaciones basadas en evidencia científica
-              </Text>
+  {t('workoutGenerator.featureEvidenceBased')}
+</Text>
+
             </View>
           </View>
         </View>
@@ -1026,7 +1059,10 @@ export default function WorkoutGeneratorScreen() {
             onPress={handleStartGeneration}
           >
             <Ionicons name="flash" size={24} color="#1a1a1a" />
-            <Text style={styles.generateButtonText}>Generar Mi Plan</Text>
+            <Text style={styles.generateButtonText}>
+  {t('workoutGenerator.generateMyPlan')}
+</Text>
+
           </TouchableOpacity>
         )}
 

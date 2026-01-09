@@ -10,6 +10,8 @@ import {
 import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
+import { useTranslation } from 'react-i18next';
+
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,6 +31,8 @@ export default function CaloriesDetailScreen() {
   const [totalCalories, setTotalCalories] = useState(0);
   const [averageCalories, setAverageCalories] = useState(0);
   const [goalCalories] = useState(2000); // Meta en kcal
+  const { t } = useTranslation();
+
 
   // Cargar datos de calorías según el modo de vista
   useEffect(() => {
@@ -247,15 +251,21 @@ export default function CaloriesDetailScreen() {
   const getStatusText = () => {
     if (viewMode === 'day') {
       const remaining = goalCalories - totalCalories;
+  
       if (remaining > 0) {
-        return `Estás a ${remaining.toLocaleString()} calorías de alcanzar tu objetivo diario`;
-      } else {
-        return `¡Objetivo alcanzado! 🎉`;
+        return t('nutrition.dailyGoalRemaining', {
+          calories: remaining.toLocaleString(),
+        });
       }
-    } else {
-      return `Hasta ahora, has quemado un total de ${totalCalories.toLocaleString()} kcal.`;
+  
+      return t('nutrition.dailyGoalAchieved');
     }
+  
+    return t('nutrition.totalCaloriesBurned', {
+      calories: totalCalories.toLocaleString(),
+    });
   };
+  
 
   const renderChart = () => {
     // Usar un valor máximo fijo para la escala del gráfico
@@ -434,7 +444,9 @@ export default function CaloriesDetailScreen() {
           <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard' as any)}>
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Energía quemada</Text>
+          <Text style={styles.headerTitle}>
+  {t('nutrition.burnedEnergy')}
+</Text>
           <TouchableOpacity>
             <Ionicons name="ellipsis-horizontal" size={24} color="#ffffff" />
           </TouchableOpacity>
@@ -447,7 +459,8 @@ export default function CaloriesDetailScreen() {
             onPress={() => setViewMode('day')}
           >
             <Text style={[styles.tabText, viewMode === 'day' && styles.tabTextActive]}>
-              Día
+            {t('common.day')}
+
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -455,7 +468,8 @@ export default function CaloriesDetailScreen() {
             onPress={() => setViewMode('week')}
           >
             <Text style={[styles.tabText, viewMode === 'week' && styles.tabTextActive]}>
-              Semana
+            {t('common.week')}
+
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -463,7 +477,7 @@ export default function CaloriesDetailScreen() {
             onPress={() => setViewMode('month')}
           >
             <Text style={[styles.tabText, viewMode === 'month' && styles.tabTextActive]}>
-              Mes
+            {t('common.month')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -471,7 +485,7 @@ export default function CaloriesDetailScreen() {
             onPress={() => setViewMode('year')}
           >
             <Text style={[styles.tabText, viewMode === 'year' && styles.tabTextActive]}>
-              Año
+            {t('common.year')}
             </Text>
           </TouchableOpacity>
         </View>

@@ -5,6 +5,7 @@ interface WorkoutAdaptationRequest {
   userId: string;
   adaptationPrompt: string;
   currentPlan: any;
+  language?: 'es' | 'en';
 }
 
 interface WorkoutAdaptationResponse {
@@ -25,15 +26,17 @@ export class AIWorkoutAdapterService {
     workoutPlanId,
     userId,
     adaptationPrompt,
-    currentPlan
+    currentPlan,
+    language = 'es'
   }: WorkoutAdaptationRequest): Promise<WorkoutAdaptationResponse> {
     try {
       console.log('🤖 Iniciando adaptación de entrenamiento...');
       console.log('📝 Prompt:', adaptationPrompt);
+      console.log('🌍 Idioma:', language);
 
       // Crear el prompt para la IA
-      const systemPrompt = this.createSystemPrompt(currentPlan);
-      const userPrompt = this.createUserPrompt(adaptationPrompt, currentPlan);
+      const systemPrompt = this.createSystemPrompt(currentPlan, language);
+      const userPrompt = this.createUserPrompt(adaptationPrompt, currentPlan, language);
 
       // Llamar a OpenAI
       const response = await this.callOpenAI(systemPrompt, userPrompt);
@@ -106,8 +109,43 @@ export class AIWorkoutAdapterService {
   /**
    * Crea el prompt del sistema para la IA
    */
-  private static createSystemPrompt(currentPlan: any): string {
-    return `Eres un entrenador personal experto en adaptación de planes de entrenamiento. 
+  private static createSystemPrompt(currentPlan: any, language: 'es' | 'en' = 'es'): string {
+    if (language === 'en') {
+      return `You are an expert personal trainer specializing in workout plan adaptation.
+
+Your task is to adapt the existing workout plan based on the user's specific instructions, maintaining the overall structure but modifying exercises, sets, reps, or any other aspect as needed.
+
+IMPORTANT RULES:
+1. Maintain the original weekly structure of the plan
+2. Preserve the appropriate difficulty level
+3. Ensure all exercises are safe and effective
+4. If exercises are excluded, replace them with appropriate alternatives
+5. Maintain muscular balance
+6. Respond ONLY with valid JSON, no additional text
+
+REQUIRED RESPONSE FORMAT:
+{
+  "plan_name": "Adapted plan name",
+  "description": "Description of changes made",
+  "weekly_structure": [
+    {
+      "day": "Monday",
+      "muscle_groups": ["chest", "triceps"],
+      "exercises": [
+        {
+          "name": "Exercise name",
+          "sets": 3,
+          "reps": "8-12",
+          "rest": "90 seconds",
+          "notes": "Additional notes"
+        }
+      ]
+    }
+  ],
+  "changes_made": ["List of specific changes made"]
+}`;
+    } else {
+      return `Eres un entrenador personal experto en adaptación de planes de entrenamiento. 
 
 Tu tarea es adaptar el plan de entrenamiento existente basándote en las instrucciones específicas del usuario, manteniendo la estructura general pero modificando ejercicios, series, repeticiones o cualquier otro aspecto según sea necesario.
 
@@ -140,13 +178,25 @@ FORMATO DE RESPUESTA REQUERIDO:
   ],
   "changes_made": ["Lista de cambios específicos realizados"]
 }`;
+    }
   }
 
   /**
    * Crea el prompt del usuario
    */
-  private static createUserPrompt(adaptationPrompt: string, currentPlan: any): string {
-    return `Plan de entrenamiento actual:
+  private static createUserPrompt(adaptationPrompt: string, currentPlan: any, language: 'es' | 'en' = 'es'): string {
+    if (language === 'en') {
+      return `Current workout plan:
+${JSON.stringify(currentPlan, null, 2)}
+
+User's adaptation instructions:
+"${adaptationPrompt}"
+
+Please adapt this workout plan following the user's instructions. Maintain the weekly structure but modify exercises, sets, reps, or any other aspect as needed.
+
+Respond ONLY with the adapted plan JSON, no additional text.`;
+    } else {
+      return `Plan de entrenamiento actual:
 ${JSON.stringify(currentPlan, null, 2)}
 
 Instrucciones de adaptación del usuario:
@@ -155,6 +205,7 @@ Instrucciones de adaptación del usuario:
 Por favor adapta este plan de entrenamiento siguiendo las instrucciones del usuario. Mantén la estructura semanal pero modifica los ejercicios, series, repeticiones o cualquier otro aspecto según sea necesario.
 
 Responde SOLO con el JSON del plan adaptado, sin texto adicional.`;
+    }
   }
 
   /**

@@ -149,8 +149,8 @@ export default function Stats() {
   }
 
   const { userStats } = stats;
-  const conversionRate = userStats.total_users > 0 
-    ? ((stats.subscriptionStats.active / userStats.total_users) * 100).toFixed(1) 
+  const conversionRate = (userStats.total_users || 0) > 0 
+    ? ((stats.subscriptionStats.active / (userStats.total_users || 1)) * 100).toFixed(1) 
     : '0';
 
   return (
@@ -169,10 +169,10 @@ export default function Stats() {
             <div className="stat-card-icon">👥</div>
             <h3>Total de Usuarios</h3>
           </div>
-          <div className="stat-card-value">{userStats.total_users.toLocaleString()}</div>
+          <div className="stat-card-value">{(userStats.total_users || 0).toLocaleString()}</div>
           <div className="stat-card-details">
-            <span>+{userStats.new_users_7d} últimos 7 días</span>
-            <span>+{userStats.new_users_30d} últimos 30 días</span>
+            <span>+{userStats.new_users_7d || 0} últimos 7 días</span>
+            <span>+{userStats.new_users_30d || 0} últimos 30 días</span>
           </div>
         </div>
 
@@ -181,7 +181,7 @@ export default function Stats() {
             <div className="stat-card-icon">✅</div>
             <h3>Suscripciones Activas</h3>
           </div>
-          <div className="stat-card-value">{stats.subscriptionStats.active.toLocaleString()}</div>
+          <div className="stat-card-value">{(stats.subscriptionStats.active || 0).toLocaleString()}</div>
           <div className="stat-card-details">
             <span>Tasa de conversión: {conversionRate}%</span>
           </div>
@@ -192,9 +192,9 @@ export default function Stats() {
             <div className="stat-card-icon">💰</div>
             <h3>Ingresos Mensuales</h3>
           </div>
-          <div className="stat-card-value">${stats.revenueStats.monthly_revenue.toFixed(2)}</div>
+          <div className="stat-card-value">${(stats.revenueStats.monthly_revenue || 0).toFixed(2)}</div>
           <div className="stat-card-details">
-            <span>Total acumulado: ${stats.revenueStats.total_revenue.toFixed(2)}</span>
+            <span>Total acumulado: ${(stats.revenueStats.total_revenue || 0).toFixed(2)}</span>
           </div>
         </div>
 
@@ -203,9 +203,9 @@ export default function Stats() {
             <div className="stat-card-icon">🏋️</div>
             <h3>Planes Activos</h3>
           </div>
-          <div className="stat-card-value">{userStats.users_with_workout_plans.toLocaleString()}</div>
+          <div className="stat-card-value">{(userStats.users_with_workout_plans || 0).toLocaleString()}</div>
           <div className="stat-card-details">
-            <span>{userStats.total_users > 0 ? ((userStats.users_with_workout_plans / userStats.total_users) * 100).toFixed(1) : 0}% de usuarios</span>
+            <span>{(userStats.total_users || 0) > 0 ? (((userStats.users_with_workout_plans || 0) / (userStats.total_users || 1)) * 100).toFixed(1) : 0}% de usuarios</span>
           </div>
         </div>
 
@@ -213,39 +213,39 @@ export default function Stats() {
         <section className="stat-section stat-section-full">
           <h2>📊 Estado de Suscripciones</h2>
           <div className="stat-items">
-            <StatItem label="Activas" value={stats.subscriptionStats.active} color="#4CAF50" />
-            <StatItem label="En prueba" value={stats.subscriptionStats.trialing} color="#FFD54A" />
-            <StatItem label="Canceladas" value={stats.subscriptionStats.canceled} color="#f44336" />
-            <StatItem label="Vencidas" value={stats.subscriptionStats.past_due} color="#FF9800" />
-            <StatItem label="Total" value={stats.subscriptionStats.total} color="#888" />
+            <StatItem label="Activas" value={stats.subscriptionStats.active || 0} color="#4CAF50" />
+            <StatItem label="En prueba" value={stats.subscriptionStats.trialing || 0} color="#FFD54A" />
+            <StatItem label="Canceladas" value={stats.subscriptionStats.canceled || 0} color="#f44336" />
+            <StatItem label="Vencidas" value={stats.subscriptionStats.past_due || 0} color="#FF9800" />
+            <StatItem label="Total" value={stats.subscriptionStats.total || 0} color="#888" />
           </div>
         </section>
 
         <section className="stat-section stat-section-full">
           <h2>👥 Distribución de Usuarios</h2>
           <div className="stat-items">
-            <StatItem label="Usuarios normales" value={userStats.total_users - stats.roleStats.admins - stats.roleStats.socios - stats.roleStats.empresarios} color="#888" />
-            <StatItem label="Administradores" value={stats.roleStats.admins} color="#f44336" />
-            <StatItem label="Socios" value={stats.roleStats.socios} color="#FFD54A" />
-            <StatItem label="Empresarios" value={stats.roleStats.empresarios} color="#4CAF50" />
+            <StatItem label="Usuarios normales" value={(userStats.total_users || 0) - (stats.roleStats.admins || 0) - (stats.roleStats.socios || 0) - (stats.roleStats.empresarios || 0)} color="#888" />
+            <StatItem label="Administradores" value={stats.roleStats.admins || 0} color="#f44336" />
+            <StatItem label="Socios" value={stats.roleStats.socios || 0} color="#FFD54A" />
+            <StatItem label="Empresarios" value={stats.roleStats.empresarios || 0} color="#4CAF50" />
           </div>
         </section>
 
         <section className="stat-section stat-section-full">
           <h2>🏢 Gimnasios</h2>
           <div className="stat-items">
-            <StatItem label="Total de gimnasios" value={stats.gymStats.total_gyms} color="#4CAF50" />
-            <StatItem label="Miembros totales" value={stats.gymStats.total_gym_members} color="#888" />
-            <StatItem label="Miembros activos" value={stats.gymStats.active_gym_members} color="#00D4AA" />
+            <StatItem label="Total de gimnasios" value={stats.gymStats.total_gyms || 0} color="#4CAF50" />
+            <StatItem label="Miembros totales" value={stats.gymStats.total_gym_members || 0} color="#888" />
+            <StatItem label="Miembros activos" value={stats.gymStats.active_gym_members || 0} color="#00D4AA" />
           </div>
         </section>
 
         <section className="stat-section stat-section-full">
           <h2>🎯 Niveles de Fitness</h2>
           <div className="fitness-levels">
-            <LevelBar level="Principiante" count={userStats.beginners} total={userStats.total_users} color="#4CAF50" />
-            <LevelBar level="Intermedio" count={userStats.intermediate} total={userStats.total_users} color="#FFD54A" />
-            <LevelBar level="Avanzado" count={userStats.advanced} total={userStats.total_users} color="#FF5722" />
+            <LevelBar level="Principiante" count={userStats.beginners || 0} total={userStats.total_users || 0} color="#4CAF50" />
+            <LevelBar level="Intermedio" count={userStats.intermediate || 0} total={userStats.total_users || 0} color="#FFD54A" />
+            <LevelBar level="Avanzado" count={userStats.advanced || 0} total={userStats.total_users || 0} color="#FF5722" />
           </div>
         </section>
 

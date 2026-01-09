@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Alert } from 'react-native';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '../services/supabase';
+import { supabase } from '@/services/supabase';
 import { getPendingTrainerInvitations } from '../services/trainerService';
 
 /**

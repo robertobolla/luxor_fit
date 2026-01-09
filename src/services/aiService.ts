@@ -30,7 +30,7 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
 /**
  * Genera una introducción personalizada del plan de entrenamiento
  */
-export async function generatePlanIntroduction(userData: UserProfile): Promise<AIResponse> {
+export async function generatePlanIntroduction(userData: UserProfile, language: 'es' | 'en' = 'es'): Promise<AIResponse> {
   try {
     // Si no hay API key, usar texto por defecto
     if (!OPENAI_API_KEY || OPENAI_API_KEY === '') {
@@ -43,10 +43,15 @@ export async function generatePlanIntroduction(userData: UserProfile): Promise<A
 
     console.log('🤖 Generando introducción con IA...');
     console.log('📋 Datos del usuario:', userData);
+    console.log('🌍 Idioma:', language);
 
     // Construir el prompt para ChatGPT
-    const prompt = buildPrompt(userData);
+    const prompt = buildPrompt(userData, language);
     console.log('📝 Prompt construido:', prompt.substring(0, 200) + '...');
+
+    const systemMessage = language === 'en' 
+      ? 'You are an expert and motivating personal trainer. Your job is to create personalized and motivating introductions for workout plans. Be specific, positive and realistic. Use a friendly and approachable tone in English.'
+      : 'Eres un entrenador personal experto y motivador. Tu trabajo es crear introducciones personalizadas y motivadoras para planes de entrenamiento. Sé específico, positivo y realista. Usa un tono amigable y cercano en español.';
 
     // Llamar a la API de OpenAI con timeout
     const controller = new AbortController();
@@ -63,7 +68,7 @@ export async function generatePlanIntroduction(userData: UserProfile): Promise<A
         messages: [
           {
             role: 'system',
-            content: 'Eres un entrenador personal experto y motivador. Tu trabajo es crear introducciones personalizadas y motivadoras para planes de entrenamiento. Sé específico, positivo y realista. Usa un tono amigable y cercano en español.',
+            content: systemMessage,
           },
           {
             role: 'user',
@@ -135,59 +140,132 @@ export async function generatePlanIntroduction(userData: UserProfile): Promise<A
 /**
  * Construye el prompt para ChatGPT
  */
-function buildPrompt(userData: UserProfile): string {
-  const fitnessLevelText = {
-    beginner: 'principiante',
-    intermediate: 'intermedio',
-    advanced: 'avanzado',
-  }[userData.fitness_level] || userData.fitness_level;
+function buildPrompt(userData: UserProfile, language: 'es' | 'en' = 'es'): string {
+  if (language === 'en') {
+    const fitnessLevelText = {
+      beginner: 'beginner',
+      intermediate: 'intermediate',
+      advanced: 'advanced',
+    }[userData.fitness_level] || userData.fitness_level;
 
-  const goalsText = userData.goals.map(goal => {
-    const goalMap: { [key: string]: string } = {
-      weight_loss: 'perder peso',
-      muscle_gain: 'ganar músculo',
-      strength: 'aumentar fuerza',
-      endurance: 'mejorar resistencia',
-      flexibility: 'mejorar flexibilidad',
-      general_fitness: 'mantener forma general',
-    };
-    return goalMap[goal] || goal;
-  }).join(', ');
+    const goalsText = userData.goals.map(goal => {
+      const goalMap: { [key: string]: string } = {
+        weight_loss: 'lose fat',
+        muscle_gain: 'gain muscle',
+        strength: 'increase strength',
+        endurance: 'improve endurance',
+        flexibility: 'improve flexibility',
+        general_fitness: 'maintain general fitness',
+      };
+      return goalMap[goal] || goal;
+    }).join(', ');
 
-  const activityTypesText = userData.activity_types.map(activity => {
-    const activityMap: { [key: string]: string } = {
-      cardio: 'cardio',
-      strength: 'entrenamiento de fuerza',
-      sports: 'deportes',
-      yoga: 'yoga/pilates',
-      hiit: 'HIIT',
-      mixed: 'entrenamiento mixto',
-    };
-    return activityMap[activity] || activity;
-  }).join(', ');
+    const activityTypesText = userData.activity_types.map(activity => {
+      const activityMap: { [key: string]: string } = {
+        cardio: 'cardio',
+        strength: 'strength training',
+        sports: 'sports',
+        yoga: 'yoga/pilates',
+        hiit: 'HIIT',
+        mixed: 'mixed training',
+      };
+      return activityMap[activity] || activity;
+    }).join(', ');
 
-  const equipmentText = userData.equipment.map(eq => {
-    const equipmentMap: { [key: string]: string } = {
-      none: 'solo peso corporal',
-      dumbbells: 'mancuernas',
-      barbell: 'barra olímpica',
-      resistance_bands: 'bandas de resistencia',
-      pull_up_bar: 'barra de dominadas',
-      bench: 'banco',
-      bench_dumbbells: 'banco y mancuernas',
-      bench_barbell: 'banco con barra',
-      gym_access: 'gimnasio completo',
-      kettlebell: 'kettlebell',
-      cable_machine: 'máquina de poleas',
-      smith_machine: 'máquina Smith',
-      leg_press: 'prensa de piernas',
-      medicine_ball: 'balón medicinal',
-      yoga_mat: 'mat de yoga',
-    };
-    return equipmentMap[eq] || eq;
-  }).join(', ');
+    const equipmentText = userData.equipment.map(eq => {
+      const equipmentMap: { [key: string]: string } = {
+        none: 'bodyweight only',
+        dumbbells: 'dumbbells',
+        barbell: 'barbell',
+        resistance_bands: 'resistance bands',
+        pull_up_bar: 'pull-up bar',
+        bench: 'bench',
+        bench_dumbbells: 'bench and dumbbells',
+        bench_barbell: 'bench with barbell',
+        gym_access: 'full gym',
+        kettlebell: 'kettlebell',
+        cable_machine: 'cable machine',
+        smith_machine: 'smith machine',
+        leg_press: 'leg press',
+        medicine_ball: 'medicine ball',
+        yoga_mat: 'yoga mat',
+      };
+      return equipmentMap[eq] || eq;
+    }).join(', ');
 
-  return `
+    return `
+Create a personalized and motivating introduction (maximum 3 paragraphs) for a workout plan with the following information:
+
+- Name: ${userData.name}
+- Age: ${userData.age} years old
+- Fitness level: ${fitnessLevelText}
+- Goals: ${goalsText}
+- Preferred activity types: ${activityTypesText}
+- Availability: ${userData.available_days} days per week, ${userData.session_duration} minutes per session
+- Available equipment: ${equipmentText}
+
+The introduction should:
+1. Be motivating and personalized
+2. Specifically mention their goals and how we'll achieve them
+3. Explain how their availability and equipment will adapt to the plan
+4. Be realistic about expected results
+5. Generate enthusiasm to start
+
+Don't use headings or special formatting, just flowing text in paragraphs.
+`.trim();
+  } else {
+    const fitnessLevelText = {
+      beginner: 'principiante',
+      intermediate: 'intermedio',
+      advanced: 'avanzado',
+    }[userData.fitness_level] || userData.fitness_level;
+
+    const goalsText = userData.goals.map(goal => {
+      const goalMap: { [key: string]: string } = {
+        weight_loss: 'bajar grasa',
+        muscle_gain: 'ganar músculo',
+        strength: 'aumentar fuerza',
+        endurance: 'mejorar resistencia',
+        flexibility: 'mejorar flexibilidad',
+        general_fitness: 'mantener forma general',
+      };
+      return goalMap[goal] || goal;
+    }).join(', ');
+
+    const activityTypesText = userData.activity_types.map(activity => {
+      const activityMap: { [key: string]: string } = {
+        cardio: 'cardio',
+        strength: 'entrenamiento de fuerza',
+        sports: 'deportes',
+        yoga: 'yoga/pilates',
+        hiit: 'HIIT',
+        mixed: 'entrenamiento mixto',
+      };
+      return activityMap[activity] || activity;
+    }).join(', ');
+
+    const equipmentText = userData.equipment.map(eq => {
+      const equipmentMap: { [key: string]: string } = {
+        none: 'solo peso corporal',
+        dumbbells: 'mancuernas',
+        barbell: 'barra olímpica',
+        resistance_bands: 'bandas de resistencia',
+        pull_up_bar: 'barra de dominadas',
+        bench: 'banco',
+        bench_dumbbells: 'banco y mancuernas',
+        bench_barbell: 'banco con barra',
+        gym_access: 'gimnasio completo',
+        kettlebell: 'kettlebell',
+        cable_machine: 'máquina de poleas',
+        smith_machine: 'máquina Smith',
+        leg_press: 'prensa de piernas',
+        medicine_ball: 'balón medicinal',
+        yoga_mat: 'mat de yoga',
+      };
+      return equipmentMap[eq] || eq;
+    }).join(', ');
+
+    return `
 Crea una introducción personalizada y motivadora (máximo 3 párrafos) para un plan de entrenamiento con los siguientes datos:
 
 - Nombre: ${userData.name}
@@ -207,6 +285,7 @@ La introducción debe:
 
 No uses encabezados ni formato especial, solo texto corrido en párrafos.
 `.trim();
+  }
 }
 
 /**
@@ -537,7 +616,7 @@ async function buildWorkoutPrompt(
 
   const goalsText = userData.goals.map(goal => {
     const goalMap: { [key: string]: string } = {
-      weight_loss: 'perder peso',
+      weight_loss: 'bajar grasa',
       muscle_gain: 'ganar músculo',
       strength: 'aumentar fuerza',
       endurance: 'mejorar resistencia',

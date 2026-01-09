@@ -206,3 +206,4 @@ fetch(import.meta.env.VITE_SUPABASE_URL + '/rest/v1/')
 
 Con eso puedo darte la solución exacta. 🚀
 
+

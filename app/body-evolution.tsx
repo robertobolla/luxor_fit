@@ -391,7 +391,7 @@ export default function BodyEvolutionScreen() {
                           : (stats.isPositive ? '#4CAF50' : '#F44336')
                       }
                     ]}>
-                      {stats.change > 0 ? '+' : ''}{stats.change} {metricInfo.unit}
+                      {parseFloat(stats.change) > 0 ? '+' : ''}{stats.change} {metricInfo.unit}
                     </Text>
                     <Text style={styles.statLabel}>Cambio</Text>
                   </View>

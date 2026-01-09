@@ -149,6 +149,13 @@
   overflow-y: auto;
 }
 
+/* Header Actions */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 @media (max-width: 768px) {
   .sidebar {
     width: 200px;

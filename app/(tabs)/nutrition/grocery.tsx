@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
 import { getMealPlan, buildGroceryList } from '../../../src/services/nutrition';
 import { GroceryItem } from '../../../src/types/nutrition';
@@ -23,6 +24,7 @@ import { EmptyState } from '../../../src/components/EmptyStates';
 import { getFriendlyErrorMessage } from '../../../src/utils/errorMessages';
 
 export default function GroceryListScreen() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(true);
   const [groceryList, setGroceryList] = useState<GroceryItem[]>([]);
@@ -66,7 +68,7 @@ export default function GroceryListScreen() {
         action: 'cargar la lista de compras',
         screen: 'Lista de Compras'
       });
-      Alert.alert('Error', friendlyMessage);
+      Alert.alert(t('common.error'), friendlyMessage);
     } finally {
       setIsLoading(false);
     }
@@ -85,7 +87,7 @@ export default function GroceryListScreen() {
       <SafeAreaView style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <StatusBar barStyle="light-content" />
         <ActivityIndicator size="large" color="#ffb300" />
-        <Text style={styles.loadingText}>Cargando lista...</Text>
+        <Text style={styles.loadingText}>{t('groceryList.loadingText')}</Text>
       </SafeAreaView>
     );
   }
@@ -98,14 +100,14 @@ export default function GroceryListScreen() {
           <TouchableOpacity onPress={() => router.push('/(tabs)/nutrition' as any)} style={styles.backIconButton}>
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Lista de Compras</Text>
+          <Text style={styles.headerTitle}>{t('groceryList.title')}</Text>
           <View style={{ width: 24 }} />
         </View>
         <EmptyState
           icon="cart-outline"
-          title="No hay lista de compras"
-          subtitle="Genera tu plan de comidas semanal para ver la lista de ingredientes necesarios."
-          actionText="Ver Plan de Nutrición"
+          title={t('groceryList.noGroceries')}
+          subtitle={t('groceryList.noGroceriesDesc')}
+          actionText={t('groceryList.viewPlan')}
           onAction={() => router.push('/(tabs)/nutrition/plan' as any)}
         />
       </SafeAreaView>
@@ -121,7 +123,7 @@ export default function GroceryListScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backIconButton}>
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Lista de Compras</Text>
+        <Text style={styles.headerTitle}>{t('groceryList.title')}</Text>
         <View style={{ width: 24 }} />
       </View>
       
@@ -129,14 +131,14 @@ export default function GroceryListScreen() {
       <View style={styles.infoBanner}>
         <Ionicons name="information-circle-outline" size={18} color="#ffb300" />
         <Text style={styles.infoBannerText}>
-          La lista se actualiza automáticamente cuando modificas tu plan de comidas
+          {t('groceryList.infoBanner')}
         </Text>
       </View>
 
       {/* Progress */}
       <View style={styles.progressContainer}>
         <Text style={styles.progressText}>
-          {checkedCount} / {groceryList.length} productos
+          {checkedCount} / {groceryList.length} {t('groceryList.products')}
         </Text>
         <View style={styles.progressBar}>
           <View

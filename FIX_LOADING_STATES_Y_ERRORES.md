@@ -620,3 +620,4 @@ Enviar errores críticos a servicio de logging:
 Los usuarios ahora tienen feedback claro y accionable cuando algo sale mal. No más frustraciones por datos perdidos sin saber por qué.
 
 
+

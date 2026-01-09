@@ -16,7 +16,8 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '@/services/supabase';
+import { useTranslation } from 'react-i18next';
+import { supabase } from '../../src/services/supabase';
 import { useSmartNotifications } from '@/hooks/useSmartNotifications';
 import { SkeletonProfile, SkeletonCard } from '../../src/components/SkeletonLoaders';
 import { EmptyWorkouts } from '../../src/components/EmptyStates';
@@ -24,14 +25,47 @@ import { CustomRefreshControl } from '../../src/components/CustomRefreshControl'
 import { useRefresh } from '../../src/hooks/useRefresh';
 import { useNetworkStatus, checkNetworkBeforeOperation } from '../../src/hooks/useNetworkStatus';
 import { getTotalUnreadChatsCount } from '../../src/services/chatService';
+import NotificationBell from '../../src/components/NotificationBell';
+import { useTutorial } from '@/contexts/TutorialContext';
+import { AppTour } from '@/components/AppTour';
+import { HelpModal } from '@/components/HelpModal';
+import { TutorialTooltip } from '@/components/TutorialTooltip';
+type ProfileNameRow = {
+  name: string | null;
+};
+
+type WorkoutPlanRow = {
+  id: string;
+  plan_name: string | null;
+  plan_data: any; // (si después querés lo tipamos bien)
+};
+
+type NutritionTargetRow = {
+  calories: number | null;
+  // agregá más campos si los usás en UI
+};
+
 
 export default function HomeScreen() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(true);
   const [todayWorkout, setTodayWorkout] = useState<any>(null);
   const [todayNutrition, setTodayNutrition] = useState<any>(null);
   const [userName, setUserName] = useState('');
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
+
+  // Tutorial states
+  const { 
+    hasCompletedInitialTour, 
+    shouldShowTooltip, 
+    completeTutorial, 
+    markTooltipShown, 
+    showHelpModal, 
+    setShowHelpModal 
+  } = useTutorial();
+  const [showTour, setShowTour] = useState(false);
+  const [showHomeTooltips, setShowHomeTooltips] = useState(false);
 
   // Detectar estado de conexión
   const { isConnected } = useNetworkStatus();
@@ -52,10 +86,11 @@ export default function HomeScreen() {
     try {
       // Cargar nombre del usuario
       const { data: profileData, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('name')
-        .eq('user_id', user.id)
-        .maybeSingle();
+      .from('user_profiles')
+      .select('name')
+      .eq('user_id', user.id)
+      .maybeSingle<ProfileNameRow>();
+    
 
       if (profileError && profileError.code !== 'PGRST116') {
         console.error('Error loading profile:', profileError);
@@ -67,13 +102,14 @@ export default function HomeScreen() {
 
       // Cargar plan de entrenamiento activo
       const { data: activePlan, error: planError } = await supabase
-        .from('workout_plans')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      .from('workout_plans')
+      .select('id, plan_name, plan_data')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<WorkoutPlanRow>();
+    
 
       if (activePlan?.plan_data) {
         const planData = activePlan.plan_data;
@@ -134,10 +170,10 @@ export default function HomeScreen() {
               // Este día no está completado
               foundDay = {
                 ...dayData,
-                name: dayData.day || `Día ${dayIndex}`,
+                name: dayData.day || t('home.day', { dayIndex }),
                 dayKey,
                 planId: activePlan.id,
-                planName: activePlan.plan_name || 'Plan de Entrenamiento',
+                planName: activePlan.plan_name || t('home.workoutPlan'),
               };
               break;
             }
@@ -154,10 +190,10 @@ export default function HomeScreen() {
             
             setTodayWorkout({
               ...firstDay,
-              name: firstDay.day || 'Día 1',
+              name: firstDay.day || t('home.day', { dayIndex: 1 }),
               dayKey,
               planId: activePlan.id,
-              planName: activePlan.plan_name || 'Plan de Entrenamiento',
+              planName: activePlan.plan_name || t('home.workoutPlan'),
             });
           }
         }
@@ -170,7 +206,7 @@ export default function HomeScreen() {
         .select('*')
         .eq('user_id', user.id)
         .eq('date', today)
-        .maybeSingle();
+        .maybeSingle<NutritionTargetRow>();
 
       if (targetError && targetError.code !== 'PGRST116') {
         console.error('Error loading nutrition target:', targetError);
@@ -208,6 +244,27 @@ export default function HomeScreen() {
     }
   }, [user, loadData]);
 
+  // Mostrar tour inicial la primera vez
+  useEffect(() => {
+    if (!hasCompletedInitialTour && user?.id && !isLoading) {
+      // Esperar un segundo después de cargar para mejor UX
+      const timer = setTimeout(() => {
+        setShowTour(true);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [hasCompletedInitialTour, user, isLoading]);
+
+  // Mostrar tooltips después del tour
+  useEffect(() => {
+    if (shouldShowTooltip('HOME') && user?.id && !isLoading && !showTour) {
+      const timer = setTimeout(() => {
+        setShowHomeTooltips(true);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldShowTooltip, user, isLoading, showTour]);
+
   // Recargar datos cada vez que la pantalla recibe focus
   useFocusEffect(
     React.useCallback(() => {
@@ -219,9 +276,9 @@ export default function HomeScreen() {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return '☀️ Buenos días';
-    if (hour < 18) return '🌤️ Buenas tardes';
-    return '🌙 Buenas noches';
+    if (hour < 12) return t('home.goodMorning');
+    if (hour < 18) return t('home.goodAfternoon');
+    return t('home.goodEvening');
   };
 
   if (isLoading) {
@@ -246,7 +303,7 @@ export default function HomeScreen() {
           <CustomRefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            title="Actualizando datos..."
+            title={t('home.updatingData')}
           />
         }
       >
@@ -255,7 +312,7 @@ export default function HomeScreen() {
           <View style={styles.offlineBanner}>
             <Ionicons name="cloud-offline" size={20} color="#FFD93D" />
             <Text style={styles.offlineText}>
-              Sin conexión a internet. Algunas funciones pueden no estar disponibles.
+              {t('home.offlineMessage')}
             </Text>
           </View>
         )}
@@ -264,30 +321,44 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.greeting}>{getGreeting()}</Text>
-            <Text style={styles.userName}>{userName || 'Usuario'}</Text>
+            <Text style={styles.userName}>{userName || t('home.user')}</Text>
           </View>
-          <TouchableOpacity 
-            onPress={() => {
-              router.push('/chats');
-            }}
-            style={styles.profileButton}
-          >
-            <Ionicons name="paper-plane-outline" size={32} color="#ffb300" />
-            {unreadChatsCount > 0 && (
-              <View style={styles.badge}>
-                <Text style={styles.badgeText}>
-                  {unreadChatsCount > 99 ? '99+' : unreadChatsCount}
-                </Text>
-              </View>
-            )}
-          </TouchableOpacity>
+          <View style={styles.headerIcons}>
+            {/* Icono de Notificaciones */}
+            <NotificationBell />
+            
+            {/* Icono de Mensajes Directos */}
+            <TouchableOpacity 
+              onPress={() => {
+                router.push('/chats');
+              }}
+              style={styles.profileButton}
+            >
+              <Ionicons name="paper-plane-outline" size={32} color="#ffb300" />
+              {unreadChatsCount > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadChatsCount > 99 ? '99+' : unreadChatsCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            {/* Botón de Ayuda */}
+            <TouchableOpacity
+              onPress={() => setShowHelpModal(true)}
+              style={styles.helpButton}
+            >
+              <Ionicons name="help-circle-outline" size={28} color="#ffb300" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Fecha de hoy */}
         <View style={styles.dateCard}>
           <Ionicons name="calendar" size={24} color="#ffb300" />
           <Text style={styles.dateText}>
-            {new Date().toLocaleDateString('es-ES', { 
+            {new Date().toLocaleDateString(t('common.locale') || 'es-ES', { 
               weekday: 'long', 
               day: 'numeric', 
               month: 'long' 
@@ -299,7 +370,7 @@ export default function HomeScreen() {
 
         {/* Sección: Tus Actividades de Hoy */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tus Actividades de Hoy</Text>
+          <Text style={styles.sectionTitle}>{t('home.todayActivities')}</Text>
         </View>
 
         {/* Tarjeta: Entrenamiento de Hoy */}
@@ -308,6 +379,8 @@ export default function HomeScreen() {
           onPress={async () => {
               // Si no hay workout cargado, intentar cargarlo ahora
               if (!todayWorkout) {
+                if (!user?.id) return;
+
                 // Buscar el plan activo y navegar al primer día
                 const { data: activePlan, error: planError } = await supabase
                   .from('workout_plans')
@@ -323,8 +396,9 @@ export default function HomeScreen() {
                 }
 
                 if (activePlan && activePlan.plan_data) {
-                  const schedule = activePlan.plan_data.weekly_structure || 
-                                   activePlan.plan_data.weekly_schedule || 
+                  const planData = activePlan.plan_data as { weekly_structure?: any[]; weekly_schedule?: any[] } | null;
+                  const schedule = planData?.weekly_structure || 
+                                   planData?.weekly_schedule || 
                                    [];
                   
                   // Si schedule es un array, tomar el primer día
@@ -371,15 +445,15 @@ export default function HomeScreen() {
               <Ionicons name="fitness" size={32} color="#FF6B6B" />
             </View>
             <View style={styles.activityContent}>
-              <Text style={styles.activityTitle}>💪 Entrenamiento de Hoy</Text>
+              <Text style={styles.activityTitle}>{t('home.todayWorkout')}</Text>
               <Text style={styles.activitySubtitle}>
                 {todayWorkout 
                   ? `${todayWorkout.planName} - ${todayWorkout.name || todayWorkout.dayKey}` 
-                  : 'No tienes entrenamiento programado'}
+                  : t('home.noWorkoutScheduled')}
               </Text>
               {todayWorkout && todayWorkout.exercises && (
                 <Text style={styles.activityExtraInfo}>
-                  {todayWorkout.exercises.length} ejercicios
+                  {todayWorkout.exercises.length} {t('home.exercises')}
                 </Text>
               )}
             </View>
@@ -395,11 +469,11 @@ export default function HomeScreen() {
               <Ionicons name="restaurant" size={32} color="#ffb300" />
             </View>
             <View style={styles.activityContent}>
-              <Text style={styles.activityTitle}>🥗 Dieta de Hoy</Text>
+              <Text style={styles.activityTitle}>{t('home.todayDiet')}</Text>
               <Text style={styles.activitySubtitle}>
                 {todayNutrition 
-                  ? `Objetivo: ${todayNutrition.calories} kcal` 
-                  : 'Configura tu plan nutricional'}
+                  ? t('home.goalCalories', { calories: todayNutrition.calories })
+                  : t('home.configureNutrition')}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={24} color="#888888" />
@@ -407,6 +481,64 @@ export default function HomeScreen() {
 
         <View style={{ height: 30 }} />
       </ScrollView>
+
+      {/* Tour inicial */}
+      {showTour && (
+        <AppTour
+          onDone={() => {
+            setShowTour(false);
+          }}
+        />
+      )}
+
+      {/* Modal de ayuda */}
+      <HelpModal
+        visible={showHelpModal}
+        onClose={() => setShowHelpModal(false)}
+      />
+
+      {/* Tooltips de tutorial */}
+      {showHomeTooltips && (
+        <TutorialTooltip
+          visible={showHomeTooltips}
+          steps={[
+            {
+              element: <View />,
+              title: t('tutorial.home.title1'),
+              content: t('tutorial.home.content1'),
+              placement: 'center',
+            },
+            {
+              element: <View />,
+              title: t('tutorial.home.title2'),
+              content: t('tutorial.home.content2'),
+              placement: 'center',
+            },
+            {
+              element: <View />,
+              title: t('tutorial.home.title3'),
+              content: t('tutorial.home.content3'),
+              placement: 'center',
+            },
+            {
+              element: <View />,
+              title: t('tutorial.home.title4'),
+              content: t('tutorial.home.content4'),
+              placement: 'center',
+            },
+          ]}
+          onComplete={() => {
+            setShowHomeTooltips(false);
+            completeTutorial('HOME');
+            markTooltipShown('HOME');
+          }}
+          onSkip={() => {
+            setShowHomeTooltips(false);
+            completeTutorial('HOME');
+            markTooltipShown('HOME');
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -515,6 +647,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontWeight: '600',
   },
+  headerIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   profileButton: {
     width: 48,
     height: 48,
@@ -541,6 +678,10 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 11,
     fontWeight: 'bold',
+  },
+  helpButton: {
+    padding: 4,
+    marginLeft: 12,
   },
 });
 

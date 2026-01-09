@@ -15,21 +15,88 @@ export default function Layout() {
   const effectiveRole = isViewingAs && viewAsUser ? viewAsUser.role_type : userRole;
   
   React.useEffect(() => {
-    async function getUserRole() {
+    async function getUserRoleData() {
       if (user?.id) {
-        const { data } = await supabase
+        const userEmail = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress;
+        console.log('🔍 Layout: Obteniendo rol para user_id:', user.id);
+        console.log('🔍 Layout: Email:', userEmail);
+        
+        // Obtener roles por user_id
+        let { data: rolesByUserId, error } = await supabase
           .from('admin_roles')
           .select('role_type')
           .eq('user_id', user.id)
-          .eq('is_active', true)
-          .maybeSingle();
-        if (data) {
-          setUserRole(data.role_type);
+          .eq('is_active', true);
+        
+        if (error) {
+          console.error('❌ Layout: Error obteniendo rol:', error);
+        }
+        
+        // SIEMPRE buscar también por email para combinar roles
+        let rolesByEmail: any[] = [];
+        if (userEmail) {
+          console.log('🔍 Layout: Buscando también por email...');
+          const emailResult = await supabase
+            .from('admin_roles')
+            .select('role_type, user_id')
+            .eq('email', userEmail)
+            .eq('is_active', true);
+          
+          if (emailResult.data && emailResult.data.length > 0) {
+            console.log('✅ Layout: Encontrado por email:', emailResult.data.map(r => r.role_type));
+            rolesByEmail = emailResult.data;
+            
+            // Actualizar user_id para roles encontrados por email que tengan user_id diferente
+            for (const role of emailResult.data) {
+              if (role.user_id !== user.id) {
+                console.log('🔄 Layout: Actualizando user_id para rol:', role.role_type);
+              await supabase
+                .from('admin_roles')
+                .update({ user_id: user.id })
+                  .eq('email', userEmail)
+                  .eq('role_type', role.role_type);
+            }
+          }
+        }
+        }
+        
+        // Combinar TODOS los roles (por user_id Y por email)
+        const allRoles = [...(rolesByUserId || []), ...rolesByEmail];
+        const uniqueRoleTypes = [...new Set(allRoles.map(r => r.role_type))];
+        
+        console.log('✅ Layout: TODOS los roles combinados:', uniqueRoleTypes);
+        
+        // Priorizar roles: admin > empresario > socio
+        if (uniqueRoleTypes.length > 0) {
+          if (uniqueRoleTypes.includes('admin')) {
+            console.log('✅ Layout: Rol final: admin (priorizado)');
+            setUserRole('admin');
+          } else if (uniqueRoleTypes.includes('empresario')) {
+            console.log('✅ Layout: Rol final: empresario');
+            setUserRole('empresario');
+          } else if (uniqueRoleTypes.includes('socio')) {
+            console.log('✅ Layout: Rol final: socio');
+            setUserRole('socio');
+          } else {
+            setUserRole(uniqueRoleTypes[0] as 'admin' | 'socio' | 'empresario');
+          }
+        } else {
+          console.log('⚠️ Layout: No se encontró rol para este usuario');
         }
       }
     }
-    getUserRole();
+    getUserRoleData();
   }, [user?.id]);
+
+
+  // Log para debugging
+  React.useEffect(() => {
+    console.log('📊 Navigation State:', {
+      userRole,
+      effectiveRole,
+      isViewingAs,
+    });
+  }, [userRole, effectiveRole, isViewingAs]);
 
   const navItems = effectiveRole === 'socio' 
     ? [
@@ -38,8 +105,9 @@ export default function Layout() {
       ]
     : effectiveRole === 'empresario'
     ? [
-        { path: '/', label: 'Dashboard', icon: '📊' },
+        { path: '/empresario-dashboard', label: 'Dashboard', icon: '📊' },
         { path: '/empresario-users', label: 'Mis Usuarios', icon: '👥' },
+        { path: '/mensajeria', label: 'Mensajería', icon: '📧' },
         ...(userRole === 'admin' ? [{ path: '/admin-tools', label: 'Admin Tools', icon: '🛠️' }] : []),
       ]
     : (() => {
@@ -52,16 +120,12 @@ export default function Layout() {
           ]},
           { path: '/empresarios', label: 'Empresarios', icon: '🏢' },
           { path: '/stats', label: 'Estadísticas', icon: '📈' },
+          { path: '/admin-tools', label: 'Admin Tools', icon: '🛠️' },
         ];
         
         // Solo admins ven Ejercicios
         if (effectiveRole === 'admin') {
           items.splice(2, 0, { path: '/exercises', label: 'Ejercicios', icon: '🏋️' });
-        }
-        
-        // Admin Tools siempre visible para admins reales (incluso en modo View As)
-        if (userRole === 'admin') {
-          items.push({ path: '/admin-tools', label: 'Admin Tools', icon: '🛠️' });
         }
         
         return items;
@@ -127,7 +191,9 @@ export default function Layout() {
               <p className="user-email">{user?.emailAddresses[0]?.emailAddress}</p>
             </div>
           </div>
-          <UserButton />
+          <div className="header-actions">
+            <UserButton />
+          </div>
         </div>
       </aside>
 
