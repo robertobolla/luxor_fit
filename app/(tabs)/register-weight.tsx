@@ -73,7 +73,7 @@ export default function RegisterWeightScreen() {
       const { error: profileError } = await sb
         .from('user_profiles')
         .update({
-          weight: weightInKg,
+          weight: bodyMetric.weight_kg,
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', user!.id);
