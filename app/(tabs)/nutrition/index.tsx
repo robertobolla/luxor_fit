@@ -486,7 +486,7 @@ export default function NutritionHomeScreen() {
       // Obtener el perfil actual del usuario
       const { data: profileData, error: profileError } = await supabase
         .from('user_profiles')
-        .select('weight, height, goals, activity_types, age, gender')
+        .select('weight, height, goals, age, gender')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -503,7 +503,6 @@ export default function NutritionHomeScreen() {
       const currentProfileHash = JSON.stringify({
         height: profileData.height,
         goals: profileData.goals,
-        activity_types: profileData.activity_types,
         age: profileData.age,
         gender: profileData.gender,
       });
@@ -716,11 +715,10 @@ export default function NutritionHomeScreen() {
           }
         }
         
-        const typedPlanData = planData as { userData?: any; fitness_level?: string; goals?: string[]; activity_types?: string[]; available_days?: number; days_per_week?: number } | null;
+        const typedPlanData = planData as { userData?: any; fitness_level?: string; goals?: string[]; available_days?: number; days_per_week?: number } | null;
         const workoutPlanData = {
           fitness_level: typedPlanData?.userData?.fitness_level || typedPlanData?.fitness_level,
           goals: typedPlanData?.userData?.goals || typedPlanData?.goals || [],
-          activity_types: typedPlanData?.userData?.activity_types || typedPlanData?.activity_types || [],
           available_days: typedPlanData?.userData?.available_days || typedPlanData?.available_days || typedPlanData?.days_per_week,
         };
         
@@ -871,11 +869,10 @@ export default function NutritionHomeScreen() {
 
         // Extraer datos relevantes del plan para usar en la generación de dieta
         // Priorizar userData si existe (datos del formulario), sino usar datos directos del plan
-        const typedPlanData2 = planData as { userData?: any; fitness_level?: string; goals?: string[]; activity_types?: string[]; available_days?: number; days_per_week?: number } | null;
+        const typedPlanData2 = planData as { userData?: any; fitness_level?: string; goals?: string[]; available_days?: number; days_per_week?: number } | null;
         workoutPlanData = {
           fitness_level: typedPlanData2?.userData?.fitness_level || typedPlanData2?.fitness_level,
           goals: typedPlanData2?.userData?.goals || typedPlanData2?.goals || [],
-          activity_types: typedPlanData2?.userData?.activity_types || typedPlanData2?.activity_types || [],
           available_days: typedPlanData2?.userData?.available_days || typedPlanData2?.available_days || typedPlanData2?.days_per_week,
         };
         console.log('📋 Usando datos del plan activo para generar dieta:', workoutPlanData);

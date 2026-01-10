@@ -23,6 +23,7 @@ import { getClerkUserEmailSync } from '../../src/utils/clerkHelpers';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 import { useLoadingState } from '../../src/hooks/useLoadingState';
 import { uploadProfilePhoto, deleteProfilePhoto } from '../../src/services/profilePhoto';
+import { useUnitsStore, formatWeight, formatHeight } from '../../src/store/unitsStore';
 
 const { width } = Dimensions.get('window');
 
@@ -45,6 +46,7 @@ export default function ProfileScreen() {
   const { t } = useTranslation();
   const { user, isLoaded: userLoaded } = useUser();
   const { signOut } = useAuth();
+  const { weightUnit, heightUnit } = useUnitsStore();
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const { isLoading: loading, setLoading, executeAsync } = useLoadingState(true);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -407,11 +409,11 @@ export default function ProfileScreen() {
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t('profile.height')}</Text>
-                <Text style={styles.infoValue}>{profile.height} cm</Text>
+                <Text style={styles.infoValue}>{profile.height ? formatHeight(profile.height, heightUnit) : '-'}</Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>{t('profile.weight')}</Text>
-                <Text style={styles.infoValue}>{profile.weight} kg</Text>
+                <Text style={styles.infoValue}>{profile.weight ? formatWeight(profile.weight, weightUnit, 1) : '-'}</Text>
               </View>
             </>
           )}

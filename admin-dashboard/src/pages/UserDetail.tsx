@@ -102,19 +102,6 @@ export default function UserDetail() {
         </div>
 
         <div className="detail-section">
-          <h2>Tipos de Actividad</h2>
-          <div className="tags-container">
-            {user.activity_types && user.activity_types.length > 0 ? (
-              user.activity_types.map((type, i) => (
-                <span key={i} className="tag">{type}</span>
-              ))
-            ) : (
-              <span className="no-data">Sin preferencias</span>
-            )}
-          </div>
-        </div>
-
-        <div className="detail-section">
           <h2>Equipamiento</h2>
           <div className="tags-container">
             {user.equipment && user.equipment.length > 0 ? (

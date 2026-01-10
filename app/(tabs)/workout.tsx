@@ -837,7 +837,9 @@ export default function WorkoutScreen() {
               onPress={() => setShowInvitationsModal(false)}
               activeOpacity={0.8}
             >
-              <Text style={styles.invitationsCloseButtonText}>Revisar Después</Text>
+<Text style={styles.invitationsCloseButtonText}>
+  {t('common.reviewLater')}
+</Text>
             </TouchableOpacity>
           </View>
         </View>

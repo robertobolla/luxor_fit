@@ -20,18 +20,26 @@ import { supabase } from '../src/services/supabase';
 import { computeAndSaveTargets, createOrUpdateMealPlan, getNutritionProfile } from '../src/services/nutrition';
 import { validateUsernameFormat } from '../src/utils/formValidation';
 import { ConfirmModal } from '../src/components/CustomModal';
+import { useUnitsStore, getWeightInUserUnit, getWeightFromUserUnit, conversions } from '../src/store/unitsStore';
 
 export default function ProfileEditScreen() {
   const { t } = useTranslation();
   const { user } = useUser();
   const insets = useSafeAreaInsets();
+  const { weightUnit, heightUnit } = useUnitsStore();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Etiquetas de unidades
+  const weightUnitLabel = weightUnit === 'kg' ? 'kg' : 'lb';
+  const heightUnitLabel = heightUnit === 'cm' ? 'cm' : 'ft/in';
   
   // Estados del formulario
   const [username, setUsername] = useState('');
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
+  const [heightFeet, setHeightFeet] = useState('');
+  const [heightInches, setHeightInches] = useState('');
   const [age, setAge] = useState('');
   const [checkingUsername, setCheckingUsername] = useState(false);
   const [usernameError, setUsernameError] = useState('');
@@ -64,8 +72,22 @@ export default function ProfileEditScreen() {
 
       if (data) {
         setUsername(data.username || '');
-        setWeight(data.weight?.toString() || '');
-        setHeight(data.height?.toString() || '');
+        // Convertir peso a la unidad del usuario
+        if (data.weight) {
+          const weightInUserUnit = getWeightInUserUnit(data.weight, weightUnit);
+          setWeight(weightInUserUnit.toFixed(1));
+        }
+        // Convertir altura a la unidad del usuario
+        if (data.height) {
+          if (heightUnit === 'ft') {
+            const { feet, inches } = conversions.cmToFt(data.height);
+            setHeightFeet(feet.toString());
+            setHeightInches(inches.toString());
+            setHeight(data.height.toString()); // Mantener cm internamente
+          } else {
+            setHeight(data.height.toString());
+          }
+        }
         setAge(data.age?.toString() || '');
         setOriginalData(data);
       }
@@ -147,17 +169,29 @@ export default function ProfileEditScreen() {
       }
     }
 
-    // Validaciones
+    // Convertir peso a kg si el usuario usa libras
     const weightNum = parseFloat(weight);
-    const heightNum = parseFloat(height);
+    const weightInKg = getWeightFromUserUnit(weightNum, weightUnit);
+    
+    // Convertir altura a cm si el usuario usa pies/pulgadas
+    let heightInCm: number;
+    if (heightUnit === 'ft') {
+      const feet = parseFloat(heightFeet) || 0;
+      const inches = parseFloat(heightInches) || 0;
+      heightInCm = conversions.ftToCm(feet, inches);
+    } else {
+      heightInCm = parseFloat(height);
+    }
+    
     const ageNum = parseInt(age);
 
-    if (isNaN(weightNum) || weightNum <= 0 || weightNum > 300) {
+    // Validaciones (en unidades métricas)
+    if (isNaN(weightInKg) || weightInKg <= 0 || weightInKg > 300) {
       Alert.alert(t('common.error'), t('profileEdit.invalidWeight'));
       return;
     }
 
-    if (isNaN(heightNum) || heightNum <= 0 || heightNum > 250) {
+    if (isNaN(heightInCm) || heightInCm <= 0 || heightInCm > 250) {
       Alert.alert(t('common.error'), t('profileEdit.invalidHeight'));
       return;
     }
@@ -193,18 +227,18 @@ export default function ProfileEditScreen() {
             {
               text: t('profileEdit.saveAndAdaptDiet'),
               onPress: async () => {
-                await saveProfileAndAdaptDiet(weightNum, heightNum, ageNum);
+                await saveProfileAndAdaptDiet(weightInKg, heightInCm, ageNum);
               },
             },
           ]
         );
       } else {
         // No tiene perfil de nutrición, guardar directamente
-        await saveProfile(weightNum, heightNum, ageNum);
+        await saveProfile(weightInKg, heightInCm, ageNum);
       }
     } else {
       // Cambios que no afectan nutrición, guardar directamente
-      await saveProfile(weightNum, heightNum, ageNum);
+      await saveProfile(weightInKg, heightInCm, ageNum);
     }
   };
 
@@ -432,28 +466,55 @@ export default function ProfileEditScreen() {
           
           <View style={styles.inputRow}>
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('profileEdit.weightLabel')}</Text>
+              <Text style={styles.inputLabel}>{t('profileEdit.weightLabel')} ({weightUnitLabel})</Text>
               <TextInput
                 style={styles.input}
                 value={weight}
                 onChangeText={setWeight}
                 keyboardType="numeric"
-                placeholder="70"
+                placeholder={weightUnit === 'kg' ? '70' : '154'}
                 placeholderTextColor="#666666"
               />
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('profileEdit.heightLabel')}</Text>
-              <TextInput
-                style={styles.input}
-                value={height}
-                onChangeText={setHeight}
-                keyboardType="numeric"
-                placeholder="175"
-                placeholderTextColor="#666666"
-              />
-            </View>
+            {heightUnit === 'cm' ? (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('profileEdit.heightLabel')} (cm)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={height}
+                  onChangeText={setHeight}
+                  keyboardType="numeric"
+                  placeholder="175"
+                  placeholderTextColor="#666666"
+                />
+              </View>
+            ) : (
+              <View style={[styles.inputGroup, { flexDirection: 'row', gap: 8 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Ft</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={heightFeet}
+                    onChangeText={setHeightFeet}
+                    keyboardType="numeric"
+                    placeholder="5"
+                    placeholderTextColor="#666666"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>In</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={heightInches}
+                    onChangeText={setHeightInches}
+                    keyboardType="numeric"
+                    placeholder="9"
+                    placeholderTextColor="#666666"
+                  />
+                </View>
+              </View>
+            )}
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>{t('profileEdit.ageLabel')}</Text>
@@ -516,10 +577,18 @@ export default function ProfileEditScreen() {
         cancelText="Solo guardar"
         onConfirm={async () => {
           if (!user?.id) return;
-          const weightNum = parseFloat(weight);
-          const heightNum = parseFloat(height);
+          const weightValue = parseFloat(weight);
+          const weightInKgValue = getWeightFromUserUnit(weightValue, weightUnit);
+          let heightInCmValue: number;
+          if (heightUnit === 'ft') {
+            const feet = parseFloat(heightFeet) || 0;
+            const inches = parseFloat(heightInches) || 0;
+            heightInCmValue = conversions.ftToCm(feet, inches);
+          } else {
+            heightInCmValue = parseFloat(height);
+          }
           const ageNum = parseInt(age);
-          await saveProfileAndAdaptDiet(weightNum, heightNum, ageNum);
+          await saveProfileAndAdaptDiet(weightInKgValue, heightInCmValue, ageNum);
         }}
       />
     </View>

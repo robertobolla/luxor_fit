@@ -44,7 +44,8 @@ export default function Users() {
   useEffect(() => {
     async function loadRole() {
       if (user?.id) {
-        const role = await getUserRole(user.id);
+        const userEmail = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress;
+        const role = await getUserRole(user.id, userEmail);
         console.log('🔍 Rol del usuario actual:', role);
         setUserRole(role);
       }

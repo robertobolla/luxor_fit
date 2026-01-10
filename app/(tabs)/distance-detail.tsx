@@ -11,6 +11,7 @@ import { router, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
+import { useUnitsStore, formatDistance, conversions } from '../../src/store/unitsStore';
 
 
 const { width, height } = Dimensions.get('window');
@@ -25,13 +26,18 @@ interface DistanceData {
 
 export default function DistanceDetailScreen() {
   const { user } = useUser();
+  const { t } = useTranslation();
+  const { distanceUnit } = useUnitsStore();
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [distanceData, setDistanceData] = useState<DistanceData[]>([]);
   const [totalDistance, setTotalDistance] = useState(0);
   const [averageDistance, setAverageDistance] = useState(0);
-  const [goalDistance] = useState(8.05); // Meta en km
-  const { t } = useTranslation();
+  const [goalDistance] = useState(8.05); // Meta en km (5 millas)
+  
+  // Formatear distancia con la unidad del usuario
+  const formatDist = (km: number, decimals: number = 2) => formatDistance(km, distanceUnit, decimals);
+  const distUnitLabel = distanceUnit === 'km' ? 'km' : 'mi';
   // Cargar datos de distancia según el modo de vista
   useEffect(() => {
     loadDistanceData();
@@ -262,7 +268,8 @@ export default function DistanceDetailScreen() {
   };
 
   const getUnitLabel = () => {
-    return 'de 8.05 km';
+    const goalInUserUnit = distanceUnit === 'mi' ? conversions.kmToMi(goalDistance) : goalDistance;
+    return `de ${goalInUserUnit.toFixed(2)} ${distUnitLabel}`;
   };
 
   const getStatusText = () => {
@@ -270,16 +277,20 @@ export default function DistanceDetailScreen() {
       const remaining = goalDistance - averageDistance;
   
       if (remaining > 0) {
-        return t('distance.dailyGoalRemainingKm', {
-          km: remaining.toFixed(2),
+        const remainingInUserUnit = distanceUnit === 'mi' ? conversions.kmToMi(remaining) : remaining;
+        return t('distance.dailyGoalRemaining', {
+          distance: remainingInUserUnit.toFixed(2),
+          unit: distUnitLabel,
         });
       }
   
       return t('distance.dailyGoalAchieved');
     }
   
-    return t('distance.totalDistanceSoFarKm', {
-      km: totalDistance.toFixed(2),
+    const totalInUserUnit = distanceUnit === 'mi' ? conversions.kmToMi(totalDistance) : totalDistance;
+    return t('distance.totalDistanceSoFar', {
+      distance: totalInUserUnit.toFixed(2),
+      unit: distUnitLabel,
     });
   };
   
@@ -525,7 +536,7 @@ export default function DistanceDetailScreen() {
             <View style={styles.statsRow}>
               <View>
                 <Text style={styles.statsNumber}>
-                  {averageDistance.toFixed(2)}
+                  {(distanceUnit === 'mi' ? conversions.kmToMi(averageDistance) : averageDistance).toFixed(2)}
                 </Text>
                 <Text style={styles.statsLabel}>{getUnitLabel()}</Text>
                 <Text style={styles.statsSubtext}>

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/adminService';
-import { generateKeyPoints } from '../services/aiService';
 
 interface ExerciseMetadataModalProps {
   exercise: {
     id: string;
     canonical_name: string;
+    name_en?: string | null;
     category?: string | null;
     muscles?: string[] | null;
     muscle_zones?: string[] | null;
@@ -13,13 +13,11 @@ interface ExerciseMetadataModalProps {
     exercise_type?: string | null;
     equipment?: string[] | null;
     goals?: string[] | null;
-    activity_types?: string[] | null;
     uses_time?: boolean | null;
-    key_points?: string[] | null;
   };
   isOpen: boolean;
   onClose: () => void;
-  onSave: () => void;
+  onSave: () => Promise<void> | void;
 }
 
 const CATEGORIES = [
@@ -40,25 +38,200 @@ const EXERCISE_TYPES = [
   { value: 'isolation', label: 'Aislado' },
 ];
 
+// Músculos en INGLÉS (para compatibilidad con la app móvil)
 const MUSCLES = [
-  'pecho', 'espalda', 'hombros', 'bíceps', 'tríceps', 'antebrazos', 'trapecio',
-  'cuádriceps', 'isquiotibiales', 'glúteos', 'pantorrillas', 'gemelos',
-  'abdominales', 'oblicuos', 'lumbares', 'cuerpo_completo'
+  'chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'trapezius',
+  'quadriceps', 'hamstrings', 'glutes', 'calves',
+  'abs', 'obliques', 'lowerBack', 'fullBody'
 ];
 
+// Etiquetas en español para mostrar en el UI
+const MUSCLE_LABELS: Record<string, string> = {
+  'chest': 'Pecho',
+  'back': 'Espalda',
+  'shoulders': 'Hombros',
+  'biceps': 'Bíceps',
+  'triceps': 'Tríceps',
+  'forearms': 'Antebrazos',
+  'trapezius': 'Trapecio',
+  'quadriceps': 'Cuádriceps',
+  'hamstrings': 'Isquiotibiales',
+  'glutes': 'Glúteos',
+  'calves': 'Pantorrillas',
+  'abs': 'Abdominales',
+  'obliques': 'Oblicuos',
+  'lowerBack': 'Lumbares',
+  'fullBody': 'Cuerpo Completo',
+};
+
+// Mapeo para normalizar cualquier variante al inglés estándar
+const MUSCLE_NORMALIZATION: Record<string, string> = {
+  // Español a Inglés
+  'espalda': 'back',
+  'pecho': 'chest',
+  'hombros': 'shoulders',
+  'bíceps': 'biceps',
+  'tríceps': 'triceps',
+  'antebrazos': 'forearms',
+  'trapecio': 'trapezius',
+  'cuádriceps': 'quadriceps',
+  'cuadriceps': 'quadriceps',
+  'isquiotibiales': 'hamstrings',
+  'glúteos': 'glutes',
+  'gluteos': 'glutes',
+  'pantorrillas': 'calves',
+  'gemelos': 'calves',
+  'abdominales': 'abs',
+  'oblicuos': 'obliques',
+  'lumbares': 'lowerBack',
+  'cuerpo_completo': 'fullBody',
+  // Variantes inglés
+  'traps': 'trapezius',
+  'quads': 'quadriceps',
+  'core': 'abs',
+  'lower_back': 'lowerBack',
+  'lowerback': 'lowerBack',
+  'full_body': 'fullBody',
+  'fullbody': 'fullBody',
+  'lats': 'back',
+};
+
+// Función para normalizar músculos al formato inglés estándar
+const normalizeMuscles = (muscleList: string[]): string[] => {
+  const normalized = new Set<string>();
+  for (const muscle of muscleList) {
+    const lowerMuscle = muscle.toLowerCase();
+    // Si hay un mapeo, usarlo
+    if (MUSCLE_NORMALIZATION[lowerMuscle]) {
+      normalized.add(MUSCLE_NORMALIZATION[lowerMuscle]);
+    }
+    // Si ya está en MUSCLES (inglés estándar), mantenerlo
+    else if (MUSCLES.includes(muscle)) {
+      normalized.add(muscle);
+    }
+    // Ignorar valores desconocidos
+  }
+  return Array.from(normalized);
+};
+
 const MUSCLE_ZONES: Record<string, string[]> = {
-  pecho: ['pecho_superior', 'pecho_medio', 'pecho_inferior'],
-  espalda: ['espalda_superior', 'espalda_media', 'espalda_inferior', 'lats', 'romboides', 'trapecio_superior', 'trapecio_medio'],
-  hombros: ['hombros_frontales', 'hombros_medios', 'hombros_posteriores'],
-  bíceps: ['biceps_cabeza_larga', 'biceps_cabeza_corta', 'braquial'],
-  tríceps: ['triceps_cabeza_lateral', 'triceps_cabeza_medial', 'triceps_cabeza_larga'],
-  cuádriceps: ['cuadriceps_frontal', 'cuadriceps_lateral', 'cuadriceps_medial', 'cuadriceps_intermedio'],
-  isquiotibiales: ['isquiotibiales_superior', 'isquiotibiales_medio', 'isquiotibiales_inferior'],
-  glúteos: ['gluteos_superior', 'gluteos_medio', 'gluteos_inferior'],
-  pantorrillas: ['gemelos', 'soleo'],
-  gemelos: ['gemelos', 'soleo'],
-  abdominales: ['abdominales_superiores', 'abdominales_inferiores', 'transverso'],
-  oblicuos: ['oblicuos_externos', 'oblicuos_internos'],
+  chest: ['upper_chest', 'mid_chest', 'lower_chest'],
+  back: ['upper_back', 'mid_back', 'lower_back', 'lats', 'rhomboids'],
+  shoulders: ['front_delts', 'side_delts', 'rear_delts'],
+  biceps: ['biceps_long_head', 'biceps_short_head', 'brachialis'],
+  triceps: ['triceps_lateral', 'triceps_medial', 'triceps_long'],
+  quadriceps: ['quad_front', 'quad_lateral', 'quad_medial'],
+  hamstrings: ['hamstrings_upper', 'hamstrings_mid', 'hamstrings_lower'],
+  glutes: ['glutes_upper', 'glutes_mid', 'glutes_lower'],
+  calves: ['gastrocnemius', 'soleus'],
+  abs: ['upper_abs', 'lower_abs', 'transverse'],
+  obliques: ['external_obliques', 'internal_obliques'],
+};
+
+// Etiquetas en español para zonas musculares
+const MUSCLE_ZONE_LABELS: Record<string, string> = {
+  // Pecho
+  'upper_chest': 'Pecho Superior',
+  'mid_chest': 'Pecho Medio',
+  'lower_chest': 'Pecho Inferior',
+  // Espalda
+  'upper_back': 'Espalda Superior',
+  'mid_back': 'Espalda Media',
+  'lower_back': 'Espalda Baja',
+  'lats': 'Dorsales',
+  'rhomboids': 'Romboides',
+  // Hombros
+  'front_delts': 'Deltoides Frontal',
+  'side_delts': 'Deltoides Lateral',
+  'rear_delts': 'Deltoides Posterior',
+  // Bíceps
+  'biceps_long_head': 'Bíceps Cabeza Larga',
+  'biceps_short_head': 'Bíceps Cabeza Corta',
+  'brachialis': 'Braquial',
+  // Tríceps
+  'triceps_lateral': 'Tríceps Lateral',
+  'triceps_medial': 'Tríceps Medial',
+  'triceps_long': 'Tríceps Cabeza Larga',
+  // Cuádriceps
+  'quad_front': 'Cuádriceps Frontal',
+  'quad_lateral': 'Cuádriceps Lateral',
+  'quad_medial': 'Cuádriceps Medial',
+  // Isquiotibiales
+  'hamstrings_upper': 'Isquiotibiales Superior',
+  'hamstrings_mid': 'Isquiotibiales Medio',
+  'hamstrings_lower': 'Isquiotibiales Inferior',
+  // Glúteos
+  'glutes_upper': 'Glúteos Superior',
+  'glutes_mid': 'Glúteos Medio',
+  'glutes_lower': 'Glúteos Inferior',
+  // Pantorrillas
+  'gastrocnemius': 'Gastrocnemio',
+  'soleus': 'Sóleo',
+  // Abdominales
+  'upper_abs': 'Abdominales Superiores',
+  'lower_abs': 'Abdominales Inferiores',
+  'transverse': 'Transverso',
+  // Oblicuos
+  'external_obliques': 'Oblicuos Externos',
+  'internal_obliques': 'Oblicuos Internos',
+};
+
+// Normalizar zonas de español a inglés
+const ZONE_NORMALIZATION: Record<string, string> = {
+  // Zonas en español que pueden existir en la BD
+  'pecho_superior': 'upper_chest',
+  'pecho_medio': 'mid_chest',
+  'pecho_inferior': 'lower_chest',
+  'espalda_superior': 'upper_back',
+  'espalda_media': 'mid_back',
+  'espalda_inferior': 'lower_back',
+  'espalda_baja': 'lower_back',
+  'hombros_frontales': 'front_delts',
+  'hombros_medios': 'side_delts',
+  'hombros_posteriores': 'rear_delts',
+  'biceps_cabeza_larga': 'biceps_long_head',
+  'biceps_cabeza_corta': 'biceps_short_head',
+  'triceps_cabeza_lateral': 'triceps_lateral',
+  'triceps_cabeza_medial': 'triceps_medial',
+  'triceps_cabeza_larga': 'triceps_long',
+  'cuadriceps_frontal': 'quad_front',
+  'cuadriceps_lateral': 'quad_lateral',
+  'cuadriceps_medial': 'quad_medial',
+  'isquiotibiales_superior': 'hamstrings_upper',
+  'isquiotibiales_medio': 'hamstrings_mid',
+  'isquiotibiales_inferior': 'hamstrings_lower',
+  'gluteos_superior': 'glutes_upper',
+  'gluteos_medio': 'glutes_mid',
+  'gluteos_inferior': 'glutes_lower',
+  'gemelos': 'gastrocnemius',
+  'soleo': 'soleus',
+  'abdominales_superiores': 'upper_abs',
+  'abdominales_inferiores': 'lower_abs',
+  'transverso': 'transverse',
+  'oblicuos_externos': 'external_obliques',
+  'oblicuos_internos': 'internal_obliques',
+  'romboides': 'rhomboids',
+  'trapecio_superior': 'upper_back',
+  'trapecio_medio': 'mid_back',
+};
+
+// Función para normalizar zonas musculares
+const normalizeMuscleZones = (zoneList: string[]): string[] => {
+  const normalized = new Set<string>();
+  const allValidZones = Object.values(MUSCLE_ZONES).flat();
+  
+  for (const zone of zoneList) {
+    const lowerZone = zone.toLowerCase();
+    // Si hay un mapeo, usarlo
+    if (ZONE_NORMALIZATION[lowerZone]) {
+      normalized.add(ZONE_NORMALIZATION[lowerZone]);
+    }
+    // Si ya está en formato inglés válido, mantenerlo
+    else if (allValidZones.includes(zone)) {
+      normalized.add(zone);
+    }
+  }
+  return Array.from(normalized);
 };
 
 const EQUIPMENT = [
@@ -69,10 +242,6 @@ const EQUIPMENT = [
 
 const GOALS = [
   'weight_loss', 'muscle_gain', 'strength', 'endurance', 'flexibility', 'general_fitness'
-];
-
-const ACTIVITY_TYPES = [
-  'cardio', 'strength', 'sports', 'yoga', 'hiit', 'mixed'
 ];
 
 const EQUIPMENT_LABELS: Record<string, string> = {
@@ -102,15 +271,6 @@ const GOAL_LABELS: Record<string, string> = {
   general_fitness: 'Forma general',
 };
 
-const ACTIVITY_LABELS: Record<string, string> = {
-  cardio: 'Cardio',
-  strength: 'Fuerza',
-  sports: 'Deportes',
-  yoga: 'Yoga/Pilates',
-  hiit: 'HIIT',
-  mixed: 'Mixto',
-};
-
 export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSave }: ExerciseMetadataModalProps) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -118,16 +278,14 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
 
   // Form state
   const [canonicalName, setCanonicalName] = useState(exercise.canonical_name || '');
+  const [nameEn, setNameEn] = useState(exercise.name_en || '');
   const [category, setCategory] = useState(exercise.category || '');
   const [exerciseType, setExerciseType] = useState(exercise.exercise_type || '');
   const [usesTime, setUsesTime] = useState(exercise.uses_time || false);
-  const [muscles, setMuscles] = useState<string[]>(exercise.muscles || []);
-  const [muscleZones, setMuscleZones] = useState<string[]>(exercise.muscle_zones || []);
+  const [muscles, setMuscles] = useState<string[]>(normalizeMuscles(exercise.muscles || []));
+  const [muscleZones, setMuscleZones] = useState<string[]>(normalizeMuscleZones(exercise.muscle_zones || []));
   const [equipment, setEquipment] = useState<string[]>(exercise.equipment || []);
   const [goals, setGoals] = useState<string[]>(exercise.goals || []);
-  const [activityTypes, setActivityTypes] = useState<string[]>(exercise.activity_types || []);
-  const [keyPoints, setKeyPoints] = useState<string[]>(exercise.key_points || ['', '', '', '']);
-  const [generatingKeyPoints, setGeneratingKeyPoints] = useState(false);
 
   // Auto-set movement_type when category changes
   useEffect(() => {
@@ -141,15 +299,14 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
   useEffect(() => {
     if (isOpen) {
       setCanonicalName(exercise.canonical_name || '');
+      setNameEn(exercise.name_en || '');
       setCategory(exercise.category || '');
       setExerciseType(exercise.exercise_type || '');
       setUsesTime(exercise.uses_time || false);
-      setMuscles(exercise.muscles || []);
-      setMuscleZones(exercise.muscle_zones || []);
+      setMuscles(normalizeMuscles(exercise.muscles || []));
+      setMuscleZones(normalizeMuscleZones(exercise.muscle_zones || []));
       setEquipment(exercise.equipment || []);
       setGoals(exercise.goals || []);
-      setActivityTypes(exercise.activity_types || []);
-      setKeyPoints(exercise.key_points && exercise.key_points.length > 0 ? exercise.key_points : ['', '', '', '']);
       setStep(1);
       setError(null);
     }
@@ -172,52 +329,6 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
     }
   };
 
-  const generateKeyPointsWithAI = async () => {
-    setGeneratingKeyPoints(true);
-    setError(null);
-
-    try {
-      // Preparar el contexto del ejercicio
-      const context = {
-        name: canonicalName,
-        category: category,
-        muscles: muscles,
-        equipment: equipment,
-        exerciseType: exerciseType,
-      };
-
-      const generatedKeyPoints = await generateKeyPoints(context);
-      
-      if (generatedKeyPoints && generatedKeyPoints.length > 0) {
-        // Asegurarse de tener exactamente 4 puntos (rellenar con vacíos si es necesario)
-        while (generatedKeyPoints.length < 4) {
-          generatedKeyPoints.push('');
-        }
-        setKeyPoints(generatedKeyPoints.slice(0, 6)); // Máximo 6 puntos
-      }
-    } catch (e: any) {
-      setError(e.message || 'Error al generar puntos clave con IA. Verifica que la API key de OpenAI esté configurada.');
-    } finally {
-      setGeneratingKeyPoints(false);
-    }
-  };
-
-  const updateKeyPoint = (index: number, value: string) => {
-    const newKeyPoints = [...keyPoints];
-    newKeyPoints[index] = value;
-    setKeyPoints(newKeyPoints);
-  };
-
-  const addKeyPoint = () => {
-    setKeyPoints([...keyPoints, '']);
-  };
-
-  const removeKeyPoint = (index: number) => {
-    if (keyPoints.length > 1) {
-      setKeyPoints(keyPoints.filter((_, i) => i !== index));
-    }
-  };
-
   const handleSave = async () => {
     setSaving(true);
     setError(null);
@@ -225,9 +336,6 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
     try {
       const selectedCategory = CATEGORIES.find(c => c.value === category);
       const movementType = selectedCategory?.movementType || null;
-
-      // Filtrar key points vacíos
-      const filteredKeyPoints = keyPoints.filter(kp => kp.trim().length > 0);
 
       // Si el nombre cambió, actualizarlo también
       const updates: any = {
@@ -239,8 +347,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
         muscle_zones: muscleZones.length > 0 ? muscleZones : null,
         equipment: equipment.length > 0 ? equipment : null,
         goals: goals.length > 0 ? goals : null,
-        activity_types: activityTypes.length > 0 ? activityTypes : null,
-        key_points: filteredKeyPoints.length > 0 ? filteredKeyPoints : null,
+        name_en: nameEn.trim() || null,
       };
 
       // Solo actualizar el nombre si cambió
@@ -251,14 +358,24 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
         updates.canonical_name = normalizedCanonicalName;
       }
 
+      console.log('💾 Guardando ejercicio:', exercise.id, updates);
+      
       const { error: updateError } = await supabase
         .from('exercise_videos')
         .update(updates)
         .eq('id', exercise.id);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        console.error('❌ Error al guardar:', updateError);
+        throw updateError;
+      }
+      
+      console.log('✅ Ejercicio guardado, llamando a onSave...');
 
-      onSave();
+      // Esperar a que onSave complete la recarga de datos antes de cerrar
+      await onSave();
+      
+      console.log('✅ onSave completado, cerrando modal...');
       onClose();
     } catch (e: any) {
       setError(e.message || 'Error al guardar metadata');
@@ -273,8 +390,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
     if (step === 1) return category && exerciseType;
     if (step === 2) return muscles.length > 0;
     if (step === 3) return equipment.length > 0;
-    if (step === 4) return goals.length > 0 || activityTypes.length > 0;
-    if (step === 5) return true; // Puntos clave son opcionales
+    if (step === 4) return goals.length > 0;
     return true;
   };
 
@@ -320,7 +436,23 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
                 fontSize: 18,
                 fontWeight: 'bold',
               }}
-              placeholder="Nombre del ejercicio"
+              placeholder="Nombre del ejercicio (Español)"
+            />
+            <input
+              type="text"
+              value={nameEn}
+              onChange={(e) => setNameEn(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: '1px solid #2a2a2a',
+                background: '#0a0a0a',
+                color: '#888',
+                fontSize: 14,
+                marginTop: 8,
+              }}
+              placeholder="English name (optional)"
             />
           </div>
           <button
@@ -343,7 +475,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
 
         {/* Progress indicator */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-          {[1, 2, 3, 4, 5].map((s) => (
+          {[1, 2, 3, 4].map((s) => (
             <div
               key={s}
               style={{
@@ -493,7 +625,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
                       onChange={() => toggleArrayItem(muscles, setMuscles, muscle)}
                       style={{ marginRight: 8 }}
                     />
-                    {muscle}
+                    {MUSCLE_LABELS[muscle] || muscle}
                   </label>
                 ))}
               </div>
@@ -533,7 +665,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
                         onChange={() => toggleArrayItem(muscleZones, setMuscleZones, zone)}
                         style={{ marginRight: 8 }}
                       />
-                      {zone.replace(/_/g, ' ')}
+                      {MUSCLE_ZONE_LABELS[zone] || zone.replace(/_/g, ' ')}
                     </label>
                   ))}
                 </div>
@@ -629,154 +761,6 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
                 ))}
               </div>
             </div>
-
-            <div>
-              <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
-                Tipos de Actividad *
-              </label>
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: 8,
-                padding: 8,
-                border: '1px solid #2a2a2a',
-                borderRadius: 8,
-              }}>
-                {ACTIVITY_TYPES.map(activity => (
-                  <label
-                    key={activity}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      color: '#fff',
-                      cursor: 'pointer',
-                      padding: 8,
-                      borderRadius: 4,
-                      backgroundColor: activityTypes.includes(activity) ? '#1a3a1a' : 'transparent',
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={activityTypes.includes(activity)}
-                      onChange={() => toggleArrayItem(activityTypes, setActivityTypes, activity)}
-                      style={{ marginRight: 8 }}
-                    />
-                    {ACTIVITY_LABELS[activity] || activity}
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 5: Puntos Clave */}
-        {step === 5 && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ color: '#fff', margin: 0 }}>Paso 5: Puntos Clave del Ejercicio</h3>
-              <button
-                onClick={generateKeyPointsWithAI}
-                disabled={generatingKeyPoints || !canonicalName}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: 'none',
-                  background: generatingKeyPoints || !canonicalName ? '#2a2a2a' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: '#fff',
-                  cursor: generatingKeyPoints || !canonicalName ? 'not-allowed' : 'pointer',
-                  fontSize: 14,
-                  fontWeight: 'bold',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                }}
-              >
-                {generatingKeyPoints ? (
-                  <>⏳ Generando...</>
-                ) : (
-                  <>🤖 Generar con IA</>
-                )}
-              </button>
-            </div>
-            
-            <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>
-              💡 Los puntos clave son consejos técnicos específicos para ejecutar correctamente el ejercicio.
-              Puedes agregar entre 3 y 6 puntos.
-            </p>
-
-            <div style={{ marginBottom: 16 }}>
-              {keyPoints.map((point, index) => (
-                <div key={index} style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
-                  <div style={{
-                    minWidth: 32,
-                    height: 32,
-                    borderRadius: '50%',
-                    background: '#2a2a2a',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#4CAF50',
-                    fontWeight: 'bold',
-                    fontSize: 14,
-                  }}>
-                    {index + 1}
-                  </div>
-                  <input
-                    type="text"
-                    value={point}
-                    onChange={(e) => updateKeyPoint(index, e.target.value)}
-                    placeholder={`Punto clave ${index + 1}`}
-                    style={{
-                      flex: 1,
-                      padding: '10px 12px',
-                      borderRadius: 8,
-                      border: '1px solid #2a2a2a',
-                      background: '#0a0a0a',
-                      color: '#fff',
-                      fontSize: 14,
-                    }}
-                  />
-                  {keyPoints.length > 1 && (
-                    <button
-                      onClick={() => removeKeyPoint(index)}
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 8,
-                        border: '1px solid #ff4444',
-                        background: 'transparent',
-                        color: '#ff4444',
-                        cursor: 'pointer',
-                        fontSize: 18,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {keyPoints.length < 6 && (
-              <button
-                onClick={addKeyPoint}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 8,
-                  border: '1px dashed #2a2a2a',
-                  background: 'transparent',
-                  color: '#4CAF50',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  width: '100%',
-                }}
-              >
-                + Agregar otro punto clave
-              </button>
-            )}
           </div>
         )}
 
@@ -797,7 +781,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
             ← Anterior
           </button>
           
-          {step < 5 ? (
+          {step < 4 ? (
             <button
               onClick={() => setStep(step + 1)}
               disabled={!canGoNext()}

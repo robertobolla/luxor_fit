@@ -544,7 +544,7 @@ export async function getOnboardingProfileLite(
   try {
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('gender, age, height, weight, body_fat_percentage, muscle_percentage, activity_types, goals')
+      .select('gender, age, height, weight, body_fat_percentage, muscle_percentage, goals')
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -563,7 +563,6 @@ export async function getOnboardingProfileLite(
       age: data.age,
       body_fat_percentage: data.body_fat_percentage,
       muscle_percentage: data.muscle_percentage,
-      activity_types: data.activity_types,
       goals: data.goals,
     });
 
@@ -572,19 +571,10 @@ export async function getOnboardingProfileLite(
     const birthYear = currentYear - (data.age || 25);
     const birthdate = `${birthYear}-01-01`;
 
-    // Mapear activity_types a Activity
-    // Usar el primer tipo de actividad para determinar el nivel
-    const activityMap: Record<string, Activity> = {
-      cardio: 'moderate',      // 1.55x - 3-5 días/semana cardio
-      strength: 'moderate',    // 1.55x - Entrenamiento de fuerza regular
-      sports: 'moderate',      // 1.55x - Deportes regulares
-      yoga: 'light',           // 1.375x - Actividad ligera
-      hiit: 'high',            // 1.725x - Alta intensidad
-      mixed: 'moderate',       // 1.55x - Combinación de actividades
-    };
-    const activityLevel: Activity = activityMap[data.activity_types?.[0] || 'mixed'] || 'moderate';
+    // Usar nivel de actividad 'moderate' por defecto
+    const activityLevel: Activity = 'moderate';
     
-    console.log('🏃 Activity level calculado:', activityLevel, 'desde activity_type:', data.activity_types?.[0]);
+    console.log('🏃 Activity level:', activityLevel);
     
     const weight_kg = data.weight || 70;
     console.log('⚖️ Peso utilizado:', weight_kg, 'kg');
@@ -981,7 +971,6 @@ async function generateAIMealPlan(
   workoutPlanData?: {
     fitness_level?: string;
     goals?: string[];
-    activity_types?: string[];
     available_days?: number;
     session_duration?: number;
   } | null,
@@ -1012,14 +1001,6 @@ async function generateAIMealPlan(
         flexibility: 'Flexibilidad',
         general_fitness: 'Forma general',
       };
-      const activityMap: Record<string, string> = {
-        cardio: 'Cardio',
-        strength: 'Fuerza',
-        sports: 'Deportes',
-        yoga: 'Yoga',
-        hiit: 'HIIT',
-        mixed: 'Mixto',
-      };
       
       const fitnessLevel = workoutPlanData.fitness_level 
         ? fitnessLevelMap[workoutPlanData.fitness_level] || workoutPlanData.fitness_level 
@@ -1027,16 +1008,12 @@ async function generateAIMealPlan(
       const goals = workoutPlanData.goals 
         ? workoutPlanData.goals.map(g => goalMap[g] || g).join(', ') 
         : '';
-      const activities = workoutPlanData.activity_types 
-        ? workoutPlanData.activity_types.map(a => activityMap[a] || a).join(', ') 
-        : '';
       const days = workoutPlanData.available_days || 0;
       const duration = workoutPlanData.session_duration || 0;
       
       workoutContext = `\n\nPLAN DE ENTRENAMIENTO ACTIVO:\n` +
         `- Nivel de fitness: ${fitnessLevel}\n` +
         `- Objetivos: ${goals}\n` +
-        `- Tipos de actividad: ${activities}\n` +
         `- Frecuencia: ${days} días por semana\n` +
         `- Duración por sesión: ${duration} minutos\n` +
         `IMPORTANTE: La dieta debe estar alineada con este plan de entrenamiento. ` +
@@ -1608,7 +1585,6 @@ export async function computeAndSaveTargets(
   workoutPlanData?: {
     fitness_level?: string;
     goals?: string[];
-    activity_types?: string[];
     available_days?: number;
   } | null
 ): Promise<{ success: boolean; target?: NutritionTarget; error?: string }> {
@@ -1639,37 +1615,15 @@ export async function computeAndSaveTargets(
     if (workoutPlanData) {
       console.log('📋 Usando datos del plan de entrenamiento activo para calcular targets');
       
-      // Mapear activity_types del plan a Activity level
-      // Considerar tanto el tipo de actividad como los días disponibles
-      const activityMap: Record<string, Activity> = {
-        cardio: 'moderate',
-        strength: 'moderate',
-        sports: 'moderate',
-        yoga: 'light',
-        hiit: 'high',
-        mixed: 'moderate',
-      };
-      
-      const planActivityType = workoutPlanData.activity_types?.[0] || 'mixed';
-      const baseActivityLevel = activityMap[planActivityType] || 'moderate';
-      
-      // Ajustar según días disponibles (más días = más actividad)
+      // Calcular nivel de actividad basándose en días disponibles
       if (workoutPlanData.available_days) {
         if (workoutPlanData.available_days >= 5) {
-          // Si entrena 5+ días, aumentar nivel de actividad
-          if (baseActivityLevel === 'light') activityLevel = 'moderate';
-          else if (baseActivityLevel === 'moderate') activityLevel = 'high';
-          else activityLevel = 'high';
+          activityLevel = 'high';
         } else if (workoutPlanData.available_days >= 3) {
-          activityLevel = baseActivityLevel;
+          activityLevel = 'moderate';
         } else {
-          // Si entrena menos de 3 días, reducir nivel
-          if (baseActivityLevel === 'high') activityLevel = 'moderate';
-          else if (baseActivityLevel === 'moderate') activityLevel = 'light';
-          else activityLevel = 'light';
+          activityLevel = 'light';
         }
-      } else {
-        activityLevel = baseActivityLevel;
       }
 
       // Mapear goals del plan a Goal de nutrición
@@ -1743,7 +1697,6 @@ export async function createOrUpdateMealPlan(
   workoutPlanData?: {
     fitness_level?: string;
     goals?: string[];
-    activity_types?: string[];
     available_days?: number;
     session_duration?: number;
   } | null
@@ -1784,29 +1737,18 @@ export async function createOrUpdateMealPlan(
     if (workoutPlanData && userProfile) {
       console.log('📋 Aplicando datos del plan de entrenamiento al contexto de IA');
       
-      // Mapear activity_types del plan a Activity level
-      const activityMap: Record<string, Activity> = {
-        cardio: 'moderate',
-        strength: 'moderate',
-        sports: 'moderate',
-        yoga: 'light',
-        hiit: 'high',
-        mixed: 'moderate',
-      };
-      
-      const planActivityType = workoutPlanData.activity_types?.[0] || 'mixed';
-      let baseActivityLevel = activityMap[planActivityType] || 'moderate';
-      
-      // Ajustar según días disponibles
+      // Calcular nivel de actividad basándose en días disponibles
+      let activityLevel: Activity = 'moderate';
       if (workoutPlanData.available_days) {
         if (workoutPlanData.available_days >= 5) {
-          if (baseActivityLevel === 'light') baseActivityLevel = 'moderate';
-          else if (baseActivityLevel === 'moderate') baseActivityLevel = 'high';
-        } else if (workoutPlanData.available_days < 3) {
-          if (baseActivityLevel === 'high') baseActivityLevel = 'moderate';
-          else if (baseActivityLevel === 'moderate') baseActivityLevel = 'light';
+          activityLevel = 'high';
+        } else if (workoutPlanData.available_days >= 3) {
+          activityLevel = 'moderate';
+        } else {
+          activityLevel = 'light';
         }
       }
+      userProfile.activity_level = activityLevel;
       
       // Mapear goals del plan a Goal
       const goalMap: Record<string, Goal> = {

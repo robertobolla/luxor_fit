@@ -39,6 +39,7 @@ const GOAL_LABELS: Record<string, string> = {
 interface ExerciseVideoRow {
   id: string;
   canonical_name: string;
+  name_en?: string | null;
   name_variations: string[] | null;
   video_url: string | null;
   storage_path: string | null;
@@ -56,9 +57,7 @@ interface ExerciseVideoRow {
   equipment?: string[] | null;
   equipment_alternatives?: string[] | null;
   goals?: string[] | null;
-  activity_types?: string[] | null;
   uses_time?: boolean | null;
-  key_points?: string[] | null;
 }
 
 const DEFAULT_PAGE_SIZE = 20;
@@ -88,7 +87,8 @@ export default function Exercises() {
   useEffect(() => {
     async function checkRole() {
       if (user?.id) {
-        const role = await getUserRole(user.id);
+        const userEmail = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress;
+        const role = await getUserRole(user.id, userEmail);
         setUserRole(role);
       }
     }
@@ -339,8 +339,10 @@ export default function Exercises() {
               {filtered.map((row, idx) => {
                 const hasVideo = !!(row.is_storage_video && row.storage_path) || !!row.video_url;
                 const hasMetadata = !!(row.category || row.muscles?.length || row.exercise_type);
+                // Usar id + muscles como key para forzar re-render cuando cambian los músculos
+                const rowKey = `${row.id}-${JSON.stringify(row.muscles)}`;
                 return (
-                  <tr key={row.canonical_name} style={{ borderBottom: '1px solid #111' }}>
+                  <tr key={rowKey} style={{ borderBottom: '1px solid #111' }}>
                     <td style={{ padding: 10, color: '#888' }}>{(page - 1) * DEFAULT_PAGE_SIZE + idx + 1}</td>
                     <td style={{ padding: 10, fontWeight: 500 }}>{row.canonical_name}</td>
                     <td style={{ padding: 10 }}>
@@ -634,8 +636,32 @@ export default function Exercises() {
             setMetadataModalOpen(false);
             setExerciseForMetadata(null);
           }}
-          onSave={() => {
-            load();
+          onSave={async () => {
+            console.log('🔄 Recargando ejercicios después de guardar...');
+            // Forzar recarga completa de datos después de guardar
+            setLoading(true);
+            setRows([]); // Limpiar para forzar re-render
+            await new Promise(resolve => setTimeout(resolve, 500));
+            try {
+              const { data, error } = await supabase
+                .from('exercise_videos')
+                .select('*')
+                .order('canonical_name', { ascending: true });
+              console.log('📊 Datos recargados:', data?.length, 'ejercicios');
+              if (error) {
+                console.error('❌ Error al recargar:', error);
+              }
+              if (data) {
+                // Log específico para ver los músculos de cada ejercicio
+                const dominadasAsistidas = data.find((e: any) => e.canonical_name === 'Dominadas Asistidas');
+                if (dominadasAsistidas) {
+                  console.log('🏋️ Dominadas Asistidas - muscles:', dominadasAsistidas.muscles);
+                }
+                setRows([...data] as ExerciseVideoRow[]); // Crear nuevo array para forzar re-render
+              }
+            } finally {
+              setLoading(false);
+            }
           }}
         />
       )}

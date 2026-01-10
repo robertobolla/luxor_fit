@@ -43,7 +43,6 @@ export default function PlanIntroductionScreen() {
     age: parseSafeInt(params.age as string, 25),
     fitness_level: (params.fitness_level as string) || 'intermediate',
     goals: parseSafeJSON(params.goals as string, []),
-    activity_types: parseSafeJSON(params.activity_types as string, []),
     available_days: parseSafeInt(params.available_days as string, 3),
     session_duration: parseSafeInt(params.session_duration as string, 45),
     equipment: parseSafeJSON(params.equipment as string, []),

@@ -73,14 +73,42 @@
     "thisWeek": "Esta semana",
     "thisMonth": "Este mes",
     "thisYear": "Este año",
-    "update": "Actualizar"
+    "update": "Actualizar",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "reviewLater": "Revisar después",
+    "current": "Actual",
+    "change": "Cambio",
+    "average": "Promedio",
+    "min": "Mínimo",
+    "max": "Máximo",
+    "noDataYet": "Sin datos aún",
+    "loadingData": "Cargando datos..."
+  },
+  "metrics": {
+    "weight": "Peso",
+    "fat": "Grasa",
+    "muscle": "Músculo"
+  },
+  "bodyProgress": {
+    "title": "Evolución Corporal",
+    "period": "Período",
+    "metric": "Métrica",
+    "history": "Historial",
+    "evolution": "Evolución",
+    "noDataTitle": "Sin datos aún",
+    "noDataDescription": "Registra tus primeras mediciones para ver tu evolución",
+    "addMeasurement": "Registrar medición",
+    "needTwoMeasurements": "Necesitás al menos 2 mediciones para ver la gráfica"
   },
   "distance": {
     "title": "Distancia",
     "goalLabelKm": "de {{goal}} km",
     "dailyGoalRemainingKm": "Estás a {{km}} kilómetros de alcanzar tu objetivo diario",
+    "dailyGoalRemaining": "Estás a {{distance}} {{unit}} de alcanzar tu objetivo diario",
     "dailyGoalAchieved": "¡Objetivo alcanzado! 🎉",
     "totalDistanceSoFarKm": "Hasta ahora, has recorrido un total de {{km}} km.",
+    "totalDistanceSoFar": "Hasta ahora, has recorrido un total de {{distance}} {{unit}}.",
     "weekRangeSameMonth": "{{startDay}} - {{endDay}} {{month}}",
     "weekRangeDifferentMonths": "{{startDay}} {{startMonth}} - {{endDay}} {{endMonth}}"
   },
@@ -300,7 +328,65 @@
     "fitnessLevel": "Nivel de fitness",
     "activeWorkoutPlanTitle": "Plan de entrenamiento activo",
     "activeWorkoutPlanHelper": "Estos son los parámetros que se usarán para generar tu nuevo plan de nutrición:",
-    "restTimerTitle": "Temporizador de descanso"
+    "restTimerTitle": "Temporizador de descanso",
+    "finishWorkout": {
+      "title": "Terminar entrenamiento",
+      "message": "¿Deseas guardar este entrenamiento?",
+      "discard": "Descartar",
+      "savedTitle": "¡Guardado!",
+      "savedMessage": "Entrenamiento de {{activity}} guardado correctamente"
+    },
+    "status": {
+      "paused": "Pausado"
+    },
+    "stats": {
+      "time": "Tiempo"
+    },
+    "completionNote": "¡Excelente trabajo! 💪 Sigue así.",
+    "markCompleted": {
+      "pending": "Marcar como completado",
+      "done": "✓ Entrenamiento completado"
+    },
+    "exercisesTitle": "🏋️ Ejercicios ({{count}})",
+    "finalNotes": "• Hidrátate durante toda la sesión\n• Si sientes dolor (no molestia), detente\n• Estira al finalizar (5-10 min)\n• Registra tus pesos/reps para seguir tu progreso",
+    "inputHint": "Opcional – ayuda a mejorar el plan",
+    "perceivedDifficulty": "💪 Dificultad percibida",
+    "difficultyScaleHint": "1 = Muy fácil, 5 = Muy difícil",
+    "notesOptional": "📝 Notas (opcional)",
+    "notesPlaceholder": "¿Cómo te sentiste? ¿Qué notaste?",
+    "backToWorkout": "Volver a entrenar",
+    "weeklyStructure": "📅 Estructura Semanal",
+    "weekIndicator": {
+      "current": "✓ Semana actual",
+      "completed": "✓ Completada",
+      "next": "⏳ Próxima"
+    },
+    "viewFullDetails": "Ver detalles completos",
+    "keyPrinciples": "🎯 Principios clave",
+    "recommendations": "💡 Recomendaciones",
+    "planAdaptedTitle": "¡Plan adaptado!",
+    "planAdaptedMessage": "Tu entrenamiento ha sido personalizado según tus especificaciones."
+  },
+  "timer": {
+    "restTimerTitle": "Temporizador de descanso",
+    "start": "Iniciar",
+    "restart": "Reiniciar"
+  },
+  "training": {
+    "principles": [
+      "Técnica estricta antes de aumentar cargas",
+      "Progresión semanal controlada (carga o repeticiones)",
+      "Equilibrio entre grupos musculares y descanso adecuado"
+    ],
+    "recommendations": [
+      "Calienta 5–10 minutos antes de empezar",
+      "Descansa 48 h entre estímulos del mismo músculo",
+      "Prioriza rango completo y control del movimiento"
+    ]
+  },
+  "ai": {
+    "adaptButtonTitle": "Adaptar con IA",
+    "adaptButtonSubtitle": "Personaliza con inteligencia artificial"
   },
   "nutrition": {
     "title": "Nutrición",
@@ -594,6 +680,31 @@
       "sampleMonth1": "Octubre",
       "sampleMonth2": "Septiembre",
       "sampleMonth3": "Agosto"
+    },
+    "weekDays": [
+      "D",
+      "L",
+      "M",
+      "M",
+      "J",
+      "V",
+      "S"
+    ],
+    "months": {
+      "short": [
+        "E",
+        "F",
+        "M",
+        "A",
+        "M",
+        "J",
+        "J",
+        "A",
+        "S",
+        "O",
+        "N",
+        "D"
+      ]
     }
   },
   "profile": {
@@ -834,7 +945,59 @@
     "couldNotUploadImage": "No se pudo subir la imagen",
     "couldNotProcessImage": "No se pudo procesar la imagen",
     "couldNotSelectImage": "No se pudo seleccionar la imagen",
-    "couldNotTakePhoto": "No se pudo tomar la foto"
+    "couldNotTakePhoto": "No se pudo tomar la foto",
+    "empty": {
+      "title": "No tienes chats aún",
+      "subtitle": "Agrega amigos para comenzar a chatear"
+    }
+  },
+  "trainingTips": {
+    "default": [
+      "🔥 Calienta bien antes de empezar (5–10 min)",
+      "💪 Prioriza la técnica sobre el peso",
+      "⏱️ Respeta los tiempos de descanso",
+      "🎯 Mantén el core activado durante todos los ejercicios",
+      "📈 Escucha a tu cuerpo y ajusta la intensidad según sea necesario"
+    ],
+    "strength": [
+      "🔥 Calienta bien antes de empezar (5–10 min)",
+      "💪 Prioriza la técnica sobre el peso",
+      "⏱️ Respeta los tiempos de descanso para una recuperación óptima",
+      "🎯 Mantén el core activado durante todos los ejercicios",
+      "📈 Aumenta el peso solo cuando completes todas las series con buena forma"
+    ],
+    "cardio": [
+      "🔥 Calienta con 5 min de cardio ligero",
+      "💧 Mantén una botella de agua cerca",
+      "⏱️ Usa un cronómetro para controlar los intervalos",
+      "🎯 Enfócate en mantener la intensidad alta",
+      "😮‍💨 Controla tu respiración durante los ejercicios"
+    ],
+    "lowerBody": [
+      "🔥 Calienta con movilidad de cadera y rodillas",
+      "💪 Mantén la espalda recta en todos los ejercicios",
+      "⏱️ Descansos más largos para ejercicios pesados",
+      "🎯 Empuja desde los talones en sentadillas",
+      "📈 Progresa gradualmente para evitar lesiones"
+    ],
+    "core": [
+      "🔥 Activa el core antes de cada ejercicio",
+      "💪 Calidad sobre cantidad en cada repetición",
+      "⏱️ Mantén la tensión constante",
+      "🎯 Respira correctamente (exhala en el esfuerzo)",
+      "📈 Aumenta el tiempo bajo tensión antes que el peso"
+    ],
+    "general": [
+      "🔥 Calienta adecuadamente antes de empezar",
+      "💪 Mantén buena técnica en todos los ejercicios",
+      "⏱️ Respeta los tiempos de descanso",
+      "🎯 Escucha a tu cuerpo y ajusta si es necesario",
+      "📈 Progresa gradualmente semana a semana"
+    ]
+  },
+  "time": {
+    "minutes_one": "{{count}} minuto",
+    "minutes_other": "{{count}} minutos"
   },
   "friends": {
     "title": "Amigos",
@@ -963,6 +1126,7 @@
     "privacy": "Privacidad",
     "language": "Idioma",
     "units": "Unidades",
+    "measurementUnits": "Unidades de medida",
     "metric": "Métrico",
     "imperial": "Imperial",
     "darkMode": "Modo oscuro",
@@ -981,6 +1145,27 @@
     "accountDeleted": "Cuenta eliminada",
     "accountDeletedMessage": "Tu cuenta ha sido eliminada exitosamente. Todos tus datos han sido borrados.",
     "legal": "Legal"
+  },
+  "units": {
+    "title": "Unidades de Medida",
+    "quickPresets": "Configuración Rápida",
+    "customizeUnits": "Personalizar Unidades",
+    "metric": "Métrico",
+    "imperial": "Imperial",
+    "custom": "Personalizado",
+    "weight": "Peso",
+    "height": "Altura",
+    "distance": "Distancia",
+    "temperature": "Temperatura",
+    "kilograms": "Kilogramos",
+    "pounds": "Libras",
+    "centimeters": "Centímetros",
+    "feetInches": "Pies/Pulgadas",
+    "kilometers": "Kilómetros",
+    "miles": "Millas",
+    "celsius": "Celsius",
+    "fahrenheit": "Fahrenheit",
+    "infoNote": "Los datos se almacenan internamente en unidades métricas (kg, cm) y se convierten automáticamente según tu preferencia al mostrarlos."
   },
   "alerts": {
     "confirm": "Confirmar",
@@ -1085,6 +1270,8 @@
     "activity_hiit": "🔥 HIIT (entrenamiento intenso)",
     "activity_mixed": "🎯 Mixto (de todo un poco)",
     "minutes": "minutos",
+    "exercise": "ejercicio",
+    "exercises": "ejercicios",
     "day": "día",
     "days": "días",
     "introTitle": "Plan de Entrenamiento con IA",
@@ -1607,7 +1794,9 @@
     "remember": "Recuerda",
     "completeWorkout": "Completar Entrenamiento",
     "registerDetails": "Registra los detalles de tu sesión",
-    "durationLabel": "⏱️ Duración (minutos)"
+    "durationLabel": "⏱️ Duración (minutos)",
+    "warmup": "Calentamiento",
+    "toFailure": "Al Fallo"
   },
   "profileEdit": {
     "title": "Editar Perfil",
@@ -1929,7 +2118,15 @@
     "loadingExercises": "Cargando ejercicios...",
     "noExercisesAvailable": "No hay ejercicios disponibles",
     "noExercisesForMuscleAndEquipment": "No se encontraron ejercicios para este músculo con el equipamiento seleccionado",
-    "problemSavingExerciseFallback": "Hubo un problema al guardar el ejercicio, pero se intentará agregarlo de todas formas."
+    "problemSavingExerciseFallback": "Hubo un problema al guardar el ejercicio, pero se intentará agregarlo de todas formas.",
+    "searchExercise": "Buscar ejercicio...",
+    "searchAllExercises": "Buscar en todos los ejercicios...",
+    "noExercisesFound": "No se encontraron ejercicios",
+    "tryDifferentSearch": "Intenta con otra búsqueda",
+    "exercise": "ejercicio",
+    "exercises": "ejercicios",
+    "exerciseNotes": "Notas del ejercicio",
+    "exerciseNotesPlaceholder": "Ej: Indicaciones especiales, técnica, peso recomendado..."
   },
   "muscles": {
     "chest": "Pecho",

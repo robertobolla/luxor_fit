@@ -102,7 +102,6 @@ export interface UserProfile {
   weight: number | null;
   fitness_level: string | null;
   goals: string[];
-  activity_types: string[];
   available_days: number | null;
   session_duration: number | null;
   equipment: string[];
@@ -546,7 +545,6 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
         weight: null,
         fitness_level: null,
         goals: [],
-        activity_types: [],
         available_days: null,
         session_duration: null,
         equipment: [],
@@ -805,7 +803,6 @@ export async function searchUsers(query: string): Promise<UserProfile[]> {
         weight: null,
         fitness_level: null,
         goals: [],
-        activity_types: [],
         available_days: null,
         session_duration: null,
         equipment: [],

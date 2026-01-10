@@ -350,11 +350,10 @@ export default function NutritionSettingsScreen() {
 
         // Extraer datos relevantes del plan para usar en la generación de dieta
         // Priorizar userData si existe (datos del formulario), sino usar datos directos del plan
-        const typedPlanData = planData as { userData?: any; fitness_level?: string; goals?: string[]; activity_types?: string[]; available_days?: number; days_per_week?: number } | null;
+        const typedPlanData = planData as { userData?: any; fitness_level?: string; goals?: string[]; available_days?: number; days_per_week?: number } | null;
         workoutPlanData = {
           fitness_level: typedPlanData?.userData?.fitness_level || typedPlanData?.fitness_level,
           goals: typedPlanData?.userData?.goals || typedPlanData?.goals || [],
-          activity_types: typedPlanData?.userData?.activity_types || typedPlanData?.activity_types || [],
           available_days: typedPlanData?.userData?.available_days || typedPlanData?.available_days || typedPlanData?.days_per_week,
         };
         

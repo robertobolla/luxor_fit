@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { getUserChats, Chat, subscribeToChats } from '../services/chatService';
 import { getPendingFriendRequests } from '../services/friendsService';
+import { useTranslation } from 'react-i18next';
 
 interface ChatListProps {
   onNavigateToChat?: (chatId: string, otherUserId: string) => void;
@@ -24,6 +25,8 @@ export default function ChatList({ onNavigateToChat, onNavigateToFriends }: Chat
   const [chats, setChats] = useState<Chat[]>([]);
   const [pendingRequests, setPendingRequests] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  
+const { t } = useTranslation();
 
   useEffect(() => {
     if (user?.id) {
@@ -156,8 +159,9 @@ export default function ChatList({ onNavigateToChat, onNavigateToFriends }: Chat
       {chats.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="chatbubbles-outline" size={48} color="#666" />
-          <Text style={styles.emptyText}>No tienes chats aún</Text>
-          <Text style={styles.emptySubtext}>Agrega amigos para comenzar a chatear</Text>
+          <Text style={styles.emptyText}>{t('chat.empty.title')}</Text>
+<Text style={styles.emptySubtext}>{t('chat.empty.subtitle')}</Text>
+
         </View>
       ) : (
         <FlatList

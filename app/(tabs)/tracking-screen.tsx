@@ -174,15 +174,15 @@ export default function TrackingScreen() {
   // Terminar entrenamiento
   const handleFinish = async () => {
     Alert.alert(
-      'Terminar entrenamiento',
-      '¿Deseas guardar este entrenamiento?',
+      t('workout.finishWorkout.title'),
+      t('workout.finishWorkout.message'),
       [
         {
-          text: 'Cancelar',
+          text: t('common.cancel'),
           style: 'cancel',
         },
         {
-          text: 'Descartar',
+          text: t('workout.finishWorkout.discard'),
           style: 'destructive',
           onPress: () => {
             stopGPSTracking();
@@ -190,16 +190,19 @@ export default function TrackingScreen() {
           },
         },
         {
-          text: 'Guardar',
+          text: t('common.save'),
           onPress: async () => {
             stopGPSTracking();
             setIsTracking(false);
-            
+    
             // Guardar en la base de datos
             if (user) {
               const today = new Date().toISOString().split('T')[0];
-              const avgSpeed = trackingTime > 0 ? ((distance / (trackingTime / 3600)) || 0) : 0;
-              
+              const avgSpeed =
+                trackingTime > 0
+                  ? distance / (trackingTime / 3600) || 0
+                  : 0;
+    
               const result = await saveExercise({
                 user_id: user.id,
                 activity_type: activityType,
@@ -210,21 +213,32 @@ export default function TrackingScreen() {
                 has_gps: true,
                 average_speed_kmh: avgSpeed,
               });
-              
+    
               if (result.success) {
                 Alert.alert(
-                  '¡Guardado! ✅',
-                  `Entrenamiento de ${activityName.toLowerCase()} guardado correctamente`,
-                  [{ text: 'OK', onPress: () => router.push('/(tabs)/workout' as any) }]
+                  t('workout.finishWorkout.savedTitle'),
+                  t('workout.finishWorkout.savedMessage', {
+                    activity: activityName.toLowerCase(),
+                  }),
+                  [
+                    {
+                      text: t('common.ok'),
+                      onPress: () => router.push('/(tabs)/workout' as any),
+                    },
+                  ]
                 );
               } else {
-                Alert.alert(t('common.error'), t('workout.couldNotSaveWorkout'));
+                Alert.alert(
+                  t('common.error'),
+                  t('workout.couldNotSaveWorkout')
+                );
               }
             }
           },
         },
       ]
     );
+    
   };
 
   // Formatear tiempo
@@ -260,7 +274,9 @@ export default function TrackingScreen() {
         </View>
         {isPaused && (
           <View style={styles.pausedBadge}>
-            <Text style={styles.pausedText}>PAUSADO</Text>
+<Text style={styles.pausedText}>
+  {t('workout.status.paused')}
+</Text>
           </View>
         )}
       </View>
@@ -307,7 +323,9 @@ export default function TrackingScreen() {
         {/* Estadística principal: Tiempo */}
         <View style={styles.mainStat}>
           <Text style={styles.mainStatValue}>{formatTime(trackingTime)}</Text>
-          <Text style={styles.mainStatLabel}>Tiempo</Text>
+          <Text style={styles.mainStatLabel}>
+  {t('workout.stats.time')}
+</Text>
         </View>
 
         {/* Estadísticas secundarias */}
@@ -346,8 +364,9 @@ export default function TrackingScreen() {
             color="#ffffff"
           />
           <Text style={styles.controlButtonText}>
-            {isPaused ? 'Reanudar' : 'Pausar'}
-          </Text>
+  {isPaused ? t('common.resume') : t('common.pause')}
+</Text>
+
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -355,8 +374,9 @@ export default function TrackingScreen() {
           onPress={handleFinish}
         >
           <Ionicons name="stop" size={24} color="#ffffff" />
-          <Text style={styles.controlButtonText}>Terminar</Text>
-        </TouchableOpacity>
+          <Text style={styles.controlButtonText}>
+  {t('common.finish')}
+</Text>        </TouchableOpacity>
       </View>
     </View>
   );

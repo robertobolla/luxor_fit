@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../src/services/supabase';
 import { LineChart } from 'react-native-chart-kit';
+import { useUnitsStore, formatWeight, getWeightInUserUnit } from '../src/store/unitsStore';
+import { useTranslation } from 'react-i18next';
 
 const { width } = Dimensions.get('window');
 
@@ -29,8 +31,10 @@ interface BodyMetric {
 }
 
 export default function BodyEvolutionScreen() {
+  const { t } = useTranslation();
   const params = useLocalSearchParams();
   const { user } = useUser();
+  const { weightUnit } = useUnitsStore();
   
   // Si se pasa userId, es vista de entrenador
   const targetUserId = (params.userId as string) || user?.id;
@@ -41,6 +45,8 @@ export default function BodyEvolutionScreen() {
   const [metrics, setMetrics] = useState<BodyMetric[]>([]);
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('weight');
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('3months');
+  
+  const weightUnitLabel = weightUnit === 'kg' ? 'kg' : 'lb';
 
   useEffect(() => {
     if (targetUserId) {
@@ -105,7 +111,7 @@ export default function BodyEvolutionScreen() {
     
     switch (selectedMetric) {
       case 'weight':
-        dataPoints = metrics.map(m => m.weight_kg);
+        dataPoints = metrics.map(m => getWeightInUserUnit(m.weight_kg, weightUnit));
         break;
       case 'bodyFat':
         filteredMetrics = metrics.filter(m => m.body_fat_percentage !== null);
@@ -148,7 +154,7 @@ export default function BodyEvolutionScreen() {
       case 'weight':
         return {
           title: 'Peso Corporal',
-          unit: 'kg',
+          unit: weightUnitLabel,
           color: '#ffb300',
           icon: 'fitness' as const,
         };
@@ -175,7 +181,7 @@ export default function BodyEvolutionScreen() {
     let values: number[] = [];
     switch (selectedMetric) {
       case 'weight':
-        values = metrics.map(m => m.weight_kg);
+        values = metrics.map(m => getWeightInUserUnit(m.weight_kg, weightUnit));
         break;
       case 'bodyFat':
         values = metrics.filter(m => m.body_fat_percentage !== null).map(m => m.body_fat_percentage!);
@@ -220,7 +226,9 @@ export default function BodyEvolutionScreen() {
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-        <Text style={styles.headerTitle}>Evolución Corporal</Text>
+        <Text style={styles.headerTitle}>
+  {t('bodyProgress.title')}
+</Text>
           {isTrainerView && targetUserName && (
             <Text style={styles.headerSubtitle}>{targetUserName}</Text>
           )}
@@ -236,8 +244,8 @@ export default function BodyEvolutionScreen() {
       <ScrollView style={styles.scrollView}>
         {/* Selector de período */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Período</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <Text style={styles.sectionTitle}>{t('bodyProgress.period')}</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.periodSelector}>
               {[
                 { value: '1month' as PeriodType, label: '1 Mes' },
@@ -268,8 +276,8 @@ export default function BodyEvolutionScreen() {
 
         {/* Selector de métrica */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Métrica</Text>
-          <View style={styles.metricSelector}>
+        <Text style={styles.sectionTitle}>{t('bodyProgress.metric')}</Text>
+        <View style={styles.metricSelector}>
             <TouchableOpacity
               style={[
                 styles.metricButton,
@@ -338,21 +346,28 @@ export default function BodyEvolutionScreen() {
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#ffb300" />
-            <Text style={styles.loadingText}>Cargando datos...</Text>
+            <Text style={styles.loadingText}>
+  {t('common.loadingData')}
+</Text>
           </View>
         ) : metrics.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="analytics-outline" size={64} color="#666" />
-            <Text style={styles.emptyStateText}>Sin Datos Aún</Text>
+            <Text style={styles.emptyStateText}>
+  {t('common.noDataYet')}
+</Text>
             <Text style={styles.emptyStateSubtext}>
-              Registra tus primeras mediciones para ver tu evolución
-            </Text>
+  {t('bodyProgress.noDataDescription')}
+</Text>
             <TouchableOpacity
               style={styles.addButton}
               onPress={() => router.push('/(tabs)/register-weight' as any)}
             >
               <Ionicons name="add-circle" size={20} color="#1a1a1a" />
-              <Text style={styles.addButtonText}>Registrar Medición</Text>
+             
+<Text style={styles.addButtonText}>
+  {t('bodyProgress.addMeasurement')}
+</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -366,8 +381,8 @@ export default function BodyEvolutionScreen() {
                   <View style={styles.statCard}>
                     <Ionicons name="trending-up" size={20} color={metricInfo.color} />
                     <Text style={styles.statValue}>{stats.current} {metricInfo.unit}</Text>
-                    <Text style={styles.statLabel}>Actual</Text>
-                  </View>
+                    <Text style={styles.statLabel}>{t('common.current')}</Text>
+                    </View>
 
                   <View style={styles.statCard}>
                     <Ionicons 
@@ -393,26 +408,26 @@ export default function BodyEvolutionScreen() {
                     ]}>
                       {parseFloat(stats.change) > 0 ? '+' : ''}{stats.change} {metricInfo.unit}
                     </Text>
-                    <Text style={styles.statLabel}>Cambio</Text>
-                  </View>
+                    <Text style={styles.statLabel}>{t('common.change')}</Text>
+                    </View>
 
                   <View style={styles.statCard}>
                     <Ionicons name="analytics" size={20} color="#999" />
                     <Text style={styles.statValue}>{stats.average} {metricInfo.unit}</Text>
-                    <Text style={styles.statLabel}>Promedio</Text>
-                  </View>
+                    <Text style={styles.statLabel}>{t('common.average')}</Text>
+                    </View>
                 </View>
 
                 <View style={styles.rangeCard}>
                   <View style={styles.rangeItem}>
                     <Ionicons name="arrow-down-circle" size={18} color="#4CAF50" />
-                    <Text style={styles.rangeLabel}>Mínimo</Text>
+                    <Text style={styles.rangeLabel}>{t('common.min')}</Text>
                     <Text style={styles.rangeValue}>{stats.min} {metricInfo.unit}</Text>
                   </View>
                   <View style={styles.rangeDivider} />
                   <View style={styles.rangeItem}>
                     <Ionicons name="arrow-up-circle" size={18} color="#F44336" />
-                    <Text style={styles.rangeLabel}>Máximo</Text>
+                    <Text style={styles.rangeLabel}>{t('common.max')}</Text>
                     <Text style={styles.rangeValue}>{stats.max} {metricInfo.unit}</Text>
                   </View>
                 </View>
@@ -421,7 +436,7 @@ export default function BodyEvolutionScreen() {
 
             {/* Gráfica */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Evolución</Text>
+            <Text style={styles.sectionTitle}>{t('bodyProgress.evolution')}</Text>
               
               {chartData.datasets[0].data.length > 1 ? (
                 <View style={styles.chartContainer}>
@@ -470,17 +485,16 @@ export default function BodyEvolutionScreen() {
               ) : (
                 <View style={styles.noDataCard}>
                   <Ionicons name="bar-chart-outline" size={48} color="#666" />
-                  <Text style={styles.noDataText}>
-                    Necesitas al menos 2 mediciones para ver la gráfica
-                  </Text>
+                  {t('bodyProgress.needTwoMeasurements')}
+
                 </View>
               )}
             </View>
 
             {/* Historial de mediciones */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Historial</Text>
-              {metrics.slice().reverse().map((metric, index) => (
+            <Text style={styles.sectionTitle}>{t('bodyProgress.history')}</Text>
+            {metrics.slice().reverse().map((metric, index) => (
                 <View key={index} style={styles.historyCard}>
                   <View style={styles.historyDate}>
                     <Ionicons name="calendar" size={16} color="#ffb300" />
@@ -494,19 +508,19 @@ export default function BodyEvolutionScreen() {
                   </View>
                   <View style={styles.historyValues}>
                     <View style={styles.historyValue}>
-                      <Text style={styles.historyValueLabel}>Peso</Text>
-                      <Text style={styles.historyValueText}>{metric.weight_kg} kg</Text>
+                    <Text style={styles.historyValueLabel}>{t('metrics.weight')}</Text>
+                    <Text style={styles.historyValueText}>{formatWeight(metric.weight_kg, weightUnit, 1)}</Text>
                     </View>
                     {metric.body_fat_percentage && (
                       <View style={styles.historyValue}>
-                        <Text style={styles.historyValueLabel}>Grasa</Text>
-                        <Text style={styles.historyValueText}>{metric.body_fat_percentage}%</Text>
+<Text style={styles.historyValueLabel}>{t('metrics.fat')}</Text>
+<Text style={styles.historyValueText}>{metric.body_fat_percentage}%</Text>
                       </View>
                     )}
                     {metric.muscle_percentage && (
                       <View style={styles.historyValue}>
-                        <Text style={styles.historyValueLabel}>Músculo</Text>
-                        <Text style={styles.historyValueText}>{metric.muscle_percentage}%</Text>
+<Text style={styles.historyValueLabel}>{t('metrics.muscle')}</Text>
+<Text style={styles.historyValueText}>{metric.muscle_percentage}%</Text>
                       </View>
                     )}
                   </View>

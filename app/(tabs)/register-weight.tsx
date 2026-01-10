@@ -16,11 +16,14 @@ import { useUser } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/services/supabase';
 import { useCustomAlert } from '../../src/components/CustomAlert';
+import { useUnitsStore, getWeightFromUserUnit } from '../../src/store/unitsStore';
 
 export default function RegisterWeightScreen() {
   const { user } = useUser();
   const { t, i18n } = useTranslation();
   const locale = i18n.language; // 'es', 'en', 'es-ES', etc.
+  const { weightUnit } = useUnitsStore();
+  const weightUnitLabel = weightUnit === 'kg' ? 'kg' : 'lb';
 
   // ✅ FIX: Supabase sin tipos -> TS infiere payload como "never".
   // Casteamos el cliente (o from) para evitar los 2 errores que te quedaban.
@@ -66,11 +69,11 @@ export default function RegisterWeightScreen() {
 
       console.log('✅ Measurement saved in history');
 
-      // 2. Update current weight in the user profile
+      // 2. Update current weight in the user profile (always in kg)
       const { error: profileError } = await sb
         .from('user_profiles')
         .update({
-          weight: parseFloat(weight),
+          weight: weightInKg,
           updated_at: new Date().toISOString(),
         })
         .eq('user_id', user!.id);
@@ -115,10 +118,13 @@ export default function RegisterWeightScreen() {
     try {
       setSaving(true);
 
+      // Convertir peso a kg si el usuario usa libras
+      const weightInKg = getWeightFromUserUnit(parseFloat(weight), weightUnit);
+      
       const bodyMetric = {
         user_id: user.id,
         date,
-        weight_kg: parseFloat(weight),
+        weight_kg: weightInKg,
         body_fat_percentage: bodyFat ? parseFloat(bodyFat) : null,
         muscle_percentage: muscle ? parseFloat(muscle) : null,
         notes: notes || null,
@@ -259,12 +265,12 @@ export default function RegisterWeightScreen() {
 
         {/* Weight */}
         <View style={styles.section}>
-          <Text style={styles.label}>{t('registerWeight.weightLabel')}</Text>
+          <Text style={styles.label}>{t('registerWeight.weightLabel')} ({weightUnitLabel})</Text>
           <TextInput
             style={styles.input}
             value={weight}
             onChangeText={setWeight}
-            placeholder="78.5"
+            placeholder={weightUnit === 'kg' ? '78.5' : '173.0'}
             placeholderTextColor="#666"
             keyboardType="decimal-pad"
             autoFocus

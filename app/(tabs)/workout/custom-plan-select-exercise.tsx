@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  TextInput,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -67,6 +68,16 @@ export default function CustomPlanSelectExerciseScreen() {
   const [videoModalVisible, setVideoModalVisible] = useState(false);
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
   const [selectedExerciseName, setSelectedExerciseName] = useState<string>('');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Filtrar ejercicios por búsqueda (nombre exacto)
+  const filteredExercises = useMemo(() => {
+    if (!searchQuery.trim()) return exercises;
+    const query = searchQuery.toLowerCase().trim();
+    return exercises.filter(ex => 
+      ex.canonical_name.toLowerCase().includes(query)
+    );
+  }, [exercises, searchQuery]);
 
   // Resetear el músculo seleccionado y limpiar caché cada vez que la pantalla recibe el foco
   useFocusEffect(
@@ -85,13 +96,62 @@ export default function CustomPlanSelectExerciseScreen() {
   useEffect(() => {
     setSelectedMuscle(null);
     setExercises([]);
+    setSearchQuery('');
   }, [dayNumber]);
+
+  // Resetear búsqueda cuando se cambia de músculo
+  useEffect(() => {
+    setSearchQuery('');
+  }, [selectedMuscle]);
 
   useEffect(() => {
     if (selectedMuscle) {
       loadExercises(selectedMuscle);
     }
   }, [selectedMuscle]);
+
+  // Búsqueda global cuando el usuario escribe sin seleccionar músculo
+  useEffect(() => {
+    if (!selectedMuscle && searchQuery.trim().length >= 2) {
+      searchAllExercises(searchQuery.trim());
+    } else if (!selectedMuscle && searchQuery.trim().length === 0) {
+      setExercises([]);
+    }
+  }, [searchQuery, selectedMuscle]);
+
+  // Buscar en todos los ejercicios (búsqueda global - nombre y descripción)
+  const searchAllExercises = async (query: string) => {
+    setLoading(true);
+    try {
+      console.log('🔍 Búsqueda global:', query);
+      
+      // Buscar en nombre O descripción
+      const { data, error } = await supabase
+        .from('exercise_videos')
+        .select('id, canonical_name, description, muscles, muscle_zones, equipment, video_url, storage_path, is_storage_video')
+        .or(`video_url.not.is.null,and(is_storage_video.eq.true,storage_path.not.is.null)`)
+        .or(`canonical_name.ilike.%${query}%,description.ilike.%${query}%`)
+        .order('canonical_name', { ascending: true })
+        .limit(50);
+
+      if (error) {
+        console.error('Error en búsqueda global:', error);
+        return;
+      }
+
+      const exercisesWithVideo = (data || []).filter(ex => {
+        const hasVideo = (ex.is_storage_video && ex.storage_path) || ex.video_url;
+        return hasVideo;
+      });
+
+      console.log(`✅ ${exercisesWithVideo.length} ejercicios encontrados para "${query}"`);
+      setExercises(exercisesWithVideo);
+    } catch (error) {
+      console.error('❌ Error en búsqueda global:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadExercises = async (muscle: string) => {
     setLoading(true);
@@ -237,7 +297,7 @@ export default function CustomPlanSelectExerciseScreen() {
   };
 
   if (selectedMuscle === null) {
-    // Mostrar selección de músculos
+    // Mostrar selección de músculos con buscador global
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
@@ -264,26 +324,118 @@ export default function CustomPlanSelectExerciseScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        <ScrollView style={styles.content}>
-          <Text style={styles.description}>
-            {t('customPlan.selectMuscleDescription')}
-          </Text>
+        {/* Buscador global de ejercicios */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder={t('customPlan.searchAllExercises')}
+            placeholderTextColor="#666"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.clearButton}
+            >
+              <Ionicons name="close-circle" size={20} color="#888" />
+            </TouchableOpacity>
+          )}
+        </View>
 
-          <View style={styles.musclesGrid}>
-            {MUSCLES.map((muscle) => (
-              <TouchableOpacity
-                key={muscle}
-                style={styles.muscleButton}
-                onPress={() => setSelectedMuscle(muscle)}
-              >
-                <Text style={styles.muscleButtonText}>
-                {t(`muscles.${muscle}`)}
+        <ScrollView style={styles.content}>
+          {/* Mostrar resultados de búsqueda si hay query */}
+          {searchQuery.trim().length >= 2 ? (
+            loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#ffb300" />
+                <Text style={styles.loadingText}>{t('customPlan.loadingExercises')}</Text>
+              </View>
+            ) : exercises.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="search-outline" size={64} color="#666" />
+                <Text style={styles.emptyStateText}>
+                  {t('customPlan.noExercisesFound')}
                 </Text>
-                <Ionicons name="chevron-forward" size={20} color="#999" />
-              </TouchableOpacity>
-            ))}
-          </View>
+                <Text style={styles.emptyStateSubtext}>
+                  {t('customPlan.tryDifferentSearch')}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.exercisesList}>
+                <Text style={styles.exercisesCount}>
+                  {exercises.length} {exercises.length === 1 ? t('customPlan.exercise') : t('customPlan.exercises')}
+                </Text>
+                {exercises.map((exercise) => (
+                  <TouchableOpacity
+                    key={exercise.id}
+                    style={styles.exerciseCard}
+                    onPress={() => handleSelectExercise(exercise)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.exerciseCardContent}>
+                      <View style={styles.exerciseHeader}>
+                        <Text style={styles.exerciseName}>{exercise.canonical_name}</Text>
+                        <TouchableOpacity
+                          style={styles.videoButton}
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            handleShowVideo(exercise);
+                          }}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Ionicons name="play-circle" size={32} color="#ffb300" />
+                        </TouchableOpacity>
+                      </View>
+                      {/* Mostrar el músculo del ejercicio */}
+                      {exercise.muscles && exercise.muscles.length > 0 && (
+                        <Text style={styles.exerciseMuscle}>
+                          {t(`muscles.${exercise.muscles[0]}`)}
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )
+          ) : (
+            <>
+              <Text style={styles.description}>
+                {t('customPlan.selectMuscleDescription')}
+              </Text>
+
+              <View style={styles.musclesGrid}>
+                {MUSCLES.map((muscle) => (
+                  <TouchableOpacity
+                    key={muscle}
+                    style={styles.muscleButton}
+                    onPress={() => setSelectedMuscle(muscle)}
+                  >
+                    <Text style={styles.muscleButtonText}>
+                    {t(`muscles.${muscle}`)}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={20} color="#999" />
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </>
+          )}
         </ScrollView>
+
+        {/* Modal de video */}
+        <ExerciseVideoModal
+          visible={videoModalVisible}
+          videoUrl={selectedVideoUrl}
+          exerciseName={selectedExerciseName}
+          onClose={() => {
+            setVideoModalVisible(false);
+            setSelectedVideoUrl(null);
+            setSelectedExerciseName('');
+          }}
+        />
       </SafeAreaView>
     );
   }
@@ -319,24 +471,52 @@ export default function CustomPlanSelectExerciseScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Buscador de ejercicios */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={t('customPlan.searchExercise')}
+          placeholderTextColor="#666"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity
+            onPress={() => setSearchQuery('')}
+            style={styles.clearButton}
+          >
+            <Ionicons name="close-circle" size={20} color="#888" />
+          </TouchableOpacity>
+        )}
+      </View>
+
       <ScrollView style={styles.content}>
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#ffb300" />
             <Text style={styles.loadingText}>{t('customPlan.loadingExercises')}</Text>
             </View>
-        ) : exercises.length === 0 ? (
+        ) : filteredExercises.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="fitness-outline" size={64} color="#666" />
-            <Text style={styles.emptyStateText}>{t('customPlan.noExercisesAvailable')}</Text>
-<Text style={styles.emptyStateSubtext}>
-  {t('customPlan.noExercisesForMuscleAndEquipment')}
-</Text>
-
+            <Text style={styles.emptyStateText}>
+              {searchQuery ? t('customPlan.noExercisesFound') : t('customPlan.noExercisesAvailable')}
+            </Text>
+            <Text style={styles.emptyStateSubtext}>
+              {searchQuery 
+                ? t('customPlan.tryDifferentSearch')
+                : t('customPlan.noExercisesForMuscleAndEquipment')}
+            </Text>
           </View>
         ) : (
           <View style={styles.exercisesList}>
-            {exercises.map((exercise) => (
+            <Text style={styles.exercisesCount}>
+              {filteredExercises.length} {filteredExercises.length === 1 ? t('customPlan.exercise') : t('customPlan.exercises')}
+            </Text>
+            {filteredExercises.map((exercise) => (
               <TouchableOpacity
                 key={exercise.id}
                 style={styles.exerciseCard}
@@ -480,8 +660,42 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 12,
   },
+  exerciseMuscle: {
+    fontSize: 13,
+    color: '#888',
+    marginTop: 4,
+  },
   videoButton: {
     padding: 4,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2a2a2a',
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 44,
+    color: '#ffffff',
+    fontSize: 16,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  exercisesCount: {
+    fontSize: 13,
+    color: '#888',
+    marginBottom: 12,
   },
 });
 

@@ -69,6 +69,7 @@ interface Exercise {
   reps: number[]; // Mantener para compatibilidad
   setTypes?: SetInfo[]; // Nuevo campo para tipos de series
   rest_seconds?: number; // Tiempo de descanso en segundos
+  notes?: string; // Notas del entrenador o usuario para este ejercicio
 }
 
 export default function CustomPlanDayDetailScreen() {
@@ -111,6 +112,7 @@ export default function CustomPlanDayDetailScreen() {
   const [rirValues, setRirValues] = useState<string[]>([]); // RIR para cada serie
   const [setTypes, setSetTypes] = useState<SetInfo[]>([]);
   const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
+  const [exerciseNotes, setExerciseNotes] = useState<string>(''); // Notas del ejercicio
   
   // Ref para saber si hay cambios sin guardar (para no sobrescribir con AsyncStorage)
   const hasLocalChanges = React.useRef(false);
@@ -247,6 +249,9 @@ export default function CustomPlanDayDetailScreen() {
         setSets(defaultSets.toString());
       }
       
+      // Inicializar notas del ejercicio
+      setExerciseNotes(editingExercise.notes || '');
+      
       console.log('✅ Estados inicializados para:', editingExercise.name);
     } else {
       // Limpiar estados cuando se cierra el modal
@@ -255,6 +260,7 @@ export default function CustomPlanDayDetailScreen() {
       setReps([]);
       setRirValues([]);
       setSets('');
+      setExerciseNotes('');
       setShowSetTypeModal(false);
       setSelectedSetIndex(-1);
     }
@@ -514,6 +520,8 @@ export default function CustomPlanDayDetailScreen() {
             setTypes: finalSetTypes,
             // Mantener rest_seconds si existe
             rest_seconds: ex.rest_seconds || 120,
+            // Guardar notas del ejercicio
+            notes: exerciseNotes.trim() || undefined,
           }
         : ex
     );
@@ -527,6 +535,7 @@ export default function CustomPlanDayDetailScreen() {
     setSets('');
     setReps([]);
     setSetTypes([]);
+    setExerciseNotes('');
   };
 
   const toggleExerciseExpansion = (exerciseId: string) => {
@@ -1312,6 +1321,16 @@ export default function CustomPlanDayDetailScreen() {
                     </View>
                   )}
                 </View>
+                  
+                  {/* Mostrar notas del ejercicio si existen */}
+                  {exercise.notes && (
+                    <View style={styles.exerciseNotesContainer}>
+                      <Ionicons name="document-text-outline" size={14} color="#ffb300" />
+                      <Text style={styles.exerciseNotesText} numberOfLines={2}>
+                        {exercise.notes}
+                      </Text>
+                    </View>
+                  )}
                     </View>
                   );
                 })}
@@ -1461,6 +1480,21 @@ export default function CustomPlanDayDetailScreen() {
                     <Ionicons name="add-circle" size={22} color="#ffb300" />
                     <Text style={styles.addSetButtonText}>{t('customPlan.addSet')}</Text>
                   </TouchableOpacity>
+                </View>
+
+                {/* Campo de notas del ejercicio */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>{t('customPlan.exerciseNotes')}</Text>
+                  <TextInput
+                    style={styles.notesInput}
+                    value={exerciseNotes}
+                    onChangeText={setExerciseNotes}
+                    placeholder={t('customPlan.exerciseNotesPlaceholder')}
+                    placeholderTextColor="#666"
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
                 </View>
 
                 <View style={styles.modalButtons}>
@@ -1855,6 +1889,21 @@ const styles = StyleSheet.create({
   exerciseDetails: {
     gap: 0,
   },
+  exerciseNotesContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#2a2a2a',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 10,
+    gap: 8,
+  },
+  exerciseNotesText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#aaa',
+    fontStyle: 'italic',
+  },
   setsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2072,6 +2121,17 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     borderWidth: 1,
     borderColor: '#444',
+  },
+  notesInput: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#444',
+    minHeight: 80,
     textAlign: 'center',
     minHeight: 52,
   },

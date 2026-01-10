@@ -20,7 +20,7 @@ import { generateWorkoutPlan } from '../../src/services/aiService';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 import { useRetry } from '../../src/hooks/useRetry';
 import { useLoadingState } from '../../src/hooks/useLoadingState';
-import { FitnessLevel, FitnessGoal, Equipment, ActivityType } from '../../src/types';
+import { FitnessLevel, FitnessGoal, Equipment } from '../../src/types';
 
 // Equipment keys for translation lookup
 const EQUIPMENT_KEYS: Record<Equipment, string> = {
@@ -41,6 +41,28 @@ const EQUIPMENT_KEYS: Record<Equipment, string> = {
   [Equipment.YOGA_MAT]: 'yoga_mat',
 };
 
+// Orden personalizado de equipamiento (GYM_ACCESS primero)
+const EQUIPMENT_ORDER = [
+  Equipment.GYM_ACCESS,
+  Equipment.NONE,
+  Equipment.DUMBBELLS,
+  Equipment.BARBELL,
+  Equipment.RESISTANCE_BANDS,
+  Equipment.PULL_UP_BAR,
+  Equipment.BENCH,
+  Equipment.BENCH_DUMBBELLS,
+  Equipment.BENCH_BARBELL,
+  Equipment.KETTLEBELL,
+  Equipment.CABLE_MACHINE,
+  Equipment.SMITH_MACHINE,
+  Equipment.LEG_PRESS,
+  Equipment.MEDICINE_BALL,
+  Equipment.YOGA_MAT,
+];
+
+// Todos los equipamientos excepto GYM_ACCESS (para seleccionar todo cuando eliges gimnasio)
+const ALL_EQUIPMENT_EXCEPT_GYM = EQUIPMENT_ORDER.filter(e => e !== Equipment.GYM_ACCESS);
+
 interface UserProfile {
   name: string;
   age: number;
@@ -48,7 +70,6 @@ interface UserProfile {
   weight: number;
   fitness_level: string;
   goals: string[];
-  activity_types: string[];
   available_days: number;
   session_duration: number;
   equipment: string[];
@@ -76,13 +97,13 @@ export default function WorkoutGeneratorScreen() {
   const [formData, setFormData] = useState({
     fitness_level: FitnessLevel.BEGINNER,
     goals: [] as FitnessGoal[],
-    activity_types: [] as ActivityType[],
     available_days: 3,
     session_duration: 30,
     equipment: [] as Equipment[],
   });
   const [showActivateModal, setShowActivateModal] = useState(false);
   const [newPlanId, setNewPlanId] = useState<string | null>(null);
+  const [previousEquipmentSelection, setPreviousEquipmentSelection] = useState<Equipment[]>([]);
   
   // Ref para cleanup de timeout de navegación
   const navigationTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
@@ -97,14 +118,13 @@ export default function WorkoutGeneratorScreen() {
   // Esto asegura que si el usuario borra un plan y vuelve, no vea el plan anterior
   useFocusEffect(
     useCallback(() => {
-      // Solo limpiar si no estamos generando un plan actualmente
-      if (!isGenerating && !showForm) {
+      // Solo limpiar si no estamos generando un plan actualmente Y no estamos mostrando el modal
+      if (!isGenerating && !showForm && !showActivateModal) {
         setGeneratedPlan(null);
         setNewPlanId(null);
-        setShowActivateModal(false);
         setError('');
       }
-    }, [isGenerating, showForm])
+    }, [isGenerating, showForm, showActivateModal])
   );
 
   // Cleanup: Limpiar timeout de navegación al desmontar
@@ -171,11 +191,12 @@ export default function WorkoutGeneratorScreen() {
     setFormData({
       fitness_level: FitnessLevel.BEGINNER,
       goals: [],
-      activity_types: [],
       available_days: 3,
       session_duration: 30,
       equipment: [],
     });
+    // Resetear selección previa de equipamiento
+    setPreviousEquipmentSelection([]);
     // Mostrar formulario directamente (ya se seleccionó IA desde el modal anterior)
     setShowForm(true);
   };
@@ -195,40 +216,6 @@ export default function WorkoutGeneratorScreen() {
       default:
         return true;
     }
-  };
-
-  // Inferir tipos de actividad basándose en los objetivos seleccionados
-  const inferActivityTypes = (goals: FitnessGoal[]): ActivityType[] => {
-    const activitySet = new Set<ActivityType>();
-    
-    goals.forEach(goal => {
-      switch (goal) {
-        case FitnessGoal.MUSCLE_GAIN:
-        case FitnessGoal.STRENGTH:
-          activitySet.add(ActivityType.STRENGTH);
-          break;
-        case FitnessGoal.WEIGHT_LOSS:
-          activitySet.add(ActivityType.CARDIO);
-          activitySet.add(ActivityType.HIIT);
-          break;
-        case FitnessGoal.ENDURANCE:
-          activitySet.add(ActivityType.CARDIO);
-          break;
-        case FitnessGoal.FLEXIBILITY:
-          activitySet.add(ActivityType.YOGA);
-          break;
-        case FitnessGoal.GENERAL_FITNESS:
-          activitySet.add(ActivityType.MIXED);
-          break;
-      }
-    });
-    
-    // Si no hay actividades inferidas, usar mixed como fallback
-    if (activitySet.size === 0) {
-      activitySet.add(ActivityType.MIXED);
-    }
-    
-    return Array.from(activitySet);
   };
 
   const nextFormStep = () => {
@@ -258,12 +245,32 @@ export default function WorkoutGeneratorScreen() {
   };
 
   const toggleEquipment = (equipment: Equipment) => {
-    setFormData(prev => ({
-      ...prev,
-      equipment: prev.equipment.includes(equipment)
-        ? prev.equipment.filter(e => e !== equipment)
-        : [...prev.equipment, equipment]
-    }));
+    if (equipment === Equipment.GYM_ACCESS) {
+      // Si GYM_ACCESS ya está seleccionado, deseleccionarlo y restaurar selección previa
+      if (formData.equipment.includes(Equipment.GYM_ACCESS)) {
+        setFormData(prev => ({ ...prev, equipment: previousEquipmentSelection }));
+        setPreviousEquipmentSelection([]);
+      } else {
+        // Guardar selección actual (sin GYM_ACCESS)
+        const currentSelection = formData.equipment.filter(e => e !== Equipment.GYM_ACCESS);
+        setPreviousEquipmentSelection(currentSelection);
+        // Seleccionar GYM_ACCESS + todos los demás equipamientos
+        setFormData(prev => ({ ...prev, equipment: [Equipment.GYM_ACCESS, ...ALL_EQUIPMENT_EXCEPT_GYM] }));
+      }
+    } else {
+      // Comportamiento normal para otros equipamientos
+      setFormData(prev => {
+        if (prev.equipment.includes(equipment)) {
+          // Si GYM_ACCESS está activo y deseleccionamos algo, desactivar GYM_ACCESS también
+          if (prev.equipment.includes(Equipment.GYM_ACCESS)) {
+            return { ...prev, equipment: prev.equipment.filter(e => e !== equipment && e !== Equipment.GYM_ACCESS) };
+          }
+          return { ...prev, equipment: prev.equipment.filter(e => e !== equipment) };
+        } else {
+          return { ...prev, equipment: [...prev.equipment, equipment] };
+        }
+      });
+    }
   };
 
   const handleGeneratePlan = async () => {
@@ -278,15 +285,11 @@ export default function WorkoutGeneratorScreen() {
     setError('');
 
     try {
-      // Inferir tipos de actividad basándose en los objetivos
-      const inferredActivityTypes = inferActivityTypes(formData.goals);
-      
       // Combinar datos del perfil con datos del formulario
       const workoutData: UserProfile = {
         ...userProfile,
         fitness_level: formData.fitness_level,
         goals: formData.goals,
-        activity_types: inferredActivityTypes,
         available_days: formData.available_days,
         session_duration: formData.session_duration,
         equipment: formData.equipment,
@@ -325,54 +328,8 @@ export default function WorkoutGeneratorScreen() {
         // Si se guardó exitosamente, preguntar si quiere activarlo
         if (saved && planId) {
           setGeneratedPlan(null); // Limpiar el plan generado para no mostrar la vista de detalle
-          
-          // Mostrar alerta para activar el plan
-          Alert.alert(
-            t('workoutGenerator.planCreated'),
-            t('workoutGenerator.activatePlanQuestion'),
-            [
-              {
-                text: t('workoutGenerator.viewLater'),
-                style: 'cancel',
-                onPress: () => {
-                  // Limpiar estados y navegar a la pestaña Entrenar
-                  setNewPlanId(null);
-                  setShowForm(false);
-                  setFormStep(0);
-                  setError('');
-                  router.replace('/(tabs)/workout' as any);
-                },
-              },
-              {
-                text: t('workoutGenerator.yesActivate'),
-                onPress: async () => {
-                  if (!user || !planId) return;
-                  try {
-                    // Activar el plan
-                    const { error: rpcError } = await supabase.rpc('activate_workout_plan', {
-                      p_user_id: user.id,
-                      p_plan_id: planId,
-                    });
-
-                    if (rpcError) {
-                      console.error('Error activando plan:', rpcError);
-                      Alert.alert(t('common.error'), t('workoutGenerator.couldNotActivatePlan'));
-                    }
-                    
-                    // Limpiar estados y navegar a la pestaña Entrenar
-                    setNewPlanId(null);
-                    setShowForm(false);
-                    setFormStep(0);
-                    setError('');
-                    router.replace('/(tabs)/workout' as any);
-                  } catch (err) {
-                    console.error('Error activando plan:', err);
-                    Alert.alert(t('common.error'), t('workoutGenerator.couldNotActivatePlan'));
-                  }
-                },
-              },
-            ]
-          );
+          setNewPlanId(planId); // Guardar el ID del plan para usarlo en el modal
+          setShowActivateModal(true); // Mostrar el modal estilizado
         }
       } else {
         setError('No se pudo generar el plan después de varios intentos');
@@ -397,7 +354,6 @@ export default function WorkoutGeneratorScreen() {
         userData: {
           fitness_level: formData.fitness_level,
           goals: formData.goals,
-          activity_types: formData.activity_types,
           available_days: formData.available_days,
           session_duration: formData.session_duration,
           equipment: formData.equipment,
@@ -435,26 +391,20 @@ export default function WorkoutGeneratorScreen() {
   const handleActivatePlan = async (activate: boolean) => {
     if (!newPlanId || !user) return;
 
+    const planIdToNavigate = newPlanId; // Guardar referencia antes de limpiar
     setShowActivateModal(false);
 
     if (activate) {
       try {
-        // Desactivar todos los planes del usuario
-        await supabase
-          .from('workout_plans')
-          .update({ is_active: false })
-          .eq('user_id', user.id);
+        // Usar RPC para activar el plan (más consistente)
+        const { error: rpcError } = await supabase.rpc('activate_workout_plan', {
+          p_user_id: user.id,
+          p_plan_id: newPlanId,
+        });
 
-        // Activar el nuevo plan
-        const { error } = await supabase
-          .from('workout_plans')
-          .update({ is_active: true })
-          .eq('id', newPlanId)
-          .eq('user_id', user.id);
-
-        if (error) {
-          console.error('Error activando plan:', error);
-          Alert.alert(t('common.warning'), t('workoutGenerator.planSavedNotActivated'));
+        if (rpcError) {
+          console.error('Error activando plan:', rpcError);
+          // No mostrar alert aquí, el plan se guardó correctamente
         } else {
           console.log('✅ Plan activado correctamente');
         }
@@ -471,14 +421,18 @@ export default function WorkoutGeneratorScreen() {
     setError('');
 
     // Pequeño delay para asegurar que los estados se limpien antes de navegar
-    // Guardar referencia del timeout para poder limpiarlo
     navigationTimeoutRef.current = setTimeout(() => {
-      // Navegar al detalle del plan recién creado para que lo vea inmediatamente
-      router.replace({
-        pathname: '/(tabs)/workout-plan-detail',
-        params: { planId: newPlanId }
-      } as any);
-      navigationTimeoutRef.current = null; // Limpiar referencia después de ejecutar
+      if (activate) {
+        // Si activó el plan, navegar al detalle del plan
+        router.replace({
+          pathname: '/(tabs)/workout-plan-detail',
+          params: { planId: planIdToNavigate }
+        } as any);
+      } else {
+        // Si canceló, navegar a la lista de planes de entrenamiento
+        router.replace('/(tabs)/workout' as any);
+      }
+      navigationTimeoutRef.current = null;
     }, 100);
   };
 
@@ -589,23 +543,26 @@ export default function WorkoutGeneratorScreen() {
         subtitle: '',
         content: (
           <View>
-            {[15, 30, 45, 60, 90].map((mins) => (
-              <TouchableOpacity
-                key={mins}
-                style={[
-                  styles.formOptionButton,
-                  formData.session_duration === mins && styles.formOptionButtonSelected
-                ]}
-                onPress={() => setFormData(prev => ({ ...prev, session_duration: mins }))}
-              >
-                <Text style={[
-                  styles.formOptionText,
-                  formData.session_duration === mins && styles.formOptionTextSelected
-                ]}>
-                  {mins} {t('workoutGenerator.minutes')}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {[15, 30, 45, 60, 75, 90].map((mins) => {
+              const exerciseCount = Math.floor(mins / 15);
+              return (
+                <TouchableOpacity
+                  key={mins}
+                  style={[
+                    styles.formOptionButton,
+                    formData.session_duration === mins && styles.formOptionButtonSelected
+                  ]}
+                  onPress={() => setFormData(prev => ({ ...prev, session_duration: mins }))}
+                >
+                  <Text style={[
+                    styles.formOptionText,
+                    formData.session_duration === mins && styles.formOptionTextSelected
+                  ]}>
+                    {mins} {t('workoutGenerator.minutes')} ({exerciseCount} {exerciseCount === 1 ? t('workoutGenerator.exercise') : t('workoutGenerator.exercises')})
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         ),
       },
@@ -614,7 +571,7 @@ export default function WorkoutGeneratorScreen() {
         subtitle: t('customPlan.selectAllYouHave'),
         content: (
           <View>
-            {Object.values(Equipment).map((equipment) => (
+            {EQUIPMENT_ORDER.map((equipment) => (
               <TouchableOpacity
                 key={equipment}
                 style={[
@@ -937,48 +894,6 @@ export default function WorkoutGeneratorScreen() {
 
           <View style={{ height: 40 }} />
         </ScrollView>
-
-        {/* Modal para activar plan */}
-        <Modal
-          visible={showActivateModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowActivateModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Ionicons name="checkmark-circle" size={64} color="#ffb300" />
-              <Text style={styles.modalTitle}>
-  {t('workoutGenerator.planGenerated')}
-</Text>
-<Text style={styles.modalText}>
-  {t('workoutGenerator.planGeneratedSuccess')}
-</Text>
-<Text style={styles.modalQuestion}>
-  {t('workoutGenerator.activatePlanNow')}
-</Text>
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonSecondary]}
-                  onPress={() => handleActivatePlan(false)}
-                >
-                  <Text style={styles.modalButtonSecondaryText}>
-  {t('workoutGenerator.later')}
-</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.modalButtonPrimary]}
-                  onPress={() => handleActivatePlan(true)}
-                >
-                  <Text style={styles.modalButtonPrimaryText}>
-  {t('workoutGenerator.activate')}
-</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
       </SafeAreaView>
     );
   }
@@ -1072,6 +987,48 @@ export default function WorkoutGeneratorScreen() {
 
       {/* Modal de formulario */}
       {renderForm()}
+
+      {/* Modal para activar plan - SIEMPRE renderizado para que aparezca cuando se necesite */}
+      <Modal
+        visible={showActivateModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowActivateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Ionicons name="checkmark-circle" size={64} color="#ffb300" />
+            <Text style={styles.modalTitle}>
+              {t('workoutGenerator.planGenerated')}
+            </Text>
+            <Text style={styles.modalText}>
+              {t('workoutGenerator.planGeneratedSuccess')}
+            </Text>
+            <Text style={styles.modalQuestion}>
+              {t('workoutGenerator.activatePlanNow')}
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSecondary]}
+                onPress={() => handleActivatePlan(false)}
+              >
+                <Text style={styles.modalButtonSecondaryText}>
+                  {t('workoutGenerator.later')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                onPress={() => handleActivatePlan(true)}
+              >
+                <Text style={styles.modalButtonPrimaryText}>
+                  {t('workoutGenerator.activate')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

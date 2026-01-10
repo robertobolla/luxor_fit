@@ -51,15 +51,6 @@ export enum FitnessGoal {
   GENERAL_FITNESS = 'general_fitness'
 }
 
-export enum ActivityType {
-  CARDIO = 'cardio',
-  STRENGTH = 'strength',
-  SPORTS = 'sports',
-  YOGA = 'yoga',
-  HIIT = 'hiit',
-  MIXED = 'mixed'
-}
-
 export enum Equipment {
   NONE = 'none',
   DUMBBELLS = 'dumbbells',

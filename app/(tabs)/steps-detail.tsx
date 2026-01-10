@@ -69,7 +69,7 @@ export default function StepsDetailScreen() {
         // Datos por día de la semana
         // Ojo: tus labels eran ES (D L M M J V S). Los dejamos como estaban.
         // Si querés, después los hacemos dependientes del locale.
-        const weekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+        const weekDays = t('stepsDetail.weekDays', { returnObjects: true }) as string[];
         return weekDays.map((day, i) => ({
           label: day,
           value: i === 5 ? 187 : Math.floor(Math.random() * 5000), // Viernes tiene datos reales
@@ -89,7 +89,7 @@ export default function StepsDetailScreen() {
 
       case 'year':
         // Datos por mes del año (tus labels eran ES: E F M A M J J A S O N D)
-        const months = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+        const months = t('stepsDetail.months.short', { returnObjects: true }) as string[];
         return months.map((month) => ({
           label: month,
           value: Math.floor(Math.random() * 150000),

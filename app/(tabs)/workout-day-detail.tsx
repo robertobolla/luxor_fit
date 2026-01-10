@@ -28,17 +28,157 @@ import Svg, { Circle } from 'react-native-svg';
 import { Audio } from 'expo-av';
 import { Vibration } from 'react-native';
 
+// Determina si un ejercicio es de abdominales o peso corporal (sin RIR, más reps permitidas)
+function isAbsOrBodyweightExercise(name: string): boolean {
+  const absKeywords = [
+    'abdominal', 'crunch', 'plancha', 'plank', 'sit-up', 'situp',
+    'oblicuo', 'core', 'dead bug', 'dragon flag', 'leg raise',
+    'elevacion de piernas', 'russian twist', 'giros rusos'
+  ];
+  const bodyweightKeywords = [
+    'flexiones', 'push-up', 'pushup', 'push up',
+    'dominadas', 'pull-up', 'pullup', 'pull up', 
+    'fondos', 'dips', 'burpees', 'jumping jack',
+    'mountain climber', 'escalador'
+  ];
+  
+  const lowerName = (name || '').toLowerCase();
+  return absKeywords.some(k => lowerName.includes(k)) || 
+         bodyweightKeywords.some(k => lowerName.includes(k));
+}
+
+// Función para enriquecer ejercicios de un día con progresión
+function enrichDayExercises(dayData: any): any {
+  if (!dayData || !dayData.exercises) return dayData;
+  
+  return {
+    ...dayData,
+    exercises: dayData.exercises.map((exercise: any, index: number) => {
+      // Si ya tiene setTypes completos, no modificar
+      if (exercise.setTypes && exercise.setTypes.length > 0 && exercise.setTypes[0]?.type) {
+        return exercise;
+      }
+      
+      const exerciseName = exercise.name || '';
+      const isAbsOrBodyweight = isAbsOrBodyweightExercise(exerciseName);
+      
+      // Parsear el formato de reps: "8-10 @ RIR 2" o "10" o "8-10"
+      const repsString = String(exercise.reps || '10');
+      let { minReps, maxReps } = parseRepsString(repsString);
+      
+      // Aplicar límites de repeticiones para ejercicios normales (no abs/bodyweight)
+      if (!isAbsOrBodyweight) {
+        // Máximo 12 reps para empezar
+        maxReps = Math.min(maxReps, 12);
+        // Mínimo terminar por debajo de 10
+        minReps = Math.min(minReps, 8);
+        // Asegurar que maxReps >= minReps
+        if (maxReps < minReps) {
+          maxReps = minReps + 2;
+        }
+      }
+      
+      const numWorkingSets = exercise.sets || 4;
+      const restSeconds = parseRestToSeconds(exercise.rest);
+      
+      // Agregar calentamiento SOLO al primer ejercicio del día (no para abs/bodyweight)
+      const isFirstExercise = index === 0;
+      const warmupCount = (isFirstExercise && !isAbsOrBodyweight) ? 2 : 0;
+      
+      const setTypes: any[] = [];
+      const repsArray: number[] = [];
+      
+      // Series de calentamiento
+      for (let i = 0; i < warmupCount; i++) {
+        setTypes.push({ type: 'warmup', reps: null, rir: null });
+        repsArray.push(0);
+      }
+      
+      // Series de trabajo con progresión
+      for (let i = 0; i < numWorkingSets; i++) {
+        const progress = i / Math.max(numWorkingSets - 1, 1);
+        const currentReps = Math.round(maxReps - ((maxReps - minReps) * progress));
+        
+        // Para ejercicios de abs/bodyweight: sin RIR
+        if (isAbsOrBodyweight) {
+          setTypes.push({
+            type: 'normal',
+            reps: currentReps,
+            rir: null,
+          });
+        } else {
+          const currentRir = Math.round(4 - (3 * progress)); // RIR 4 -> 1
+          const isLastSet = i === numWorkingSets - 1;
+          const isFailure = isLastSet && currentRir <= 1;
+          
+          setTypes.push({
+            type: isFailure ? 'failure' : 'normal',
+            reps: currentReps,
+            rir: isFailure ? 0 : currentRir,
+          });
+        }
+        repsArray.push(currentReps);
+      }
+      
+      return {
+        ...exercise,
+        sets: warmupCount + numWorkingSets,
+        reps: repsArray,
+        setTypes,
+        rest_seconds: restSeconds,
+      };
+    }),
+  };
+}
+
+// Funciones auxiliares para enriquecer ejercicios
+function parseRepsString(repsString: string): { minReps: number; maxReps: number; baseRir: number | null } {
+  const rirMatch = repsString.match(/@\s*RIR\s*(\d+)/i);
+  const baseRir = rirMatch ? parseInt(rirMatch[1]) : null;
+  
+  const repsOnlyString = repsString.replace(/@.*$/, '').trim();
+  const rangeMatch = repsOnlyString.match(/(\d+)\s*[-–]\s*(\d+)/);
+  
+  if (rangeMatch) {
+    return { minReps: parseInt(rangeMatch[1]), maxReps: parseInt(rangeMatch[2]), baseRir };
+  }
+  
+  const singleMatch = repsOnlyString.match(/(\d+)/);
+  const reps = singleMatch ? parseInt(singleMatch[1]) : 10;
+  return { minReps: Math.max(reps - 2, 4), maxReps: reps, baseRir };
+}
+
+function parseRestToSeconds(rest: string | number | undefined): number {
+  if (typeof rest === 'number') return rest;
+  if (!rest) return 90;
+  const match = String(rest).match(/(\d+)/);
+  if (match) {
+    const value = parseInt(match[0]);
+    if (value > 300) return value;
+    if (String(rest).toLowerCase().includes('min')) return value * 60;
+    return value;
+  }
+  return 90;
+}
+
+function isCompoundExercise(name: string): boolean {
+  const compounds = ['press', 'sentadilla', 'squat', 'peso muerto', 'deadlift', 'dominadas', 'pull-up', 'remo', 'row', 'hip thrust', 'zancadas', 'lunges', 'fondos', 'dips'];
+  return compounds.some(k => (name || '').toLowerCase().includes(k));
+}
+
 export default function WorkoutDayDetailScreen() {
   const { t } = useTranslation();
   const params = useLocalSearchParams();
   const { showAlert } = useAlert();
   const { user } = useUser();
   
-  // Parsear los datos del día con validación
+  // Parsear los datos del día con validación y enriquecimiento
   const parseDayData = (dataString: string | undefined) => {
     try {
       if (dataString) {
-        return JSON.parse(dataString as string);
+        const parsed = JSON.parse(dataString as string);
+        // Enriquecer con progresión de series
+        return enrichDayExercises(parsed);
       }
     } catch (e) {
       console.error('Error parseando dayData:', e);
@@ -127,7 +267,12 @@ export default function WorkoutDayDetailScreen() {
         
         if (dayDataFromDB) {
           console.log('✅ Datos del día encontrados:', JSON.stringify(dayDataFromDB, null, 2));
-          setDayData(dayDataFromDB);
+          
+          // Enriquecer ejercicios con progresión si no tienen setTypes
+          const enrichedDayData = enrichDayExercises(dayDataFromDB);
+          console.log('🔧 Ejercicios enriquecidos con progresión');
+          
+          setDayData(enrichedDayData);
         } else {
           console.warn('⚠️ No se encontraron datos para', dayName);
         }
@@ -517,7 +662,9 @@ export default function WorkoutDayDetailScreen() {
           {!isCustomPlan && dayData.duration && (
             <View style={styles.durationBadge}>
               <Ionicons name="time-outline" size={18} color="#ffb300" />
-              <Text style={styles.durationText}>{dayData.duration} minutos</Text>
+              <Text style={styles.durationText}>
+  {t('time.minutes', { count: dayData.duration })}
+</Text>
             </View>
           )}
         </View>
@@ -554,25 +701,33 @@ export default function WorkoutDayDetailScreen() {
                   size={24} 
                   color={isCompleted ? "#4CAF50" : "#1a1a1a"} 
                 />
-                <Text style={[
-                  styles.completionButtonText,
-                  isCompleted && styles.completionButtonTextCompleted
-                ]}>
-                  {isCompleted ? '✓ Entrenamiento Completado' : 'Marcar como Completado'}
-                </Text>
+              <Text style={[
+  styles.completionButtonText,
+  isCompleted && styles.completionButtonTextCompleted
+]}>
+  {isCompleted
+    ? t('workout.markCompleted.done')
+    : t('workout.markCompleted.pending')}
+</Text>
+
               </>
             )}
           </TouchableOpacity>
           {isCompleted && (
-            <Text style={styles.completionNote}>
-              ¡Excelente trabajo! 💪 Sigue así.
-            </Text>
+         <Text style={styles.completionNote}>
+         {t('workout.completionNote')}
+       </Text>
+       
           )}
         </View>
 
         {/* Ejercicios */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🏋️ Ejercicios ({dayData.exercises?.length || 0})</Text>
+        <Text style={styles.sectionTitle}>
+  {t('workout.exercisesTitle', {
+    count: dayData.exercises?.length || 0,
+  })}
+</Text>
           {dayData.exercises?.map((exercise: any, index: number) => {
             const isOldFormat = typeof exercise === 'string';
             const exerciseName = isOldFormat ? exercise : exercise.name;
@@ -690,7 +845,7 @@ export default function WorkoutDayDetailScreen() {
                 )}
 
                 {!isExpanded && !isOldFormat && sets && reps && (
-                  <View style={styles.seriesDetailContainer}>
+                  <View style={styles.setsGrid}>
                     {(() => {
                       // Convertir reps a array si no lo es
                       const repsArray = Array.isArray(reps) ? reps : Array(sets).fill(reps);
@@ -705,64 +860,70 @@ export default function WorkoutDayDetailScreen() {
                         const setRir = setTypes?.[i]?.rir;
                         
                         let label = '';
-                        let color = '#ffb300';
-                        let typeText = '';
+                        let badgeStyle = 'normal';
                         
                         switch (setType) {
                           case 'warmup':
                             label = 'C';
-                            color = '#4CAF50';
-                            typeText = ' (Calentamiento)';
+                            badgeStyle = 'warmup';
                             break;
                           case 'failure':
-                            // Las series al fallo también se numeran secuencialmente
                             seriesCount++;
                             label = `${seriesCount} F`;
-                            color = '#F44336';
-                            typeText = ' (Al Fallo)';
+                            badgeStyle = 'failure';
                             break;
                           case 'drop':
                             label = 'D';
-                            color = '#9C27B0';
-                            typeText = ' (Drop)';
+                            badgeStyle = 'drop';
                             break;
                           case 'normal':
                           default:
-                            // Las series normales se numeran secuencialmente
                             seriesCount++;
                             label = seriesCount.toString();
-                            color = '#ffb300';
-                            typeText = '';
+                            badgeStyle = 'normal';
                         }
                         
                         seriesData.push({
                           label,
                           reps: setReps,
-                          color,
-                          typeText,
                           type: setType,
                           rir: setRir,
+                          badgeStyle,
                         });
                       }
                       
                       return seriesData.map((serie, idx) => (
-                        <View key={idx} style={styles.serieDetailItem}>
-                          <View style={[styles.serieLabel, { backgroundColor: serie.color }]}>
-                            <Text style={styles.serieLabelText}>{serie.label}</Text>
+                        <View key={idx} style={styles.setBadge}>
+                          <View style={[
+                            styles.setBadgeNumber,
+                            serie.badgeStyle === 'warmup' && styles.setBadgeWarmup,
+                            serie.badgeStyle === 'normal' && styles.setBadgeNormal,
+                            serie.badgeStyle === 'failure' && styles.setBadgeFailure,
+                            serie.badgeStyle === 'drop' && styles.setBadgeDrop,
+                          ]}>
+                            <Text style={styles.setBadgeNumberText}>{serie.label}</Text>
                           </View>
-                          <Text style={styles.serieDetailText}>
+                          <View style={styles.setBadgeContent}>
                             {serie.type === 'warmup' ? (
-                              <Text style={styles.serieTypeText}>{serie.typeText}</Text>
+                              <Text style={styles.setBadgeReps}>{t('workoutDay.warmup')}</Text>
+                            ) : serie.type === 'failure' ? (
+                              <View style={styles.setBadgeInfo}>
+                                <Text style={styles.setBadgeReps}>
+                                  {serie.reps} reps
+                                </Text>
+                                <Text style={styles.setBadgeFailureText}>{t('workoutDay.toFailure')}</Text>
+                              </View>
                             ) : (
-                              <>
-                                {serie.reps} {typeof serie.reps === 'string' && serie.reps.toLowerCase() === 'al fallo' ? '' : 'reps'}
+                              <View style={styles.setBadgeInfo}>
+                                <Text style={styles.setBadgeReps}>
+                                  {serie.reps} reps
+                                </Text>
                                 {serie.rir !== null && serie.rir !== undefined && (
-                                  <Text style={styles.serieRirText}> • RIR {serie.rir}</Text>
+                                  <Text style={styles.setBadgeRir}>RIR {serie.rir}</Text>
                                 )}
-                                <Text style={styles.serieTypeText}>{serie.typeText}</Text>
-                              </>
+                              </View>
                             )}
-                          </Text>
+                          </View>
                         </View>
                       ));
                     })()}
@@ -780,11 +941,9 @@ export default function WorkoutDayDetailScreen() {
             <View style={styles.finalNotesContent}>
               <Text style={styles.finalNotesTitle}>{t('workoutDay.remember')}</Text>
               <Text style={styles.finalNotesText}>
-                • Hidrátate durante toda la sesión{'\n'}
-                • Si sientes dolor (no molestia), detente{'\n'}
-                • Estira al finalizar (5-10 min){'\n'}
-                • Registra tus pesos/reps para seguir tu progreso
-              </Text>
+  {t('workout.finalNotes')}
+</Text>
+
             </View>
           </View>
         </View>
@@ -823,12 +982,16 @@ export default function WorkoutDayDetailScreen() {
                 placeholderTextColor="#666"
                 keyboardType="numeric"
               />
-              <Text style={styles.inputHint}>Opcional - Ayuda a mejorar el plan</Text>
-            </View>
+<Text style={styles.inputHint}>
+  {t('workout.inputHint')}
+</Text>
+              </View>
 
             {/* Dificultad */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>💪 Dificultad percibida</Text>
+            <Text style={styles.inputLabel}>
+  {t('workout.perceivedDifficulty')}
+</Text>
               <View style={styles.difficultyContainer}>
                 {[1, 2, 3, 4, 5].map((level) => (
                   <TouchableOpacity
@@ -849,18 +1012,21 @@ export default function WorkoutDayDetailScreen() {
                 ))}
               </View>
               <Text style={styles.inputHint}>
-                1=Muy fácil, 5=Muy difícil
-              </Text>
+  {t('workout.difficultyScaleHint')}
+</Text>
+
             </View>
 
             {/* Notas */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>📝 Notas (opcional)</Text>
+            <Text style={styles.inputLabel}>
+  {t('workout.notesOptional')}
+</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
                 value={notes}
                 onChangeText={setNotes}
-                placeholder="¿Cómo te sentiste? ¿Qué notaste?"
+                placeholder={t('workout.notesPlaceholder')}
                 placeholderTextColor="#666"
                 multiline
                 numberOfLines={3}
@@ -879,7 +1045,8 @@ export default function WorkoutDayDetailScreen() {
                   setNotes('');
                 }}
               >
-                <Text style={styles.modalButtonTextCancel}>Cancelar</Text>
+                <Text style={styles.modalButtonTextCancel}>  {t('common.cancel')}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonConfirm]}
@@ -887,9 +1054,11 @@ export default function WorkoutDayDetailScreen() {
                 disabled={saveCompletionWithRetry.isRetrying}
               >
                 {saveCompletionWithRetry.isRetrying ? (
-                  <Text style={styles.modalButtonTextConfirm}>Guardando...</Text>
+                  <Text style={styles.modalButtonTextConfirm}>  {t('common.saving')}
+</Text>
                 ) : (
-                  <Text style={styles.modalButtonTextConfirm}>Guardar</Text>
+                  <Text style={styles.modalButtonTextConfirm}>  {t('common.save')}
+</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -917,7 +1086,8 @@ export default function WorkoutDayDetailScreen() {
           <View style={styles.timerModalContent}>
             <View style={styles.timerModalHeader}>
               <Ionicons name="timer" size={24} color="#ffb300" />
-              <Text style={styles.timerModalTitle}>Temporizador de Descanso</Text>
+              <Text style={styles.timerModalTitle}>  {t('timer.restTimerTitle')}
+              </Text>
             </View>
 
             <View style={styles.timePickerContainer}>
@@ -1000,7 +1170,8 @@ export default function WorkoutDayDetailScreen() {
                   console.log('🛑 Timer detenido y modal cerrado');
                 }}
               >
-                <Text style={styles.timerCancelButtonText}>Cerrar</Text>
+                <Text style={styles.timerCancelButtonText}>  {t('common.close')}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.timerStartButton}
@@ -1008,7 +1179,9 @@ export default function WorkoutDayDetailScreen() {
               >
                 <Ionicons name={isTimerRunning ? "refresh" : "play"} size={20} color="#1a1a1a" />
                 <Text style={styles.timerStartButtonText}>
-                  {isTimerRunning ? 'Reiniciar' : 'Iniciar'}
+                {isTimerRunning
+    ? t('timer.restart')
+    : t('timer.start')}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1304,6 +1477,82 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 4,
   },
+  // Nuevos estilos de badges (igual que en edición)
+  setsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  setBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1.5,
+    borderColor: '#333',
+    gap: 10,
+  },
+  setBadgeNumber: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  setBadgeWarmup: {
+    backgroundColor: '#4CAF50',
+  },
+  setBadgeNormal: {
+    backgroundColor: '#ffb300',
+  },
+  setBadgeFailure: {
+    backgroundColor: '#F44336',
+  },
+  setBadgeDrop: {
+    backgroundColor: '#9C27B0',
+  },
+  setBadgeNumberText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1a1a1a',
+  },
+  setBadgeContent: {
+    flexDirection: 'column',
+  },
+  setBadgeInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  setBadgeReps: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  setBadgeRir: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ffb300',
+    backgroundColor: 'rgba(255, 179, 0, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  setBadgeFailureText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#F44336',
+    backgroundColor: 'rgba(244, 67, 54, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    textTransform: 'uppercase',
+  },
+  // Estilos anteriores (mantener compatibilidad)
   serieDetailItem: {
     flexDirection: 'row',
     alignItems: 'center',

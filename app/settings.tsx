@@ -16,6 +16,7 @@ import { useUser, useAuth } from '@clerk/clerk-expo';
 import { LanguageSelector } from '../src/components/LanguageSelector';
 import { ConfirmModal } from '../src/components/CustomModal';
 import { supabase } from '../src/services/supabase';
+import { useUnitsStore } from '../src/store/unitsStore';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -23,6 +24,16 @@ export default function SettingsScreen() {
   const { signOut } = useAuth();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const { weightUnit, heightUnit, distanceUnit } = useUnitsStore();
+  
+  // Determinar si es métrico o imperial
+  const isMetric = weightUnit === 'kg' && heightUnit === 'cm' && distanceUnit === 'km';
+  const isImperial = weightUnit === 'lb' && heightUnit === 'ft' && distanceUnit === 'mi';
+  const currentUnitsLabel = isMetric 
+    ? t('units.metric') 
+    : isImperial 
+      ? t('units.imperial') 
+      : t('units.custom');
 
   const handleDeleteAccount = async () => {
     if (!user?.id) return;
@@ -101,13 +112,16 @@ export default function SettingsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('settings.units')}</Text>
           <View style={styles.settingCard}>
-            <TouchableOpacity style={styles.settingRow}>
+            <TouchableOpacity 
+              style={styles.settingRow}
+              onPress={() => router.push('/units-settings')}
+            >
               <View style={styles.settingLeft}>
                 <Ionicons name="speedometer" size={24} color="#ffb300" />
-                <Text style={styles.settingLabel}>{t('settings.metric')}</Text>
+                <Text style={styles.settingLabel}>{t('settings.measurementUnits')}</Text>
               </View>
               <View style={styles.settingRight}>
-                <Text style={styles.settingValue}>{t('settings.metric')}</Text>
+                <Text style={styles.settingValue}>{currentUnitsLabel}</Text>
                 <Ionicons name="chevron-forward" size={20} color="#666" />
               </View>
             </TouchableOpacity>
@@ -138,22 +152,7 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Sección Legal */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('settings.legal')}</Text>
-          <View style={styles.settingCard}>
-            <TouchableOpacity 
-              style={styles.settingRow}
-              onPress={() => router.push('/about')}
-            >
-              <View style={styles.settingLeft}>
-                <Ionicons name="information-circle" size={24} color="#ffb300" />
-                <Text style={styles.settingLabel}>{t('about.title')}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#666" />
-            </TouchableOpacity>
-          </View>
-        </View>
+    
 
         {/* Footer con versión */}
         <View style={styles.footer}>

@@ -12,6 +12,7 @@ import { shareWorkout } from '../../src/services/sharedWorkoutService';
 import { FriendSelectionModal, ConfirmModal } from '../../src/components/CustomModal';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 
+
 type WorkoutExercise =
   | string
   | {
@@ -98,17 +99,11 @@ type NormalizedWorkoutPlan = Omit<WorkoutPlanRow, 'plan_data'> & { plan_data: Pl
 
 type FriendsResult = { success: boolean; data?: any[]; error?: string };
 
-const DEFAULT_PRINCIPLES = [
-  'Técnica estricta antes de aumentar cargas',
-  'Progresión semanal controlada (carga o repeticiones)',
-  'Equilibrio entre grupos musculares y descanso adecuado',
-];
+const { t } = useTranslation();
 
-const DEFAULT_RECOMMENDATIONS = [
-  'Calienta 5-10 minutos antes de empezar',
-  'Descansa 48 h entre estímulos del mismo músculo',
-  'Prioriza rango completo y control del movimiento',
-];
+const DEFAULT_PRINCIPLES = t('training.principles', { returnObjects: true }) as string[];
+const DEFAULT_RECOMMENDATIONS = t('training.recommendations', { returnObjects: true }) as string[];
+
 
 const getParamString = (v: string | string[] | undefined): string | undefined => {
   if (!v) return undefined;
@@ -532,7 +527,11 @@ export default function WorkoutPlanDetailScreen() {
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.container}>
-          <LoadingOverlay visible={true} message={str(t('commonUI.loading'), 'Cargando...')} fullScreen />
+        <LoadingOverlay
+  visible={true}
+  message={t('common.loading')}
+  fullScreen
+/>
         </View>
       </>
     );
@@ -546,7 +545,9 @@ export default function WorkoutPlanDetailScreen() {
           <Ionicons name="alert-circle-outline" size={64} color="#FF5722" />
           <Text style={styles.errorText}>{error || 'Plan no encontrado'}</Text>
           <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(tabs)/workout' as any)}>
-            <Text style={styles.backButtonText}>Volver a Entrenar</Text>
+          <Text style={styles.backButtonText}>
+  {t('workout.backToWorkout')}
+</Text>
           </TouchableOpacity>
         </View>
       </>
@@ -573,8 +574,10 @@ export default function WorkoutPlanDetailScreen() {
               <Text style={styles.planName}>{str(plan.plan_name, 'Plan')}</Text>
               {!!plan.is_active && (
                 <View style={styles.activeBadge}>
-                  <Text style={styles.activeBadgeText}>{str(t('workout.activePlan'), 'Activo')}</Text>
-                </View>
+<Text style={styles.activeBadgeText}>
+  {t('workout.activePlan')}
+</Text>
+                  </View>
               )}
             </View>
           </View>
@@ -585,8 +588,14 @@ export default function WorkoutPlanDetailScreen() {
                 <Ionicons name="create-outline" size={18} color="#ffffff" />
               </View>
               <View style={styles.aiTextContainer}>
-                <Text style={styles.aiButtonTitle}>{str(t('workout.editPlan'), 'Editar plan')}</Text>
-                <Text style={styles.aiButtonSubtitle}>{str(t('workout.modifyExercises'), 'Modificar ejercicios')}</Text>
+              <Text style={styles.aiButtonTitle}>
+  {t('workout.editPlan')}
+</Text>
+
+<Text style={styles.aiButtonSubtitle}>
+  {t('workout.modifyExercises')}
+</Text>
+
               </View>
               <Ionicons name="chevron-forward" size={16} color="#ffb300" />
             </View>
@@ -599,8 +608,14 @@ export default function WorkoutPlanDetailScreen() {
                   <Ionicons name="sparkles" size={18} color="#ffffff" />
                 </View>
                 <View style={styles.aiTextContainer}>
-                  <Text style={styles.aiButtonTitle}>Adaptar con IA</Text>
-                  <Text style={styles.aiButtonSubtitle}>Personaliza con inteligencia artificial</Text>
+                <Text style={styles.aiButtonTitle}>
+  {t('ai.adaptButtonTitle')}
+</Text>
+
+<Text style={styles.aiButtonSubtitle}>
+  {t('ai.adaptButtonSubtitle')}
+</Text>
+
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#ffb300" />
               </View>
@@ -640,7 +655,9 @@ export default function WorkoutPlanDetailScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📅 Estructura Semanal</Text>
+        <Text style={styles.sectionTitle}>
+  {t('workout.weeklyStructure')}
+</Text>
           <Text style={styles.sectionSubtitle}>{str(t('workout.tapDayForDetails'), 'Tocá un día para ver detalles')}</Text>
 
           {safePlanData.multi_week_structure.length > 0 ? (
@@ -660,13 +677,14 @@ export default function WorkoutPlanDetailScreen() {
                       Semana {currentWeekIndex + 1} de {safePlanData.multi_week_structure.length}
                     </Text>
                     {!!plan.is_active && !!str(plan.activated_at) && (
-                      <Text style={styles.weekIndicatorSubtext}>
-                        {currentWeekIndex === calculateCurrentWeekIndex(str(plan.activated_at), safePlanData.duration_weeks)
-                          ? '✓ Semana actual'
-                          : currentWeekIndex < calculateCurrentWeekIndex(str(plan.activated_at), safePlanData.duration_weeks)
-                            ? '✓ Completada'
-                            : '⏳ Próxima'}
-                      </Text>
+                     <Text style={styles.weekIndicatorSubtext}>
+                     {currentWeekIndex === calculateCurrentWeekIndex(str(plan.activated_at), safePlanData.duration_weeks)
+                       ? t('workout.weekIndicator.current')
+                       : currentWeekIndex < calculateCurrentWeekIndex(str(plan.activated_at), safePlanData.duration_weeks)
+                         ? t('workout.weekIndicator.completed')
+                         : t('workout.weekIndicator.next')}
+                   </Text>
+                   
                     )}
                   </View>
 
@@ -740,7 +758,9 @@ export default function WorkoutPlanDetailScreen() {
                               {isCompleted && (
                                 <View style={styles.completedBadge}>
                                   <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
-                                  <Text style={styles.completedBadgeText}>Completado</Text>
+                                  <Text style={styles.completedBadgeText}>
+  {t('workout.completed')}
+</Text>
                                 </View>
                               )}
                             </View>
@@ -771,7 +791,9 @@ export default function WorkoutPlanDetailScreen() {
                           </View>
 
                           <View style={styles.viewDetailsButton}>
-                            <Text style={styles.viewDetailsText}>Ver detalles completos</Text>
+                          <Text style={styles.viewDetailsText}>
+  {t('workout.viewFullDetails')}
+</Text>
                             <Ionicons name="chevron-forward" size={16} color="#ffb300" />
                           </View>
                         </TouchableOpacity>
@@ -823,7 +845,8 @@ export default function WorkoutPlanDetailScreen() {
                       {isCompleted && (
                         <View style={styles.completedBadge}>
                           <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
-                          <Text style={styles.completedBadgeText}>Completado</Text>
+                          <Text style={styles.completedBadgeText}>  {t('workout.completed')}
+                          </Text>
                         </View>
                       )}
                     </View>
@@ -854,7 +877,7 @@ export default function WorkoutPlanDetailScreen() {
                   </View>
 
                   <View style={styles.viewDetailsButton}>
-                    <Text style={styles.viewDetailsText}>Ver detalles completos</Text>
+                    <Text style={styles.viewDetailsText}>{t('workout.viewFullDetails')}</Text>
                     <Ionicons name="chevron-forward" size={16} color="#ffb300" />
                   </View>
                 </TouchableOpacity>
@@ -864,7 +887,9 @@ export default function WorkoutPlanDetailScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🎯 Principios Clave</Text>
+        <Text style={styles.sectionTitle}>
+  {t('workout.keyPrinciples')}
+</Text>
           <View style={styles.principlesContainer}>
             {safePlanData.key_principles.map((principle, index) => (
               <View key={index} style={styles.principleItem}>
@@ -883,7 +908,9 @@ export default function WorkoutPlanDetailScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>💡 Recomendaciones</Text>
+        <Text style={styles.sectionTitle}>
+  {t('workout.recommendations')}
+</Text>
           <View style={styles.recommendationsContainer}>
             {safePlanData.recommendations.map((rec, index) => (
               <View key={index} style={styles.recommendationItem}>
@@ -905,7 +932,9 @@ export default function WorkoutPlanDetailScreen() {
 
           <TouchableOpacity style={styles.deleteButton} onPress={handleDeletePlan}>
             <Ionicons name="trash" size={20} color="#ffffff" />
-            <Text style={styles.deleteButtonText}>Eliminar Plan</Text>
+            <Text style={styles.deleteButtonText}>
+  {t('workout.deletePlan')}
+</Text>
           </TouchableOpacity>
         </View>
 
@@ -927,9 +956,12 @@ export default function WorkoutPlanDetailScreen() {
           setPlan(normalized);
           setShowAIModal(false);
 
-          Alert.alert('¡Plan Adaptado!', 'Tu entrenamiento ha sido personalizado según tus especificaciones.', [
-            { text: 'Perfecto', style: 'default' },
-          ]);
+          Alert.alert(
+            t('workout.planAdaptedTitle'),
+            t('workout.planAdaptedMessage'),
+            [{ text: t('common.ok'), style: 'default' }],
+          );
+          
         }}
         workoutPlan={plan}
         userId={user?.id || ''}

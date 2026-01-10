@@ -7,7 +7,6 @@ export interface ExerciseVideo {
   description?: string | null;
   is_storage_video?: boolean;
   storage_path?: string | null;
-  key_points?: string[] | null;  // Puntos clave del ejercicio
 }
 
 /**
@@ -143,12 +142,12 @@ export async function getExerciseVideoUrl(exerciseName: string): Promise<string 
     // Si el video está en Supabase Storage, usar la URL pública
     if (video.is_storage_video && video.storage_path) {
       console.log(`📦 [getExerciseVideoUrl] Generando URL pública para storage_path: "${video.storage_path}"`);
-      const { data, error } = supabase.storage
+      const { data } = supabase.storage
         .from('exercise-videos')
         .getPublicUrl(video.storage_path);
       
-      if (error) {
-        console.error(`❌ [getExerciseVideoUrl] Error al generar URL pública:`, error);
+      if (!data?.publicUrl) {
+        console.error(`❌ [getExerciseVideoUrl] No se pudo generar URL pública`);
         return null;
       }
       
@@ -289,10 +288,10 @@ export async function uploadExerciseVideo(
       success: true, 
       video: {
         canonical_name: dbData.canonical_name,
-        video_url: dbData.video_url,
+        video_url: dbData.video_url || '',
         thumbnail_url: dbData.thumbnail_url,
         description: dbData.description,
-        is_storage_video: dbData.is_storage_video,
+        is_storage_video: dbData.is_storage_video ?? undefined,
         storage_path: dbData.storage_path,
       }
     };
@@ -373,50 +372,4 @@ export async function upsertExerciseVideo(
   }
 }
 
-/**
- * Obtiene los puntos clave (key points) de un ejercicio específico
- * Usa matching flexible para encontrar el ejercicio incluso si el nombre varía
- */
-export async function getExerciseKeyPoints(
-  exerciseName: string
-): Promise<string[]> {
-  try {
-    if (!exerciseName || exerciseName.trim().length === 0) {
-      console.warn('⚠️ Nombre de ejercicio vacío');
-      return [];
-    }
-
-    // Normalizar el nombre
-    const normalizedName = normalizeExerciseName(exerciseName);
-    console.log(`🔍 Buscando puntos clave para: "${exerciseName}" (normalizado: "${normalizedName}")`);
-
-    // Llamar a la función SQL que hace matching flexible
-    const { data, error } = await supabase.rpc('find_exercise_video', {
-      exercise_name: normalizedName,
-    });
-
-    if (error) {
-      console.error('❌ Error al buscar puntos clave:', error);
-      return [];
-    }
-
-    if (!data || data.length === 0) {
-      console.log(`⚠️ No se encontró ejercicio para: "${exerciseName}"`);
-      return [];
-    }
-
-    const exercise = data[0] as ExerciseVideo;
-    
-    if (exercise.key_points && exercise.key_points.length > 0) {
-      console.log(`✅ Puntos clave encontrados: ${exercise.key_points.length} puntos`);
-      return exercise.key_points;
-    } else {
-      console.log(`⚠️ El ejercicio "${exerciseName}" no tiene puntos clave en la BD`);
-      return [];
-    }
-  } catch (error) {
-    console.error('❌ Error inesperado al buscar puntos clave:', error);
-    return [];
-  }
-}
 

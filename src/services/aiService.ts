@@ -10,7 +10,6 @@ interface UserProfile {
   age: number;
   fitness_level: string;
   goals: string[];
-  activity_types: string[];
   available_days: number;
   session_duration: number;
   equipment: string[];
@@ -160,18 +159,6 @@ function buildPrompt(userData: UserProfile, language: 'es' | 'en' = 'es'): strin
       return goalMap[goal] || goal;
     }).join(', ');
 
-    const activityTypesText = userData.activity_types.map(activity => {
-      const activityMap: { [key: string]: string } = {
-        cardio: 'cardio',
-        strength: 'strength training',
-        sports: 'sports',
-        yoga: 'yoga/pilates',
-        hiit: 'HIIT',
-        mixed: 'mixed training',
-      };
-      return activityMap[activity] || activity;
-    }).join(', ');
-
     const equipmentText = userData.equipment.map(eq => {
       const equipmentMap: { [key: string]: string } = {
         none: 'bodyweight only',
@@ -200,7 +187,6 @@ Create a personalized and motivating introduction (maximum 3 paragraphs) for a w
 - Age: ${userData.age} years old
 - Fitness level: ${fitnessLevelText}
 - Goals: ${goalsText}
-- Preferred activity types: ${activityTypesText}
 - Availability: ${userData.available_days} days per week, ${userData.session_duration} minutes per session
 - Available equipment: ${equipmentText}
 
@@ -232,18 +218,6 @@ Don't use headings or special formatting, just flowing text in paragraphs.
       return goalMap[goal] || goal;
     }).join(', ');
 
-    const activityTypesText = userData.activity_types.map(activity => {
-      const activityMap: { [key: string]: string } = {
-        cardio: 'cardio',
-        strength: 'entrenamiento de fuerza',
-        sports: 'deportes',
-        yoga: 'yoga/pilates',
-        hiit: 'HIIT',
-        mixed: 'entrenamiento mixto',
-      };
-      return activityMap[activity] || activity;
-    }).join(', ');
-
     const equipmentText = userData.equipment.map(eq => {
       const equipmentMap: { [key: string]: string } = {
         none: 'solo peso corporal',
@@ -272,7 +246,6 @@ Crea una introducción personalizada y motivadora (máximo 3 párrafos) para un 
 - Edad: ${userData.age} años
 - Nivel de fitness: ${fitnessLevelText}
 - Objetivos: ${goalsText}
-- Tipos de actividad preferidos: ${activityTypesText}
 - Disponibilidad: ${userData.available_days} días por semana, ${userData.session_duration} minutos por sesión
 - Equipamiento disponible: ${equipmentText}
 
@@ -431,7 +404,7 @@ export async function generateWorkoutPlan(
       console.warn('⚠️ OpenAI API Key no configurada, usando plan por defecto');
       return {
         success: true,
-        plan: generateDefaultWorkoutPlan(userData),
+        plan: enrichPlanWithProgression(generateDefaultWorkoutPlan(userData), userData.fitness_level),
       };
     }
 
@@ -456,7 +429,7 @@ export async function generateWorkoutPlan(
         messages: [
           {
             role: 'system',
-            content: 'Eres un entrenador personal certificado (NSCA-CPT, ACE) con maestría en Ciencias del Ejercicio y 10+ años de experiencia. Especializaciones: periodización, biomecánica, fisiología del ejercicio, nutrición deportiva. Creas planes basados en literatura científica (Schoenfeld, Helms, Nuckols, Israetel). Tus planes son específicos, progresivos, seguros y ALTAMENTE EFECTIVOS.',
+            content: 'Eres un entrenador personal certificado con más de 10 años de experiencia, especializado en entrenamiento de fuerza, hipertrofia, recomposición corporal y acondicionamiento general, con un enfoque estrictamente basado en evidencia científica. Creas planes de entrenamiento PROFESIONALES, REALISTAS, ESTRUCTURADOS y ESCALABLES. Siempre usas RIR (Reps In Reserve) para indicar intensidad.',
           },
           {
             role: 'user',
@@ -472,10 +445,10 @@ export async function generateWorkoutPlan(
       const errorData = await response.json();
       console.error('Error de OpenAI API:', errorData);
       
-      // Fallback a plan por defecto
+      // Fallback a plan por defecto con progresión
       return {
         success: true,
-        plan: generateDefaultWorkoutPlan(userData),
+        plan: enrichPlanWithProgression(generateDefaultWorkoutPlan(userData), userData.fitness_level),
       };
     }
 
@@ -491,7 +464,7 @@ export async function generateWorkoutPlan(
 
     // Parseo robusto del plan
     try {
-      const plan = parsePlanSafely(planText);
+      let plan = parsePlanSafely(planText);
       if (plan) {
         // Validar que el plan tenga el número correcto de días
         const requestedDays = userData.available_days;
@@ -521,23 +494,235 @@ export async function generateWorkoutPlan(
           plan.days_per_week = plan.weekly_structure.length;
         }
         
+        // Enriquecer el plan con progresión de series (calentamiento, RIR progresivo, al fallo)
+        console.log('🔧 Enriqueciendo plan con progresión de series...');
+        plan = enrichPlanWithProgression(plan, userData.fitness_level);
+        
         return { success: true, plan };
       }
       console.warn('⚠️ Plan inválido tras intentos de limpieza. Usando plan por defecto.');
-      return { success: true, plan: generateDefaultWorkoutPlan(userData) };
+      return { success: true, plan: enrichPlanWithProgression(generateDefaultWorkoutPlan(userData), userData.fitness_level) };
     } catch (parseError) {
       console.error('Error al parsear plan:', parseError);
-      return { success: true, plan: generateDefaultWorkoutPlan(userData) };
+      return { success: true, plan: enrichPlanWithProgression(generateDefaultWorkoutPlan(userData), userData.fitness_level) };
     }
   } catch (error) {
     console.error('Error al generar plan de entrenamiento:', error);
     
-    // Fallback a plan por defecto
+    // Fallback a plan por defecto con progresión
     return {
       success: true,
-      plan: generateDefaultWorkoutPlan(userData),
+      plan: enrichPlanWithProgression(generateDefaultWorkoutPlan(userData), userData.fitness_level),
     };
   }
+}
+
+/**
+ * Enriquece los ejercicios de un plan con estructura de progresión (setTypes)
+ * Transforma el formato simple "8-10 @ RIR 2" al formato con series individuales
+ */
+export function enrichPlanWithProgression(plan: any, fitnessLevel: string = 'intermediate'): any {
+  if (!plan || !plan.weekly_structure) return plan;
+  
+  const enrichedPlan = { ...plan };
+  
+  enrichedPlan.weekly_structure = plan.weekly_structure.map((day: any) => {
+    if (!day.exercises) return day;
+    
+    return {
+      ...day,
+      exercises: day.exercises.map((exercise: any, exerciseIndex: number) => {
+        return enrichExerciseWithProgression(exercise, fitnessLevel, exerciseIndex === 0);
+      }),
+    };
+  });
+  
+  return enrichedPlan;
+}
+
+/**
+ * Determina si un ejercicio es de abdominales o peso corporal (sin RIR, más reps permitidas)
+ */
+function isAbsOrBodyweightExercise(name: string): boolean {
+  const absKeywords = [
+    'abdominal', 'crunch', 'plancha', 'plank', 'sit-up', 'situp',
+    'oblicuo', 'core', 'dead bug', 'dragon flag', 'leg raise',
+    'elevacion de piernas', 'russian twist', 'giros rusos'
+  ];
+  const bodyweightKeywords = [
+    'flexiones', 'push-up', 'pushup', 'push up',
+    'dominadas', 'pull-up', 'pullup', 'pull up', 
+    'fondos', 'dips', 'burpees', 'jumping jack',
+    'mountain climber', 'escalador'
+  ];
+  
+  const lowerName = (name || '').toLowerCase();
+  return absKeywords.some(k => lowerName.includes(k)) || 
+         bodyweightKeywords.some(k => lowerName.includes(k));
+}
+
+/**
+ * Enriquece un ejercicio individual con setTypes y progresión
+ * Reglas:
+ * - Máximo 12 reps, terminar por debajo de 10
+ * - Ejercicios de abs/peso corporal: más reps permitidas, sin RIR
+ */
+function enrichExerciseWithProgression(
+  exercise: any, 
+  fitnessLevel: string = 'intermediate',
+  isFirstExercise: boolean = false
+): any {
+  // Si ya tiene setTypes completos, no modificar
+  if (exercise.setTypes && exercise.setTypes.length > 0 && exercise.setTypes[0].type) {
+    return exercise;
+  }
+  
+  const exerciseName = exercise.name || '';
+  const isAbsOrBodyweight = isAbsOrBodyweightExercise(exerciseName);
+  
+  // Parsear el formato de reps: "8-10 @ RIR 2" o "10" o "8-10"
+  const repsString = String(exercise.reps || '10');
+  let { minReps, maxReps, baseRir } = parseRepsString(repsString);
+  
+  // Aplicar límites de repeticiones para ejercicios normales (no abs/bodyweight)
+  if (!isAbsOrBodyweight) {
+    // Máximo 12 reps para empezar
+    maxReps = Math.min(maxReps, 12);
+    // Mínimo terminar por debajo de 10
+    minReps = Math.min(minReps, 8);
+    // Asegurar que maxReps >= minReps
+    if (maxReps < minReps) {
+      maxReps = minReps + 2;
+    }
+  }
+  
+  const numWorkingSets = exercise.sets || 4;
+  const restSeconds = parseRestToSeconds(exercise.rest);
+  
+  // Configuración según nivel
+  const levelConfig = {
+    beginner: { warmupSets: 1, useFailure: false, startRir: 4, endRir: 3 },
+    intermediate: { warmupSets: 2, useFailure: true, startRir: 3, endRir: 1 },
+    advanced: { warmupSets: 2, useFailure: true, startRir: 2, endRir: 0 },
+  }[fitnessLevel] || { warmupSets: 2, useFailure: true, startRir: 3, endRir: 1 };
+  
+  // Solo agregar calentamiento al PRIMER ejercicio del día (no para abs/bodyweight)
+  const warmupCount = (isFirstExercise && !isAbsOrBodyweight) ? levelConfig.warmupSets : 0;
+  
+  const setTypes: any[] = [];
+  const repsArray: number[] = [];
+  
+  // Agregar series de calentamiento
+  for (let i = 0; i < warmupCount; i++) {
+    setTypes.push({ type: 'warmup', reps: null, rir: null });
+    repsArray.push(0);
+  }
+  
+  // Calcular progresión de RIR y reps para series de trabajo
+  const rirRange = levelConfig.startRir - levelConfig.endRir;
+  const repsRange = maxReps - minReps;
+  
+  for (let i = 0; i < numWorkingSets; i++) {
+    const progress = i / Math.max(numWorkingSets - 1, 1); // 0 a 1
+    
+    // Reps bajan progresivamente (más peso = menos reps)
+    const currentReps = Math.round(maxReps - (repsRange * progress));
+    
+    // Para ejercicios de abs/bodyweight: sin RIR, solo reps
+    if (isAbsOrBodyweight) {
+      setTypes.push({
+        type: 'normal',
+        reps: currentReps,
+        rir: null, // Sin RIR para abs/bodyweight
+      });
+    } else {
+      // RIR baja progresivamente (más intensidad)
+      const currentRir = Math.round(levelConfig.startRir - (rirRange * progress));
+      
+      // Última serie puede ser al fallo para intermedios/avanzados
+      const isLastSet = i === numWorkingSets - 1;
+      const isFailureSet = isLastSet && levelConfig.useFailure && currentRir <= 1;
+      
+      setTypes.push({
+        type: isFailureSet ? 'failure' : 'normal',
+        reps: currentReps,
+        rir: isFailureSet ? 0 : currentRir,
+      });
+    }
+    
+    repsArray.push(currentReps);
+  }
+  
+  return {
+    ...exercise,
+    sets: warmupCount + numWorkingSets,
+    reps: repsArray,
+    setTypes,
+    rest_seconds: restSeconds,
+  };
+}
+
+/**
+ * Parsea el string de reps para extraer valores
+ */
+function parseRepsString(repsString: string): { minReps: number; maxReps: number; baseRir: number | null } {
+  // Formato: "8-10 @ RIR 2" o "10" o "8-10"
+  const rirMatch = repsString.match(/@\s*RIR\s*(\d+)/i);
+  const baseRir = rirMatch ? parseInt(rirMatch[1]) : null;
+  
+  // Extraer rango de reps
+  const repsOnlyString = repsString.replace(/@.*$/, '').trim();
+  const rangeMatch = repsOnlyString.match(/(\d+)\s*[-–]\s*(\d+)/);
+  
+  if (rangeMatch) {
+    return {
+      minReps: parseInt(rangeMatch[1]),
+      maxReps: parseInt(rangeMatch[2]),
+      baseRir,
+    };
+  }
+  
+  // Si es un número único
+  const singleMatch = repsOnlyString.match(/(\d+)/);
+  const reps = singleMatch ? parseInt(singleMatch[1]) : 10;
+  
+  return {
+    minReps: Math.max(reps - 2, 4),
+    maxReps: reps,
+    baseRir,
+  };
+}
+
+/**
+ * Convierte string de descanso a segundos
+ */
+function parseRestToSeconds(rest: string | number | undefined): number {
+  if (typeof rest === 'number') return rest;
+  if (!rest) return 90;
+  
+  const match = String(rest).match(/(\d+)/);
+  if (match) {
+    const value = parseInt(match[0]);
+    // Si es mayor a 300, probablemente ya está en segundos
+    // Si es menor, probablemente está en formato "90s" o "2min"
+    if (value > 300) return value;
+    if (String(rest).toLowerCase().includes('min')) return value * 60;
+    return value;
+  }
+  return 90;
+}
+
+/**
+ * Determina si un ejercicio es compuesto (necesita calentamiento)
+ */
+function isCompoundExercise(name: string): boolean {
+  const compoundKeywords = [
+    'press', 'sentadilla', 'squat', 'peso muerto', 'deadlift', 
+    'dominadas', 'pull-up', 'remo', 'row', 'hip thrust',
+    'zancadas', 'lunges', 'fondos', 'dips'
+  ];
+  const lowerName = (name || '').toLowerCase();
+  return compoundKeywords.some(keyword => lowerName.includes(keyword));
 }
 
 /**
@@ -602,7 +787,8 @@ function cleanJsonString(s: string): string {
 }
 
 /**
- * Construye el prompt para generar un plan de entrenamiento
+ * Construye el prompt profesional para generar un plan de entrenamiento
+ * Basado en evidencia científica y mejores prácticas de entrenamiento
  */
 async function buildWorkoutPrompt(
   userData: UserProfile,
@@ -616,26 +802,14 @@ async function buildWorkoutPrompt(
 
   const goalsText = userData.goals.map(goal => {
     const goalMap: { [key: string]: string } = {
-      weight_loss: 'bajar grasa',
-      muscle_gain: 'ganar músculo',
-      strength: 'aumentar fuerza',
-      endurance: 'mejorar resistencia',
-      flexibility: 'mejorar flexibilidad',
-      general_fitness: 'mantener forma general',
+      weight_loss: 'pérdida de grasa',
+      muscle_gain: 'ganancia muscular',
+      strength: 'aumento de fuerza',
+      endurance: 'mejora de resistencia',
+      flexibility: 'mejora de flexibilidad',
+      general_fitness: 'acondicionamiento general',
     };
     return goalMap[goal] || goal;
-  }).join(', ');
-
-  const activityTypesText = userData.activity_types.map(activity => {
-    const activityMap: { [key: string]: string } = {
-      cardio: 'cardio',
-      strength: 'entrenamiento de fuerza',
-      sports: 'deportes',
-      yoga: 'yoga/pilates',
-      hiit: 'HIIT',
-      mixed: 'entrenamiento mixto',
-    };
-    return activityMap[activity] || activity;
   }).join(', ');
 
   const equipmentText = userData.equipment.map(eq => {
@@ -659,222 +833,107 @@ async function buildWorkoutPrompt(
     return equipmentMap[eq] || eq;
   }).join(', ');
 
-  const genderText = {
+  const genderMap: Record<string, string> = {
     male: 'Masculino',
     female: 'Femenino',
     other: 'Otro'
-  }[userData.gender] || userData.gender;
+  };
+  const genderText = (userData.gender && genderMap[userData.gender]) || userData.gender || 'No especificado';
+
+  // Calcular número de ejercicios basado en duración (15 min por ejercicio)
+  const numExercises = Math.floor(userData.session_duration / 15);
 
   return `
-Eres un entrenador personal certificado con 10+ años de experiencia. Crea un plan de entrenamiento PROFESIONAL y DETALLADO basado en evidencia científica.
+Eres un entrenador personal certificado especializado en BODYBUILDING e HIPERTROFIA con más de 10 años de experiencia.
 
-PERFIL DEL USUARIO:
-- Género: ${genderText}
-- Edad: ${userData.age} años
-- Nivel: ${fitnessLevelText}
-- Objetivos principales: ${goalsText}
-- Actividades preferidas: ${activityTypesText}
-- Disponibilidad: ${userData.available_days} días/semana, ${userData.session_duration} min/sesión
-- Equipamiento: ${equipmentText}
+⚠️ TIPO DE RUTINA: BODYBUILDING / HIPERTROFIA EXCLUSIVAMENTE
+- NUNCA incluyas días de potencia, pliometría, deportes, funcional o crossfit
+- TODOS los días deben ser de FUERZA e HIPERTROFIA
+- Enfoques permitidos: Push/Pull/Legs, Upper/Lower, Full Body, Torso/Pierna, PPL
+- PROHIBIDO: días de cardio puro, días de potencia, días de pliometría, días de acondicionamiento
 
-INSTRUCCIONES CRÍTICAS:
+PERFIL DEL USUARIO
 
-1. SELECCIÓN DE EJERCICIOS:
-   - Usa ejercicios COMPUESTOS como base (sentadilla, peso muerto, press, dominadas, remo)
-   - Incluye ejercicios ACCESORIOS específicos para los objetivos
-   - Nombra ejercicios con PRECISIÓN (ej: "Sentadilla con barra alta" no solo "Sentadillas")
-   - Varía el tipo de agarre, ángulos y variaciones
-   - Para principiantes: prioriza movimientos básicos y técnica
-   - Para avanzados: incluye variaciones complejas y técnicas avanzadas
-   
-   ADAPTACIÓN POR GÉNERO:
-   - Masculino: Equilibrio entre tren superior e inferior, énfasis en fuerza general
-   - Femenino: Mayor énfasis en tren inferior (piernas, glúteos), core y estabilidad
-     * Incluye más variaciones de sentadillas, hip thrust, zancadas, peso muerto rumano
-     * Mantén tren superior pero con enfoque funcional
-     * Ejercicios específicos para glúteos: hip thrust, patada de glúteo, puente de glúteos
-   - Otro: Plan balanceado adaptado a objetivos específicos
+Género: ${genderText}
+Edad: ${userData.age} años
+Nivel actual: ${fitnessLevelText}
+Objetivos: ${goalsText}
+Disponibilidad: ${userData.available_days} días por semana
+Duración por sesión: ${userData.session_duration} minutos
+Equipamiento disponible: ${equipmentText}
 
-2. VOLUMEN Y INTENSIDAD (basado en ciencia):
-   Principiante:
-   - 8-12 series por grupo muscular/semana
-   - Reps: 8-15 para hipertrofia, 12-20 para resistencia
-   - RIR: 3-4 (intensidad moderada, enfoque en técnica)
-   - Descansos: 60-90s
-   - Tiempo por ejercicio: 12-15 minutos (menos series, descansos cortos)
-   
-   Intermedio:
-   - 12-18 series por grupo muscular/semana
-   - Reps: 6-12 para fuerza, 8-15 para hipertrofia
-   - RIR: 2-3 (intensidad alta pero controlada)
-   - Descansos: 90-180s para compuestos, 60-90s para accesorios
-   - Tiempo por ejercicio: 15-18 minutos (series moderadas, descansos intermedios)
-   
-   Avanzado:
-   - 16-25 series por grupo muscular/semana
-   - Reps: 3-6 para fuerza máxima, 6-12 para hipertrofia, 12-20 para resistencia
-   - RIR: 1-2 (muy cerca del fallo, solo en series finales)
-   - Descansos: 2-5min para fuerza, 90-120s para hipertrofia
-   - Tiempo por ejercicio: 18-20 minutos (más series, descansos largos, calentamiento extenso)
-   
-   NOTA: El número de ejercicios por sesión se calcula automáticamente según la duración disponible (ver sección 3).
+REGLAS ESTRUCTURALES OBLIGATORIAS
 
-2.1. INTENSIDAD Y PROXIMIDAD AL FALLO (RIR/RPE) - CRÍTICO:
-   - USA SIEMPRE RIR (Reps In Reserve) en el formato de repeticiones
-   - NUNCA uses números fijos sin RIR (ej: "10, 10, 10" es INCORRECTO)
-   - Formato correcto: "8-10 @ RIR 2" significa 8-10 repeticiones dejando 2 en reserva
-   - Alternativa: "6-8 @ RPE 8" (RPE 8 = RIR 2)
-   
-   RIR por nivel y objetivo:
-   - Principiante: RIR 3-4 (intensidad moderada, enfoque en técnica y seguridad)
-   - Intermedio: RIR 2-3 (intensidad alta pero controlada, permite progresión)
-   - Avanzado: RIR 1-2 (muy cerca del fallo, solo en series finales de ejercicios principales)
-   
-   Reglas de RIR:
-   - RIR 0 (fallo absoluto): SOLO para avanzados y SOLO en última serie del último ejercicio compuesto
-   - RIR 1-2: Para series principales de ejercicios compuestos (sentadilla, peso muerto, press)
-   - RIR 2-3: Para ejercicios accesorios y series de volumen
-   - RIR 3-4: Para principiantes y series de calentamiento/aproximación
-   
-   IMPORTANTE: Cada serie debe tener RIR diferente según su posición:
-   - Primera serie de trabajo: RIR 2-3 (más conservador)
-   - Series intermedias: RIR 2 (intensidad objetivo)
-   - Última serie: RIR 1-2 (puede acercarse más al fallo)
+1. Duración fija: 12 semanas
+2. Cada ejercicio = 15 minutos
+3. Número de ejercicios por sesión = ${userData.session_duration} ÷ 15 = ${numExercises} ejercicios EXACTOS
+4. Base del plan: HIPERTROFIA y FUERZA (estilo bodybuilding)
 
-2.2. SERIES DE APROXIMACIÓN Y CALENTAMIENTO (OBLIGATORIO):
-   Para ejercicios COMPUESTOS principales (sentadilla, peso muerto, press de banca, press militar, remo):
-   - Series de calentamiento: 1-2 series con 40-60% del peso de trabajo, RIR 4-5
-   - Series de aproximación: 1 serie con 70-85% del peso de trabajo, RIR 3
-   - Series de trabajo: 3-5 series con peso objetivo y RIR específico
-   
-   Para ejercicios ACCESORIOS:
-   - Pueden empezar directamente con series de trabajo
-   - O 1 serie de calentamiento ligera (50% peso, RIR 4)
-   
-   Ejemplo de estructura profesional:
-   Sentadilla con barra (objetivo: 100kg x 6-8):
-   - Calentamiento 1: 1x10 @ 50kg (RIR 4-5)
-   - Calentamiento 2: 1x5 @ 70kg (RIR 3)
-   - Trabajo 1: 1x6-8 @ 100kg (RIR 2)
-   - Trabajo 2: 1x6-8 @ 100kg (RIR 2)
-   - Trabajo 3: 1x6-8 @ 100kg (RIR 1)
+ESTRUCTURA DE DÍAS SEGÚN DISPONIBILIDAD:
+- 3 días: Full Body x3 o Push/Pull/Legs
+- 4 días: Upper/Lower x2 o Push/Pull/Upper/Lower
+- 5 días: Push/Pull/Legs/Upper/Lower o PPL + Upper/Lower
+- 6 días: Push/Pull/Legs x2
 
-2.3. PROGRESIÓN DENTRO DE LA SESIÓN:
-   NUNCA uses el mismo peso y repeticiones en todas las series (ej: 70kg x 10, 70kg x 10, 70kg x 10).
-   
-   Tipos de progresión profesional:
-   - PIramidal: Aumenta peso, reduce reps (ej: 60kgx10, 70kgx8, 80kgx6) - MÁS COMÚN
-   - Ascendente: Aumenta peso progresivamente (ej: 60kgx8, 65kgx8, 70kgx8)
-   - Constante: Mismo peso y reps (SOLO para principiantes o ejercicios accesorios)
-   - Inversa: Reduce peso, aumenta reps (avanzados, para fatiga acumulada)
-   
-   Regla general:
-   - Principiantes: Constante o ascendente ligera (ej: 60kgx10, 62.5kgx10, 65kgx10)
-   - Intermedios: Piramidal o ascendente (ej: 60kgx10, 70kgx8, 80kgx6)
-   - Avanzados: Piramidal, inversa, o técnicas avanzadas (cluster sets, rest-pause)
-   
-   IMPORTANTE: Varía el peso entre series según el tipo de progresión elegido
+EJERCICIOS - REGLAS:
 
-3. NÚMERO DE EJERCICIOS POR SESIÓN (CRÍTICO - CALCULAR POR TIEMPO):
-   El número de ejercicios DEBE calcularse basándose en el tiempo disponible:
-   - Cada ejercicio toma 15-20 minutos (incluyendo calentamiento, series de trabajo, descansos)
-   - Para INTENSIDAD ALTA (RIR 1-2): 18-20 minutos por ejercicio
-   - Para INTENSIDAD MODERADA (RIR 2-3): 15-18 minutos por ejercicio
-   - Para INTENSIDAD BAJA (RIR 3-4): 12-15 minutos por ejercicio
-   
-   FÓRMULA DE CÁLCULO:
-   - Tiempo disponible: ${userData.session_duration} minutos
-   - Tiempo por ejercicio (intensidad alta): 18-20 minutos
-   - Número de ejercicios = ${userData.session_duration} ÷ 18-20 = ${Math.floor(userData.session_duration / 20)}-${Math.floor(userData.session_duration / 18)} ejercicios
-   
-   EJEMPLOS:
-   - 30 minutos: 30 ÷ 20 = 1-2 ejercicios (máximo 2)
-   - 45 minutos: 45 ÷ 20 = 2-3 ejercicios (máximo 3)
-   - 60 minutos: 60 ÷ 20 = 3-4 ejercicios (máximo 4)
-   - 90 minutos: 90 ÷ 20 = 4-5 ejercicios (máximo 5)
-   
-   IMPORTANTE:
-   - Para una sesión de ${userData.session_duration} minutos, DEBES incluir ${Math.max(1, Math.floor(userData.session_duration / 20))}-${Math.max(2, Math.floor(userData.session_duration / 18))} ejercicios.
-   - NUNCA excedas este número - cada ejercicio necesita tiempo suficiente para calentamiento, series de trabajo y descansos.
-   - Si el nivel es avanzado o la intensidad es alta (RIR 1-2), usa el límite inferior (más tiempo por ejercicio).
-   - Si el nivel es principiante o la intensidad es moderada (RIR 3-4), puedes usar el límite superior.
-   
-   DISTRIBUCIÓN RECOMENDADA:
-   - Ejercicios COMPUESTOS principales: 20-25 minutos cada uno (calentamiento + 3-5 series + descansos largos)
-   - Ejercicios ACCESORIOS: 12-15 minutos cada uno (1 serie calentamiento + 2-3 series + descansos cortos)
+1. Usa ejercicios de gimnasio tradicionales de bodybuilding
+2. Prioriza compuestos: Press banca, Sentadilla, Peso muerto, Dominadas, Remo, Press militar
+3. Complementa con aislamiento: Curl bíceps, Extensiones tríceps, Elevaciones laterales, etc.
+4. PROHIBIDO: Box jumps, burpees, battle ropes, cleans, snatches, ejercicios de crossfit
 
-4. ESTRUCTURA SEMANAL:
-   - Distribuye grupos musculares inteligentemente (evita solapamiento)
-   - Incluye días de recuperación activa si es necesario
-   - Para perder peso: más frecuencia cardio, déficit calórico
-   - Para ganar músculo: enfoque en progresión de peso, superávit calórico
-   - Para fuerza: ejercicios compuestos pesados, bajas reps
+⚠️ INTENSIDAD CON RIR - OBLIGATORIO EN CADA EJERCICIO
 
-4. PROGRESIÓN:
-   - Especifica EXACTAMENTE cómo aumentar la carga semana a semana
-   - Incluye deloads cada 4-6 semanas
-   - Menciona señales de sobreentrenamiento
+El campo "reps" DEBE incluir el RIR. Formato: "8-10 @ RIR 2"
 
-5. PRINCIPIOS CLAVE:
-   - Cita principios científicos específicos (sobrecarga progresiva, especificidad, etc.)
-   - Explica el PORQUÉ de cada decisión
-   - Incluye referencias a estudios si es relevante
+REGLAS DE REPETICIONES:
+- MÁXIMO 12 reps para empezar una progresión
+- MÍNIMO terminar con 8 reps o menos (nunca más de 9 en la serie final)
+- Rango típico: iniciar 10-12 reps, terminar 6-8 reps
 
-FORMATO JSON REQUERIDO:
+EXCEPCIONES (SIN RIR, MÁS REPS PERMITIDAS):
+- Ejercicios de ABDOMINALES: 15-20 reps, sin RIR
+- Ejercicios de PESO CORPORAL (dominadas, flexiones, fondos): 8-15 reps, sin RIR
+- SEMANAS DE DESCARGA: se pueden usar reps más altas (12-15) con RIR 4-5
 
-⚠️ CRÍTICO: "weekly_structure" DEBE contener EXACTAMENTE ${userData.available_days} días. NO menos, NO más.
+Ejemplos CORRECTOS para ejercicios CON PESO:
+- "8-10 @ RIR 2" (empezar 10, terminar 8)
+- "6-8 @ RIR 1" (empezar 8, terminar 6)
+- "10-12 @ RIR 3" (solo primera semana/principiantes)
 
-{
-  "name": "Nombre específico y motivador",
-  "description": "Descripción detallada del enfoque y beneficios esperados",
-  "duration_weeks": número (8-16 semanas),
-  "days_per_week": ${userData.available_days},
-  "weekly_structure": [
-    // INCLUIR EXACTAMENTE ${userData.available_days} DÍAS AQUÍ
-    {
-      "day": "Día 1",
-      "focus": "Enfoque específico (ej: Fuerza de tren superior - Empuje)",
-      "duration": ${userData.session_duration},
-      "exercises": [
-        {
-          "name": "Nombre ESPECÍFICO del ejercicio",
-          "warmup_sets": [
-            {
-              "reps": número,
-              "weight_note": "porcentaje o peso aproximado (ej: '50% peso de trabajo' o '40kg')",
-              "rir": número (3-4 para calentamiento)
-            }
-          ],
-          "working_sets": [
-            {
-              "reps": "rango con RIR (ej: '6-8 @ RIR 2')",
-              "weight_note": "peso objetivo o progresión (ej: '80kg' o '60kg → 70kg → 80kg' para piramidal)",
-              "rir": número (1-3 según nivel y posición de la serie),
-              "rest": "tiempo específico",
-              "notes": "opcional: notas sobre esta serie específica"
-            }
-          ],
-          "progression_type": "piramidal" | "ascendente" | "constante" | "inversa",
-          "total_sets": número (incluyendo warmup),
-          "sets": número (total de series de trabajo, para compatibilidad),
-          "reps": "rango con RIR (ej: '6-8 @ RIR 2', para compatibilidad con UI)",
-          "rest": "tiempo de descanso entre series de trabajo"
-        }
-      ]
-    }
-  ],
-  "key_principles": [
-    "Principio científico 1 con explicación breve",
-    "Principio científico 2 con explicación breve",
-    "Principio científico 3 con explicación breve"
-  ],
-  "progression": "Plan DETALLADO de progresión semanal con números específicos y señales de cuándo aumentar carga",
-  "recommendations": [
-    "Recomendación específica y accionable 1",
-    "Recomendación específica y accionable 2",
-    "Recomendación específica y accionable 3"
-  ]
-}
+Ejemplos CORRECTOS para ABDOMINALES/PESO CORPORAL:
+- "15-20" (sin RIR)
+- "12-15" (sin RIR)
+- "8-12" (sin RIR, para dominadas)
+
+Ejemplos INCORRECTOS (PROHIBIDOS):
+- "15-20 @ RIR 2" (demasiadas reps para ejercicio con peso)
+- "10" (sin rango)
+- "3x10" (formato incorrecto)
+
+RIR por nivel:
+- Principiante: RIR 3-4
+- Intermedio: RIR 2-3
+- Avanzado: RIR 1-2
+
+VOLUMEN E INTENSIDAD:
+
+Principiante (Semanas 1-2):
+- 8-12 series/grupo muscular/semana
+- Reps: 8-12 (máx)
+- RIR: 3-4
+- Descanso: 60-90s
+
+Intermedio (Semanas 3-12):
+- 12-18 series/grupo muscular/semana
+- Reps: 6-10 (fuerza-hipertrofia)
+- RIR: 2-3
+- Descanso: 90-180s (compuestos), 60-90s (aislamiento)
+
+CARDIO (SOLO SI EL OBJETIVO ES PÉRDIDA DE GRASA):
+- Se agrega AL FINAL de la sesión de pesas
+- NUNCA reemplaza el entrenamiento de fuerza
+- Tipo: LISS (20-40 min) o HIIT (15-20 min, máx 2x/semana)
 
 ${feedback ? `
 HISTORIAL DE ENTRENAMIENTOS (últimos ${feedback.totalCompletions}):
@@ -893,41 +952,70 @@ ADAPTACIONES REQUERIDAS BASADAS EN FEEDBACK:
 ${generateAdaptationInstructions(feedback)}
 ` : ''}
 
-IMPORTANTE - REGLAS CRÍTICAS:
-- Responde SOLO con el JSON válido, sin markdown ni texto adicional
-- Asegúrate de que el plan sea REALISTA y ALCANZABLE
-- Prioriza CALIDAD sobre cantidad
-- El plan debe ser lo suficientemente desafiante pero no abrumador
-- Adapta el lenguaje técnico al nivel del usuario
+FORMATO JSON FINAL (OBLIGATORIO)
 
-REGLAS OBLIGATORIAS DE FORMATO:
-1. NUNCA uses repeticiones fijas sin RIR (ej: "10, 10, 10" es INCORRECTO)
-2. SIEMPRE incluye RIR en el formato: "8-10 @ RIR 2" o "6-8 @ RPE 8"
-3. SIEMPRE incluye series de calentamiento/aproximación para ejercicios compuestos
-4. SIEMPRE varía el peso entre series (piramidal, ascendente, etc.) - NUNCA constante en todas las series
-5. Cada serie de trabajo debe tener RIR diferente según su posición (primera más conservadora, última más intensa)
-6. Para ejercicios accesorios, puedes usar formato simplificado pero SIEMPRE con RIR
-7. OBLIGATORIO: Incluye los campos "sets", "reps" y "rest" en cada ejercicio para compatibilidad con la UI
-8. OBLIGATORIO: El número de ejercicios debe ser proporcional a la duración (60 min = mínimo 6 ejercicios)
+⚠️ CRÍTICO: 
+- "weekly_structure" DEBE contener EXACTAMENTE ${userData.available_days} días (Día 1, Día 2, etc.)
+- Cada día DEBE contener EXACTAMENTE ${numExercises} ejercicios
+- El campo "reps" SIEMPRE debe incluir RIR: "8-10 @ RIR 2"
+- Responde SOLO con JSON válido, sin markdown ni texto adicional
 
-EJEMPLO CORRECTO de ejercicio:
+EJEMPLO DE DÍA CORRECTO (copia este formato):
 {
-  "name": "Sentadilla con barra",
-  "warmup_sets": [
-    { "reps": 10, "weight_note": "50kg (50% peso de trabajo)", "rir": 4 },
-    { "reps": 5, "weight_note": "70kg (70% peso de trabajo)", "rir": 3 }
-  ],
-  "working_sets": [
-    { "reps": "6-8 @ RIR 2", "weight_note": "80kg", "rir": 2, "rest": "3min" },
-    { "reps": "6-8 @ RIR 2", "weight_note": "85kg", "rir": 2, "rest": "3min" },
-    { "reps": "6-8 @ RIR 1", "weight_note": "90kg", "rir": 1, "rest": "3min", "notes": "Última serie, puede acercarse más al fallo" }
-  ],
-  "progression_type": "piramidal",
-  "total_sets": 5
+  "day": "Día 1",
+  "focus": "Pecho y Tríceps",
+  "duration": ${userData.session_duration},
+  "exercises": [
+    {
+      "name": "Press de banca con barra",
+      "sets": 4,
+      "reps": "8-10 @ RIR 2",
+      "rest": "120s"
+    },
+    {
+      "name": "Press inclinado con mancuernas",
+      "sets": 3,
+      "reps": "10-12 @ RIR 2",
+      "rest": "90s"
+    },
+    {
+      "name": "Aperturas con mancuernas",
+      "sets": 3,
+      "reps": "12-15 @ RIR 3",
+      "rest": "60s"
+    },
+    {
+      "name": "Fondos en paralelas",
+      "sets": 3,
+      "reps": "8-10 @ RIR 2",
+      "rest": "90s"
+    }
+  ]
 }
 
-${feedback ? '- PRIORIZA ejercicios que el usuario completa consistentemente' : ''}
-${feedback && feedback.skippedExercises.length > 0 ? '- EVITA o REEMPLAZA ejercicios que el usuario frecuentemente salta' : ''}
+ESTRUCTURA COMPLETA:
+{
+  "name": "Plan de Hipertrofia - ${userData.available_days} días",
+  "description": "Plan de bodybuilding enfocado en hipertrofia muscular",
+  "duration_weeks": 12,
+  "days_per_week": ${userData.available_days},
+  "training_base": "hypertrophy",
+  "weekly_structure": [
+    // ${userData.available_days} objetos de día aquí, cada uno con ${numExercises} ejercicios
+  ],
+  "key_principles": ["Sobrecarga progresiva", "Volumen adecuado", "Recuperación"],
+  "progression": "Aumentar peso cuando logres el límite superior de repeticiones con buena técnica",
+  "recommendations": ["Dormir 7-9 horas", "Consumir suficiente proteína", "Mantener consistencia"]
+}
+
+REGLAS FINALES INQUEBRANTABLES
+
+1. TODOS los días son de hipertrofia/fuerza (NO potencia, NO pliometría, NO crossfit)
+2. El campo "reps" SIEMPRE incluye RIR: "8-10 @ RIR 2" (NUNCA solo "10")
+3. Exactamente ${userData.available_days} días en weekly_structure
+4. Exactamente ${numExercises} ejercicios por día
+5. Enfoques de día: Push, Pull, Legs, Upper, Lower, Chest, Back, Shoulders, Arms (NO Potencia, NO Pliometría)
+6. Los días se numeran "Día 1", "Día 2", "Día 3", etc.
 `.trim();
 }
 
@@ -987,44 +1075,45 @@ function generateDefaultWorkoutPlan(userData: UserProfile): any {
   const primaryGoal = userData.goals[0] || 'general_fitness';
   const daysPerWeek = Math.min(userData.available_days, 5);
 
-  // Plan básico adaptado al nivel
+  // Plan básico adaptado al nivel - ESTILO BODYBUILDING
   const plans = {
     beginner: {
       name: `Plan ${fitnessLevelText} - Fundamentos`,
-      description: `Plan de ${daysPerWeek} días para construir una base sólida de fuerza y resistencia`,
-      duration_weeks: 8,
+      description: `Plan de ${daysPerWeek} días para construir una base sólida de fuerza e hipertrofia`,
+      duration_weeks: 12,
       days_per_week: daysPerWeek,
       weekly_structure: [
         {
           day: 'Día 1',
-          focus: 'Cuerpo completo - Fuerza',
+          focus: 'Full Body A',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Sentadillas', sets: 3, reps: '10-12', rest: '60s' },
-            { name: 'Flexiones', sets: 3, reps: '8-10', rest: '60s' },
-            { name: 'Remo con banda', sets: 3, reps: '12-15', rest: '45s' },
-            { name: 'Plancha', sets: 3, reps: '30-45s', rest: '45s' },
+            { name: 'Sentadilla con barra', sets: 3, reps: '10-12 @ RIR 3', rest: '90s' },
+            { name: 'Press de banca con barra', sets: 3, reps: '10-12 @ RIR 3', rest: '90s' },
+            { name: 'Remo con barra', sets: 3, reps: '10-12 @ RIR 3', rest: '90s' },
+            { name: 'Press militar con mancuernas', sets: 3, reps: '10-12 @ RIR 3', rest: '60s' },
           ],
         },
         {
           day: 'Día 2',
-          focus: 'Cardio moderado',
+          focus: 'Full Body B',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Caminata rápida', sets: 1, reps: '20 min', rest: '-' },
-            { name: 'Jumping jacks', sets: 3, reps: '30s', rest: '30s' },
-            { name: 'Mountain climbers', sets: 3, reps: '20s', rest: '40s' },
+            { name: 'Peso muerto rumano', sets: 3, reps: '10-12 @ RIR 3', rest: '90s' },
+            { name: 'Press inclinado con mancuernas', sets: 3, reps: '10-12 @ RIR 3', rest: '90s' },
+            { name: 'Jalón al pecho', sets: 3, reps: '10-12 @ RIR 3', rest: '90s' },
+            { name: 'Curl de bíceps con barra', sets: 3, reps: '12-15 @ RIR 3', rest: '60s' },
           ],
         },
         {
           day: 'Día 3',
-          focus: 'Cuerpo completo - Resistencia',
+          focus: 'Full Body C',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Zancadas', sets: 3, reps: '10 por pierna', rest: '45s' },
-            { name: 'Flexiones de rodillas', sets: 3, reps: '10-12', rest: '45s' },
-            { name: 'Superman', sets: 3, reps: '12-15', rest: '30s' },
-            { name: 'Bicicleta abdominal', sets: 3, reps: '15 por lado', rest: '30s' },
+            { name: 'Prensa de piernas', sets: 3, reps: '12-15 @ RIR 3', rest: '90s' },
+            { name: 'Aperturas con mancuernas', sets: 3, reps: '12-15 @ RIR 3', rest: '60s' },
+            { name: 'Remo con mancuerna', sets: 3, reps: '10-12 @ RIR 3', rest: '60s' },
+            { name: 'Elevaciones laterales', sets: 3, reps: '12-15 @ RIR 3', rest: '60s' },
           ],
         },
       ],
@@ -1033,11 +1122,11 @@ function generateDefaultWorkoutPlan(userData: UserProfile): any {
         'Progresión gradual en volumen e intensidad',
         'Descanso adecuado entre sesiones (48 horas para mismo grupo muscular)',
       ],
-      progression: 'Aumenta repeticiones en 2-3 cada semana. Después de 4 semanas, incrementa la dificultad de los ejercicios.',
+      progression: 'Aumenta peso cuando logres el límite superior de repeticiones con RIR 3. Después de 4 semanas, reduce RIR a 2.',
       recommendations: [
         'Calienta 5-10 minutos antes de cada sesión',
         'Mantén una buena hidratación',
-        'Escucha a tu cuerpo y descansa cuando sea necesario',
+        'Consume suficiente proteína (1.6-2.2g/kg de peso)',
       ],
     },
     intermediate: {
@@ -1048,55 +1137,55 @@ function generateDefaultWorkoutPlan(userData: UserProfile): any {
       weekly_structure: [
         {
           day: 'Día 1',
-          focus: 'Tren superior - Push',
+          focus: 'Push - Pecho y Tríceps',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Press de banca', sets: 4, reps: '8-10', rest: '90s' },
-            { name: 'Press militar', sets: 3, reps: '8-12', rest: '90s' },
-            { name: 'Fondos', sets: 3, reps: '10-12', rest: '60s' },
-            { name: 'Extensiones de tríceps', sets: 3, reps: '12-15', rest: '60s' },
+            { name: 'Press de banca con barra', sets: 4, reps: '8-10 @ RIR 2', rest: '120s' },
+            { name: 'Press inclinado con mancuernas', sets: 3, reps: '10-12 @ RIR 2', rest: '90s' },
+            { name: 'Fondos en paralelas', sets: 3, reps: '8-10 @ RIR 2', rest: '90s' },
+            { name: 'Extensiones de tríceps en polea', sets: 3, reps: '12-15 @ RIR 2', rest: '60s' },
           ],
         },
         {
           day: 'Día 2',
-          focus: 'Tren inferior - Fuerza',
+          focus: 'Pull - Espalda y Bíceps',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Sentadillas', sets: 4, reps: '6-8', rest: '2-3 min' },
-            { name: 'Peso muerto rumano', sets: 3, reps: '8-10', rest: '2 min' },
-            { name: 'Zancadas', sets: 3, reps: '10 por pierna', rest: '90s' },
-            { name: 'Elevaciones de gemelos', sets: 4, reps: '15-20', rest: '45s' },
+            { name: 'Dominadas', sets: 4, reps: '6-10 @ RIR 2', rest: '120s' },
+            { name: 'Remo con barra', sets: 4, reps: '8-10 @ RIR 2', rest: '90s' },
+            { name: 'Remo con mancuerna', sets: 3, reps: '10-12 @ RIR 2', rest: '60s' },
+            { name: 'Curl de bíceps con barra', sets: 3, reps: '10-12 @ RIR 2', rest: '60s' },
           ],
         },
         {
           day: 'Día 3',
-          focus: 'Tren superior - Pull',
+          focus: 'Legs - Piernas',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Dominadas', sets: 4, reps: '6-10', rest: '2 min' },
-            { name: 'Remo con barra', sets: 4, reps: '8-10', rest: '90s' },
-            { name: 'Curl de bíceps', sets: 3, reps: '10-12', rest: '60s' },
-            { name: 'Face pulls', sets: 3, reps: '15-20', rest: '45s' },
+            { name: 'Sentadilla con barra', sets: 4, reps: '8-10 @ RIR 2', rest: '180s' },
+            { name: 'Peso muerto rumano', sets: 3, reps: '10-12 @ RIR 2', rest: '120s' },
+            { name: 'Prensa de piernas', sets: 3, reps: '12-15 @ RIR 2', rest: '90s' },
+            { name: 'Elevación de gemelos sentado', sets: 4, reps: '15-20 @ RIR 2', rest: '60s' },
           ],
         },
         {
           day: 'Día 4',
-          focus: 'HIIT / Cardio',
+          focus: 'Upper - Hombros y Brazos',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Burpees', sets: 4, reps: '30s', rest: '30s' },
-            { name: 'Sprints', sets: 6, reps: '20s', rest: '40s' },
-            { name: 'Box jumps', sets: 3, reps: '10', rest: '60s' },
-            { name: 'Battle ropes', sets: 3, reps: '30s', rest: '30s' },
+            { name: 'Press militar con barra', sets: 4, reps: '8-10 @ RIR 2', rest: '120s' },
+            { name: 'Elevaciones laterales', sets: 4, reps: '12-15 @ RIR 2', rest: '60s' },
+            { name: 'Curl martillo', sets: 3, reps: '10-12 @ RIR 2', rest: '60s' },
+            { name: 'Press francés', sets: 3, reps: '10-12 @ RIR 2', rest: '60s' },
           ],
         },
       ],
       key_principles: [
-        'Sobrecarga progresiva: aumenta peso o repeticiones gradualmente',
-        'Volumen óptimo: 10-20 series por grupo muscular por semana',
+        'Sobrecarga progresiva: aumenta peso cuando logres el límite superior de repeticiones',
+        'Volumen óptimo: 12-18 series por grupo muscular por semana',
         'Frecuencia: entrena cada grupo muscular 2 veces por semana',
       ],
-      progression: 'Incrementa peso en 2.5-5% cuando puedas completar todas las series con buena técnica. Cada 4 semanas, toma una semana de descarga.',
+      progression: 'Incrementa peso en 2.5-5% cuando completes todas las series con RIR 2. Semana 4 y 8: deload (reduce volumen 40%).',
       recommendations: [
         'Prioriza ejercicios compuestos',
         'Mantén un registro de tus levantamientos',
@@ -1105,75 +1194,75 @@ function generateDefaultWorkoutPlan(userData: UserProfile): any {
     },
     advanced: {
       name: `Plan ${fitnessLevelText} - Optimización`,
-      description: `Plan de ${daysPerWeek} días con periodización para máximos resultados`,
-      duration_weeks: 16,
+      description: `Plan de ${daysPerWeek} días con periodización para máxima hipertrofia`,
+      duration_weeks: 12,
       days_per_week: daysPerWeek,
       weekly_structure: [
         {
           day: 'Día 1',
-          focus: 'Fuerza - Tren inferior',
+          focus: 'Push - Pecho énfasis',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Sentadilla con barra', sets: 5, reps: '3-5', rest: '3-4 min' },
-            { name: 'Peso muerto', sets: 4, reps: '4-6', rest: '3 min' },
-            { name: 'Hip thrust', sets: 4, reps: '8-10', rest: '2 min' },
-            { name: 'Sentadilla búlgara', sets: 3, reps: '8 por pierna', rest: '90s' },
+            { name: 'Press de banca con barra', sets: 4, reps: '6-8 @ RIR 1', rest: '180s' },
+            { name: 'Press inclinado con mancuernas', sets: 4, reps: '8-10 @ RIR 2', rest: '120s' },
+            { name: 'Aperturas en polea', sets: 3, reps: '12-15 @ RIR 2', rest: '60s' },
+            { name: 'Press de hombro con mancuernas', sets: 3, reps: '10-12 @ RIR 2', rest: '90s' },
           ],
         },
         {
           day: 'Día 2',
-          focus: 'Hipertrofia - Tren superior Push',
+          focus: 'Pull - Espalda énfasis',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Press inclinado', sets: 4, reps: '8-12', rest: '2 min' },
-            { name: 'Press militar', sets: 4, reps: '8-10', rest: '2 min' },
-            { name: 'Aperturas', sets: 3, reps: '12-15', rest: '90s' },
-            { name: 'Tríceps en polea', sets: 4, reps: '12-15', rest: '60s' },
+            { name: 'Dominadas lastradas', sets: 4, reps: '6-8 @ RIR 1', rest: '180s' },
+            { name: 'Remo con barra', sets: 4, reps: '8-10 @ RIR 2', rest: '120s' },
+            { name: 'Jalón al pecho agarre cerrado', sets: 3, reps: '10-12 @ RIR 2', rest: '90s' },
+            { name: 'Curl de bíceps inclinado', sets: 3, reps: '10-12 @ RIR 2', rest: '60s' },
           ],
         },
         {
           day: 'Día 3',
-          focus: 'Potencia / Pliometría',
+          focus: 'Legs - Cuádriceps énfasis',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Power cleans', sets: 5, reps: '3-5', rest: '2-3 min' },
-            { name: 'Box jumps', sets: 4, reps: '5-8', rest: '2 min' },
-            { name: 'Med ball slams', sets: 4, reps: '8-10', rest: '90s' },
-            { name: 'Sprint intervals', sets: 6, reps: '15s', rest: '45s' },
+            { name: 'Sentadilla con barra', sets: 4, reps: '6-8 @ RIR 1', rest: '180s' },
+            { name: 'Prensa de piernas', sets: 4, reps: '10-12 @ RIR 2', rest: '120s' },
+            { name: 'Extensiones de cuádriceps', sets: 3, reps: '12-15 @ RIR 2', rest: '60s' },
+            { name: 'Elevación de gemelos de pie', sets: 4, reps: '12-15 @ RIR 2', rest: '60s' },
           ],
         },
         {
           day: 'Día 4',
-          focus: 'Hipertrofia - Tren superior Pull',
+          focus: 'Push - Hombros énfasis',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Dominadas lastradas', sets: 4, reps: '6-8', rest: '2-3 min' },
-            { name: 'Remo pendlay', sets: 4, reps: '6-8', rest: '2 min' },
-            { name: 'Pullover', sets: 3, reps: '10-12', rest: '90s' },
-            { name: 'Curl martillo', sets: 3, reps: '10-12', rest: '60s' },
+            { name: 'Press militar con barra', sets: 4, reps: '6-8 @ RIR 1', rest: '180s' },
+            { name: 'Elevaciones laterales', sets: 4, reps: '12-15 @ RIR 2', rest: '60s' },
+            { name: 'Elevaciones frontales', sets: 3, reps: '12-15 @ RIR 2', rest: '60s' },
+            { name: 'Press francés con barra Z', sets: 3, reps: '10-12 @ RIR 2', rest: '60s' },
           ],
         },
         {
           day: 'Día 5',
-          focus: 'Accesorios / Core',
+          focus: 'Legs - Isquiotibiales y Glúteos',
           duration: userData.session_duration,
           exercises: [
-            { name: 'Plancha con peso', sets: 4, reps: '45-60s', rest: '90s' },
-            { name: 'Pallof press', sets: 3, reps: '12 por lado', rest: '60s' },
-            { name: 'Farmer walks', sets: 4, reps: '40m', rest: '90s' },
-            { name: 'Ab wheel', sets: 3, reps: '10-15', rest: '60s' },
+            { name: 'Peso muerto convencional', sets: 4, reps: '5-6 @ RIR 1', rest: '180s' },
+            { name: 'Hip thrust con barra', sets: 4, reps: '8-10 @ RIR 2', rest: '120s' },
+            { name: 'Curl femoral tumbado', sets: 3, reps: '10-12 @ RIR 2', rest: '60s' },
+            { name: 'Zancadas con mancuernas', sets: 3, reps: '10 c/pierna @ RIR 2', rest: '90s' },
           ],
         },
       ],
       key_principles: [
-        'Periodización ondulante: alterna entre fases de fuerza, hipertrofia y potencia',
-        'Volumen alto: 15-25 series por grupo muscular por semana',
-        'Intensidad variable: usa RPE y porcentajes de 1RM',
+        'Periodización ondulante: alterna entre fases de fuerza (RIR 1) e hipertrofia (RIR 2)',
+        'Volumen alto: 16-22 series por grupo muscular por semana',
+        'Intensidad variable: usa RIR para regular la proximidad al fallo',
       ],
-      progression: 'Sigue un ciclo de 4 semanas: acumulación (volumen alto), intensificación (peso alto), realización (pico), descarga. Ajusta basado en recuperación.',
+      progression: 'Semanas 1-3: RIR 2-3 (acumulación). Semanas 4-6: RIR 1-2 (intensificación). Semana 7: deload. Repetir ciclo.',
       recommendations: [
-        'Monitorea métricas de recuperación (HRV, calidad de sueño)',
-        'Considera periodización de nutrición (surplus/déficit según fase)',
+        'Monitorea métricas de recuperación (calidad de sueño, fatiga)',
+        'Consume 1.8-2.2g de proteína por kg de peso corporal',
         'Incluye trabajo de movilidad y prevención de lesiones',
       ],
     },
