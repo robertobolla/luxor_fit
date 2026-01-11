@@ -13,8 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useUser } from '@clerk/clerk-expo';
+import { supabase } from '@/services/supabase';
 
 interface NutritionPlan {
   id: string;
@@ -29,7 +29,7 @@ interface NutritionPlan {
 
 export default function PlansLibraryScreen() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user } = useUser();
   const [plans, setPlans] = useState<NutritionPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlan, setSelectedPlan] = useState<NutritionPlan | null>(null);
@@ -42,7 +42,7 @@ export default function PlansLibraryScreen() {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('nutrition_plans')
         .select('*')
         .eq('user_id', user.id)
@@ -50,7 +50,7 @@ export default function PlansLibraryScreen() {
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
-      setPlans(data || []);
+      setPlans((data as NutritionPlan[]) || []);
     } catch (err) {
       console.error('Error loading plans:', err);
       Alert.alert(t('common.error'), t('plansLibrary.loadError'));
@@ -71,13 +71,13 @@ export default function PlansLibraryScreen() {
     setActivating(true);
     try {
       // Desactivar todos los planes del usuario
-      await supabase
+      await (supabase as any)
         .from('nutrition_plans')
         .update({ is_active: false })
         .eq('user_id', user.id);
 
       // Activar el plan seleccionado
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('nutrition_plans')
         .update({ is_active: true })
         .eq('id', selectedPlan.id);
@@ -112,7 +112,7 @@ export default function PlansLibraryScreen() {
           onPress: async () => {
             setDeleting(true);
             try {
-              const { error } = await supabase
+              const { error } = await (supabase as any)
                 .from('nutrition_plans')
                 .delete()
                 .eq('id', selectedPlan.id);
@@ -139,7 +139,7 @@ export default function PlansLibraryScreen() {
 
     try {
       // Obtener los detalles completos del plan
-      const { data: planData, error: planError } = await supabase
+      const { data: planData, error: planError } = await (supabase as any)
         .from('nutrition_plans')
         .select(`
           *,
@@ -160,7 +160,7 @@ export default function PlansLibraryScreen() {
       if (planError) throw planError;
 
       // Crear nuevo plan
-      const { data: newPlan, error: newPlanError } = await supabase
+      const { data: newPlan, error: newPlanError } = await (supabase as any)
         .from('nutrition_plans')
         .insert({
           user_id: user.id,
@@ -177,7 +177,7 @@ export default function PlansLibraryScreen() {
 
       // Duplicar semanas, días, comidas y alimentos
       for (const week of planData.nutrition_plan_weeks || []) {
-        const { data: newWeek, error: weekError } = await supabase
+        const { data: newWeek, error: weekError } = await (supabase as any)
           .from('nutrition_plan_weeks')
           .insert({
             plan_id: newPlan.id,
@@ -189,7 +189,7 @@ export default function PlansLibraryScreen() {
         if (weekError) throw weekError;
 
         for (const day of week.nutrition_plan_days || []) {
-          const { data: newDay, error: dayError } = await supabase
+          const { data: newDay, error: dayError } = await (supabase as any)
             .from('nutrition_plan_days')
             .insert({
               week_id: newWeek.id,
@@ -206,7 +206,7 @@ export default function PlansLibraryScreen() {
           if (dayError) throw dayError;
 
           for (const meal of day.nutrition_plan_meals || []) {
-            const { data: newMeal, error: mealError } = await supabase
+            const { data: newMeal, error: mealError } = await (supabase as any)
               .from('nutrition_plan_meals')
               .insert({
                 day_id: newDay.id,
@@ -219,7 +219,7 @@ export default function PlansLibraryScreen() {
             if (mealError) throw mealError;
 
             for (const food of meal.nutrition_plan_meal_foods || []) {
-              await supabase
+              await (supabase as any)
                 .from('nutrition_plan_meal_foods')
                 .insert({
                   meal_id: newMeal.id,

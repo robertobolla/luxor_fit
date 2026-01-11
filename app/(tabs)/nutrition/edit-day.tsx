@@ -15,8 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useUser } from '@clerk/clerk-expo';
+import { supabase } from '@/services/supabase';
 import { useUnitsStore, conversions } from '@/store/unitsStore';
 
 interface Food {
@@ -73,7 +73,7 @@ const generateId = () => Math.random().toString(36).substring(2, 9);
 
 export default function EditDayScreen() {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user } = useUser();
   const params = useLocalSearchParams();
   const { weightUnit } = useUnitsStore();
   
@@ -133,7 +133,7 @@ export default function EditDayScreen() {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('nutrition_plan_meals')
         .select(`
           id,
@@ -244,7 +244,7 @@ export default function EditDayScreen() {
   const loadFoodsByType = async (foodType: string) => {
     setLoadingFoods(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('foods')
         .select('*')
         .eq('food_type', foodType)

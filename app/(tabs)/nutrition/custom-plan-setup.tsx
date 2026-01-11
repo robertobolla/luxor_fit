@@ -16,8 +16,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useUser } from '@clerk/clerk-expo';
+import { supabase } from '@/services/supabase';
 
 interface DayConfig {
   id: string;
@@ -50,7 +50,7 @@ const DAY_NAMES = [
 
 export default function CustomPlanSetupScreen() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user } = useUser();
   
   const [planName, setPlanName] = useState('');
   const [planDescription, setPlanDescription] = useState('');
@@ -289,14 +289,14 @@ export default function CustomPlanSetupScreen() {
     try {
       // Si activamos, desactivar otros planes primero
       if (activate) {
-        await supabase
+        await (supabase as any)
           .from('nutrition_plans')
           .update({ is_active: false })
           .eq('user_id', user.id);
       }
 
       // Crear el plan
-      const { data: planData, error: planError } = await supabase
+      const { data: planData, error: planError } = await (supabase as any)
         .from('nutrition_plans')
         .insert({
           user_id: user.id,
@@ -313,7 +313,7 @@ export default function CustomPlanSetupScreen() {
 
       // Crear semanas y días
       for (const week of weeks) {
-        const { data: weekData, error: weekError } = await supabase
+        const { data: weekData, error: weekError } = await (supabase as any)
           .from('nutrition_plan_weeks')
           .insert({
             plan_id: planData.id,
@@ -325,7 +325,7 @@ export default function CustomPlanSetupScreen() {
         if (weekError) throw weekError;
 
         for (const day of week.days) {
-          const { error: dayError } = await supabase
+          const { error: dayError } = await (supabase as any)
             .from('nutrition_plan_days')
             .insert({
               week_id: weekData.id,

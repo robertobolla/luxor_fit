@@ -14,8 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { useUser } from '@clerk/clerk-expo';
+import { supabase } from '@/services/supabase';
 
 interface MealFood {
   id: string;
@@ -72,7 +72,7 @@ interface NutritionPlan {
 
 export default function PlanDetailScreen() {
   const { t, i18n } = useTranslation();
-  const { user } = useAuth();
+  const { user } = useUser();
   const params = useLocalSearchParams();
   const planId = params.id as string;
 
@@ -93,7 +93,7 @@ export default function PlanDetailScreen() {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('nutrition_plans')
         .select(`
           *,
@@ -197,13 +197,13 @@ export default function PlanDetailScreen() {
     setActivating(true);
     try {
       // Deactivate all plans
-      await supabase
+      await (supabase as any)
         .from('nutrition_plans')
         .update({ is_active: false })
         .eq('user_id', user.id);
 
       // Activate this plan
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('nutrition_plans')
         .update({ is_active: true })
         .eq('id', plan.id);
@@ -235,7 +235,7 @@ export default function PlanDetailScreen() {
           onPress: async () => {
             setDeleting(true);
             try {
-              const { error } = await supabase
+              const { error } = await (supabase as any)
                 .from('nutrition_plans')
                 .delete()
                 .eq('id', plan.id);
