@@ -11,6 +11,7 @@ import AdminTools from './pages/AdminTools';
 import CreateUser from './pages/CreateUser';
 import Partners from './pages/Partners';
 import Exercises from './pages/Exercises';
+import Foods from './pages/Foods';
 import PartnerReferrals from './pages/PartnerReferrals';
 import PartnerPayments from './pages/PartnerPayments';
 import Empresarios from './pages/Empresarios';
@@ -33,6 +34,7 @@ function App() {
             <Route path="users/:userId" element={<UserDetail />} />
             <Route path="partners" element={<Partners />} />
             <Route path="exercises" element={<Exercises />} />
+            <Route path="foods" element={<Foods />} />
             <Route path="partner-payments" element={<PartnerPayments />} />
             <Route path="partner-payments/:partnerId" element={<PartnerPayments />} />
             <Route path="empresarios" element={<Empresarios />} />

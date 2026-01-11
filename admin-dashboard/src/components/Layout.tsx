@@ -123,9 +123,10 @@ export default function Layout() {
           { path: '/admin-tools', label: 'Admin Tools', icon: '🛠️' },
         ];
         
-        // Solo admins ven Ejercicios
+        // Solo admins ven Ejercicios y Alimentos
         if (effectiveRole === 'admin') {
           items.splice(2, 0, { path: '/exercises', label: 'Ejercicios', icon: '🏋️' });
+          items.splice(3, 0, { path: '/foods', label: 'Alimentos', icon: '🍎' });
         }
         
         return items;

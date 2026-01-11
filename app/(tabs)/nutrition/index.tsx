@@ -1448,11 +1448,19 @@ export default function NutritionHomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.actionCard, styles.actionCardWide]}
+              style={styles.actionCard}
               onPress={handleGenerateNewPlan}
             >
               <Ionicons name="create" size={32} color="#ffb300" />
               <Text style={styles.actionText}>{t('nutritionIndex.generatePlan')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => router.push('/(tabs)/nutrition/plans-library' as any)}
+            >
+              <Ionicons name="library" size={32} color="#ffb300" />
+              <Text style={styles.actionText}>{t('nutritionIndex.plansLibrary')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1731,11 +1739,33 @@ export default function NutritionHomeScreen() {
                 {t('nutrition.chooseMethod')}
               </Text>
               
+              {/* Opción 1: Crear plan personalizado */}
               <TouchableOpacity
                 style={[styles.selectionOption, styles.selectionOptionPrimary]}
                 onPress={async () => {
                   setShowSelectionModal(false);
-                  // Usar requestAnimationFrame para asegurar que el modal se cierre antes de navegar
+                  requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                      router.push('/(tabs)/nutrition/custom-plan-setup' as any);
+                    });
+                  });
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={styles.optionIconContainer}>
+                  <Ionicons name="create-outline" size={28} color="#ffb300" />
+                </View>
+                <Text style={styles.selectionOptionTitlePrimary}>{t('nutrition.createCustomPlan')}</Text>
+                <Text style={styles.selectionOptionDescriptionPrimary}>
+                  {t('nutrition.createCustomPlanDesc')}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Opción 2: Generar plan con IA */}
+              <TouchableOpacity
+                style={[styles.selectionOption, styles.selectionOptionSecondary]}
+                onPress={async () => {
+                  setShowSelectionModal(false);
                   requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
                       setShowGeneratePlanModal(true);
@@ -1745,38 +1775,11 @@ export default function NutritionHomeScreen() {
                 activeOpacity={0.8}
               >
                 <View style={styles.optionIconContainer}>
-                  <Ionicons name="restaurant" size={28} color="#ffb300" />
+                  <Ionicons name="sparkles" size={28} color="#ffb300" />
                 </View>
-                <Text style={styles.selectionOptionTitlePrimary}>{t('nutrition.basedOnActivePlan')}</Text>
-                <Text style={styles.selectionOptionDescriptionPrimary}>
-                  {t('nutrition.basedOnActivePlanDesc')}
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.selectionOption, styles.selectionOptionSecondary]}
-                onPress={async () => {
-                  setShowSelectionModal(false);
-                  // Usar requestAnimationFrame para asegurar que el modal se cierre antes de navegar
-                  requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                      router.push({
-                        pathname: '/(tabs)/nutrition/settings' as any,
-                        params: {
-                          useActivePlan: 'false',
-                        },
-                      });
-                    });
-                  });
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={styles.optionIconContainer}>
-                  <Ionicons name="settings" size={28} color="#ffb300" />
-                </View>
-                <Text style={styles.selectionOptionTitleSecondary}>{t('nutrition.withDifferentGoals')}</Text>
+                <Text style={styles.selectionOptionTitleSecondary}>{t('nutrition.generateWithAI')}</Text>
                 <Text style={styles.selectionOptionDescriptionSecondary}>
-                  {t('nutrition.withDifferentGoalsDesc')}
+                  {t('nutrition.generateWithAIDesc')}
                 </Text>
               </TouchableOpacity>
 
