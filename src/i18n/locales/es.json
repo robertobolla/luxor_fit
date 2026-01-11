@@ -342,6 +342,8 @@
     "stats": {
       "time": "Tiempo"
     },
+    "time": "Tiempo",
+    "avgSpeed": "Vel. promedio",
     "completionNote": "¡Excelente trabajo! 💪 Sigue así.",
     "markCompleted": {
       "pending": "Marcar como completado",

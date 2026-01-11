@@ -342,6 +342,8 @@
     "stats": {
       "time": "Time"
     },
+    "time": "Time",
+    "avgSpeed": "Avg. speed",
     "completionNote": "Great job! 💪 Keep it up.",
     "markCompleted": {
       "pending": "Mark as completed",

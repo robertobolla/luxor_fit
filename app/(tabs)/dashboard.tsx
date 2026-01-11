@@ -28,6 +28,7 @@ import { useLoadingState } from '@/hooks/useLoadingState';
 import { SkeletonDashboard } from '@/components/SkeletonLoaders';
 import { checkIfNeedsWeeklyCheckin, CheckinStatus, shouldShowCheckinReminder, markCheckinReminderShown } from '@/services/weeklyCheckinService';
 import { getTotalUnreadChatsCount } from '@/services/chatService';
+import { useUnitsStore, conversions } from '../../src/store/unitsStore';
 
 const { width } = Dimensions.get('window');
 
@@ -88,6 +89,9 @@ export default function DashboardScreen() {
   const { user } = useUser();
   const { signOut } = useAuth();
   const { t } = useTranslation();
+  const { distanceUnit } = useUnitsStore();
+  const distanceLabel = distanceUnit === 'mi' ? 'mi' : 'km';
+  const displayDistance = (km: number) => distanceUnit === 'mi' ? conversions.kmToMi(km) : km;
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
@@ -490,8 +494,8 @@ export default function DashboardScreen() {
         return {
           value: stats.distance,
           goal: stats.distanceGoal,
-          displayValue: stats.distance.toFixed(1),
-          unit: 'km',
+          displayValue: displayDistance(stats.distance).toFixed(1),
+          unit: distanceLabel,
         };
       case 'calories':
         return {
@@ -791,7 +795,7 @@ export default function DashboardScreen() {
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{t('dashboard.distance')}</Text>
-                <Text style={styles.cardValue}>{stats.distance.toFixed(1)} km</Text>
+                <Text style={styles.cardValue}>{displayDistance(stats.distance).toFixed(1)} {distanceLabel}</Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
               <ProgressCircle

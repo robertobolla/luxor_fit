@@ -17,6 +17,7 @@ import { useUser } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
 import { saveExercise, getDaysWithExercise } from '@/services/exerciseService';
 import { supabase } from '../../src/services/supabase';
+import { useUnitsStore, conversions } from '../../src/store/unitsStore';
 
 
 const { width } = Dimensions.get('window');
@@ -51,6 +52,13 @@ const getManualActivities = (t: any): Activity[] => [
 export default function ExerciseDetailScreen() {
   const { user } = useUser();
   const { t } = useTranslation();
+  const { distanceUnit } = useUnitsStore();
+  
+  // Helpers para conversión de unidades
+  const displayDistance = (km: number) => distanceUnit === 'mi' ? conversions.kmToMi(km) : km;
+  const displaySpeed = (kmh: number) => distanceUnit === 'mi' ? conversions.kmToMi(kmh) : kmh;
+  const distanceLabel = distanceUnit === 'mi' ? 'mi' : 'km';
+  const speedLabel = distanceUnit === 'mi' ? 'mph' : 'km/h';
 
   const MONITOR_ACTIVITIES = useMemo(() => getMonitorActivities(t), [t]);
   const MANUAL_ACTIVITIES = useMemo(() => getManualActivities(t), [t]);
@@ -475,8 +483,8 @@ export default function ExerciseDetailScreen() {
       '¡Actividad completada! 🎉',
       `${selectedActivity?.name}\n\n` +
       `⏱️ Tiempo: ${timeStr}\n` +
-      `📏 Distancia: ${distance.toFixed(2)} km\n` +
-      `🚀 Velocidad promedio: ${avgSpeed.toFixed(1)} km/h\n\n` +
+      `📏 Distancia: ${displayDistance(distance).toFixed(2)} ${distanceLabel}\n` +
+      `🚀 Velocidad promedio: ${displaySpeed(avgSpeed).toFixed(1)} ${speedLabel}\n\n` +
       `💾 Actividad guardada correctamente`,
       [{ text: 'OK', onPress: handleCloseModal }]
     );
@@ -909,7 +917,7 @@ export default function ExerciseDetailScreen() {
                     <View style={styles.trackingStat}>
                       <Ionicons name="navigate" size={32} color="#ffb300" />
                       <Text style={styles.trackingStatValue}>
-                        {distance.toFixed(2)} km
+                        {displayDistance(distance).toFixed(2)} {distanceLabel}
                       </Text>
                       <Text style={styles.trackingStatLabel}>Distancia</Text>
                     </View>
@@ -917,9 +925,9 @@ export default function ExerciseDetailScreen() {
                     <View style={styles.trackingStat}>
                       <Ionicons name="speedometer" size={32} color="#ffb300" />
                       <Text style={styles.trackingStatValue}>
-                        {currentSpeed.toFixed(1)}
+                        {displaySpeed(currentSpeed).toFixed(1)}
                       </Text>
-                      <Text style={styles.trackingStatLabel}>km/h</Text>
+                      <Text style={styles.trackingStatLabel}>{speedLabel}</Text>
                     </View>
                   </View>
 

@@ -36,6 +36,7 @@ import {
   getProgressComparison,
   getProgressToGoals,
 } from '@/services/progressService';
+import { useUnitsStore, conversions } from '@/store/unitsStore';
 import {
   BodyMetricsChart,
   ProgressComparisonCard,
@@ -115,6 +116,7 @@ export default function ProgressScreen() {
   const { user } = useUser();
   const { signOut } = useAuth();
   const { t } = useTranslation();
+  const { weightUnit, distanceUnit } = useUnitsStore();
 
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -473,11 +475,13 @@ export default function ProgressScreen() {
           unit: '',
         };
       case 'distance':
+        const distanceValue = distanceUnit === 'mi' ? conversions.kmToMi(stats.distance) : stats.distance;
+        const distanceGoalValue = distanceUnit === 'mi' ? conversions.kmToMi(stats.distanceGoal) : stats.distanceGoal;
         return {
-          value: stats.distance,
-          goal: stats.distanceGoal,
-          displayValue: stats.distance.toFixed(1),
-          unit: 'km',
+          value: distanceValue,
+          goal: distanceGoalValue,
+          displayValue: distanceValue.toFixed(1),
+          unit: distanceUnit === 'mi' ? 'mi' : 'km',
         };
       case 'calories':
         return {
@@ -508,11 +512,13 @@ export default function ProgressScreen() {
           unit: t('progress.daysUnit'),
         };
       case 'weight':
+        const weightValue = weightUnit === 'lb' ? conversions.kgToLb(stats.weight) : stats.weight;
+        const weightGoalValue = weightUnit === 'lb' ? conversions.kgToLb(80) : 80;
         return {
-          value: stats.weight,
-          goal: 80,
-          displayValue: stats.weight ? stats.weight.toFixed(1) : '0',
-          unit: 'kg',
+          value: weightValue,
+          goal: weightGoalValue,
+          displayValue: weightValue ? weightValue.toFixed(1) : '0',
+          unit: weightUnit === 'lb' ? 'lb' : 'kg',
         };
       case 'water':
         return {
@@ -724,7 +730,9 @@ export default function ProgressScreen() {
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{t('progress.distance')}</Text>
-                <Text style={styles.cardValue}>{stats.distance.toFixed(1)} km</Text>
+                <Text style={styles.cardValue}>
+                  {(distanceUnit === 'mi' ? conversions.kmToMi(stats.distance) : stats.distance).toFixed(1)} {distanceUnit === 'mi' ? 'mi' : 'km'}
+                </Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
               <ProgressCircle
@@ -781,7 +789,9 @@ export default function ProgressScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{t('dashboard.weight')}</Text>
                 <Text style={styles.cardValue}>
-                  {stats.weight ? `${stats.weight.toFixed(1)} kg` : t('progress.noData')}
+                  {stats.weight 
+                    ? `${(weightUnit === 'lb' ? conversions.kgToLb(stats.weight) : stats.weight).toFixed(1)} ${weightUnit === 'lb' ? 'lb' : 'kg'}` 
+                    : t('progress.noData')}
                 </Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>
               </View>
