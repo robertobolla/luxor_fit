@@ -10,6 +10,10 @@ import {
   ActivityIndicator,
   Modal,
   Image,
+  KeyboardAvoidingView,
+  TouchableWithoutFeedback,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -661,109 +665,116 @@ export default function EditDayScreen() {
         animationType="fade"
         onRequestClose={() => setShowQuantityModal(false)}
       >
-        <View style={styles.quantityModalOverlay}>
-          <View style={styles.quantityModalContent}>
-            {selectedFood && (
-              <>
-                <View style={styles.quantityModalHeader}>
-                  {selectedFood.image_url ? (
-                    <Image
-                      source={{ uri: selectedFood.image_url }}
-                      style={styles.quantityFoodImage}
-                    />
-                  ) : (
-                    <View style={styles.quantityFoodImagePlaceholder}>
-                      <Ionicons name="restaurant" size={40} color="#666" />
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <KeyboardAvoidingView 
+            style={styles.quantityModalOverlay}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+            <TouchableWithoutFeedback>
+              <View style={styles.quantityModalContent}>
+                {selectedFood && (
+                  <>
+                    <View style={styles.quantityModalHeader}>
+                      {selectedFood.image_url ? (
+                        <Image
+                          source={{ uri: selectedFood.image_url }}
+                          style={styles.quantityFoodImage}
+                        />
+                      ) : (
+                        <View style={styles.quantityFoodImagePlaceholder}>
+                          <Ionicons name="restaurant" size={40} color="#666" />
+                        </View>
+                      )}
+                      <Text style={styles.quantityFoodName}>{getFoodName(selectedFood)}</Text>
                     </View>
-                  )}
-                  <Text style={styles.quantityFoodName}>{getFoodName(selectedFood)}</Text>
-                </View>
 
-                <View style={styles.quantityInputContainer}>
-                  <Text style={styles.quantityLabel}>{t('editDay.quantity')}</Text>
-                  <View style={styles.quantityInputRow}>
-                    <TouchableOpacity
-                      style={styles.quantityButton}
-                      onPress={() => {
-                        const current = parseFloat(quantity) || 0;
-                        const step = selectedFood.quantity_type === 'units' ? 1 : 25;
-                        if (current > step) setQuantity((current - step).toString());
-                      }}
-                    >
-                      <Ionicons name="remove" size={24} color="#fff" />
-                    </TouchableOpacity>
-                    <TextInput
-                      style={styles.quantityInput}
-                      value={quantity}
-                      onChangeText={setQuantity}
-                      keyboardType="numeric"
-                    />
-                    <Text style={styles.quantityUnit}>{getQuantityLabel(selectedFood)}</Text>
-                    <TouchableOpacity
-                      style={styles.quantityButton}
-                      onPress={() => {
-                        const current = parseFloat(quantity) || 0;
-                        const step = selectedFood.quantity_type === 'units' ? 1 : 25;
-                        setQuantity((current + step).toString());
-                      }}
-                    >
-                      <Ionicons name="add" size={24} color="#fff" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                    <View style={styles.quantityInputContainer}>
+                      <Text style={styles.quantityLabel}>{t('editDay.quantity')}</Text>
+                      <View style={styles.quantityInputRow}>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => {
+                            const current = parseFloat(quantity) || 0;
+                            const step = selectedFood.quantity_type === 'units' ? 1 : 25;
+                            if (current > step) setQuantity((current - step).toString());
+                          }}
+                        >
+                          <Ionicons name="remove" size={24} color="#fff" />
+                        </TouchableOpacity>
+                        <TextInput
+                          style={styles.quantityInput}
+                          value={quantity}
+                          onChangeText={setQuantity}
+                          keyboardType="numeric"
+                        />
+                        <Text style={styles.quantityUnit}>{getQuantityLabel(selectedFood)}</Text>
+                        <TouchableOpacity
+                          style={styles.quantityButton}
+                          onPress={() => {
+                            const current = parseFloat(quantity) || 0;
+                            const step = selectedFood.quantity_type === 'units' ? 1 : 25;
+                            setQuantity((current + step).toString());
+                          }}
+                        >
+                          <Ionicons name="add" size={24} color="#fff" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
 
-                {/* Calculated macros preview */}
-                <View style={styles.calculatedMacros}>
-                  {(() => {
-                    const macros = calculateMacros(selectedFood, parseFloat(quantity) || 0);
-                    return (
-                      <>
-                        <View style={styles.calculatedMacroItem}>
-                          <Text style={styles.calculatedMacroValue}>{macros.calories}</Text>
-                          <Text style={styles.calculatedMacroLabel}>kcal</Text>
-                        </View>
-                        <View style={styles.calculatedMacroItem}>
-                          <Text style={[styles.calculatedMacroValue, { color: '#4CAF50' }]}>
-                            {macros.protein}g
-                          </Text>
-                          <Text style={styles.calculatedMacroLabel}>{t('nutrition.protein')}</Text>
-                        </View>
-                        <View style={styles.calculatedMacroItem}>
-                          <Text style={[styles.calculatedMacroValue, { color: '#2196F3' }]}>
-                            {macros.carbs}g
-                          </Text>
-                          <Text style={styles.calculatedMacroLabel}>{t('nutrition.carbs')}</Text>
-                        </View>
-                        <View style={styles.calculatedMacroItem}>
-                          <Text style={[styles.calculatedMacroValue, { color: '#FF9800' }]}>
-                            {macros.fat}g
-                          </Text>
-                          <Text style={styles.calculatedMacroLabel}>{t('nutrition.fats')}</Text>
-                        </View>
-                      </>
-                    );
-                  })()}
-                </View>
+                    {/* Calculated macros preview */}
+                    <View style={styles.calculatedMacros}>
+                      {(() => {
+                        const macros = calculateMacros(selectedFood, parseFloat(quantity) || 0);
+                        return (
+                          <>
+                            <View style={styles.calculatedMacroItem}>
+                              <Text style={styles.calculatedMacroValue}>{macros.calories}</Text>
+                              <Text style={styles.calculatedMacroLabel}>kcal</Text>
+                            </View>
+                            <View style={styles.calculatedMacroItem}>
+                              <Text style={[styles.calculatedMacroValue, { color: '#4CAF50' }]}>
+                                {macros.protein}g
+                              </Text>
+                              <Text style={styles.calculatedMacroLabel}>{t('nutrition.protein')}</Text>
+                            </View>
+                            <View style={styles.calculatedMacroItem}>
+                              <Text style={[styles.calculatedMacroValue, { color: '#2196F3' }]}>
+                                {macros.carbs}g
+                              </Text>
+                              <Text style={styles.calculatedMacroLabel}>{t('nutrition.carbs')}</Text>
+                            </View>
+                            <View style={styles.calculatedMacroItem}>
+                              <Text style={[styles.calculatedMacroValue, { color: '#FF9800' }]}>
+                                {macros.fat}g
+                              </Text>
+                              <Text style={styles.calculatedMacroLabel}>{t('nutrition.fats')}</Text>
+                            </View>
+                          </>
+                        );
+                      })()}
+                    </View>
 
-                <View style={styles.quantityModalActions}>
-                  <TouchableOpacity
-                    style={styles.quantityCancelButton}
-                    onPress={() => setShowQuantityModal(false)}
-                  >
-                    <Text style={styles.quantityCancelButtonText}>{t('common.cancel')}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.quantityAddButton}
-                    onPress={addFoodToMeal}
-                  >
-                    <Ionicons name="add" size={20} color="#000" />
-                    <Text style={styles.quantityAddButtonText}>{t('editDay.add')}</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
+                    <View style={styles.quantityModalActions}>
+                      <TouchableOpacity
+                        style={styles.quantityCancelButton}
+                        onPress={() => setShowQuantityModal(false)}
+                      >
+                        <Text style={styles.quantityCancelButtonText}>{t('common.cancel')}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.quantityAddButton}
+                        onPress={addFoodToMeal}
+                      >
+                        <Ionicons name="add" size={20} color="#000" />
+                        <Text style={styles.quantityAddButtonText}>{t('editDay.add')}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* Meal Name Edit Modal */}
