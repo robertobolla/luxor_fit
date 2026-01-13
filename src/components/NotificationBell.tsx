@@ -18,13 +18,17 @@ import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../../src/services/supabase';
 import { useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-
+import { acceptSharedWorkout, rejectSharedWorkout } from '../services/sharedWorkoutService';
+import { acceptSharedNutritionPlan, rejectSharedNutritionPlan } from '../services/sharedNutritionService';
+import { Alert } from 'react-native';
 
 interface Notification {
   id: string;
+  notification_type: string;
   title: string;
   message: string;
   sender_name: string;
+  related_id?: string;
   created_at: string;
   is_read: boolean;
 }
@@ -46,12 +50,19 @@ export default function NotificationBell() {
       const { data, error } = await supabase
         .rpc('get_user_notifications', { p_user_id: user.id });
 
-      if (error) throw error;
+      if (error) {
+        // Silently fail if RPC doesn't exist - notifications feature might not be set up
+        setNotifications([]);
+        setUnreadCount(0);
+        return;
+      }
 
       setNotifications(data || []);
       setUnreadCount((data || []).filter((n: Notification) => !n.is_read).length);
-    } catch (error) {
-      console.error('Error cargando notificaciones:', error);
+    } catch (error: any) {
+      // Silently fail - notifications feature might not be configured
+      setNotifications([]);
+      setUnreadCount(0);
     } finally {
       setLoading(false);
     }
@@ -94,6 +105,183 @@ export default function NotificationBell() {
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
       console.error('Error marcando notificación:', error);
+    }
+  };
+
+  // Aceptar plan compartido desde notificación
+  const handleAcceptPlan = async (notification: Notification) => {
+    if (!user?.id || !notification.related_id) return;
+
+    try {
+      // Buscar el shared_workout o shared_nutrition_plan correspondiente
+      if (notification.notification_type === 'workout_plan') {
+        const { data: sharedWorkout } = await supabase
+          .from('shared_workouts')
+          .select('*')
+          .eq('workout_plan_id', notification.related_id)
+          .eq('receiver_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (!sharedWorkout) {
+          Alert.alert('Error', 'Plan de entrenamiento no encontrado');
+          return;
+        }
+
+        Alert.alert(
+          'Aceptar plan de entrenamiento',
+          '¿Deseas activarlo como tu plan actual?',
+          [
+            {
+              text: 'Solo aceptar',
+              onPress: async () => {
+                const result = await acceptSharedWorkout(sharedWorkout.id, user.id, false);
+                if (result.success) {
+                  markAsRead(notification.id);
+                  loadNotifications();
+                } else {
+                  Alert.alert('Error', result.error || 'No se pudo aceptar el plan');
+                }
+              },
+            },
+            {
+              text: 'Aceptar y activar',
+              onPress: async () => {
+                const result = await acceptSharedWorkout(sharedWorkout.id, user.id, true);
+                if (result.success) {
+                  Alert.alert('Éxito', 'Plan de entrenamiento aceptado y activado');
+                  markAsRead(notification.id);
+                  loadNotifications();
+                } else {
+                  Alert.alert('Error', result.error || 'No se pudo aceptar el plan');
+                }
+              },
+            },
+            { text: 'Cancelar', style: 'cancel' },
+          ]
+        );
+      } else if (notification.notification_type === 'nutrition_plan') {
+        const { data: sharedPlan } = await supabase
+          .from('shared_nutrition_plans')
+          .select('*')
+          .eq('nutrition_plan_id', notification.related_id)
+          .eq('receiver_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (!sharedPlan) {
+          Alert.alert('Error', 'Plan nutricional no encontrado');
+          return;
+        }
+
+        Alert.alert(
+          'Aceptar plan nutricional',
+          '¿Deseas activarlo como tu plan actual?',
+          [
+            {
+              text: 'Solo aceptar',
+              onPress: async () => {
+                const result = await acceptSharedNutritionPlan(sharedPlan.id, user.id, false);
+                if (result.success) {
+                  markAsRead(notification.id);
+                  loadNotifications();
+                } else {
+                  Alert.alert('Error', result.error || 'No se pudo aceptar el plan');
+                }
+              },
+            },
+            {
+              text: 'Aceptar y activar',
+              onPress: async () => {
+                const result = await acceptSharedNutritionPlan(sharedPlan.id, user.id, true);
+                if (result.success) {
+                  Alert.alert('Éxito', 'Plan nutricional aceptado y activado');
+                  markAsRead(notification.id);
+                  loadNotifications();
+                } else {
+                  Alert.alert('Error', result.error || 'No se pudo aceptar el plan');
+                }
+              },
+            },
+            { text: 'Cancelar', style: 'cancel' },
+          ]
+        );
+      }
+    } catch (error: any) {
+      console.error('Error accepting plan:', error);
+      Alert.alert('Error', 'No se pudo procesar la solicitud');
+    }
+  };
+
+  // Rechazar plan compartido desde notificación
+  const handleRejectPlan = async (notification: Notification) => {
+    if (!user?.id || !notification.related_id) return;
+
+    try {
+      if (notification.notification_type === 'workout_plan') {
+        const { data: sharedWorkout } = await supabase
+          .from('shared_workouts')
+          .select('*')
+          .eq('workout_plan_id', notification.related_id)
+          .eq('receiver_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (!sharedWorkout) {
+          Alert.alert('Error', 'Plan de entrenamiento no encontrado');
+          return;
+        }
+
+        Alert.alert('Rechazar plan', '¿Estás seguro de que deseas rechazar este plan?', [
+          {
+            text: 'Rechazar',
+            style: 'destructive',
+            onPress: async () => {
+              const result = await rejectSharedWorkout(sharedWorkout.id, user.id);
+              if (result.success) {
+                markAsRead(notification.id);
+                loadNotifications();
+              } else {
+                Alert.alert('Error', result.error || 'No se pudo rechazar el plan');
+              }
+            },
+          },
+          { text: 'Cancelar', style: 'cancel' },
+        ]);
+      } else if (notification.notification_type === 'nutrition_plan') {
+        const { data: sharedPlan } = await supabase
+          .from('shared_nutrition_plans')
+          .select('*')
+          .eq('nutrition_plan_id', notification.related_id)
+          .eq('receiver_id', user.id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (!sharedPlan) {
+          Alert.alert('Error', 'Plan nutricional no encontrado');
+          return;
+        }
+
+        Alert.alert('Rechazar plan', '¿Estás seguro de que deseas rechazar este plan?', [
+          {
+            text: 'Rechazar',
+            style: 'destructive',
+            onPress: async () => {
+              const result = await rejectSharedNutritionPlan(sharedPlan.id, user.id);
+              if (result.success) {
+                markAsRead(notification.id);
+                loadNotifications();
+              } else {
+                Alert.alert('Error', result.error || 'No se pudo rechazar el plan');
+              }
+            },
+          },
+          { text: 'Cancelar', style: 'cancel' },
+        ]);
+      }
+    } catch (error: any) {
+      console.error('Error rejecting plan:', error);
+      Alert.alert('Error', 'No se pudo procesar la solicitud');
     }
   };
 
@@ -208,47 +396,77 @@ export default function NotificationBell() {
               </View>
             ) : (
               <ScrollView style={styles.notificationsList}>
-                {notifications.map((notification) => (
-                  <TouchableOpacity
-                    key={notification.id}
-                    style={[
-                      styles.notificationItem,
-                      !notification.is_read && styles.notificationUnread,
-                    ]}
-                    onPress={() => {
-                      if (!notification.is_read) {
-                        markAsRead(notification.id);
-                      }
-                    }}
-                  >
-                    <View style={styles.notificationIcon}>
-                      <Ionicons
-                        name={notification.is_read ? "mail-open-outline" : "mail-unread-outline"}
-                        size={24}
-                        color={notification.is_read ? "#666" : "#F7931E"}
-                      />
+                {notifications.map((notification) => {
+                  const isPlanNotification = notification.notification_type === 'workout_plan' || 
+                                            notification.notification_type === 'nutrition_plan';
+                  const isPendingPlan = isPlanNotification && 
+                                      (notification.title.includes('compartido') || 
+                                       notification.title.includes('Plan'));
+
+                  return (
+                    <View
+                      key={notification.id}
+                      style={[
+                        styles.notificationItem,
+                        !notification.is_read && styles.notificationUnread,
+                      ]}
+                    >
+                      <TouchableOpacity
+                        style={styles.notificationContentWrapper}
+                        onPress={() => {
+                          if (!notification.is_read && !isPendingPlan) {
+                            markAsRead(notification.id);
+                          }
+                        }}
+                      >
+                        <View style={styles.notificationIcon}>
+                          <Ionicons
+                            name={notification.is_read ? "mail-open-outline" : "mail-unread-outline"}
+                            size={24}
+                            color={notification.is_read ? "#666" : "#F7931E"}
+                          />
+                        </View>
+                        <View style={styles.notificationContent}>
+                          <View style={styles.notificationHeader}>
+                            <Text style={styles.notificationSender}>
+                              {notification.sender_name}
+                            </Text>
+                            {!notification.is_read && (
+                              <View style={styles.unreadDot} />
+                            )}
+                          </View>
+                          <Text style={styles.notificationTitle}>
+                            {notification.title}
+                          </Text>
+                          <Text style={styles.notificationMessage}>
+                            {renderMessageWithLinks(notification.message)}
+                          </Text>
+                          <Text style={styles.notificationTime}>
+                            {getRelativeTime(notification.created_at)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                      {isPendingPlan && !notification.is_read && (
+                        <View style={styles.planActions}>
+                          <TouchableOpacity
+                            style={styles.acceptButton}
+                            onPress={() => handleAcceptPlan(notification)}
+                          >
+                            <Ionicons name="checkmark" size={16} color="#ffffff" />
+                            <Text style={styles.acceptButtonText}>Aceptar</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.rejectButton}
+                            onPress={() => handleRejectPlan(notification)}
+                          >
+                            <Ionicons name="close" size={16} color="#ffffff" />
+                            <Text style={styles.rejectButtonText}>Rechazar</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
                     </View>
-                    <View style={styles.notificationContent}>
-                      <View style={styles.notificationHeader}>
-                        <Text style={styles.notificationSender}>
-                          {notification.sender_name}
-                        </Text>
-                        {!notification.is_read && (
-                          <View style={styles.unreadDot} />
-                        )}
-                      </View>
-                      <Text style={styles.notificationTitle}>
-                        {notification.title}
-                      </Text>
-                      <Text style={styles.notificationMessage}>
-                        {renderMessageWithLinks(notification.message)}
-                      </Text>
-                      <Text style={styles.notificationTime}>
-                        {getRelativeTime(notification.created_at)}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                ))}
+                  );
+                })}
               </ScrollView>
             )}
           </View>
@@ -418,6 +636,50 @@ const styles = StyleSheet.create({
   notificationTime: {
     fontSize: 12,
     color: '#666',
+  },
+  notificationContentWrapper: {
+    flexDirection: 'row',
+    flex: 1,
+  },
+  planActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a2a',
+  },
+  acceptButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  acceptButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  rejectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ff4444',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+    flex: 1,
+    justifyContent: 'center',
+  },
+  rejectButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

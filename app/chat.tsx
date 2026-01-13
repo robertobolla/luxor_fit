@@ -39,6 +39,12 @@ import {
   getReceivedSharedWorkouts,
   SharedWorkout,
 } from '../src/services/sharedWorkoutService';
+import {
+  acceptSharedNutritionPlan,
+  rejectSharedNutritionPlan,
+  getPendingSharedNutritionPlans,
+  SharedNutritionPlan,
+} from '../src/services/sharedNutritionService';
 import { uploadChatImage } from '../src/services/chatImageService';
 import { setCurrentChatForNotifications } from '../src/hooks/useChatNotifications';
 
@@ -56,6 +62,7 @@ export default function ChatScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [otherUserProfile, setOtherUserProfile] = useState<any>(null);
   const [pendingWorkouts, setPendingWorkouts] = useState<SharedWorkout[]>([]);
+  const [pendingNutritionPlans, setPendingNutritionPlans] = useState<SharedNutritionPlan[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [otherUserTyping, setOtherUserTyping] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -74,6 +81,7 @@ export default function ChatScreen() {
       loadMessages();
       loadOtherUserProfile();
       loadPendingWorkouts();
+      loadPendingNutritionPlans();
       markMessagesAsRead(chatId, user.id);
     }
 
@@ -195,6 +203,19 @@ export default function ChatScreen() {
     }
   };
 
+  const loadPendingNutritionPlans = async () => {
+    if (!user?.id) return;
+
+    const result = await getPendingSharedNutritionPlans(user.id);
+    if (result.success && result.data) {
+      // Filtrar solo los del chat actual
+      const chatPlans = result.data.filter(
+        (p) => p.sender_id === otherUserId || p.receiver_id === otherUserId
+      );
+      setPendingNutritionPlans(chatPlans);
+    }
+  };
+
   const handleAcceptWorkout = async (message: Message) => {
     if (!user?.id || !message.workout_plan_id) return;
 
@@ -273,6 +294,91 @@ export default function ChatScreen() {
             loadMessages();
           } else {
             Alert.alert(t('common.error'), result.error || t('chat.couldNotReject'));
+          }
+        },
+      },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
+
+  const handleAcceptNutritionPlan = async (message: Message) => {
+    if (!user?.id || !message.nutrition_plan_id) return;
+
+    // Buscar el shared_nutrition_plan correspondiente
+    const { data: sharedPlan } = await supabase
+      .from('shared_nutrition_plans')
+      .select('*')
+      .eq('nutrition_plan_id', message.nutrition_plan_id)
+      .eq('receiver_id', user.id)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (!sharedPlan) {
+      Alert.alert(t('common.error'), 'Plan nutricional no encontrado');
+      return;
+    }
+
+    Alert.alert(
+      'Aceptar plan nutricional',
+      '¿Deseas activarlo como tu plan actual?',
+      [
+        {
+          text: 'Solo aceptar',
+          onPress: async () => {
+            const result = await acceptSharedNutritionPlan(sharedPlan.id, user.id, false);
+            if (result.success) {
+              loadPendingNutritionPlans();
+              loadMessages(); // Recargar mensajes para ver la actualización
+            } else {
+              Alert.alert(t('common.error'), result.error || 'No se pudo aceptar el plan');
+            }
+          },
+        },
+        {
+          text: 'Aceptar y activar',
+          onPress: async () => {
+            const result = await acceptSharedNutritionPlan(sharedPlan.id, user.id, true);
+            if (result.success) {
+              Alert.alert(t('common.success'), 'Plan nutricional aceptado y activado');
+              loadPendingNutritionPlans();
+              loadMessages();
+            } else {
+              Alert.alert(t('common.error'), result.error || 'No se pudo aceptar el plan');
+            }
+          },
+        },
+        { text: 'Cancelar', style: 'cancel' },
+      ]
+    );
+  };
+
+  const handleRejectNutritionPlan = async (message: Message) => {
+    if (!user?.id || !message.nutrition_plan_id) return;
+
+    const { data: sharedPlan } = await supabase
+      .from('shared_nutrition_plans')
+      .select('*')
+      .eq('nutrition_plan_id', message.nutrition_plan_id)
+      .eq('receiver_id', user.id)
+      .eq('status', 'pending')
+      .maybeSingle();
+
+    if (!sharedPlan) {
+      Alert.alert(t('common.error'), 'Plan nutricional no encontrado');
+      return;
+    }
+
+    Alert.alert('Rechazar plan nutricional', '¿Estás seguro de que deseas rechazar este plan?', [
+      {
+        text: 'Rechazar',
+        style: 'destructive',
+        onPress: async () => {
+          const result = await rejectSharedNutritionPlan(sharedPlan.id, user.id);
+          if (result.success) {
+            loadPendingNutritionPlans();
+            loadMessages();
+          } else {
+            Alert.alert(t('common.error'), result.error || 'No se pudo rechazar el plan');
           }
         },
       },
@@ -648,6 +754,44 @@ export default function ChatScreen() {
                   <View style={styles.workoutRejectedCard}>
                     <Ionicons name="close-circle" size={20} color="#ff4444" />
                     <Text style={styles.workoutRejectedText}>Entrenamiento rechazado</Text>
+                  </View>
+                )}
+                {message.message_type === 'nutrition_share' && (
+                  <View style={styles.nutritionShareCard}>
+                    <Ionicons name="restaurant" size={20} color="#4CAF50" />
+                    <View style={styles.nutritionShareContent}>
+                      <Text style={styles.nutritionShareText}>Plan nutricional compartido</Text>
+                      {!isMe && (
+                        <View style={styles.nutritionActions}>
+                          <TouchableOpacity
+                            style={styles.acceptNutritionButton}
+                            onPress={() => handleAcceptNutritionPlan(message)}
+                          >
+                            <Ionicons name="checkmark" size={16} color="#ffffff" />
+                            <Text style={styles.acceptNutritionText}>Aceptar</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.rejectNutritionButton}
+                            onPress={() => handleRejectNutritionPlan(message)}
+                          >
+                            <Ionicons name="close" size={16} color="#ffffff" />
+                            <Text style={styles.rejectNutritionText}>Rechazar</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                )}
+                {message.message_type === 'nutrition_accepted' && (
+                  <View style={styles.nutritionAcceptedCard}>
+                    <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+                    <Text style={styles.nutritionAcceptedText}>Plan nutricional aceptado</Text>
+                  </View>
+                )}
+                {message.message_type === 'nutrition_rejected' && (
+                  <View style={styles.nutritionRejectedCard}>
+                    <Ionicons name="close-circle" size={20} color="#ff4444" />
+                    <Text style={styles.nutritionRejectedText}>Plan nutricional rechazado</Text>
                   </View>
                 )}
                 {/* Imagen si existe */}
@@ -1073,6 +1217,81 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   workoutRejectedText: {
+    color: '#ff4444',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  nutritionShareCard: {
+    backgroundColor: '#4CAF5020',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  nutritionShareContent: {
+    marginLeft: 28,
+  },
+  nutritionShareText: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  nutritionActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  acceptNutritionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+  },
+  acceptNutritionText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  rejectNutritionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ff4444',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+  },
+  rejectNutritionText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  nutritionAcceptedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF5020',
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  nutritionAcceptedText: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  nutritionRejectedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ff444420',
+    padding: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  nutritionRejectedText: {
     color: '#ff4444',
     fontSize: 14,
     fontWeight: '600',

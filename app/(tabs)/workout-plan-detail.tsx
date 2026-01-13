@@ -234,53 +234,124 @@ export default function WorkoutPlanDetailScreen() {
     return Math.max(0, Math.min(weeksPassed, safeTotal - 1));
   };
 
-  const loadPlanDetails = useCallback(async () => {
-    if (!planId) return;
+  const loadPlanDetails = useCallback(
+    async (options?: { allowRetry?: boolean }) => {
+      if (!planId) return;
 
-    try {
-      setIsLoading(true);
-      setError(null);
+      const allowRetry = options?.allowRetry ?? true;
 
-      const { data, error: sbError, status } = await supabase
-        .from('workout_plans')
-        .select('*')
-        .eq('id', planId)
-        .limit(1)
-        .maybeSingle();
+      try {
+        setIsLoading(true);
+        setError(null);
 
-      if (sbError) {
-        console.error('Error al cargar plan:', sbError);
-        setError(str(t('workoutPlanDetail.couldNotLoadPlan'), 'No se pudo cargar el plan'));
-        return;
+        const { data, error: sbError, status } = await supabase
+          .from('workout_plans')
+          .select('*')
+          .eq('id', planId)
+          .limit(1)
+          .maybeSingle();
+
+        // Si falla justo al abrir la app porque la sesión aún no está lista,
+        // reintentamos una vez antes de mostrar error para evitar el "parpadeo"
+        if ((sbError || !data) && allowRetry && (status === 401 || status === 406)) {
+          console.warn(
+            'Reintentando carga de plan tras error de sesión inicial:',
+            { status, sbError }
+          );
+          await new Promise((resolve) => setTimeout(resolve, 400));
+
+          const { data: retryData, error: retryError, status: retryStatus } = await supabase
+            .from('workout_plans')
+            .select('*')
+            .eq('id', planId)
+            .limit(1)
+            .maybeSingle();
+
+          if (retryError) {
+            console.error('Error al recargar plan (reintento):', retryError);
+            setError(
+              str(t('workoutPlanDetail.couldNotLoadPlan'), 'No se pudo cargar el plan')
+            );
+            return;
+          }
+
+          if (!retryData) {
+            console.warn('Plan no encontrado después del reintento:', {
+              planId,
+              retryStatus,
+            });
+            setError(str(t('workoutPlanDetail.planNotFound'), 'Plan no encontrado'));
+            return;
+          }
+
+          const normalizedRetry = normalizePlanRow(retryData as WorkoutPlanRow);
+          setPlan(normalizedRetry);
+
+          const durationWeeksRetry = toNumber(
+            normalizedRetry.plan_data.duration_weeks ?? normalizedRetry.duration_weeks,
+            4
+          );
+
+          const hasMultiRetry =
+            Array.isArray(normalizedRetry.plan_data.multi_week_structure) &&
+            normalizedRetry.plan_data.multi_week_structure.length > 0;
+
+          if (normalizedRetry.is_active && normalizedRetry.activated_at && hasMultiRetry) {
+            setCurrentWeekIndex(
+              calculateCurrentWeekIndex(
+                str(normalizedRetry.activated_at),
+                durationWeeksRetry
+              )
+            );
+          } else {
+            setCurrentWeekIndex(0);
+          }
+
+          return;
+        }
+
+        if (sbError) {
+          console.error('Error al cargar plan:', sbError);
+          setError(
+            str(t('workoutPlanDetail.couldNotLoadPlan'), 'No se pudo cargar el plan')
+          );
+          return;
+        }
+
+        if (!data) {
+          console.warn('Plan no encontrado para id:', planId, 'status:', status);
+          setError(str(t('workoutPlanDetail.planNotFound'), 'Plan no encontrado'));
+          return;
+        }
+
+        const normalized = normalizePlanRow(data as WorkoutPlanRow);
+        setPlan(normalized);
+
+        const durationWeeks = toNumber(
+          normalized.plan_data.duration_weeks ?? normalized.duration_weeks,
+          4
+        );
+
+        const hasMulti =
+          Array.isArray(normalized.plan_data.multi_week_structure) &&
+          normalized.plan_data.multi_week_structure.length > 0;
+
+        if (normalized.is_active && normalized.activated_at && hasMulti) {
+          setCurrentWeekIndex(
+            calculateCurrentWeekIndex(str(normalized.activated_at), durationWeeks)
+          );
+        } else {
+          setCurrentWeekIndex(0);
+        }
+      } catch (err) {
+        console.error('Error inesperado:', err);
+        setError(str(t('workoutPlanDetail.unexpectedError'), 'Error inesperado'));
+      } finally {
+        setIsLoading(false);
       }
-
-      if (!data) {
-        console.warn('Plan no encontrado para id:', planId, 'status:', status);
-        setError(str(t('workoutPlanDetail.planNotFound'), 'Plan no encontrado'));
-        return;
-      }
-
-      const normalized = normalizePlanRow(data as WorkoutPlanRow);
-      setPlan(normalized);
-
-      const durationWeeks = toNumber(normalized.plan_data.duration_weeks ?? normalized.duration_weeks, 4);
-
-      const hasMulti =
-        Array.isArray(normalized.plan_data.multi_week_structure) &&
-        normalized.plan_data.multi_week_structure.length > 0;
-
-      if (normalized.is_active && normalized.activated_at && hasMulti) {
-        setCurrentWeekIndex(calculateCurrentWeekIndex(str(normalized.activated_at), durationWeeks));
-      } else {
-        setCurrentWeekIndex(0);
-      }
-    } catch (err) {
-      console.error('Error inesperado:', err);
-      setError(str(t('workoutPlanDetail.unexpectedError'), 'Error inesperado'));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [planId, t]);
+    },
+    [planId, t]
+  );
 
   const loadCompletedDays = useCallback(async () => {
     if (!user?.id || !planId) return;
@@ -305,7 +376,8 @@ export default function WorkoutPlanDetailScreen() {
   }, [user?.id, planId]);
 
   useEffect(() => {
-    loadPlanDetails();
+    // Primer load con posibilidad de reintento (caso app recién abierta)
+    loadPlanDetails({ allowRetry: true });
   }, [loadPlanDetails]);
 
   useEffect(() => {
@@ -314,7 +386,8 @@ export default function WorkoutPlanDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadPlanDetails().then(() => {
+      // En foco recargamos sin reintento extra (ya debería estar la sesión lista)
+      loadPlanDetails({ allowRetry: false }).then(() => {
         if (user?.id) loadCompletedDays();
       });
     }, [loadPlanDetails, loadCompletedDays, user?.id])
