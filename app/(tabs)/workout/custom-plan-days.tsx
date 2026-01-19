@@ -638,6 +638,8 @@ export default function CustomPlanDaysScreen() {
         equipment: JSON.stringify(equipment),
         dayData: JSON.stringify(dayData),
         planId: editingPlanId || '', // Pasar planId para guardar directamente en DB
+        isTrainerView: isTrainerView ? 'true' : 'false',
+        studentId: studentId || '',
       },
     });
   };

@@ -82,6 +82,8 @@ export default function CustomPlanDayDetailScreen() {
   
   // Obtener planId de los parámetros (si estamos editando un plan existente)
   const editingPlanId = params.planId as string | undefined;
+  const isTrainerView = params.isTrainerView === 'true';
+  const studentId = params.studentId as string | undefined;
   
   // Parsear parámetros con validación
   const parseDayNumber = (value: string | undefined): number => {
@@ -324,6 +326,8 @@ export default function CustomPlanDayDetailScreen() {
         dayNumber: dayNumber.toString(),
         daysPerWeek: params.daysPerWeek as string || '',
         dayData: JSON.stringify({ dayNumber, exercises }),
+        isTrainerView: isTrainerView ? 'true' : 'false',
+        studentId: studentId || '',
       },
     });
   };
@@ -668,13 +672,17 @@ export default function CustomPlanDayDetailScreen() {
       if (editingPlanId && user?.id) {
         console.log('📤 Guardando también en Supabase (plan existente):', editingPlanId);
         
+        // Determinar el user_id correcto (alumno si modo entrenador, propio si no)
+        const targetUserId = isTrainerView && studentId ? studentId : user.id;
+        console.log('👤 Target user_id para actualización:', targetUserId, '(isTrainerView:', isTrainerView, ')');
+        
         try {
           // 1. Cargar el plan actual desde Supabase
           const { data: currentPlan, error: fetchError } = await supabase
             .from('workout_plans')
             .select('plan_data')
             .eq('id', editingPlanId)
-            .eq('user_id', user.id)
+            .eq('user_id', targetUserId)
             .single();
           
           if (fetchError) {
@@ -730,7 +738,7 @@ export default function CustomPlanDayDetailScreen() {
               .from('workout_plans')
               .update({ plan_data: planData })
               .eq('id', editingPlanId)
-              .eq('user_id', user.id);
+              .eq('user_id', targetUserId);
             
             if (updateError) {
               console.error('❌ Error actualizando plan en Supabase:', updateError);
@@ -762,6 +770,8 @@ export default function CustomPlanDayDetailScreen() {
           daysPerWeek: params.daysPerWeek as string || '',
           equipment: JSON.stringify(equipment),
           planId: params.planId as string || '',
+          isTrainerView: isTrainerView ? 'true' : 'false',
+          studentId: studentId || '',
         },
       });
     } catch (error) {

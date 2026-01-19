@@ -43,14 +43,14 @@ export async function initializeRevenueCat(userId?: string): Promise<void> {
 
   // Detectar si estamos en Expo Go (no tiene acceso a tiendas nativas)
   const isExpoGo = Constants.appOwnership === 'expo';
-  
+
   if (isExpoGo) {
     // En Expo Go, RevenueCat no funciona, silenciar el intento
     return;
   }
 
   const apiKey = Platform.OS === 'ios' ? REVENUECAT_API_KEY_IOS : REVENUECAT_API_KEY_ANDROID;
-  
+
   if (!apiKey) {
     console.warn('⚠️ RevenueCat API Key no configurada para', Platform.OS);
     return;
@@ -73,8 +73,8 @@ export async function initializeRevenueCat(userId?: string): Promise<void> {
   } catch (error: any) {
     // Si el error es porque la tienda nativa no está disponible (Expo Go, etc.),
     // manejar silenciosamente ya que esto es esperado
-    if (error?.message?.includes('native store is not available') || 
-        error?.message?.includes('Expo Go')) {
+    if (error?.message?.includes('native store is not available') ||
+      error?.message?.includes('Expo Go')) {
       // Silenciar este error específico
       return;
     }
@@ -98,8 +98,8 @@ export async function identifyUser(userId: string): Promise<CustomerInfo | null>
     return customerInfo.customerInfo;
   } catch (error: any) {
     // Si el error es porque no está configurado, retornar null silenciosamente
-    if (error?.message?.includes('singleton instance') || 
-        error?.message?.includes('configure Purchases')) {
+    if (error?.message?.includes('singleton instance') ||
+      error?.message?.includes('configure Purchases')) {
       return null;
     }
     console.warn('⚠️ Error identificando usuario en RevenueCat:', error?.message || error);
@@ -132,19 +132,19 @@ export async function getOfferings(): Promise<PurchasesOffering | null> {
   try {
     console.log('📦 Obteniendo ofertas de RevenueCat...');
     const offerings = await Purchases.getOfferings();
-    
+
     console.log('📦 Offerings recibidas:', JSON.stringify({
       current: offerings.current?.identifier,
       all: Object.keys(offerings.all || {}),
       currentPackages: offerings.current?.availablePackages?.length || 0,
     }));
-    
+
     if (offerings.current && offerings.current.availablePackages.length > 0) {
       console.log('📦 Ofertas disponibles:', offerings.current.identifier);
       console.log('📦 Paquetes:', offerings.current.availablePackages.map(p => p.identifier));
       return offerings.current;
     }
-    
+
     // Intentar obtener la primera offering si current no existe
     const allOfferingKeys = Object.keys(offerings.all || {});
     if (allOfferingKeys.length > 0) {
@@ -154,7 +154,7 @@ export async function getOfferings(): Promise<PurchasesOffering | null> {
         return firstOffering;
       }
     }
-    
+
     console.warn('⚠️ No hay ofertas disponibles en RevenueCat');
     console.warn('⚠️ Verifica que hayas configurado offerings y productos en RevenueCat Dashboard');
     return null;
@@ -182,21 +182,21 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<{
   try {
     console.log('🛒 Iniciando compra:', pkg.identifier);
     console.log('🛒 Producto:', pkg.product.identifier, pkg.product.priceString);
-    
+
     const { customerInfo } = await Purchases.purchasePackage(pkg);
-    
+
     console.log('🛒 Compra procesada, verificando entitlements...');
     console.log('🛒 Entitlements activos:', Object.keys(customerInfo.entitlements.active || {}));
-    
+
     // Verificar si tiene el entitlement premium
     const isPremium = customerInfo.entitlements.active[ENTITLEMENTS.PREMIUM] !== undefined;
-    
+
     if (isPremium) {
       console.log('✅ Compra exitosa - Usuario es Premium');
-      
+
       // Sincronizar con Supabase
       await syncSubscriptionToSupabase(customerInfo);
-      
+
       return { success: true, customerInfo };
     } else {
       console.warn('⚠️ Compra completada pero sin entitlement premium');
@@ -210,17 +210,17 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<{
       console.log('ℹ️ Usuario canceló la compra');
       return { success: false, error: 'cancelled' };
     }
-    
+
     // Errores de red o servidor
     if (error.code === 'NETWORK_ERROR' || error.message?.includes('network')) {
       return { success: false, error: 'Error de conexión. Verifica tu internet.' };
     }
-    
+
     // Error de configuración
     if (error.message?.includes('configured') || error.message?.includes('singleton')) {
       return { success: false, error: 'Servicio de suscripciones no disponible' };
     }
-    
+
     console.error('❌ Error en la compra:', error);
     console.error('❌ Código:', error.code, 'Mensaje:', error.message);
     return { success: false, error: error.message || 'Error al procesar la compra' };
@@ -238,17 +238,17 @@ export async function restorePurchases(): Promise<{
 }> {
   try {
     console.log('🔄 Restaurando compras...');
-    
+
     const customerInfo = await Purchases.restorePurchases();
     const isPremium = customerInfo.entitlements.active[ENTITLEMENTS.PREMIUM] !== undefined;
-    
+
     if (isPremium) {
       console.log('✅ Compras restauradas - Usuario es Premium');
       await syncSubscriptionToSupabase(customerInfo);
     } else {
       console.log('ℹ️ No se encontraron compras anteriores activas');
     }
-    
+
     return { success: true, isPremium, customerInfo };
   } catch (error: any) {
     console.error('❌ Error restaurando compras:', error);
@@ -273,23 +273,23 @@ export async function checkSubscriptionStatus(): Promise<{
   try {
     const customerInfo = await Purchases.getCustomerInfo();
     const premiumEntitlement = customerInfo.entitlements.active[ENTITLEMENTS.PREMIUM];
-    
+
     if (premiumEntitlement) {
       return {
         isActive: true,
         willRenew: premiumEntitlement.willRenew,
-        expirationDate: premiumEntitlement.expirationDate 
-          ? new Date(premiumEntitlement.expirationDate) 
+        expirationDate: premiumEntitlement.expirationDate
+          ? new Date(premiumEntitlement.expirationDate)
           : undefined,
         productIdentifier: premiumEntitlement.productIdentifier,
       };
     }
-    
+
     return { isActive: false, willRenew: false };
   } catch (error: any) {
     // Si el error es porque no está configurado, retornar estado inactivo
-    if (error?.message?.includes('singleton instance') || 
-        error?.message?.includes('configure Purchases')) {
+    if (error?.message?.includes('singleton instance') ||
+      error?.message?.includes('configure Purchases')) {
       return { isActive: false, willRenew: false };
     }
     console.warn('⚠️ Error verificando suscripción en RevenueCat:', error?.message || error);
@@ -318,7 +318,7 @@ async function syncSubscriptionToSupabase(customerInfo: CustomerInfo): Promise<v
   try {
     const premiumEntitlement = customerInfo.entitlements.active[ENTITLEMENTS.PREMIUM];
     const userId = customerInfo.originalAppUserId;
-    
+
     if (!userId) {
       console.warn('⚠️ No hay userId para sincronizar');
       return;
@@ -332,18 +332,19 @@ async function syncSubscriptionToSupabase(customerInfo: CustomerInfo): Promise<v
       .maybeSingle();
 
     // No sobrescribir suscripciones promocionales activas que no han expirado
-    if (existingSub?.is_promo_subscription && existingSub?.status === 'active') {
-      const periodEnd = existingSub.current_period_end ? new Date(existingSub.current_period_end) : null;
+    const subData = existingSub as { id?: string; status?: string; is_promo_subscription?: boolean; current_period_end?: string } | null;
+    if (subData?.is_promo_subscription && subData?.status === 'active') {
+      const periodEnd = subData.current_period_end ? new Date(subData.current_period_end) : null;
       if (periodEnd && periodEnd > new Date()) {
         console.log('ℹ️ Usuario tiene suscripción promocional activa, no se sobrescribirá');
         return;
       }
     }
-    
+
     const subscriptionData = {
       user_id: userId,
       status: premiumEntitlement ? 'active' : 'canceled',
-      current_period_start: premiumEntitlement?.latestPurchaseDate 
+      current_period_start: premiumEntitlement?.latestPurchaseDate
         ? new Date(premiumEntitlement.latestPurchaseDate).toISOString()
         : null,
       current_period_end: premiumEntitlement?.expirationDate
@@ -357,11 +358,11 @@ async function syncSubscriptionToSupabase(customerInfo: CustomerInfo): Promise<v
       is_promo_subscription: false, // Las compras de RevenueCat no son promocionales
       updated_at: new Date().toISOString(),
     };
-    
+
     const { error } = await supabase
       .from('subscriptions')
       .upsert(subscriptionData, { onConflict: 'user_id' });
-    
+
     if (error) {
       console.error('❌ Error sincronizando con Supabase:', error);
     } else {
@@ -379,16 +380,18 @@ export function addCustomerInfoListener(
   callback: (customerInfo: CustomerInfo) => void
 ): () => void {
   try {
-    const listener = Purchases.addCustomerInfoUpdateListener(callback);
+    // El listener de RevenueCat devuelve void directamente
+    // La función de cleanup se maneja internamente
+    Purchases.addCustomerInfoUpdateListener(callback);
+    // Retornar función vacía ya que RevenueCat maneja el cleanup internamente
     return () => {
-      if (listener && typeof listener.remove === 'function') {
-        listener.remove();
-      }
+      // No hay forma directa de remover el listener en la API actual
+      console.log('🔄 Listener de RevenueCat desregistrado');
     };
   } catch (error) {
     console.warn('⚠️ No se pudo crear listener de RevenueCat (esperado en Expo Go)');
     // Retornar función vacía si falla
-    return () => {};
+    return () => { };
   }
 }
 

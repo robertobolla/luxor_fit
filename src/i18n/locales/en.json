@@ -2607,5 +2607,15 @@
     "obliques": "Obliques",
     "lowerBack": "Lower back",
     "fullBody": "Full body"
+  },
+  "favorites": {
+    "all": "All",
+    "favorites": "Favorites",
+    "favorite": "Favorite",
+    "noFavorites": "No favorites",
+    "noFavoritesDescription": "Tap the ❤️ on any exercise to add it to your favorites",
+    "searchFavorites": "Search favorites...",
+    "addedToFavorites": "Added to favorites",
+    "removedFromFavorites": "Removed from favorites"
   }
 }

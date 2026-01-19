@@ -644,7 +644,7 @@ export default function ExerciseDetailScreen() {
     }
     
     // Días de la semana empezando por Domingo para el calendario mensual
-    const calendarWeekDays = t('calendar.weekDays', { returnObjects: true }) as string[];
+    const calendarWeekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
     
     return (
       <View style={styles.calendarGrid}>
@@ -668,10 +668,7 @@ export default function ExerciseDetailScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
-          onPress={() => {
-            // Navegar directamente a workout
-            router.push('/(tabs)/workout' as any);
-          }}
+          onPress={() => router.back()}
         >
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
@@ -812,11 +809,8 @@ export default function ExerciseDetailScreen() {
                       <Ionicons name="play-circle" size={40} color="#ffb300" />
                     </View>
                     <View style={styles.optionTextContainer}>
-                    <Text style={styles.optionTitle}>
-  {t('tracking.startTracking')}
-</Text>                      <Text style={styles.optionDescription}>
-  {t('tracking.realTimeGps')}
-</Text>
+                      <Text style={styles.optionTitle}>{t('tracking.startTracking')}</Text>
+                      <Text style={styles.optionDescription}>{t('tracking.realTimeGps')}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={24} color="#666" />
                   </TouchableOpacity>
@@ -831,12 +825,8 @@ export default function ExerciseDetailScreen() {
                       <Ionicons name="create" size={40} color="#ffb300" />
                     </View>
                     <View style={styles.optionTextContainer}>
-                    <Text style={styles.optionTitle}>
-  {t('activity.logActivity')}
-</Text>                      
-<Text style={styles.optionDescription}>
-  {t('activity.manualEntry')}
-</Text>
+                      <Text style={styles.optionTitle}>{t('activity.logActivity')}</Text>
+                      <Text style={styles.optionDescription}>{t('activity.manualEntry')}</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={24} color="#666" />
                   </TouchableOpacity>
@@ -851,8 +841,7 @@ export default function ExerciseDetailScreen() {
                   <TouchableOpacity onPress={() => setModalStep('initial')}>
                     <Ionicons name="arrow-back" size={28} color="#ffffff" />
                   </TouchableOpacity>
-                  <Text style={styles.modalTitle}>  {t('activity.chooseActivity')}
-                  </Text>
+                  <Text style={styles.modalTitle}>{t('activity.chooseActivity')}</Text>
                   <TouchableOpacity onPress={handleCloseModal}>
                     <Ionicons name="close" size={28} color="#ffffff" />
                   </TouchableOpacity>
@@ -886,8 +875,7 @@ export default function ExerciseDetailScreen() {
                   <TouchableOpacity onPress={() => setModalStep('initial')}>
                     <Ionicons name="arrow-back" size={28} color="#ffffff" />
                   </TouchableOpacity>
-                  <Text style={styles.modalTitle}>  {t('activity.chooseActivity')}
-                  </Text>
+                  <Text style={styles.modalTitle}>{t('activity.chooseActivity')}</Text>
                   <TouchableOpacity onPress={handleCloseModal}>
                     <Ionicons name="close" size={28} color="#ffffff" />
                   </TouchableOpacity>
@@ -930,10 +918,7 @@ export default function ExerciseDetailScreen() {
                 <View style={styles.trackingContainer}>
                   <View style={styles.mapPlaceholder}>
                     <Ionicons name="map" size={80} color="#ffb300" />
-                    <Text style={styles.mapPlaceholderText}>
-                    {t('tracking.liveGpsMap')}
-
-                    </Text>
+                    <Text style={styles.mapPlaceholderText}>{t('tracking.liveGpsMap')}</Text>
                   </View>
 
                   <View style={styles.trackingStats}>
@@ -942,8 +927,7 @@ export default function ExerciseDetailScreen() {
                       <Text style={styles.trackingStatValue}>
                         {Math.floor(trackingTime / 60)}:{String(trackingTime % 60).padStart(2, '0')}
                       </Text>
-                      <Text style={styles.trackingStatLabel}>  {t('tracking.time')}
-                      </Text>
+                      <Text style={styles.trackingStatLabel}>{t('tracking.time')}</Text>
                     </View>
 
                     <View style={styles.trackingStat}>
@@ -951,8 +935,7 @@ export default function ExerciseDetailScreen() {
                       <Text style={styles.trackingStatValue}>
                         {displayDistance(distance).toFixed(2)} {distanceLabel}
                       </Text>
-                      <Text style={styles.trackingStatLabel}>  {t('tracking.distance')}
-                      </Text>
+                      <Text style={styles.trackingStatLabel}>{t('tracking.distance')}</Text>
                     </View>
 
                     <View style={styles.trackingStat}>
@@ -969,8 +952,8 @@ export default function ExerciseDetailScreen() {
                     onPress={handleStopTracking}
                   >
                     <Ionicons name="stop-circle" size={60} color="#ff4444" />
-                    {t('actions.stopAndSave')}
-                    </TouchableOpacity>
+                    <Text style={styles.stopButtonText}>{t('actions.stopAndSave')}</Text>
+                  </TouchableOpacity>
                 </View>
               </>
             )}

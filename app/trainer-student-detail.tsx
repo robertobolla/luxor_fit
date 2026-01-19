@@ -145,9 +145,8 @@ export default function TrainerStudentDetailScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ffb300" />
-          <Text style={styles.loadingText}>
-  {t('trainingPlan.loadingStats')}
-</Text>        </View>
+          <Text style={styles.loadingText}>{t('trainingPlan.loadingStats')}</Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -198,9 +197,8 @@ export default function TrainerStudentDetailScreen() {
         {activePlan ? (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>
-  {t('trainingPlan.activeTitle')}
-</Text>            </View>
+            <Text style={styles.sectionTitle}>{t('trainingPlan.activeTitle')}</Text>
+            </View>
             <View style={styles.planCard}>
               <Text style={styles.planName}>{activePlan.plan_name}</Text>
               <Text style={styles.planDescription}>{activePlan.description}</Text>
@@ -208,19 +206,11 @@ export default function TrainerStudentDetailScreen() {
               <View style={styles.planStats}>
                 <View style={styles.stat}>
                   <Ionicons name="calendar" size={16} color="#ffb300" />
-                  <Text style={styles.statText}>
-  {t('trainingPlan.weeks', {
-    count: activePlan.plan_data?.duration_weeks || 0,
-  })}
-</Text>
+                  <Text style={styles.statText}>{t('trainingPlan.weeks', { count: activePlan.plan_data?.duration_weeks || 0 })}</Text>
                 </View>
                 <View style={styles.stat}>
                   <Ionicons name="fitness-outline" size={16} color="#ffb300" />
-                  <Text style={styles.statText}>
-  {t('trainingPlan.daysPerWeek', {
-    count: activePlan.plan_data?.days_per_week || 0,
-  })}
-</Text>
+                  <Text style={styles.statText}>{t('trainingPlan.daysPerWeek', { count: activePlan.plan_data?.days_per_week || 0 })}</Text>
                 </View>
               </View>
 
@@ -229,20 +219,17 @@ export default function TrainerStudentDetailScreen() {
                 onPress={handleEditPlan}
               >
                 <Ionicons name="create-outline" size={18} color="#1a1a1a" />
-                <Text style={styles.editButtonText}>
-  {t('trainingPlan.edit')}
-</Text>              </TouchableOpacity>
+                <Text style={styles.editButtonText}>{t('trainingPlan.edit')}</Text>
+              </TouchableOpacity>
             </View>
           </View>
         ) : (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('trainingPlan.activeTitle')}
-            </Text>
+            <Text style={styles.sectionTitle}>{t('trainingPlan.activeTitle')}</Text>
             <View style={styles.emptyCard}>
               <Ionicons name="fitness-outline" size={48} color="#666" />
-              <Text style={styles.emptyText}>
-  {t('trainingPlan.empty')}
-</Text>            </View>
+              <Text style={styles.emptyText}>{t('trainingPlan.empty')}</Text>
+            </View>
           </View>
         )}
 
@@ -251,9 +238,8 @@ export default function TrainerStudentDetailScreen() {
           <>
             <View style={styles.section}>
               <View style={styles.sectionHeaderWithPeriod}>
-              <Text style={styles.sectionTitle}>
-  {t('workouts.statsTitle')}
-</Text>                
+              <Text style={styles.sectionTitle}>{t('workouts.statsTitle')}</Text>
+                
                 {/* Selector de Periodo */}
                 <ScrollView 
                   horizontal 
@@ -288,11 +274,7 @@ export default function TrainerStudentDetailScreen() {
                 <View style={styles.statCard}>
                   <Ionicons name="checkmark-circle" size={32} color="#4CAF50" />
                   <Text style={styles.statNumber}>{stats.workout_count}</Text>
-                  <Text style={styles.statLabel}>
-  {t('workouts.completed', {
-    period: PERIODS[selectedPeriod].label,
-  })}
-</Text>
+                  <Text style={styles.statLabel}>{t('workouts.completed', { period: PERIODS[selectedPeriod].label })}</Text>
                 </View>
                 {stats.recent_workouts && stats.recent_workouts.length > 0 && (
                   <View style={styles.statCard}>
@@ -303,17 +285,15 @@ export default function TrainerStudentDetailScreen() {
                         stats.recent_workouts.length
                       )}
                     </Text>
-                    <Text style={styles.statLabel}>
-  {t('workouts.avgMinutes')}
-</Text>                  </View>
+                    <Text style={styles.statLabel}>{t('workouts.avgMinutes')}</Text>
+                  </View>
                 )}
               </View>
 
               {stats.recent_workouts && stats.recent_workouts.length > 0 && (
                 <View style={styles.recentWorkoutsContainer}>
-<Text style={styles.subsectionTitle}>
-  {t('workouts.recent')}
-</Text>                  {stats.recent_workouts.slice(0, 5).map((workout, index) => (
+                  <Text style={styles.subsectionTitle}>{t('workouts.recent')}</Text>
+                  {stats.recent_workouts.slice(0, 5).map((workout, index) => (
                     <View key={workout.id || index} style={styles.workoutItem}>
                       <Ionicons name="fitness" size={20} color="#ffb300" />
                       <View style={styles.workoutInfo}>
@@ -324,11 +304,7 @@ export default function TrainerStudentDetailScreen() {
                             year: 'numeric',
                           })}
                         </Text>
-                        <Text style={styles.workoutDuration}>
-  {t('workouts.duration', {
-    minutes: workout.duration_minutes,
-  })}
-</Text>
+                        <Text style={styles.workoutDuration}>{t('workouts.duration', { minutes: workout.duration_minutes })}</Text>
                       </View>
                     </View>
                   ))}
@@ -339,9 +315,8 @@ export default function TrainerStudentDetailScreen() {
             {/* Métricas Corporales */}
             <View style={styles.section}>
               <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitle}>
-  {t('bodyMetrics.title')}
-</Text>                <TouchableOpacity
+                <Text style={styles.sectionTitle}>{t('bodyMetrics.title')}</Text>
+                <TouchableOpacity
                   style={styles.viewEvolutionButton}
                   onPress={() => router.push({
                     pathname: '/body-evolution',
@@ -354,35 +329,30 @@ export default function TrainerStudentDetailScreen() {
                   activeOpacity={0.7}
                 >
                   <Ionicons name="trending-up" size={16} color="#ffb300" />
-                  <Text style={styles.viewEvolutionText}>
-  {t('bodyMetrics.viewEvolution')}
-</Text>                </TouchableOpacity>
+                  <Text style={styles.viewEvolutionText}>{t('bodyMetrics.viewEvolution')}</Text>
+                </TouchableOpacity>
               </View>
               
               {stats.body_metrics ? (
                 <View style={styles.metricsCard}>
                   <View style={styles.metricRow}>
 
-                  <Text style={styles.metricLabel}>
-  {t('bodyMetrics.currentWeight')}
-</Text>                    <Text style={styles.metricValue}>
+                    <Text style={styles.metricLabel}>{t('bodyMetrics.currentWeight')}</Text>
+                    <Text style={styles.metricValue}>
                       {stats.body_metrics.current_weight.toFixed(1)} kg
                     </Text>
                   </View>
                   {stats.body_metrics.body_fat_percentage && (
                     <View style={styles.metricRow}>
-<Text style={styles.metricLabel}>
-  {t('bodyMetrics.bodyFat')}
-</Text>                      <Text style={styles.metricValue}>
+                      <Text style={styles.metricLabel}>{t('bodyMetrics.bodyFat')}</Text>
+                      <Text style={styles.metricValue}>
                         {stats.body_metrics.body_fat_percentage.toFixed(1)}%
                       </Text>
                     </View>
                   )}
                   {stats.body_metrics.muscle_percentage && (
                     <View style={styles.metricRow}>
-<Text style={styles.metricLabel}>
-  {t('bodyMetrics.muscleMass')}
-</Text>
+                      <Text style={styles.metricLabel}>{t('bodyMetrics.muscleMass')}</Text>
                       <Text style={styles.metricValue}>
                         {stats.body_metrics.muscle_percentage.toFixed(1)}%
                       </Text>
@@ -395,12 +365,8 @@ export default function TrainerStudentDetailScreen() {
               ) : (
                 <View style={styles.emptyCard}>
                   <Ionicons name="body-outline" size={48} color="#666" />
-                  <Text style={styles.emptyText}>
-  {t('bodyMetrics.empty')}
-</Text>              
- <Text style={styles.emptySubtext}>
-  {t('bodyMetrics.emptySubtext')}
-</Text>
+                  <Text style={styles.emptyText}>{t('bodyMetrics.empty')}</Text>
+                  <Text style={styles.emptySubtext}>{t('bodyMetrics.emptySubtext')}</Text>
                 </View>
               )}
             </View>
@@ -411,18 +377,16 @@ export default function TrainerStudentDetailScreen() {
             {/* Pasos */}
             {stats.steps_stats && (
               <View style={styles.section}>
-<Text style={styles.sectionTitle}>
-  {t('dailyActivity.titleLastDays', { days: 7 })}
-</Text>                <View style={styles.stepsCard}>
+                <Text style={styles.sectionTitle}>{t('dailyActivity.titleLastDays', { days: 7 })}</Text>
+                <View style={styles.stepsCard}>
                   <View style={styles.stepsRow}>
                     <Ionicons name="footsteps" size={32} color="#ffb300" />
                     <View style={styles.stepsInfo}>
                       <Text style={styles.stepsNumber}>
                         {Math.round(stats.steps_stats.avg_steps).toLocaleString()}
                       </Text>
-                      <Text style={styles.stepsLabel}>
-  {t('dailyActivity.avgStepsPerDay')}
-</Text>                    </View>
+                      <Text style={styles.stepsLabel}>{t('dailyActivity.avgStepsPerDay')}</Text>
+                    </View>
                   </View>
                   <View style={styles.stepsDivider} />
                   <View style={styles.stepsRow}>
@@ -431,9 +395,8 @@ export default function TrainerStudentDetailScreen() {
                       <Text style={styles.stepsNumber}>
                         {Math.round(stats.steps_stats.total_steps).toLocaleString()}
                       </Text>
-                      <Text style={styles.stepsLabel}>
-  {t('dailyActivity.totalSteps')}
-</Text>                    </View>
+                      <Text style={styles.stepsLabel}>{t('dailyActivity.totalSteps')}</Text>
+                    </View>
                   </View>
                 </View>
               </View>

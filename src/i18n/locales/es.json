@@ -2607,5 +2607,15 @@
     "obliques": "Oblicuos",
     "lowerBack": "Lumbares",
     "fullBody": "Cuerpo completo"
+  },
+  "favorites": {
+    "all": "Todos",
+    "favorites": "Favoritos",
+    "favorite": "Favorito",
+    "noFavorites": "Sin favoritos",
+    "noFavoritesDescription": "Toca el ❤️ en cualquier ejercicio para agregarlo a tus favoritos",
+    "searchFavorites": "Buscar en favoritos...",
+    "addedToFavorites": "Agregado a favoritos",
+    "removedFromFavorites": "Eliminado de favoritos"
   }
 }

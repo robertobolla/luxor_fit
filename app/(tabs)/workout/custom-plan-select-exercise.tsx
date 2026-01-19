@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/services/supabase';
 import { getExerciseVideoUrl } from '../../../src/services/exerciseVideoService';
 import ExerciseVideoModal from '../../../src/components/ExerciseVideoModal';
+import {
+  getFavoriteExerciseIds,
+  toggleExerciseFavorite,
+  getFavoriteExercises,
+  getFavoritesByMuscle,
+  FavoriteExercise,
+} from '../../../src/services/exerciseFavoritesService';
+
+type FilterMode = 'all' | 'favorites';
 
 // Músculos (IDs internos, NO traducibles)
 const MUSCLES = [
@@ -61,6 +70,8 @@ export default function CustomPlanSelectExerciseScreen() {
   const dayNumber = params.dayNumber as string;
   const weekNumber = params.weekNumber as string;
   const daysPerWeek = params.daysPerWeek as string;
+  const isTrainerView = params.isTrainerView === 'true';
+  const studentId = params.studentId as string | undefined;
 
   const [selectedMuscle, setSelectedMuscle] = useState<Muscle | null>(null);
   const [exercises, setExercises] = useState<ExerciseVideo[]>([]);
@@ -69,15 +80,70 @@ export default function CustomPlanSelectExerciseScreen() {
   const [selectedVideoUrl, setSelectedVideoUrl] = useState<string | null>(null);
   const [selectedExerciseName, setSelectedExerciseName] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  
+  // Estados para favoritos
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [favoriteExercises, setFavoriteExercises] = useState<FavoriteExercise[]>([]);
 
-  // Filtrar ejercicios por búsqueda (nombre exacto)
+  // Filtrar ejercicios por búsqueda y modo de filtro
   const filteredExercises = useMemo(() => {
-    if (!searchQuery.trim()) return exercises;
-    const query = searchQuery.toLowerCase().trim();
-    return exercises.filter(ex => 
-      ex.canonical_name.toLowerCase().includes(query)
+    let result = exercises;
+    
+    // Filtrar por favoritos si está activo
+    if (filterMode === 'favorites') {
+      result = result.filter(ex => favoriteIds.has(ex.id));
+    }
+    
+    // Filtrar por búsqueda
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      result = result.filter(ex => 
+        ex.canonical_name.toLowerCase().includes(query)
+      );
+    }
+    
+    return result;
+  }, [exercises, searchQuery, filterMode, favoriteIds]);
+
+  // Cargar favoritos al iniciar
+  const loadFavorites = useCallback(async () => {
+    try {
+      const ids = await getFavoriteExerciseIds();
+      setFavoriteIds(ids);
+      
+      // Cargar lista completa de favoritos para la vista sin músculo seleccionado
+      const favorites = await getFavoriteExercises();
+      setFavoriteExercises(favorites);
+    } catch (error) {
+      console.error('Error cargando favoritos:', error);
+    }
+  }, []);
+
+  // Toggle favorito
+  const handleToggleFavorite = async (exercise: ExerciseVideo) => {
+    const muscle = selectedMuscle || (exercise.muscles && exercise.muscles[0]) || 'other';
+    const isNowFavorite = await toggleExerciseFavorite(
+      exercise.id,
+      exercise.canonical_name,
+      muscle
     );
-  }, [exercises, searchQuery]);
+    
+    // Actualizar estado local
+    setFavoriteIds(prev => {
+      const newSet = new Set(prev);
+      if (isNowFavorite) {
+        newSet.add(exercise.id);
+      } else {
+        newSet.delete(exercise.id);
+      }
+      return newSet;
+    });
+    
+    // Recargar lista de favoritos
+    const favorites = await getFavoriteExercises();
+    setFavoriteExercises(favorites);
+  };
 
   // Resetear el músculo seleccionado y limpiar caché cada vez que la pantalla recibe el foco
   useFocusEffect(
@@ -85,11 +151,15 @@ export default function CustomPlanSelectExerciseScreen() {
       console.log('🔄 Pantalla de selección de ejercicio enfocada, limpiando caché');
       setSelectedMuscle(null);
       setExercises([]);
+      setFilterMode('all');
+      
+      // Cargar favoritos
+      loadFavorites();
       
       // Limpiar cualquier caché de Supabase forzando una nueva sesión
       // Esto asegura que siempre obtenemos datos frescos del servidor
       supabase.removeAllChannels();
-    }, [])
+    }, [loadFavorites])
   );
 
   // Resetear el músculo seleccionado cuando cambia el día
@@ -234,6 +304,8 @@ export default function CustomPlanSelectExerciseScreen() {
             weekNumber: weekNumber || '1',
             daysPerWeek: daysPerWeek,
             equipment: JSON.stringify(equipment),
+            isTrainerView: isTrainerView ? 'true' : 'false',
+            studentId: studentId || '',
           },
         });
       } else {
@@ -257,6 +329,8 @@ export default function CustomPlanSelectExerciseScreen() {
             weekNumber: weekNumber || '1',
             daysPerWeek: daysPerWeek,
             equipment: JSON.stringify(equipment),
+            isTrainerView: isTrainerView ? 'true' : 'false',
+            studentId: studentId || '',
           },
         });
       } else {
@@ -324,12 +398,34 @@ export default function CustomPlanSelectExerciseScreen() {
           <View style={{ width: 40 }} />
         </View>
 
+        {/* Tabs de filtro: Todos / Favoritos */}
+        <View style={styles.filterTabs}>
+          <TouchableOpacity
+            style={[styles.filterTab, filterMode === 'all' && styles.filterTabActive]}
+            onPress={() => setFilterMode('all')}
+          >
+            <Ionicons name="list" size={18} color={filterMode === 'all' ? '#1a1a1a' : '#888'} />
+            <Text style={[styles.filterTabText, filterMode === 'all' && styles.filterTabTextActive]}>
+              {t('favorites.all')}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterTab, filterMode === 'favorites' && styles.filterTabActive]}
+            onPress={() => setFilterMode('favorites')}
+          >
+            <Ionicons name="heart" size={18} color={filterMode === 'favorites' ? '#1a1a1a' : '#888'} />
+            <Text style={[styles.filterTabText, filterMode === 'favorites' && styles.filterTabTextActive]}>
+              {t('favorites.favorites')} ({favoriteExercises.length})
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Buscador global de ejercicios */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder={t('customPlan.searchAllExercises')}
+            placeholder={filterMode === 'favorites' ? t('favorites.searchFavorites') : t('customPlan.searchAllExercises')}
             placeholderTextColor="#666"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -347,8 +443,65 @@ export default function CustomPlanSelectExerciseScreen() {
         </View>
 
         <ScrollView style={styles.content}>
-          {/* Mostrar resultados de búsqueda si hay query */}
-          {searchQuery.trim().length >= 2 ? (
+          {/* Mostrar favoritos si está en modo favoritos */}
+          {filterMode === 'favorites' ? (
+            favoriteExercises.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="heart-outline" size={64} color="#666" />
+                <Text style={styles.emptyStateText}>
+                  {t('favorites.noFavorites')}
+                </Text>
+                <Text style={styles.emptyStateSubtext}>
+                  {t('favorites.noFavoritesDescription')}
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.exercisesList}>
+                <Text style={styles.exercisesCount}>
+                  {favoriteExercises.length} {favoriteExercises.length === 1 ? t('favorites.favorite') : t('favorites.favorites')}
+                </Text>
+                {favoriteExercises
+                  .filter(fav => !searchQuery.trim() || fav.canonical_name.toLowerCase().includes(searchQuery.toLowerCase()))
+                  .map((favorite) => (
+                  <TouchableOpacity
+                    key={favorite.id}
+                    style={styles.exerciseCard}
+                    onPress={() => handleSelectExercise({
+                      id: favorite.id,
+                      canonical_name: favorite.canonical_name,
+                      muscles: [favorite.muscle],
+                    })}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.exerciseCardContent}>
+                      <View style={styles.exerciseHeader}>
+                        <Text style={styles.exerciseName}>{favorite.canonical_name}</Text>
+                        <View style={styles.actionButtons}>
+                          <TouchableOpacity
+                            style={styles.favoriteButton}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleToggleFavorite({
+                                id: favorite.id,
+                                canonical_name: favorite.canonical_name,
+                                muscles: [favorite.muscle],
+                              });
+                            }}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          >
+                            <Ionicons name="heart" size={28} color="#ff4757" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                      <Text style={styles.exerciseMuscle}>
+                        {t(`muscles.${favorite.muscle}`)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )
+          ) : searchQuery.trim().length >= 2 ? (
             loading ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#ffb300" />
@@ -379,16 +532,32 @@ export default function CustomPlanSelectExerciseScreen() {
                     <View style={styles.exerciseCardContent}>
                       <View style={styles.exerciseHeader}>
                         <Text style={styles.exerciseName}>{exercise.canonical_name}</Text>
-                        <TouchableOpacity
-                          style={styles.videoButton}
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            handleShowVideo(exercise);
-                          }}
-                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        >
-                          <Ionicons name="play-circle" size={32} color="#ffb300" />
-                        </TouchableOpacity>
+                        <View style={styles.actionButtons}>
+                          <TouchableOpacity
+                            style={styles.favoriteButton}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleToggleFavorite(exercise);
+                            }}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          >
+                            <Ionicons 
+                              name={favoriteIds.has(exercise.id) ? "heart" : "heart-outline"} 
+                              size={28} 
+                              color={favoriteIds.has(exercise.id) ? "#ff4757" : "#888"} 
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.videoButton}
+                            onPress={(e) => {
+                              e.stopPropagation();
+                              handleShowVideo(exercise);
+                            }}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          >
+                            <Ionicons name="play-circle" size={32} color="#ffb300" />
+                          </TouchableOpacity>
+                        </View>
                       </View>
                       {/* Mostrar el músculo del ejercicio */}
                       {exercise.muscles && exercise.muscles.length > 0 && (
@@ -471,12 +640,34 @@ export default function CustomPlanSelectExerciseScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Tabs de filtro: Todos / Favoritos */}
+      <View style={styles.filterTabs}>
+        <TouchableOpacity
+          style={[styles.filterTab, filterMode === 'all' && styles.filterTabActive]}
+          onPress={() => setFilterMode('all')}
+        >
+          <Ionicons name="list" size={18} color={filterMode === 'all' ? '#1a1a1a' : '#888'} />
+          <Text style={[styles.filterTabText, filterMode === 'all' && styles.filterTabTextActive]}>
+            {t('favorites.all')}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterTab, filterMode === 'favorites' && styles.filterTabActive]}
+          onPress={() => setFilterMode('favorites')}
+        >
+          <Ionicons name="heart" size={18} color={filterMode === 'favorites' ? '#1a1a1a' : '#888'} />
+          <Text style={[styles.filterTabText, filterMode === 'favorites' && styles.filterTabTextActive]}>
+            {t('favorites.favorites')} ({exercises.filter(ex => favoriteIds.has(ex.id)).length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Buscador de ejercicios */}
       <View style={styles.searchContainer}>
         <Ionicons name="search" size={20} color="#888" style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
-          placeholder={t('customPlan.searchExercise')}
+          placeholder={filterMode === 'favorites' ? t('favorites.searchFavorites') : t('customPlan.searchExercise')}
           placeholderTextColor="#666"
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -526,16 +717,32 @@ export default function CustomPlanSelectExerciseScreen() {
                 <View style={styles.exerciseCardContent}>
                   <View style={styles.exerciseHeader}>
                     <Text style={styles.exerciseName}>{exercise.canonical_name}</Text>
-                    <TouchableOpacity
-                      style={styles.videoButton}
-                      onPress={(e) => {
-                        e.stopPropagation();
-                        handleShowVideo(exercise);
-                      }}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                    >
-                      <Ionicons name="play-circle" size={32} color="#ffb300" />
-                    </TouchableOpacity>
+                    <View style={styles.actionButtons}>
+                      <TouchableOpacity
+                        style={styles.favoriteButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleToggleFavorite(exercise);
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Ionicons 
+                          name={favoriteIds.has(exercise.id) ? "heart" : "heart-outline"} 
+                          size={28} 
+                          color={favoriteIds.has(exercise.id) ? "#ff4757" : "#888"} 
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.videoButton}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleShowVideo(exercise);
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Ionicons name="play-circle" size={32} color="#ffb300" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               </TouchableOpacity>
@@ -667,6 +874,45 @@ const styles = StyleSheet.create({
   },
   videoButton: {
     padding: 4,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  favoriteButton: {
+    padding: 4,
+  },
+  filterTabs: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginTop: 16,
+    gap: 12,
+  },
+  filterTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    backgroundColor: '#2a2a2a',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  filterTabActive: {
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
+  },
+  filterTabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#888',
+  },
+  filterTabTextActive: {
+    color: '#1a1a1a',
   },
   searchContainer: {
     flexDirection: 'row',
