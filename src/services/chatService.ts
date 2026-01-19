@@ -23,8 +23,9 @@ export interface Message {
   sender_id: string;
   receiver_id: string;
   message_text: string;
-  message_type: 'text' | 'workout_share' | 'workout_accepted' | 'workout_rejected' | 'image';
+  message_type: 'text' | 'workout_share' | 'workout_accepted' | 'workout_rejected' | 'nutrition_share' | 'nutrition_accepted' | 'nutrition_rejected' | 'image';
   workout_plan_id?: string;
+  nutrition_plan_id?: string;
   image_url?: string;
   is_read: boolean;
   created_at: string;
@@ -206,8 +207,9 @@ export async function sendMessage(
   senderId: string,
   receiverId: string,
   messageText: string,
-  messageType: 'text' | 'workout_share' | 'workout_accepted' | 'workout_rejected' | 'image' = 'text',
+  messageType: 'text' | 'workout_share' | 'workout_accepted' | 'workout_rejected' | 'nutrition_share' | 'nutrition_accepted' | 'nutrition_rejected' | 'image' = 'text',
   workoutPlanId?: string,
+  nutritionPlanId?: string,
   imageUrl?: string
 ): Promise<{
   success: boolean;
@@ -224,6 +226,7 @@ export async function sendMessage(
         message_text: messageText,
         message_type: messageType,
         workout_plan_id: workoutPlanId,
+        nutrition_plan_id: nutritionPlanId,
         image_url: imageUrl,
         is_read: false,
       })

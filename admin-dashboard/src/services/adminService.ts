@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { logger } from '../utils/logger';
 
 // Re-exportar supabase para compatibilidad con archivos existentes
 export { supabase };
@@ -139,41 +140,28 @@ export interface UserStats {
  */
 export async function checkAdminRole(userId: string, userEmail?: string): Promise<boolean> {
   try {
-    console.log('🔍 Verificando rol para user_id:', userId);
-    if (userEmail) {
-      console.log('📧 Email del usuario:', userEmail);
-    }
+    logger.debug('Verificando rol para user_id:', userId);
     
     // Limpiar el userId (trim y asegurar que no tenga espacios)
     const cleanUserId = userId.trim();
-    console.log('🔍 user_id limpio:', JSON.stringify(cleanUserId));
-    console.log('🔍 user_id limpio (length):', cleanUserId.length);
     
     // Primero intentar con la consulta normal por user_id
-    let { data, error, status, statusText } = await supabase
+    let { data, error } = await supabase
       .from('admin_roles')
       .select('id, role_type, is_active, user_id, email')
       .eq('user_id', cleanUserId)
       .eq('is_active', true)
       .limit(1)
       .maybeSingle();
-
-    console.log('📊 Status de respuesta:', status, statusText);
     
     if (error) {
-      console.error('❌ Error verificando rol:', error);
-      console.error('📝 Código de error:', error.code);
-      console.error('📝 Mensaje de error:', error.message);
-      console.error('📝 Detalles completos:', JSON.stringify(error, null, 2));
+      logger.error('Error verificando rol:', error);
       return false;
     }
-
-    console.log('📋 Resultado de verificación por user_id:', data);
-    console.log('📋 Tipo de resultado:', typeof data);
     
     // Si no encuentra por user_id pero tenemos email, buscar por email
     if (!data && userEmail) {
-      console.log('🔍 No se encontró por user_id, buscando por email...');
+      logger.debug('No se encontró por user_id, buscando por email...');
       const cleanEmail = userEmail.trim().toLowerCase();
       
       const { data: emailData, error: emailError } = await supabase
@@ -185,10 +173,9 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
         .maybeSingle();
       
       if (emailError) {
-        console.error('❌ Error buscando por email:', emailError);
+        logger.error('Error buscando por email:', emailError);
       } else if (emailData) {
-        console.log('✅ Encontrado por email:', emailData);
-        console.log('🔄 Actualizando user_id en admin_roles...');
+        logger.debug('Encontrado por email, actualizando user_id...');
         
         // Actualizar el user_id en la base de datos para que coincida
         const { error: updateError } = await supabase
@@ -197,44 +184,33 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
           .eq('id', emailData.id);
         
         if (updateError) {
-          console.error('❌ Error actualizando user_id:', updateError);
-          // Aún así devolver true porque el usuario tiene rol admin
-        } else {
-          console.log('✅ user_id actualizado correctamente');
+          logger.error('Error actualizando user_id:', updateError);
         }
         
         data = emailData;
-      } else {
-        console.log('⚠️ No se encontró por email tampoco');
       }
     }
     
-      // Si no encuentra con la consulta exacta, obtener TODOS los registros activos y buscar en memoria
-      if (!data) {
-        console.log('⚠️ Consulta exacta no encontró resultados, obteniendo todos los registros activos...');
-        const { data: allRoles, error: allRolesError } = await supabase
-          .from('admin_roles')
-          .select('id, role_type, is_active, user_id, email')
-          .eq('is_active', true);
+    // Si no encuentra con la consulta exacta, obtener todos los registros activos y buscar en memoria
+    if (!data) {
+      logger.debug('Consulta exacta no encontró resultados, buscando en todos los registros activos...');
+      const { data: allRoles, error: allRolesError } = await supabase
+        .from('admin_roles')
+        .select('id, role_type, is_active, user_id, email')
+        .eq('is_active', true);
       
       if (!allRolesError && allRoles && allRoles.length > 0) {
-        console.log('📋 Total de registros activos obtenidos:', allRoles.length);
-        
-        // Iterar manualmente y comparar con normalización robusta
-        console.log('🔍 Buscando en', allRoles.length, 'registros...');
-        
         // Función de normalización robusta (sin toLowerCase porque user_ids son case-sensitive)
         const normalizeUserId = (id: string | null | undefined): string => {
           if (!id) return '';
           return String(id)
             .trim()
-            .replace(/\s+/g, '') // Eliminar TODOS los espacios
-            .replace(/[\u200B-\u200D\uFEFF]/g, '') // Eliminar caracteres invisibles Unicode (zero-width spaces)
-            .normalize('NFC'); // Normalizar a forma compuesta (mantener mayúsculas/minúsculas)
+            .replace(/\s+/g, '')
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            .normalize('NFC');
         };
         
         const normalizedSearchId = normalizeUserId(cleanUserId);
-        console.log('🔍 user_id normalizado buscado:', JSON.stringify(normalizedSearchId));
         
         for (let i = 0; i < allRoles.length; i++) {
           const r = allRoles[i];
@@ -242,34 +218,17 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
           const rUserIdNormalized = normalizeUserId(r.user_id);
           
           // Múltiples estrategias de comparación
-          const strategy1 = rUserIdNormalized === normalizedSearchId; // Normalizada
-          const strategy2 = rUserIdStr.trim() === String(cleanUserId).trim(); // Directa con trim
-          const strategy3 = rUserIdStr === String(cleanUserId); // Directa sin trim
-          const strategy4 = r.user_id === cleanUserId; // Comparación directa de valores
-          
-          // Comparación byte por byte usando JSON
+          const strategy1 = rUserIdNormalized === normalizedSearchId;
+          const strategy2 = rUserIdStr.trim() === String(cleanUserId).trim();
+          const strategy3 = rUserIdStr === String(cleanUserId);
+          const strategy4 = r.user_id === cleanUserId;
           const strategy5 = JSON.stringify(r.user_id) === JSON.stringify(cleanUserId);
-          
-          // Comparación usando includes (más permisiva)
           const strategy6 = rUserIdStr.includes(cleanUserId) && cleanUserId.includes(rUserIdStr);
           
           const matches = strategy1 || strategy2 || strategy3 || strategy4 || strategy5 || strategy6;
           
-          console.log(`  [${i}] user_id original: "${r.user_id}"`);
-          console.log(`      user_id normalizado: "${rUserIdNormalized}"`);
-          console.log(`      Estrategias: norm=${strategy1}, trim=${strategy2}, direct=${strategy3}, val=${strategy4}, json=${strategy5}, incl=${strategy6}`);
-          console.log(`      Coincide (cualquiera): ${matches}`);
-          
-          // Si el user_id contiene el buscado y viceversa, es muy probable que sea el mismo
-          if (r.user_id && cleanUserId && 
-              (r.user_id.includes(cleanUserId) || cleanUserId.includes(r.user_id)) &&
-              Math.abs(r.user_id.length - cleanUserId.length) < 3) {
-            console.log(`  ⚠️ Coincidencia probable por similitud (longitudes similares)`);
-          }
-          
           if (matches) {
-            console.log('✅ ¡COINCIDENCIA ENCONTRADA en índice', i, '!');
-            console.log('✅ Registro encontrado:', r);
+            logger.debug('Coincidencia encontrada en índice', i);
             data = r;
             break;
           }
@@ -277,7 +236,6 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
         
         // Último recurso: buscar por los primeros y últimos caracteres
         if (!data && allRoles.length > 0) {
-          console.log('🔍 Último recurso: buscando por prefijo y sufijo...');
           const searchPrefix = cleanUserId.substring(0, 15);
           const searchSuffix = cleanUserId.substring(cleanUserId.length - 10);
           
@@ -285,102 +243,25 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
             const r = allRoles[i];
             const rUserId = String(r.user_id || '');
             if (rUserId.startsWith(searchPrefix) && rUserId.endsWith(searchSuffix)) {
-              console.log('✅ Encontrado por prefijo/sufijo en índice', i, '!');
-              console.log('✅ Registro:', r);
+              logger.debug('Encontrado por prefijo/sufijo en índice', i);
               data = r;
               break;
             }
           }
-        }
-        
-        // ÚLTIMO RECURSO ABSOLUTO: Si el user_id buscado contiene "34uvPy06s00wcE3tfZ44DTmuSdX"
-        // y encontramos un registro cuyo user_id también lo contiene, lo aceptamos
-        if (!data && allRoles.length > 0) {
-          console.log('🔍 ÚLTIMO RECURSO: buscando por substring característico...');
-          const characteristicPart = '34uvPy06s00wcE3tfZ44DTmuSdX'; // Parte única del user_id
-          
-          for (let i = 0; i < allRoles.length; i++) {
-            const r = allRoles[i];
-            const rUserId = String(r.user_id || '');
-            
-            // Si ambos contienen la parte característica y tienen longitud similar, es el mismo
-            if (rUserId.includes(characteristicPart) && 
-                cleanUserId.includes(characteristicPart) &&
-                Math.abs(rUserId.length - cleanUserId.length) <= 2) {
-              console.log('✅ Encontrado por substring característico en índice', i, '!');
-              console.log('✅ user_id del registro:', rUserId);
-              console.log('✅ user_id buscado:', cleanUserId);
-              console.log('✅ Registro:', r);
-              data = r;
-              break;
-            }
-          }
-        }
-        
-        if (!data) {
-          console.log('❌ No se encontró coincidencia exacta después de iterar todos los registros');
         }
       } else if (allRolesError) {
-        console.error('❌ Error obteniendo todos los roles:', allRolesError);
-      } else {
-        console.log('⚠️ No hay registros activos en admin_roles');
+        logger.error('Error obteniendo todos los roles:', allRolesError);
       }
     }
     
     if (data) {
-      console.log('✅ Usuario tiene rol:', data.role_type);
+      logger.debug('Usuario tiene rol:', data.role_type);
       return true;
-    } else {
-      console.log('⚠️ Usuario no tiene rol activo en admin_roles');
-      console.log('🔍 Intentando consulta sin filtro is_active...');
-      
-      // Intentar sin el filtro is_active para debug
-      const { data: dataWithoutFilter } = await supabase
-        .from('admin_roles')
-        .select('id, role_type, is_active, user_id')
-        .eq('user_id', userId)
-        .limit(1)
-        .maybeSingle();
-      
-      console.log('📋 Resultado sin filtro is_active:', dataWithoutFilter);
-      
-      // Debug: Listar TODOS los registros para comparar
-      console.log('🔍 Listando TODOS los registros de admin_roles para debug...');
-      const { data: allRoles, error: allRolesError } = await supabase
-        .from('admin_roles')
-        .select('user_id, email, role_type, is_active')
-        .limit(100);
-      
-      if (allRolesError) {
-        console.error('❌ Error listando todos los roles:', allRolesError);
-      } else {
-        console.log('📋 Total de registros en admin_roles:', allRoles?.length || 0);
-        console.log('📋 Todos los user_ids:', allRoles?.map(r => ({
-          user_id: r.user_id,
-          email: r.email,
-          role_type: r.role_type,
-          is_active: r.is_active,
-          user_id_length: r.user_id?.length,
-          user_id_exact: JSON.stringify(r.user_id)
-        })));
-        console.log('🔍 user_id buscado:', userId);
-        console.log('🔍 user_id buscado (length):', userId.length);
-        console.log('🔍 user_id buscado (exact):', JSON.stringify(userId));
-        
-        // Buscar coincidencias parciales
-        const matches = allRoles?.filter(r => 
-          r.user_id?.includes(userId.substring(0, 20)) || 
-          userId.includes(r.user_id?.substring(0, 20) || '')
-        );
-        if (matches && matches.length > 0) {
-          console.log('⚠️ Posibles coincidencias parciales:', matches);
-        }
-      }
-      
-      return false;
     }
+    
+    return false;
   } catch (error) {
-    console.error('❌ Error inesperado verificando rol:', error);
+    logger.error('Error inesperado verificando rol:', error);
     return false;
   }
 }
@@ -390,7 +271,7 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
  */
 export async function getUserRole(userId: string, userEmail?: string): Promise<'admin' | 'socio' | 'empresario' | 'user'> {
   try {
-    console.log('🔍 getUserRole - userId:', userId, 'email:', userEmail);
+    logger.debug('getUserRole - userId:', userId, 'email:', userEmail);
     
     // Obtener roles por user_id
     const { data: rolesByUserId, error } = await supabase
@@ -400,13 +281,13 @@ export async function getUserRole(userId: string, userEmail?: string): Promise<'
       .eq('is_active', true);
 
     if (error) {
-      console.error('❌ getUserRole error:', error);
+      logger.error('getUserRole error:', error);
     }
 
     // SIEMPRE buscar también por email para combinar roles
-    let rolesByEmail: any[] = [];
+    let rolesByEmail: Array<{ role_type: string; user_id: string }> = [];
     if (userEmail) {
-      console.log('🔍 getUserRole - Buscando también por email:', userEmail);
+      logger.debug('getUserRole - Buscando también por email:', userEmail);
       const { data: emailRoles } = await supabase
         .from('admin_roles')
         .select('role_type, user_id')
@@ -414,19 +295,19 @@ export async function getUserRole(userId: string, userEmail?: string): Promise<'
         .eq('is_active', true);
       
       if (emailRoles && emailRoles.length > 0) {
-        console.log('✅ getUserRole - Encontrado por email:', emailRoles.map(r => r.role_type));
+        logger.debug('getUserRole - Encontrado por email:', emailRoles.map(r => r.role_type));
         rolesByEmail = emailRoles;
         
         // Actualizar user_id para roles que tengan user_id diferente
         for (const role of emailRoles) {
           if (role.user_id !== userId) {
-            console.log('🔄 getUserRole - Actualizando user_id para rol:', role.role_type);
-          await supabase
-            .from('admin_roles')
-            .update({ user_id: userId })
+            logger.debug('getUserRole - Actualizando user_id para rol:', role.role_type);
+            await supabase
+              .from('admin_roles')
+              .update({ user_id: userId })
               .eq('email', userEmail)
               .eq('role_type', role.role_type);
-        }
+          }
         }
       }
     }
@@ -434,13 +315,10 @@ export async function getUserRole(userId: string, userEmail?: string): Promise<'
     // Combinar TODOS los roles (por user_id Y por email)
     const allRoles = [...(rolesByUserId || []), ...rolesByEmail];
     const uniqueRoleTypes = [...new Set(allRoles.map(r => r.role_type))];
-    
-    console.log('✅ getUserRole - TODOS los roles combinados:', uniqueRoleTypes);
         
-        // Priorizar roles: admin > empresario > socio
+    // Priorizar roles: admin > empresario > socio
     if (uniqueRoleTypes.length > 0) {
       if (uniqueRoleTypes.includes('admin')) {
-        console.log('✅ getUserRole - Rol final: admin (priorizado)');
         return 'admin';
       }
       if (uniqueRoleTypes.includes('empresario')) return 'empresario';
@@ -449,10 +327,9 @@ export async function getUserRole(userId: string, userEmail?: string): Promise<'
     }
 
     // Si no se encontró ningún rol
-    console.log('⚠️ getUserRole - No se encontró rol, retornando "user"');
     return 'user';
   } catch (error) {
-    console.error('💥 getUserRole exception:', error);
+    logger.error('getUserRole exception:', error);
     return 'user';
   }
 }
@@ -469,13 +346,13 @@ export async function getUserStats(): Promise<UserStats | null> {
       .maybeSingle();
 
     if (error) {
-      console.error('Error obteniendo estadísticas:', error);
+      logger.error('Error obteniendo estadísticas:', error);
       return null;
     }
 
     return data as UserStats;
   } catch (error) {
-    console.error('Error inesperado obteniendo estadísticas:', error);
+    logger.error('Error inesperado obteniendo estadísticas:', error);
     return null;
   }
 }
@@ -501,7 +378,7 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
       .order('created_at', { ascending: false });
 
     if (usersError) {
-      console.error('Error obteniendo usuarios:', usersError);
+      logger.error('Error obteniendo usuarios:', usersError);
       return { users: [], total: 0, page, limit };
     }
 
@@ -513,19 +390,8 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
       .order('created_at', { ascending: false });
 
     if (adminRolesError) {
-      console.error('Error obteniendo admin_roles:', adminRolesError);
+      logger.error('Error obteniendo admin_roles:', adminRolesError);
     }
-
-    console.log('🔍 DEBUG getUsers - admin_roles data:', {
-      total: adminRolesData?.length || 0,
-      empresarios: adminRolesData?.filter(ar => ar.role_type === 'empresario').length || 0,
-      data: adminRolesData?.filter(ar => ar.role_type === 'empresario').map(ar => ({
-        user_id: ar.user_id,
-        email: ar.email,
-        name: ar.name,
-        role_type: ar.role_type
-      }))
-    });
 
     // Crear un mapa de todos los user_ids únicos para contar total
     const allUserIds = new Set<string>();
@@ -553,31 +419,10 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
         role_type: ar.role_type as 'admin' | 'socio' | 'empresario',
       }));
 
-    console.log('🔍 DEBUG getUsers - adminUsersAsProfiles:', {
-      total: adminUsersAsProfiles.length,
-      empresarios: adminUsersAsProfiles.filter(u => u.role_type === 'empresario').length,
-      empresariosData: adminUsersAsProfiles.filter(u => u.role_type === 'empresario').map(u => ({
-        user_id: u.user_id,
-        email: u.email,
-        name: u.name,
-        role_type: u.role_type
-      }))
-    });
 
     // Combinar usuarios de user_profiles con usuarios de admin_roles
     const allUsersData = [...(usersData || []), ...adminUsersAsProfiles];
 
-    console.log('🔍 DEBUG getUsers - allUsersData antes de ordenar:', {
-      total: allUsersData.length,
-      empresarios: allUsersData.filter(u => u.role_type === 'empresario').length,
-      empresariosData: allUsersData.filter(u => u.role_type === 'empresario').map(u => ({
-        user_id: u.user_id,
-        email: u.email,
-        name: u.name,
-        role_type: u.role_type,
-        created_at: u.created_at
-      }))
-    });
 
     // Ordenar por fecha de creación descendente
     allUsersData.sort((a, b) => 
@@ -587,7 +432,7 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
     // Paginar manualmente (ya que combinamos dos fuentes)
     const paginatedUsers = allUsersData.slice(from, to + 1);
 
-    console.log('🔍 DEBUG getUsers - paginación:', {
+    logger.debug('getUsers - paginación:', {
       page,
       from,
       to,
@@ -619,17 +464,6 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
       role_type: roleMap.get(user.user_id) || 'user' as 'admin' | 'socio' | 'empresario' | 'user',
     }));
 
-    console.log('🔍 DEBUG getUsers - resultado final:', {
-      totalRetornado: usersWithRoles.length,
-      empresarios: usersWithRoles.filter(u => u.role_type === 'empresario').length,
-      empresariosData: usersWithRoles.filter(u => u.role_type === 'empresario').map(u => ({
-        user_id: u.user_id,
-        email: u.email,
-        name: u.name,
-        role_type: u.role_type
-      })),
-      totalUniqueUserIds: allUserIds.size
-    });
 
     return {
       users: usersWithRoles as UserProfile[],
@@ -638,7 +472,7 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
       limit,
     };
   } catch (error) {
-    console.error('Error inesperado obteniendo usuarios:', error);
+    logger.error('Error inesperado obteniendo usuarios:', error);
     return { users: [], total: 0, page, limit };
   }
 }
@@ -656,13 +490,13 @@ export async function getUserDetail(userId: string): Promise<UserProfile | null>
       .maybeSingle();
 
     if (error) {
-      console.error('Error obteniendo usuario:', error);
+      logger.error('Error obteniendo usuario:', error);
       return null;
     }
 
     return data as UserProfile | null;
   } catch (error) {
-    console.error('Error inesperado obteniendo usuario:', error);
+    logger.error('Error inesperado obteniendo usuario:', error);
     return null;
   }
 }
@@ -775,7 +609,7 @@ export async function searchUsers(query: string): Promise<UserProfile[]> {
       .limit(50);
 
     if (usersError) {
-      console.error('Error buscando usuarios:', usersError);
+      logger.error('Error buscando usuarios:', usersError);
     }
 
     // Buscar también en admin_roles (admins, socios, empresarios)

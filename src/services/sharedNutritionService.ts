@@ -1,6 +1,4 @@
 import { supabase } from './supabase';
-import { sendMessage } from './chatService';
-import { getOrCreateChat } from './chatService';
 
 export interface SharedNutritionPlan {
   id: string;
@@ -54,11 +52,12 @@ export async function shareNutritionPlan(
     const planName = nutritionPlan?.plan_name || 'un plan de nutrición';
 
     // Crear notificación en lugar de mensaje en el chat
+    // Usamos 'nutrition_plan_shared' para solicitudes (el receptor puede aceptar/rechazar)
     const { data: notification, error: notificationError } = await supabase
       .from('user_notifications')
       .insert({
         user_id: receiverId,
-        notification_type: 'nutrition_plan',
+        notification_type: 'nutrition_plan_shared',
         title: '🍽️ Plan nutricional compartido',
         message: message || `${senderName} te ha compartido el plan "${planName}"`,
         sender_name: senderName,
@@ -80,7 +79,6 @@ export async function shareNutritionPlan(
         sender_id: senderId,
         receiver_id: receiverId,
         nutrition_plan_id: nutritionPlanId,
-        message_id: notification.id, // Guardamos el ID de la notificación
         status: 'pending',
       })
       .select()
@@ -261,30 +259,29 @@ export async function acceptSharedNutritionPlan(
     }
 
     // Crear notificación de confirmación para el remitente
-    if (sharedPlan.message_id) {
-      const { data: receiverProfile } = await supabase
-        .from('user_profiles')
-        .select('name, username')
-        .eq('user_id', receiverId)
+    // Usamos 'nutrition_plan_accepted' para que sea solo informativa (sin botones de aceptar/rechazar)
+    const { data: receiverProfile } = await supabase
+      .from('user_profiles')
+      .select('name, username')
+      .eq('user_id', receiverId)
         .single();
 
-      const receiverName = receiverProfile?.name || receiverProfile?.username || 'Un usuario';
-      const messageText = makeActive 
-        ? `${receiverName} ha aceptado tu plan de nutrición y lo ha activado`
-        : `${receiverName} ha aceptado tu plan de nutrición`;
-
-      await supabase
-        .from('user_notifications')
-        .insert({
-          user_id: sharedPlan.sender_id,
-          notification_type: 'nutrition_plan',
-          title: '✅ Plan nutricional aceptado',
-          message: messageText,
-          sender_name: receiverName,
-          related_id: sharedPlan.nutrition_plan_id,
-          is_read: false,
-        });
-    }
+    const receiverName = receiverProfile?.name || receiverProfile?.username || 'Un usuario';
+        const messageText = makeActive 
+      ? `${receiverName} ha aceptado tu plan de nutrición y lo ha activado`
+      : `${receiverName} ha aceptado tu plan de nutrición`;
+        
+    await supabase
+      .from('user_notifications')
+      .insert({
+        user_id: sharedPlan.sender_id,
+        notification_type: 'nutrition_plan_accepted',
+        title: '✅ Plan nutricional aceptado',
+        message: messageText,
+        sender_name: receiverName,
+        related_id: sharedPlan.nutrition_plan_id,
+        is_read: false,
+      });
 
     return { success: true, data: updated };
   } catch (error: any) {
@@ -327,27 +324,26 @@ export async function rejectSharedNutritionPlan(
     }
 
     // Crear notificación de rechazo para el remitente
-    if (sharedPlan.message_id) {
-      const { data: receiverProfile } = await supabase
-        .from('user_profiles')
-        .select('name, username')
-        .eq('user_id', receiverId)
+    // Usamos 'nutrition_plan_rejected' para que sea solo informativa (sin botones de aceptar/rechazar)
+    const { data: receiverProfile } = await supabase
+      .from('user_profiles')
+      .select('name, username')
+      .eq('user_id', receiverId)
         .single();
 
-      const receiverName = receiverProfile?.name || receiverProfile?.username || 'Un usuario';
+    const receiverName = receiverProfile?.name || receiverProfile?.username || 'Un usuario';
 
-      await supabase
-        .from('user_notifications')
-        .insert({
-          user_id: sharedPlan.sender_id,
-          notification_type: 'nutrition_plan',
-          title: '❌ Plan nutricional rechazado',
-          message: `${receiverName} ha rechazado tu plan de nutrición`,
-          sender_name: receiverName,
-          related_id: sharedPlan.nutrition_plan_id,
-          is_read: false,
-        });
-    }
+    await supabase
+      .from('user_notifications')
+      .insert({
+        user_id: sharedPlan.sender_id,
+        notification_type: 'nutrition_plan_rejected',
+        title: '❌ Plan nutricional rechazado',
+        message: `${receiverName} ha rechazado tu plan de nutrición`,
+        sender_name: receiverName,
+        related_id: sharedPlan.nutrition_plan_id,
+        is_read: false,
+      });
 
     return { success: true };
   } catch (error: any) {

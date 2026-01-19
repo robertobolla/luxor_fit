@@ -55,6 +55,55 @@ export default function NutritionLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="custom-plan-setup"
+        options={{
+          title: 'Crear Plan Personalizado',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="edit-day"
+        options={{
+          title: 'Editar Día',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="plans-library"
+        options={{
+          title: 'Biblioteca de Planes',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="plan-detail"
+        options={{
+          title: 'Detalle del Plan',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="edit-plan"
+        options={{
+          title: 'Editar Plan',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="select-plan-type"
+        options={{
+          title: 'Crear Plan',
+          headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="generate-ai-plan"
+        options={{
+          title: 'Generar Plan con IA',
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

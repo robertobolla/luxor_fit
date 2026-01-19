@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '../src/services/supabase';
 import { LineChart } from 'react-native-chart-kit';
+import { useTranslation } from 'react-i18next';
+import { useUnitsStore, getWeightInUserUnit } from '../src/store/unitsStore';
 
 const { width } = Dimensions.get('window');
 
@@ -41,6 +43,15 @@ export default function ExerciseProgressStatsScreen() {
   const params = useLocalSearchParams();
   const exerciseName = params.exerciseName as string;
   const exerciseId = params.exerciseId as string;
+  const { t } = useTranslation();
+  const { weightUnit } = useUnitsStore();
+  const weightLabel = weightUnit === 'kg' ? 'kg' : 'lb';
+
+  // Helper para formatear peso en la unidad del usuario
+  const formatWeight = (weightKg: number): string => {
+    const converted = getWeightInUserUnit(weightKg, weightUnit);
+    return converted % 1 === 0 ? converted.toString() : converted.toFixed(1);
+  };
 
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('3months');
@@ -124,7 +135,8 @@ export default function ExerciseProgressStatsScreen() {
         const bestSetData = sets.reduce((best, current) => 
           (current.weight_kg * current.reps) > (best.weight_kg * best.reps) ? current : best
         );
-        const bestSet = `${bestSetData.weight_kg}kg × ${bestSetData.reps}`;
+        // El bestSet se formateará al mostrar, guardamos los valores crudos
+        const bestSet = `${bestSetData.weight_kg}|${bestSetData.reps}`;
 
         return {
           date,
@@ -180,7 +192,8 @@ export default function ExerciseProgressStatsScreen() {
       return `${date.getDate()}/${date.getMonth() + 1}`;
     });
 
-    const data = sessions.map(s => s.maxWeight);
+    // Convertir los pesos a la unidad del usuario
+    const data = sessions.map(s => getWeightInUserUnit(s.maxWeight, weightUnit));
 
     return {
       labels: labels.length > 10 ? labels.filter((_, i) => i % Math.ceil(labels.length / 10) === 0) : labels,
@@ -201,7 +214,8 @@ export default function ExerciseProgressStatsScreen() {
       return `${date.getDate()}/${date.getMonth() + 1}`;
     });
 
-    const data = sessions.map(s => s.totalVolume);
+    // Convertir el volumen a la unidad del usuario
+    const data = sessions.map(s => getWeightInUserUnit(s.totalVolume, weightUnit));
 
     return {
       labels: labels.length > 10 ? labels.filter((_, i) => i % Math.ceil(labels.length / 10) === 0) : labels,
@@ -243,7 +257,7 @@ export default function ExerciseProgressStatsScreen() {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ffb300" />
-          <Text style={styles.loadingText}>Cargando estadísticas...</Text>
+          <Text style={styles.loadingText}>{t('stats.loading')}</Text>
         </View>
       ) : (
         <ScrollView style={styles.content}>
@@ -253,28 +267,23 @@ export default function ExerciseProgressStatsScreen() {
               <View style={styles.statsGrid}>
                 <View style={styles.statCard}>
                   <Ionicons name="trophy" size={32} color="#ffb300" />
-                  <Text style={styles.statValue}>{stats.personalRecord} kg</Text>
-                  <Text style={styles.statLabel}>Record Personal</Text>
+                  <Text style={styles.statValue}>{formatWeight(stats.personalRecord)} {weightLabel}</Text>
+                  <Text style={styles.statLabel}>{t('stats.personalRecord')}</Text>
                 </View>
-
                 <View style={styles.statCard}>
                   <Ionicons name="trending-up" size={32} color="#4CAF50" />
-                  <Text style={styles.statValue}>
-                    {stats.progressPercent > 0 ? '+' : ''}{stats.progressPercent}%
-                  </Text>
-                  <Text style={styles.statLabel}>Progreso</Text>
+                  <Text style={styles.statValue}>{stats.progressPercent > 0 ? '+' : ''}{stats.progressPercent}%</Text>
+                  <Text style={styles.statLabel}>{t('stats.progress')}</Text>
                 </View>
-
                 <View style={styles.statCard}>
                   <Ionicons name="fitness" size={32} color="#2196F3" />
-                  <Text style={styles.statValue}>{stats.totalVolume} kg</Text>
-                  <Text style={styles.statLabel}>Volumen Total</Text>
+                  <Text style={styles.statValue}>{formatWeight(stats.totalVolume)} {weightLabel}</Text>
+                  <Text style={styles.statLabel}>{t('stats.totalVolume')}</Text>
                 </View>
-
                 <View style={styles.statCard}>
                   <Ionicons name="calendar" size={32} color="#FF9800" />
-                  <Text style={styles.statValue}>{stats.lastSession}</Text>
-                  <Text style={styles.statLabel}>Última Sesión</Text>
+                  <Text style={styles.statValue}>{stats.lastSession.includes('|') ? `${formatWeight(parseFloat(stats.lastSession.split('|')[0]))}${weightLabel} × ${stats.lastSession.split('|')[1]}` : stats.lastSession}</Text>
+                  <Text style={styles.statLabel}>{t('stats.lastSession')}</Text>
                 </View>
               </View>
 
@@ -305,7 +314,7 @@ export default function ExerciseProgressStatsScreen() {
 
               {/* Charts */}
               <View style={styles.chartSection}>
-                <Text style={styles.chartTitle}>📈 Peso Máximo por Sesión</Text>
+                <Text style={styles.chartTitle}>{t('charts.maxWeightPerSession')}</Text>
                 <LineChart
                   data={getMaxWeightChartData()}
                   width={width - 40}
@@ -321,7 +330,7 @@ export default function ExerciseProgressStatsScreen() {
               </View>
 
               <View style={styles.chartSection}>
-                <Text style={styles.chartTitle}>💪 Volumen Total por Sesión</Text>
+                <Text style={styles.chartTitle}>{t('charts.totalVolumePerSession')}</Text>
                 <LineChart
                   data={getVolumeChartData()}
                   width={width - 40}
@@ -338,7 +347,7 @@ export default function ExerciseProgressStatsScreen() {
 
               {/* Session History */}
               <View style={styles.historySection}>
-                <Text style={styles.historyTitle}>📜 Historial de Sesiones</Text>
+                <Text style={styles.historyTitle}>{t('history.sessions')}</Text>
                 {sessions.slice().reverse().map((session, index) => {
                   const date = new Date(session.date);
                   const formattedDate = `${date.getDate()} ${date.toLocaleString('es', { month: 'short' })} ${date.getFullYear()}`;
@@ -347,15 +356,15 @@ export default function ExerciseProgressStatsScreen() {
                     <View key={index} style={styles.sessionCard}>
                       <View style={styles.sessionHeader}>
                         <Text style={styles.sessionDate}>📅 {formattedDate}</Text>
-                        <Text style={styles.sessionVolume}>{session.totalVolume} kg</Text>
+                        <Text style={styles.sessionVolume}>{formatWeight(session.totalVolume)} {weightLabel}</Text>
                       </View>
                       {session.sets.map((set, setIndex) => (
                         <View key={setIndex} style={styles.setRow}>
-                          <Text style={styles.setNumber}>Serie {set.set_number}</Text>
-                          <Text style={styles.setText}>{set.weight_kg}kg × {set.reps} reps</Text>
+                          <Text style={styles.setNumber}>Serie {setIndex + 1}</Text>
+                          <Text style={styles.setText}>{formatWeight(set.weight_kg)}{weightLabel} × {set.reps} reps</Text>
                         </View>
                       ))}
-                      <Text style={styles.sessionBest}>🏆 Mejor: {session.bestSet}</Text>
+                      <Text style={styles.sessionBest}>{t('sessions.bestSet', { value: session.bestSet.includes('|') ? `${formatWeight(parseFloat(session.bestSet.split('|')[0]))}${weightLabel} × ${session.bestSet.split('|')[1]}` : session.bestSet })}</Text>
                     </View>
                   );
                 })}
@@ -364,13 +373,9 @@ export default function ExerciseProgressStatsScreen() {
           ) : (
             <View style={styles.emptyState}>
               <Ionicons name="bar-chart-outline" size={80} color="#444" />
-              <Text style={styles.emptyTitle}>Sin Datos</Text>
-              <Text style={styles.emptyText}>
-                Aún no has registrado series para este ejercicio.
-              </Text>
-              <Text style={styles.emptyText}>
-                Completa tu primer entrenamiento para ver tus estadísticas.
-              </Text>
+              <Text style={styles.emptyTitle}>{t('empty.title')}</Text>
+              <Text style={styles.emptyText}>{t('empty.noSets')}</Text>
+              <Text style={styles.emptyText}>{t('empty.firstWorkout')}</Text>
             </View>
           )}
         </ScrollView>

@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
@@ -300,7 +300,7 @@ export default function CustomPlanSetupScreen() {
         .from('nutrition_plans')
         .insert({
           user_id: user.id,
-          name: planName.trim(),
+          plan_name: planName.trim(),
           description: planDescription.trim() || null,
           is_active: activate,
           is_ai_generated: false,
@@ -472,9 +472,11 @@ export default function CustomPlanSetupScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
         >
@@ -687,7 +689,8 @@ export default function CustomPlanSetupScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 }
 

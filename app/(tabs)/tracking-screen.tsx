@@ -61,6 +61,14 @@ export default function TrackingScreen() {
   const lastLocation = useRef<Location.LocationObject | null>(null);
   const totalDistance = useRef(0);
   const mapRef = useRef<MapView>(null);
+  const locationCount = useRef(0); // Contador de ubicaciones recibidas
+  const gpsStabilized = useRef(false); // Indica si el GPS ya está estable
+  
+  // Constantes para filtrado de GPS
+  const MIN_ACCURACY_METERS = 20; // Precisión mínima aceptable
+  const MIN_DISTANCE_METERS = 5; // Distancia mínima para contar (5 metros)
+  const WARMUP_LOCATIONS = 3; // Número de ubicaciones a ignorar al inicio para estabilizar GPS
+  const MIN_SPEED_KMH = 0.5; // Velocidad mínima para mostrar (evitar ruido cuando quieto)
 
   // Función para calcular distancia (Haversine)
   const calculateDistance = (
@@ -87,6 +95,14 @@ export default function TrackingScreen() {
   // Iniciar tracking GPS
   const startGPSTracking = async () => {
     try {
+      // Resetear contadores
+      locationCount.current = 0;
+      gpsStabilized.current = false;
+      totalDistance.current = 0;
+      lastLocation.current = null;
+      setDistance(0);
+      setRoutePoints([]);
+      
       // Iniciar timer
       timerInterval.current = setInterval(() => {
         setTrackingTime((prev) => prev + 1);
@@ -100,7 +116,48 @@ export default function TrackingScreen() {
           distanceInterval: 5,
         },
         (location) => {
-          console.log('📍 Nueva ubicación:', location.coords);
+          locationCount.current += 1;
+          const accuracy = location.coords.accuracy || 999;
+          
+          console.log(`📍 Ubicación #${locationCount.current}:`, {
+            lat: location.coords.latitude.toFixed(6),
+            lon: location.coords.longitude.toFixed(6),
+            accuracy: accuracy.toFixed(1),
+            speed: location.coords.speed?.toFixed(2),
+          });
+          
+          // Filtro 1: Verificar precisión del GPS
+          if (accuracy > MIN_ACCURACY_METERS) {
+            console.log(`⚠️ GPS impreciso (${accuracy.toFixed(1)}m > ${MIN_ACCURACY_METERS}m), ignorando ubicación`);
+            return;
+          }
+          
+          // Filtro 2: Período de calentamiento del GPS (ignorar primeras ubicaciones)
+          if (locationCount.current <= WARMUP_LOCATIONS) {
+            console.log(`🔄 Calentando GPS (${locationCount.current}/${WARMUP_LOCATIONS})...`);
+            setCurrentLocation(location);
+            // Solo guardar la ubicación pero no calcular distancia aún
+            if (locationCount.current === WARMUP_LOCATIONS) {
+              lastLocation.current = location;
+              gpsStabilized.current = true;
+              // Agregar primer punto a la ruta
+              setRoutePoints([{
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+              }]);
+              console.log('✅ GPS estabilizado, comenzando tracking');
+            }
+            // Centrar mapa
+            if (mapRef.current) {
+              mapRef.current.animateToRegion({
+                latitude: location.coords.latitude,
+                longitude: location.coords.longitude,
+                latitudeDelta: 0.005,
+                longitudeDelta: 0.005,
+              }, 1000);
+            }
+            return;
+          }
           
           setCurrentLocation(location);
           
@@ -111,8 +168,8 @@ export default function TrackingScreen() {
           };
           setRoutePoints((prev) => [...prev, newPoint]);
           
-          // Calcular distancia si tenemos una ubicación previa
-          if (lastLocation.current && !isPaused) {
+          // Calcular distancia si tenemos una ubicación previa y GPS estabilizado
+          if (lastLocation.current && !isPaused && gpsStabilized.current) {
             const dist = calculateDistance(
               lastLocation.current.coords.latitude,
               lastLocation.current.coords.longitude,
@@ -120,18 +177,29 @@ export default function TrackingScreen() {
               location.coords.longitude
             );
             
-            // Solo sumar distancia si es mayor a 3 metros (filtrar ruido del GPS)
-            if (dist > 0.003) { // 0.003 km = 3 metros
-              totalDistance.current += dist;
-              setDistance(totalDistance.current);
+            const distMeters = dist * 1000;
+            
+            // Filtro 3: Solo sumar distancia si es mayor al umbral mínimo
+            if (distMeters >= MIN_DISTANCE_METERS) {
+              // Filtro 4: Verificar que la velocidad implícita sea realista (< 50 km/h para caminata/running)
+              const timeDiff = (location.timestamp - (lastLocation.current?.timestamp || location.timestamp)) / 1000; // segundos
+              const impliedSpeedKmh = timeDiff > 0 ? (dist / timeDiff) * 3600 : 0;
+              
+              if (impliedSpeedKmh < 50) { // Velocidad realista para actividad humana
+                totalDistance.current += dist;
+                setDistance(totalDistance.current);
+                console.log(`📏 Distancia: +${distMeters.toFixed(1)}m, Total: ${(totalDistance.current * 1000).toFixed(0)}m`);
+              } else {
+                console.log(`⚠️ Velocidad implícita irreal (${impliedSpeedKmh.toFixed(1)} km/h), ignorando`);
+              }
             }
           }
           
-          // Actualizar velocidad (filtrar ruido del GPS - ignorar velocidades menores a 0.5 km/h)
+          // Actualizar velocidad
           if (location.coords.speed !== null && location.coords.speed >= 0) {
             const speedKmh = location.coords.speed * 3.6;
-            // Solo mostrar velocidad si es mayor a 0.5 km/h (el GPS tiene ruido cuando estás quieto)
-            setCurrentSpeed(speedKmh > 0.5 ? speedKmh : 0);
+            // Solo mostrar velocidad si es mayor al umbral mínimo
+            setCurrentSpeed(speedKmh > MIN_SPEED_KMH ? speedKmh : 0);
           }
           
           // Guardar ubicación actual
@@ -223,37 +291,61 @@ export default function TrackingScreen() {
     stopGPSTracking();
     setIsTracking(false);
 
+    const avgSpeed = trackingTime > 0 ? distance / (trackingTime / 3600) || 0 : 0;
+
+    // Guardar stats antes de la operación async
+    const currentStats = {
+      time: formatTime(trackingTime),
+      distance: distance,
+      speed: avgSpeed,
+    };
+
     if (user) {
-      const today = new Date().toISOString().split('T')[0];
-      const avgSpeed = trackingTime > 0 ? distance / (trackingTime / 3600) || 0 : 0;
+      try {
+        const today = new Date().toISOString().split('T')[0];
 
-      const result = await saveExercise({
-        user_id: user.id,
-        activity_type: activityType,
-        activity_name: activityName,
-        date: today,
-        duration_minutes: Math.ceil(trackingTime / 60),
-        distance_km: distance,
-        has_gps: true,
-        average_speed_kmh: avgSpeed,
-      });
-
-      setIsSaving(false);
-
-      if (result.success) {
-        setSavedStats({
-          time: formatTime(trackingTime),
-          distance: distance,
-          speed: avgSpeed,
+        // Timeout de 10 segundos para evitar que se congele
+        const savePromise = saveExercise({
+          user_id: user.id,
+          activity_type: activityType,
+          activity_name: activityName,
+          date: today,
+          duration_minutes: Math.ceil(trackingTime / 60),
+          distance_km: distance,
+          has_gps: true,
+          average_speed_kmh: avgSpeed,
         });
-        setShowSuccessModal(true);
-      } else {
-        // En caso de error, mostrar modal de error
+
+        const timeoutPromise = new Promise<{ success: false; error: string }>((_, reject) => 
+          setTimeout(() => reject({ success: false, error: 'Timeout' }), 10000)
+        );
+
+        const result = await Promise.race([savePromise, timeoutPromise]);
+
+        setIsSaving(false);
+
+        if (result.success) {
+          setSavedStats(currentStats);
+          setShowSuccessModal(true);
+        } else {
+          // En caso de error, mostrar modal de error
+          console.error('❌ Error guardando actividad:', result.error);
+          setSavedStats(null);
+          setShowSuccessModal(true);
+        }
+      } catch (error) {
+        console.error('❌ Error o timeout guardando actividad:', error);
+        setIsSaving(false);
+        // Mostrar modal de error en caso de excepción
         setSavedStats(null);
         setShowSuccessModal(true);
       }
     } else {
+      // Si no hay usuario, mostrar error
+      console.warn('⚠️ No hay usuario autenticado para guardar');
       setIsSaving(false);
+      setSavedStats(null);
+      setShowSuccessModal(true);
     }
   };
 

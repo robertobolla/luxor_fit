@@ -46,14 +46,32 @@ export default function ProfileEditScreen() {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showNutritionConfirm, setShowNutritionConfirm] = useState(false);
   
-  // Datos originales para detectar cambios
-  const [originalData, setOriginalData] = useState<any>(null);
+  // Datos originales para detectar cambios (en unidades métricas)
+  const [originalData, setOriginalData] = useState<{
+    username?: string;
+    weight?: number; // en kg
+    height?: number; // en cm
+    age?: number;
+  } | null>(null);
+  
+  // Datos originales en unidades del usuario (para comparación)
+  const [originalWeightInUserUnit, setOriginalWeightInUserUnit] = useState<string>('');
 
   useEffect(() => {
     if (user?.id) {
       loadProfile();
     }
   }, [user]);
+
+  // Actualizar peso cuando cambia la unidad
+  useEffect(() => {
+    if (originalData?.weight) {
+      const weightInUserUnit = getWeightInUserUnit(originalData.weight, weightUnit);
+      const weightStr = weightInUserUnit.toFixed(1);
+      setWeight(weightStr);
+      setOriginalWeightInUserUnit(weightStr);
+    }
+  }, [weightUnit, originalData?.weight]);
 
   const loadProfile = async () => {
     if (!user?.id) return;
@@ -75,7 +93,11 @@ export default function ProfileEditScreen() {
         // Convertir peso a la unidad del usuario
         if (data.weight) {
           const weightInUserUnit = getWeightInUserUnit(data.weight, weightUnit);
-          setWeight(weightInUserUnit.toFixed(1));
+          const weightStr = weightInUserUnit.toFixed(1);
+          setWeight(weightStr);
+          setOriginalWeightInUserUnit(weightStr);
+        } else {
+          setOriginalWeightInUserUnit('');
         }
         // Convertir altura a la unidad del usuario
         if (data.height) {
@@ -89,7 +111,13 @@ export default function ProfileEditScreen() {
           }
         }
         setAge(data.age?.toString() || '');
-        setOriginalData(data);
+        // Guardar datos originales en unidades métricas
+        setOriginalData({
+          username: data.username || '',
+          weight: data.weight || undefined,
+          height: data.height || undefined,
+          age: data.age || undefined,
+        });
       }
     } catch (err) {
       console.error('Error loading profile:', err);
@@ -101,10 +129,23 @@ export default function ProfileEditScreen() {
   const hasChanges = () => {
     if (!originalData) return false;
     
+    // Comparar peso en la unidad del usuario
+    const weightChanged = weight !== originalWeightInUserUnit;
+    
+    // Comparar altura
+    let heightChanged = false;
+    if (heightUnit === 'ft') {
+      const originalFeet = originalData.height ? conversions.cmToFt(originalData.height).feet : 0;
+      const originalInches = originalData.height ? conversions.cmToFt(originalData.height).inches : 0;
+      heightChanged = heightFeet !== originalFeet.toString() || heightInches !== originalInches.toString();
+    } else {
+      heightChanged = height !== (originalData.height?.toString() || '');
+    }
+    
     return (
       username !== (originalData.username || '') ||
-      weight !== (originalData.weight?.toString() || '') ||
-      height !== (originalData.height?.toString() || '') ||
+      weightChanged ||
+      heightChanged ||
       age !== (originalData.age?.toString() || '')
     );
   };
@@ -112,11 +153,24 @@ export default function ProfileEditScreen() {
   const hasNutritionImpact = () => {
     if (!originalData) return false;
     
+    // Comparar peso en la unidad del usuario
+    const weightChanged = weight !== originalWeightInUserUnit;
+    
+    // Comparar altura
+    let heightChanged = false;
+    if (heightUnit === 'ft') {
+      const originalFeet = originalData.height ? conversions.cmToFt(originalData.height).feet : 0;
+      const originalInches = originalData.height ? conversions.cmToFt(originalData.height).inches : 0;
+      heightChanged = heightFeet !== originalFeet.toString() || heightInches !== originalInches.toString();
+    } else {
+      heightChanged = height !== (originalData.height?.toString() || '');
+    }
+    
     // Cualquier cambio en el perfil puede afectar nutrición
     // Incluyendo edad (afecta BMR), peso, altura
     return (
-      weight !== (originalData.weight?.toString() || '') ||
-      height !== (originalData.height?.toString() || '') ||
+      weightChanged ||
+      heightChanged ||
       age !== (originalData.age?.toString() || '')
     );
   };

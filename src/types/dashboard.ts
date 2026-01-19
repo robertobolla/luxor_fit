@@ -49,113 +49,113 @@ export interface DashboardConfig {
   hiddenMetrics: MetricType[];
 }
 
-// Métricas disponibles
+// Métricas disponibles - usa claves de traducción
 export const AVAILABLE_METRICS: MetricConfig[] = [
   {
     id: 'steps',
-    name: 'Pasos',
+    name: 'dashboard.customize.metrics.steps',
     icon: 'footsteps',
     color: '#00D4AA',
     unit: 'pasos',
   },
   {
     id: 'distance',
-    name: 'Distancia',
+    name: 'dashboard.customize.metrics.distance',
     icon: 'location',
     color: '#00D4AA',
     unit: 'km',
   },
   {
     id: 'calories',
-    name: 'Calorías quemadas',
+    name: 'dashboard.customize.metrics.caloriesBurned',
     icon: 'flame',
     color: '#FF6B35',
     unit: 'kcal',
   },
   {
     id: 'sleep',
-    name: 'Duración del sueño',
+    name: 'dashboard.customize.metrics.sleepDuration',
     icon: 'moon',
     color: '#9B5DE5',
     unit: 'h',
   },
   {
     id: 'exercise',
-    name: 'Días de ejercicio',
+    name: 'dashboard.customize.metrics.exerciseDays',
     icon: 'barbell',
     color: '#00D4AA',
     unit: 'días',
   },
   {
     id: 'weight',
-    name: 'Peso',
+    name: 'dashboard.customize.metrics.weight',
     icon: 'fitness',
     color: '#F15BB5',
     unit: 'kg',
   },
   {
     id: 'glucose',
-    name: 'Glucosa',
+    name: 'dashboard.customize.metrics.glucose',
     icon: 'water',
     color: '#00BBF9',
     unit: 'mg/dL',
   },
   {
     id: 'mindfulness',
-    name: 'Días de mindfulness',
+    name: 'dashboard.customize.metrics.mindfulnessDays',
     icon: 'flower',
     color: '#FEE440',
   },
   {
     id: 'food',
-    name: 'Comida',
+    name: 'dashboard.customize.metrics.food',
     icon: 'restaurant',
     color: '#FF6B35',
     unit: 'kcal',
   },
   {
     id: 'water',
-    name: 'Agua',
+    name: 'dashboard.customize.metrics.water',
     icon: 'water',
     color: '#00BBF9',
     unit: 'ml',
   },
   {
     id: 'heartRate',
-    name: 'Frecuencia cardíaca',
+    name: 'dashboard.customize.metrics.heartRate',
     icon: 'heart',
     color: '#F15BB5',
     unit: 'bpm',
   },
 ];
 
-// Prioridades preestablecidas
+// Prioridades preestablecidas - usa claves de traducción
 export const PRESET_PRIORITIES: PriorityPreset[] = [
   {
     id: 'sleep-better',
-    name: 'Duerme mejor',
-    description: 'Duración del sueño • Pasos • Días de mindfulness',
+    name: 'dashboard.customize.priorities.sleepBetter',
+    description: 'dashboard.customize.priorities.sleepBetterDesc',
     icon: 'moon',
     metrics: ['sleep', 'steps', 'mindfulness'],
   },
   {
     id: 'eat-better',
-    name: 'Come mejor',
-    description: 'Comida • Pasos • Peso',
+    name: 'dashboard.customize.priorities.eatBetter',
+    description: 'dashboard.customize.priorities.eatBetterDesc',
     icon: 'restaurant',
     metrics: ['food', 'steps', 'weight'],
   },
   {
     id: 'lose-weight',
-    name: 'Pierde peso',
-    description: 'Peso • Calorías • Pasos',
+    name: 'dashboard.customize.priorities.loseWeight',
+    description: 'dashboard.customize.priorities.loseWeightDesc',
     icon: 'fitness',
     metrics: ['weight', 'calories', 'steps'],
   },
   {
     id: 'active-lifestyle',
-    name: 'Vida activa',
-    description: 'Pasos • Distancia • Calorías',
+    name: 'dashboard.customize.priorities.activeLifestyle',
+    description: 'dashboard.customize.priorities.activeLifestyleDesc',
     icon: 'footsteps',
     metrics: ['steps', 'distance', 'calories'],
   },

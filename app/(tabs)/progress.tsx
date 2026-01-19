@@ -155,7 +155,6 @@ export default function ProgressScreen() {
     gymDaysGoal: 3,
     weight: 78,
     glucose: 0,
-    mindfulnessDays: 0,
     food: 0,
     water: 0,
     waterGoal: 2000,
@@ -336,18 +335,22 @@ export default function ProgressScreen() {
         console.error('Error al obtener peso del perfil:', error);
       }
 
+      // Array de 7 días donde índice 0 = Lunes, índice 6 = Domingo
       const exerciseDaysArray = [false, false, false, false, false, false, false];
       exerciseDates.forEach((dateStr: string) => {
         const date = new Date(dateStr);
-        const dayOfWeek = date.getDay();
-        exerciseDaysArray[dayOfWeek] = true;
+        const dayOfWeek = date.getDay(); // 0 = Domingo, 1 = Lunes, etc.
+        // Convertir a índice donde 0 = Lunes, 6 = Domingo
+        const dayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        exerciseDaysArray[dayIndex] = true;
       });
 
       const gymDaysArray = [false, false, false, false, false, false, false];
       gymDates.forEach((dateStr: string) => {
         const date = new Date(dateStr);
         const dayOfWeek = date.getDay();
-        gymDaysArray[dayOfWeek] = true;
+        const dayIndex = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        gymDaysArray[dayIndex] = true;
       });
 
       setExerciseCompletedDays(exerciseDaysArray);
@@ -367,7 +370,6 @@ export default function ProgressScreen() {
         gymDaysGoal: (gymData as any).goal ?? 3,
         weight: userWeight,
         glucose: (healthData as any).glucose || 0,
-        mindfulnessDays: 2,
         food: (healthData as any).food || 0,
         water: (healthData as any).water || 0,
         waterGoal: 2000,
@@ -539,7 +541,8 @@ export default function ProgressScreen() {
   const mainMetricConfig = getMetricConfig(mainMetric);
   const mainMetricData = getMetricData(mainMetric);
 
-  const weekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+  // Días de la semana traducidos (Lunes a Domingo)
+  const weekDays = t('common.weekDaysShort', { returnObjects: true }) as string[];
 
   if (isCheckingOnboarding) {
     return (
@@ -612,7 +615,7 @@ export default function ProgressScreen() {
             {mainMetricData.displayValue}
             {mainMetricData.unit && <Text style={styles.mainUnit}> {mainMetricData.unit}</Text>}
           </Text>
-          <Text style={styles.mainLabel}>{(mainMetricConfig as any).name}</Text>
+          <Text style={styles.mainLabel}>{(mainMetricConfig as any).name?.startsWith('dashboard.') ? t((mainMetricConfig as any).name) : (mainMetricConfig as any).name}</Text>
         </View>
 
         {/* Círculos Secundarios */}
@@ -632,7 +635,7 @@ export default function ProgressScreen() {
                   iconSize={32}
                 />
                 <Text style={styles.secondaryNumber}>{metricData.displayValue}</Text>
-                <Text style={styles.secondaryLabel}>{metricData.unit || (metricConfig as any).name}</Text>
+                <Text style={styles.secondaryLabel}>{metricData.unit || ((metricConfig as any).name?.startsWith('dashboard.') ? t((metricConfig as any).name) : (metricConfig as any).name)}</Text>
               </View>
             );
           })}
@@ -812,24 +815,6 @@ export default function ProgressScreen() {
               </View>
               <View style={styles.iconCircle}>
                 <Ionicons name="water" size={22} color="#ffb300" />
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Sección de Estrés y mindfulness */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('dashboard.section.stressAndMindfulness')}</Text>
-
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{t('dashboard.mindfulnessDays')}</Text>
-                <Text style={styles.cardValue}>{t('dashboard.start')}</Text>
-                <Text style={styles.cardSubtitle}>{t('dashboard.tapToConfigure')}</Text>
-              </View>
-              <View style={styles.iconCircle}>
-                <Ionicons name="flower" size={22} color="#ffb300" />
               </View>
             </View>
           </View>

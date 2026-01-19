@@ -80,7 +80,9 @@ export default function CaloriesDetailScreen() {
       
       case 'week':
         // Datos por día de la semana
-        const weekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+        const weekDays = t('common.weekDaysShort', {
+          returnObjects: true,
+        }) as string[];
         return weekDays.map((day) => ({
           label: day,
           value: Math.random() * 800,
@@ -108,7 +110,10 @@ export default function CaloriesDetailScreen() {
       
       case 'year':
         // Datos por mes del año
-        const months = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+        const months = t('common.monthsShort', {
+          returnObjects: true,
+        }) as string[];
+        
         return months.map((month) => ({
           label: month,
           value: Math.random() * 50000,

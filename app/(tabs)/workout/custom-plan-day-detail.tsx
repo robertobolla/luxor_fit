@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../../../src/services/supabase';
 import { useCustomAlert } from '../../../src/components/CustomAlert';
 import Constants from 'expo-constants';
+import { useUser } from '@clerk/clerk-expo';
 
 // ============================================================================
 // 🚀 DRAG & DROP - DETECCIÓN AUTOMÁTICA DE ENTORNO
@@ -77,6 +78,10 @@ export default function CustomPlanDayDetailScreen() {
   const { t, i18n  } = useTranslation();
   const params = useLocalSearchParams();
   const { showAlert, AlertComponent } = useCustomAlert();
+  const { user } = useUser();
+  
+  // Obtener planId de los parámetros (si estamos editando un plan existente)
+  const editingPlanId = params.planId as string | undefined;
   
   // Parsear parámetros con validación
   const parseDayNumber = (value: string | undefined): number => {
@@ -95,15 +100,32 @@ export default function CustomPlanDayDetailScreen() {
     }
   };
 
-  const weekNumber = parseDayNumber(params.weekNumber as string);
-  const dayNumber = parseDayNumber(params.dayNumber as string);
-  const equipment = parseSafeJSON(params.equipment as string, []);
-  const dayData = parseSafeJSON(params.dayData as string, { exercises: [] });
+  // Usar useMemo para recalcular valores cuando cambien los parámetros
+  // Esto es crítico porque expo-router puede no remontar el componente
+  const weekNumber = React.useMemo(
+    () => parseDayNumber(params.weekNumber as string),
+    [params.weekNumber]
+  );
+  const dayNumber = React.useMemo(
+    () => parseDayNumber(params.dayNumber as string),
+    [params.dayNumber]
+  );
+  const equipment = React.useMemo(
+    () => parseSafeJSON(params.equipment as string, []),
+    [params.equipment]
+  );
+  const initialDayData = React.useMemo(
+    () => parseSafeJSON(params.dayData as string, { exercises: [] }),
+    [params.dayData]
+  );
 
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [dayName, setDayName] = useState<string>(
     t('customPlan.dayWithNumber', { number: dayNumber })
   );
+  
+  // Clave única para forzar recarga cuando cambian los parámetros
+  const paramsKey = `${params.weekNumber}_${params.dayNumber}`;
     const [isEditingDayName, setIsEditingDayName] = useState(false);
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
@@ -266,17 +288,32 @@ export default function CustomPlanDayDetailScreen() {
     }
   }, [editingExercise]);
 
-  // Resetear estado cuando cambia el dayNumber
+  // Resetear estado cuando cambian los parámetros (día o semana)
+  // Usar paramsKey para detectar cambios en los parámetros crudos
   useEffect(() => {
+    console.log('🔄 Parámetros cambiaron, reseteando estado:', { weekNumber, dayNumber, paramsKey });
+    
+    // Resetear flag de cambios locales para evitar usar estado anterior
+    hasLocalChanges.current = false;
+    
+    // Resetear todos los estados
     setExercises([]);
-    setDayName(t('workout.dayName', { day: dayNumber }));
-
+    setDayName(initialDayData.name || t('customPlan.dayWithNumber', { number: dayNumber }));
     setIsEditingDayName(false);
     setEditingExercise(null);
     setSets('');
     setReps([]);
     setRirValues([]);
-  }, [dayNumber]);
+    setSetTypes([]);
+    setExpandedExercises(new Set());
+    setExerciseNotes('');
+    
+    // Cargar ejercicios desde los parámetros si existen
+    if (initialDayData.exercises && initialDayData.exercises.length > 0) {
+      console.log('📦 Cargando', initialDayData.exercises.length, 'ejercicios desde parámetros');
+      setExercises(initialDayData.exercises);
+    }
+  }, [paramsKey, dayNumber, weekNumber, initialDayData]);
 
 
   const handleAddExercise = () => {
@@ -625,6 +662,95 @@ export default function CustomPlanDayDetailScreen() {
       };
       await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
       
+      // ============================================================================
+      // 🆕 GUARDAR DIRECTAMENTE EN SUPABASE si estamos editando un plan existente
+      // ============================================================================
+      if (editingPlanId && user?.id) {
+        console.log('📤 Guardando también en Supabase (plan existente):', editingPlanId);
+        
+        try {
+          // 1. Cargar el plan actual desde Supabase
+          const { data: currentPlan, error: fetchError } = await supabase
+            .from('workout_plans')
+            .select('plan_data')
+            .eq('id', editingPlanId)
+            .eq('user_id', user.id)
+            .single();
+          
+          if (fetchError) {
+            console.error('❌ Error cargando plan para actualizar:', fetchError);
+            // No fallar, seguir con AsyncStorage
+          } else if (currentPlan?.plan_data) {
+            // 2. Actualizar los datos del día en el plan
+            const planData = currentPlan.plan_data as any;
+            
+            // Formato del día actualizado
+            const updatedDayData = {
+              day: dayName,
+              focus: dayName,
+              exercises: exercises.map((ex: any) => ({
+                id: ex.id,
+                name: ex.name,
+                sets: ex.sets,
+                reps: ex.reps,
+                rest_seconds: ex.rest_seconds || 120,
+                setTypes: ex.setTypes || [],
+              })),
+              duration: 45,
+            };
+            
+            // Actualizar en multi_week_structure
+            if (planData.multi_week_structure && Array.isArray(planData.multi_week_structure)) {
+              const weekIndex = planData.multi_week_structure.findIndex((w: any) => w.week_number === weekNumber);
+              if (weekIndex >= 0) {
+                const dayIndex = planData.multi_week_structure[weekIndex].days?.findIndex(
+                  (d: any, idx: number) => idx + 1 === dayNumber
+                );
+                if (dayIndex >= 0) {
+                  planData.multi_week_structure[weekIndex].days[dayIndex] = updatedDayData;
+                } else if (planData.multi_week_structure[weekIndex].days) {
+                  // Si el día no existe, agregarlo
+                  planData.multi_week_structure[weekIndex].days.push(updatedDayData);
+                }
+              }
+            }
+            
+            // También actualizar weekly_structure si es semana 1
+            if (weekNumber === 1 && planData.weekly_structure && Array.isArray(planData.weekly_structure)) {
+              const dayIndex = dayNumber - 1;
+              if (dayIndex >= 0 && dayIndex < planData.weekly_structure.length) {
+                planData.weekly_structure[dayIndex] = updatedDayData;
+              } else if (dayIndex === planData.weekly_structure.length) {
+                planData.weekly_structure.push(updatedDayData);
+              }
+            }
+            
+            // 3. Guardar el plan actualizado en Supabase
+            const { error: updateError } = await supabase
+              .from('workout_plans')
+              .update({ plan_data: planData })
+              .eq('id', editingPlanId)
+              .eq('user_id', user.id);
+            
+            if (updateError) {
+              console.error('❌ Error actualizando plan en Supabase:', updateError);
+              showAlert(
+                t('common.warning') || 'Aviso',
+                t('customPlan.savedLocallyOnly') || 'Cambios guardados localmente. Presiona "Guardar Plan" para guardar permanentemente.',
+                [{ text: t('common.ok') }],
+                { icon: 'alert-circle', iconColor: '#ffb300' }
+              );
+            } else {
+              console.log('✅ Plan actualizado en Supabase exitosamente');
+            }
+          }
+        } catch (supabaseError) {
+          console.error('❌ Error en actualización de Supabase:', supabaseError);
+          // No mostrar error, el guardado local ya funcionó
+        }
+      }
+      // ============================================================================
+      
       // Resetear flag de cambios locales después de guardar
       hasLocalChanges.current = false;
       console.log('✅ Cambios guardados, reseteando flag de cambios locales');
@@ -657,53 +783,39 @@ export default function CustomPlanDayDetailScreen() {
     React.useCallback(() => {
       let isMounted = true;
       
+      // Capturar los valores actuales de los parámetros
+      const currentDayNumber = dayNumber;
+      const currentWeekNumber = weekNumber;
+      
+      console.log('🔍 useFocusEffect - día:', currentDayNumber, 'semana:', currentWeekNumber);
+      
       const loadDayData = async () => {
         try {
-          // Primero verificar si hay datos pasados por parámetros
-          const paramDayData = parseSafeJSON(params.dayData as string, {});
-          if (paramDayData.dayNumber === dayNumber && paramDayData.exercises) {
-            if (isMounted) {
-              setExercises(paramDayData.exercises || []);
-              if (paramDayData.name) {
-                setDayName(paramDayData.name);
-              }
-            }
-          }
+          // Si ya hay ejercicios cargados desde el useEffect de parámetros, no sobrescribir
+          // a menos que haya datos más recientes en AsyncStorage
           
-          // Luego cargar desde AsyncStorage (sobrescribe si existe)
           // Prevenir race condition: no cargar si hay guardado en proceso
           if (isSavingToStorage.current) {
-            console.log('⏳ Guardado en proceso, usando datos de parámetros solamente');
-          } else {
-            const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
-            if (dayDataStr) {
+            console.log('⏳ Guardado en proceso, usando datos existentes');
+            return;
+          }
+          
+          const dayDataStr = await AsyncStorage.getItem(`week_${currentWeekNumber}_day_${currentDayNumber}_data`);
+          if (dayDataStr && isMounted) {
             const savedDayData = parseSafeJSON(dayDataStr, {});
             // Verificar que los datos guardados correspondan al día correcto
-            if (savedDayData.dayNumber === dayNumber && isMounted) {
+            if (savedDayData.dayNumber === currentDayNumber) {
+              console.log('📂 Cargando desde AsyncStorage:', savedDayData.exercises?.length || 0, 'ejercicios');
               if (savedDayData.name) {
                 setDayName(savedDayData.name);
-              } else {
-                setDayName(t('customPlan.dayWithNumber', { day: dayNumber }));
               }
-              if (savedDayData.exercises) {
+              if (savedDayData.exercises && savedDayData.exercises.length > 0) {
                 setExercises(savedDayData.exercises);
-              } else {
-                setExercises([]);
               }
-            }
-            } else if (isMounted) {
-              // Si no hay datos guardados, usar los valores por defecto
-              setDayName(t('customPlan.dayWithNumber', { day: dayNumber }));
-              setExercises([]);
             }
           }
         } catch (error) {
           console.error('Error loading day data:', error);
-          // En caso de error, usar valores por defecto
-          if (isMounted) {
-            setDayName(t('customPlan.dayWithNumber', { day: dayNumber }));
-            setExercises([]);
-          }
         }
       };
 
@@ -744,13 +856,13 @@ export default function CustomPlanDayDetailScreen() {
               if (!isSavingToStorage.current) {
                 isSavingToStorage.current = true;
                 try {
-                  const currentDayName = dayName || t('workout.dayName', { day: dayNumber });
+                  const currentDayName = dayName || t('workout.dayName', { day: currentDayNumber });
                   const dayDataToSave = {
-                    dayNumber,
+                    dayNumber: currentDayNumber,
                     name: currentDayName,
                     exercises: updatedExercises,
                   };
-                  await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
+                  await AsyncStorage.setItem(`week_${currentWeekNumber}_day_${currentDayNumber}_data`, JSON.stringify(dayDataToSave));
                   console.log('💾 Ejercicio guardado inmediatamente en AsyncStorage');
                 } catch (error) {
                   console.error('Error saving updated day data:', error);
@@ -792,13 +904,13 @@ export default function CustomPlanDayDetailScreen() {
         
         // Cargar datos primero
         try {
-          console.log('📥 Iniciando carga de datos para día:', dayNumber, 'semana:', weekNumber);
+          console.log('📥 Cargando día', currentDayNumber, 'semana', currentWeekNumber);
           
           // Primero verificar si hay datos pasados por parámetros
           const paramDayData = parseSafeJSON(params.dayData as string, {});
-          console.log('📦 Datos de parámetros:', JSON.stringify(paramDayData, null, 2));
+          console.log('📦 Ejercicios recibidos:', paramDayData.exercises?.length || 0);
           
-          if (paramDayData.dayNumber === dayNumber && paramDayData.exercises) {
+          if (paramDayData.dayNumber === currentDayNumber && paramDayData.exercises) {
             // Hacer copia profunda de ejercicios para evitar referencias compartidas
             loadedExercises = (paramDayData.exercises || []).map((ex: Exercise, idx: number) => ({
               ...ex,
@@ -818,17 +930,16 @@ export default function CustomPlanDayDetailScreen() {
           }
           
           // Luego cargar desde AsyncStorage (sobrescribe si existe)
-          const asyncKey = `week_${weekNumber}_day_${dayNumber}_data`;
+          const asyncKey = `week_${currentWeekNumber}_day_${currentDayNumber}_data`;
           console.log('🔑 Buscando en AsyncStorage con key:', asyncKey);
           const dayDataStr = await AsyncStorage.getItem(asyncKey);
           
           if (dayDataStr) {
             console.log('📦 Datos encontrados en AsyncStorage');
             const savedDayData = parseSafeJSON(dayDataStr, {});
-            console.log('📦 Datos parseados:', JSON.stringify(savedDayData, null, 2));
             
             // Verificar que los datos guardados correspondan al día correcto
-            if (savedDayData.dayNumber === dayNumber) {
+            if (savedDayData.dayNumber === currentDayNumber) {
               // Hacer copia profunda de ejercicios para evitar referencias compartidas
               loadedExercises = (savedDayData.exercises || []).map((ex: Exercise, idx: number) => ({
                 ...ex,
@@ -854,7 +965,7 @@ export default function CustomPlanDayDetailScreen() {
             if (isMounted && loadedExercises.length === 0) {
               // Si no hay datos guardados, usar los valores por defecto
               console.log('📝 Inicializando día vacío');
-              setDayName(t('workout.dayName', { day: dayNumber }));
+              setDayName(t('workout.dayName', { day: currentDayNumber }));
               setExercises([]);
             } else if (isMounted) {
               console.log('✅ Usando ejercicios de parámetros:', loadedExercises.length);
@@ -865,7 +976,7 @@ export default function CustomPlanDayDetailScreen() {
           console.error('❌ Error loading day data:', error);
           // En caso de error, usar valores por defecto
           if (isMounted) {
-            setDayName(t('workout.dayName', { day: dayNumber }));
+            setDayName(t('workout.dayName', { day: currentDayNumber }));
             setExercises([]);
             loadedExercises = [];
           }
@@ -880,19 +991,19 @@ export default function CustomPlanDayDetailScreen() {
       return () => {
         isMounted = false;
       };
-    }, [dayNumber, params.dayData])
+    }, [paramsKey, dayNumber, weekNumber])
   );
 
-  // Componente wrapper condicional
-  const WrapperComponent = DRAG_DROP_ENABLED && GestureHandlerRootView 
+  // Wrapper para GestureHandler - debe estar en el nivel superior
+  const ContentWrapper = DRAG_DROP_ENABLED && GestureHandlerRootView 
     ? GestureHandlerRootView 
     : React.Fragment;
-  const wrapperProps = (DRAG_DROP_ENABLED && GestureHandlerRootView) 
+  const wrapperProps = DRAG_DROP_ENABLED && GestureHandlerRootView 
     ? { style: { flex: 1 } } 
     : {};
 
   return (
-    <WrapperComponent {...wrapperProps}>
+    <ContentWrapper {...wrapperProps}>
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
       
@@ -987,7 +1098,13 @@ export default function CustomPlanDayDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={true}
+        bounces={true}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Toggle para mostrar/ocultar temporizadores */}
         {exercises.length > 0 && (
           <TouchableOpacity
@@ -998,8 +1115,8 @@ export default function CustomPlanDayDetailScreen() {
             <View style={styles.restTimerToggleContent}>
               <Ionicons name="timer-outline" size={20} color="#ffb300" />
               <Text style={styles.restTimerToggleText}>
-  {t('customPlan.enableRestTimer')}
-</Text>
+                {t('customPlan.enableRestTimer')}
+              </Text>
             </View>
             <View style={[
               styles.toggleSwitch,
@@ -1017,22 +1134,23 @@ export default function CustomPlanDayDetailScreen() {
           <View style={styles.emptyState}>
             <Ionicons name="fitness-outline" size={64} color="#666" />
             <Text style={styles.emptyStateText}>{t('customPlan.noExercisesAdded')}</Text>
-<Text style={styles.emptyStateSubtext}>{t('customPlan.addExercisesForThisDay')}</Text>
-
+            <Text style={styles.emptyStateSubtext}>{t('customPlan.addExercisesForThisDay')}</Text>
           </View>
         ) : (
           <View style={styles.exercisesList}>
-            {DRAG_DROP_ENABLED ? (
+            {DRAG_DROP_ENABLED && DraggableFlatList ? (
               // ============================================================================
               // VERSIÓN CON DRAG & DROP (Solo para builds de producción)
+              // GestureHandlerRootView está en el nivel superior del componente
               // ============================================================================
               <DraggableFlatList
                 data={exercises}
                 onDragEnd={({ data }: { data: Exercise[] }) => handleReorderExercises(data)}
                 keyExtractor={(item: Exercise) => item.id}
+                scrollEnabled={false}
+                activationDistance={10}
                 renderItem={({ item: exercise, drag, isActive, getIndex }: { item: Exercise; drag: () => void; isActive: boolean; getIndex: () => number | undefined }) => {
                   const exerciseIdx = getIndex() ?? 0;
-                  console.log(`🏋️ Renderizando ejercicio ${exerciseIdx + 1}: ${exercise.name} (ID: ${exercise.id})`);
                   return (
                   <ScaleDecorator>
                     <View 
@@ -1097,10 +1215,10 @@ export default function CustomPlanDayDetailScreen() {
                           <View style={styles.setsHeaderLeft}>
                             <Ionicons name="list" size={16} color="#999" />
                             <Text style={styles.setsHeaderText}>
-                            {t('customPlan.setsCount', {
-  count: exercise.sets,
-  unit: exercise.sets === 1 ? t('customPlan.set_singular') : t('customPlan.set_plural'),
-})}
+                              {t('customPlan.setsCount', {
+                                count: exercise.sets,
+                                unit: exercise.sets === 1 ? t('customPlan.set_singular') : t('customPlan.set_plural'),
+                              })}
                             </Text>
                             <Ionicons
                               name={expandedExercises.has(exercise.id) ? "chevron-up" : "chevron-down"}
@@ -1112,35 +1230,33 @@ export default function CustomPlanDayDetailScreen() {
                         {expandedExercises.has(exercise.id) && (
                           <View style={styles.setsGrid}>
                             {(exercise.setTypes || []).map((setInfo: SetInfo, idx: number) => {
-                            // Calcular label de la serie
-                            const label = (() => {
-                              switch (setInfo.type) {
-                                case 'warmup': return 'C';
-                                case 'drop': return 'D';
-                                case 'failure':
-                                case 'normal':
-                                default:
-                                  let seriesCount = 0;
-                                  for (let i = 0; i <= idx; i++) {
-                                    const type = (exercise.setTypes || [])[i]?.type || 'normal';
-                                    if (type === 'normal' || type === 'failure') {
-                                      seriesCount++;
+                              const label = (() => {
+                                switch (setInfo.type) {
+                                  case 'warmup': return 'C';
+                                  case 'drop': return 'D';
+                                  case 'failure':
+                                  case 'normal':
+                                  default:
+                                    let seriesCount = 0;
+                                    for (let i = 0; i <= idx; i++) {
+                                      const type = (exercise.setTypes || [])[i]?.type || 'normal';
+                                      if (type === 'normal' || type === 'failure') {
+                                        seriesCount++;
+                                      }
                                     }
-                                  }
-                                  return setInfo.type === 'failure' ? `${seriesCount}` : `${seriesCount}`;
-                              }
-                            })();
-                            
-                            // Determinar color y estilo del badge
-                            const badgeStyle = (() => {
-                              switch (setInfo.type) {
-                                case 'warmup': return styles.setBadgeWarmup;
-                                case 'failure': return styles.setBadgeFailure;
-                                case 'drop': return styles.setBadgeDrop;
-                                default: return styles.setBadgeNormal;
-                              }
-                            })();
-                            
+                                    return `${seriesCount}`;
+                                }
+                              })();
+                              
+                              const badgeStyle = (() => {
+                                switch (setInfo.type) {
+                                  case 'warmup': return styles.setBadgeWarmup;
+                                  case 'failure': return styles.setBadgeFailure;
+                                  case 'drop': return styles.setBadgeDrop;
+                                  default: return styles.setBadgeNormal;
+                                }
+                              })();
+                              
                               return (
                                 <View key={`${exercise.id}_set_${idx}`} style={styles.setBadge}>
                                   <View style={[styles.setBadgeNumber, badgeStyle]}>
@@ -1157,11 +1273,11 @@ export default function CustomPlanDayDetailScreen() {
                                           {setInfo.reps || 0} reps
                                         </Text>
                                         <Text style={styles.setBadgeFailureText}>{t('customPlan.toFailure')}</Text>
-                                        </View>
+                                      </View>
                                     ) : (
                                       <View style={styles.setBadgeInfo}>
                                         <Text style={styles.setBadgeReps}>
-                                        {t('customPlan.repsShort', { reps: setInfo.reps || 0 })}
+                                          {t('customPlan.repsShort', { reps: setInfo.reps || 0 })}
                                         </Text>
                                         {setInfo.rir !== null && setInfo.rir !== undefined && (
                                           <Text style={styles.setBadgeRir}>RIR {setInfo.rir}</Text>
@@ -1175,12 +1291,20 @@ export default function CustomPlanDayDetailScreen() {
                           </View>
                         )}
                       </View>
+                      
+                      {/* Mostrar notas del ejercicio si existen */}
+                      {exercise.notes && (
+                        <View style={styles.exerciseNotesContainer}>
+                          <Ionicons name="document-text-outline" size={14} color="#ffb300" />
+                          <Text style={styles.exerciseNotesText} numberOfLines={2}>
+                            {exercise.notes}
+                          </Text>
+                        </View>
+                      )}
                     </View>
                   </ScaleDecorator>
                   );
                 }}
-                scrollEnabled={false}
-                containerStyle={{ flexGrow: 0 }}
               />
             ) : (
               // ============================================================================
@@ -1727,7 +1851,7 @@ export default function CustomPlanDayDetailScreen() {
 
       <AlertComponent />
       </SafeAreaView>
-    </WrapperComponent>
+    </ContentWrapper>
   );
 }
 
@@ -1799,6 +1923,10 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
+  contentContainer: {
+    flexGrow: 1,
+    paddingBottom: 40,
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -1817,6 +1945,9 @@ const styles = StyleSheet.create({
   },
   exercisesList: {
     gap: 16,
+  },
+  draggableContainer: {
+    flex: 0, // No expandir, solo ocupar el espacio necesario
   },
   exerciseCard: {
     backgroundColor: '#1e1e1e',
@@ -1924,8 +2055,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   setsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     gap: 8,
   },
   setBadge: {
@@ -2131,7 +2261,7 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     borderWidth: 1,
     borderColor: '#444',
-    minHeight: 80,
+
     textAlign: 'center',
     minHeight: 52,
   },

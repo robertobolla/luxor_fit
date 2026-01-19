@@ -898,6 +898,291 @@ export type Database = {
           },
         ]
       }
+      foods: {
+        Row: {
+          id: string
+          name_es: string
+          name_en: string | null
+          food_type: string
+          quantity_type: string
+          calories: number
+          protein_g: number
+          carbs_g: number
+          fat_g: number
+          unit_weight_g: number | null
+          unit_name_es: string | null
+          unit_name_en: string | null
+          image_url: string | null
+          tags: string[] | null
+          status: string
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          name_es: string
+          name_en?: string | null
+          food_type: string
+          quantity_type?: string
+          calories?: number
+          protein_g?: number
+          carbs_g?: number
+          fat_g?: number
+          unit_weight_g?: number | null
+          unit_name_es?: string | null
+          unit_name_en?: string | null
+          image_url?: string | null
+          tags?: string[] | null
+          status?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          name_es?: string
+          name_en?: string | null
+          food_type?: string
+          quantity_type?: string
+          calories?: number
+          protein_g?: number
+          carbs_g?: number
+          fat_g?: number
+          unit_weight_g?: number | null
+          unit_name_es?: string | null
+          unit_name_en?: string | null
+          image_url?: string | null
+          tags?: string[] | null
+          status?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      nutrition_plans: {
+        Row: {
+          id: string
+          user_id: string
+          plan_name: string
+          description: string | null
+          plan_type: string
+          is_active: boolean
+          is_ai_generated: boolean
+          total_weeks: number
+          plan_data: Json
+          created_at: string | null
+          updated_at: string | null
+          activated_at: string | null
+          current_week_number: number
+          initial_weight_kg: number | null
+          initial_body_fat: number | null
+          initial_muscle_mass: number | null
+          renewal_completed: boolean
+          last_renewal_date: string | null
+          nutrition_goal: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          plan_name: string
+          description?: string | null
+          plan_type?: string
+          is_active?: boolean
+          is_ai_generated?: boolean
+          total_weeks?: number
+          plan_data?: Json
+          created_at?: string | null
+          updated_at?: string | null
+          activated_at?: string | null
+          current_week_number?: number
+          initial_weight_kg?: number | null
+          initial_body_fat?: number | null
+          initial_muscle_mass?: number | null
+          renewal_completed?: boolean
+          last_renewal_date?: string | null
+          nutrition_goal?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          plan_name?: string
+          description?: string | null
+          plan_type?: string
+          is_active?: boolean
+          is_ai_generated?: boolean
+          total_weeks?: number
+          plan_data?: Json
+          created_at?: string | null
+          updated_at?: string | null
+          activated_at?: string | null
+          current_week_number?: number
+          initial_weight_kg?: number | null
+          initial_body_fat?: number | null
+          initial_muscle_mass?: number | null
+          renewal_completed?: boolean
+          last_renewal_date?: string | null
+          nutrition_goal?: string | null
+        }
+        Relationships: []
+      }
+      nutrition_plan_weeks: {
+        Row: {
+          id: string
+          plan_id: string
+          week_number: number
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          plan_id: string
+          week_number?: number
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          plan_id?: string
+          week_number?: number
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_plan_weeks_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "nutrition_plans"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      nutrition_plan_days: {
+        Row: {
+          id: string
+          week_id: string
+          day_number: number
+          day_name: string | null
+          target_calories: number
+          target_protein: number
+          target_carbs: number
+          target_fat: number
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          week_id: string
+          day_number?: number
+          day_name?: string | null
+          target_calories?: number
+          target_protein?: number
+          target_carbs?: number
+          target_fat?: number
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          week_id?: string
+          day_number?: number
+          day_name?: string | null
+          target_calories?: number
+          target_protein?: number
+          target_carbs?: number
+          target_fat?: number
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_plan_days_week_id_fkey"
+            columns: ["week_id"]
+            isOneToOne: false
+            referencedRelation: "nutrition_plan_weeks"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      nutrition_plan_meals: {
+        Row: {
+          id: string
+          day_id: string
+          meal_order: number
+          meal_name: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          day_id: string
+          meal_order?: number
+          meal_name?: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          day_id?: string
+          meal_order?: number
+          meal_name?: string
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_plan_meals_day_id_fkey"
+            columns: ["day_id"]
+            isOneToOne: false
+            referencedRelation: "nutrition_plan_days"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      nutrition_plan_meal_foods: {
+        Row: {
+          id: string
+          meal_id: string
+          food_id: string
+          quantity: number
+          quantity_unit: string
+          calculated_calories: number
+          calculated_protein: number
+          calculated_carbs: number
+          calculated_fat: number
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          meal_id: string
+          food_id: string
+          quantity?: number
+          quantity_unit?: string
+          calculated_calories?: number
+          calculated_protein?: number
+          calculated_carbs?: number
+          calculated_fat?: number
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          meal_id?: string
+          food_id?: string
+          quantity?: number
+          quantity_unit?: string
+          calculated_calories?: number
+          calculated_protein?: number
+          calculated_carbs?: number
+          calculated_fat?: number
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_plan_meal_foods_meal_id_fkey"
+            columns: ["meal_id"]
+            isOneToOne: false
+            referencedRelation: "nutrition_plan_meals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nutrition_plan_meal_foods_food_id_fkey"
+            columns: ["food_id"]
+            isOneToOne: false
+            referencedRelation: "foods"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       nutrition_profiles: {
         Row: {
           activity_level: string | null

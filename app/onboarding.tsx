@@ -134,14 +134,17 @@ export default function OnboardingScreen() {
 
   const handleCancel = () => {
     Alert.alert(
-      'Cancelar edición',
-      '¿Estás seguro de que quieres cancelar? Los cambios no se guardarán.',
+      t('alerts.cancelEdit.title'),
+      t('alerts.cancelEdit.message'),
       [
-        { text: 'Continuar editando', style: 'cancel' },
-        { 
-          text: 'Sí, cancelar', 
+        {
+          text: t('alerts.cancelEdit.continueEditing'),
+          style: 'cancel',
+        },
+        {
+          text: t('alerts.cancelEdit.confirmCancel'),
           style: 'destructive',
-          onPress: () => router.push('/' as any)
+          onPress: () => router.push('/' as any),
         },
       ]
     );
@@ -586,10 +589,12 @@ export default function OnboardingScreen() {
               )}
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Nombre de usuario *</Text>
-              <Text style={styles.inputHint}>
-                Este será tu identificador único en la red social (ej: @juan_fitness)
-              </Text>
+            <Text style={styles.label}>
+  {t('form.username')} {t('form.required')}
+</Text>          
+<Text style={styles.inputHint}>
+  {t('form.usernameHint')}
+</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={{ color: '#666', fontSize: 16, marginRight: 4 }}>@</Text>
                 <TextInput
@@ -649,8 +654,9 @@ export default function OnboardingScreen() {
                 <Text style={styles.errorText}>{fieldErrors.username}</Text>
               )}
               {!fieldErrors.username && formData.username.length >= 3 && !checkingUsername && (
-                <Text style={{ color: '#4CAF50', fontSize: 12, marginTop: 4 }}>✓ Disponible</Text>
-              )}
+                <Text style={{ color: '#4CAF50', fontSize: 12, marginTop: 4 }}>
+  {t('status.available')}
+</Text>              )}
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Edad *</Text>
@@ -760,8 +766,9 @@ export default function OnboardingScreen() {
       case 'gender':
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.stepTitle}>¿Cuál es tu género?</Text>
-            <Text style={styles.stepSubtitle}>{t('onboarding.helpPersonalize')}</Text>
+<Text style={styles.stepTitle}>
+  {t('onboarding.genderQuestion')}
+</Text>            <Text style={styles.stepSubtitle}>{t('onboarding.helpPersonalize')}</Text>
             {[Gender.MALE, Gender.FEMALE].map((gender) => (
               <TouchableOpacity
                 key={gender}
@@ -786,13 +793,15 @@ export default function OnboardingScreen() {
       case 'complete':
         return (
           <View style={styles.stepContainer}>
-            <Text style={styles.title}>¡Perfecto!</Text>
-            <Text style={styles.subtitle}>
-              Hemos creado tu perfil personalizado
-            </Text>
-            <Text style={styles.description}>
-              Ahora podemos generar entrenamientos adaptados específicamente para ti
-            </Text>
+<Text style={styles.title}>
+  {t('onboarding.successTitle')}
+</Text>          
+<Text style={styles.subtitle}>
+  {t('onboarding.successSubtitle')}
+</Text>
+<Text style={styles.description}>
+  {t('onboarding.successDescription')}
+</Text>
           </View>
         );
 
@@ -815,8 +824,9 @@ export default function OnboardingScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Cargando perfil...</Text>
-        </View>
+        <Text style={styles.loadingText}>
+  {t('onboarding.loadingProfile')}
+</Text>        </View>
       </SafeAreaView>
     );
   }
@@ -848,7 +858,7 @@ export default function OnboardingScreen() {
       <View style={styles.footer}>
         {currentStep > 0 && (
           <TouchableOpacity style={styles.backButton} onPress={prevStep}>
-            <Text style={styles.backButtonText}>Atrás</Text>
+            <Text style={styles.backButtonText}> {t('common.back')}</Text>
           </TouchableOpacity>
         )}
         
@@ -860,7 +870,7 @@ export default function OnboardingScreen() {
             onPress={nextStep}
             disabled={!canProceed()}
           >
-            <Text style={styles.nextButtonText}>Siguiente</Text>
+            <Text style={styles.nextButtonText}> {t('common.next')}</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity

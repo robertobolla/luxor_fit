@@ -114,8 +114,8 @@ export default function SupportFormScreen() {
     } catch (error) {
       console.error('Error al abrir email:', error);
       Alert.alert(
-        'Error',
-        'No se pudo abrir la aplicación de email. Por favor envía tu consulta manualmente a soporte@luxorfitnessapp.com'
+        t('alerts.emailError.title'),
+        t('alerts.emailError.message')
       );
     } finally {
       setIsSending(false);
@@ -148,13 +148,15 @@ export default function SupportFormScreen() {
               </View>
               <Text style={styles.headerTitle}>{title}</Text>
               <Text style={styles.headerSubtitle}>
-                Escribe tu mensaje y nos pondremos en contacto contigo lo antes posible
-              </Text>
+  {t('support.headerSubtitle')}
+</Text>
             </View>
 
             {/* Form */}
-            <View style={styles.formContainer}>
-              <Text style={styles.label}>Tu mensaje</Text>
+            <View style={styles.formContainer}>            
+<Text style={styles.label}>
+  {t('form.message')}
+</Text>
               <TextInput
                 style={styles.textArea}
                 placeholder={placeholder}
@@ -175,8 +177,9 @@ export default function SupportFormScreen() {
             <View style={styles.infoCard}>
               <Ionicons name="information-circle" size={20} color="#ffb300" />
               <Text style={styles.infoText}>
-                Se incluirá tu información de usuario para que podamos ayudarte mejor
-              </Text>
+  {t('support.infoText')}
+</Text>
+
             </View>
           </ScrollView>
 
@@ -189,11 +192,11 @@ export default function SupportFormScreen() {
               activeOpacity={0.8}
             >
               {isSending ? (
-                <Text style={styles.sendButtonText}>Abriendo...</Text>
+                <Text style={styles.sendButtonText}> t('actions.opening')</Text>
               ) : (
                 <>
                   <Ionicons name="send" size={20} color="#1a1a1a" />
-                  <Text style={styles.sendButtonText}>Enviar mensaje</Text>
+                  <Text style={styles.sendButtonText}>t('actions.sendMessage')</Text>
                 </>
               )}
             </TouchableOpacity>

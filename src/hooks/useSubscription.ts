@@ -44,17 +44,20 @@ export function useSubscription() {
       if (Platform.OS !== 'web') {
         try {
           await initializeRevenueCat(user.id);
-          await identifyUser(user.id);
+          const identifiedUser = await identifyUser(user.id);
           
-          const rcStatus = await checkSubscriptionStatus();
-          console.log('📋 useSubscription: RevenueCat status:', rcStatus);
-          
-          if (rcStatus.isActive) {
-            setIsActive(true);
-            setStatus('active');
-            setExpirationDate(rcStatus.expirationDate);
-            console.log('📋 useSubscription: Acceso por RevenueCat IAP');
-            return;
+          // Solo verificar estado si el usuario fue identificado (RevenueCat está configurado)
+          if (identifiedUser !== null) {
+            const rcStatus = await checkSubscriptionStatus();
+            console.log('📋 useSubscription: RevenueCat status:', rcStatus);
+            
+            if (rcStatus.isActive) {
+              setIsActive(true);
+              setStatus('active');
+              setExpirationDate(rcStatus.expirationDate);
+              console.log('📋 useSubscription: Acceso por RevenueCat IAP');
+              return;
+            }
           }
         } catch (rcError) {
           console.warn('⚠️ useSubscription: Error RevenueCat (puede no estar configurado):', rcError);

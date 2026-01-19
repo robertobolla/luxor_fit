@@ -432,10 +432,12 @@ export default function TrainerModeScreen() {
         ) : (
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={64} color="#666" />
-            <Text style={styles.emptyTitle}>No tienes alumnos aún</Text>
-            <Text style={styles.emptyDescription}>
-              Agrega tu primer alumno para comenzar a entrenarlos y ver sus estadísticas
-            </Text>
+            <Text style={styles.emptyTitle}>
+  {t('students.emptyTitle')}
+</Text>       
+ <Text style={styles.emptyDescription}>
+  {t('students.emptyDescription')}
+</Text>
           </View>
         )}
       </ScrollView>
@@ -464,14 +466,18 @@ export default function TrainerModeScreen() {
                   >
                     <Ionicons name="arrow-back" size={24} color="#ffffff" />
                   </TouchableOpacity>
-                  <Text style={styles.modalTitle}>Selecciona un Amigo</Text>
+                  <Text style={styles.modalTitle}>
+  {t('friends.selectTitle')}
+</Text>
                   <View style={{ width: 24 }} />
                 </View>
 
                 {isLoadingFriends ? (
                   <View style={styles.friendsLoadingView}>
                     <ActivityIndicator size="large" color="#ffb300" />
-                    <Text style={styles.loadingText}>Cargando amigos...</Text>
+                    <Text style={styles.loadingText}>
+  {t('friends.loading')}
+</Text>
                   </View>
                 ) : friends.length > 0 ? (
                   <ScrollView style={styles.friendsListScroll} showsVerticalScrollIndicator={false}>
@@ -504,20 +510,24 @@ export default function TrainerModeScreen() {
                 ) : (
                   <View style={styles.emptyFriendsView}>
                     <Ionicons name="people-outline" size={64} color="#666" />
-                    <Text style={styles.emptyFriendsTitle}>No hay amigos disponibles</Text>
-                    <Text style={styles.emptyFriendsSubtext}>
-                      Todos tus amigos ya son alumnos
-                    </Text>
+                    <Text style={styles.emptyFriendsTitle}>
+  {t('friends.emptyTitle')}
+</Text>                  
+<Text style={styles.emptyFriendsSubtext}>
+  {t('friends.emptySubtext')}
+</Text>
                   </View>
                 )}
               </>
             ) : (
               /* Vista de Búsqueda Normal */
               <>
-                <Text style={styles.modalTitle}>Agregar Nuevo Alumno</Text>
-                <Text style={styles.modalSubtitle}>
-                  Busca a tu alumno por su nombre de usuario
-                </Text>
+<Text style={styles.modalTitle}>
+  {t('modals.addStudentTitle')}
+</Text>             
+ <Text style={styles.modalSubtitle}>
+  {t('modals.addStudentSubtitle')}
+</Text>
 
                 {/* Input con búsqueda */}
             <View style={styles.inputContainer}>
@@ -577,7 +587,8 @@ export default function TrainerModeScreen() {
                   activeOpacity={0.7}
                 >
                   <Ionicons name="people" size={18} color="#ffb300" />
-                  <Text style={styles.friendsButtonText}>Buscar en Lista de Amigos</Text>
+                  <Text style={styles.friendsButtonText}>  {t('friends.searchInList')}
+                  </Text>
                 </TouchableOpacity>
 
                 <View style={styles.modalActions}>
@@ -590,7 +601,7 @@ export default function TrainerModeScreen() {
                       setShowFriendsView(false);
                     }}
                   >
-                    <Text style={styles.cancelButtonText}>Cancelar</Text>
+                    <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -607,7 +618,7 @@ export default function TrainerModeScreen() {
                     ) : (
                       <>
                         <Ionicons name="send" size={16} color="#1a1a1a" />
-                        <Text style={styles.sendButtonText}>Agregar</Text>
+                        <Text style={styles.sendButtonText}>{t('buttons.add')}</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -643,7 +654,7 @@ export default function TrainerModeScreen() {
               style={styles.customAlertButton}
               onPress={() => setShowCustomAlert(false)}
             >
-              <Text style={styles.customAlertButtonText}>Entendido</Text>
+              <Text style={styles.customAlertButtonText}>{t('actions.understood')}</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>

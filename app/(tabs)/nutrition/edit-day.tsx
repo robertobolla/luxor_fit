@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect, Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
@@ -29,6 +29,13 @@ interface Food {
   name_en: string;
   food_type: string;
   quantity_type: 'grams' | 'units';
+  // Campos de la BD (nombres actuales)
+  calories: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  unit_weight_g: number | null;
+  // Campos calculados para compatibilidad con la app
   calories_per_100g: number | null;
   protein_per_100g: number | null;
   carbs_per_100g: number | null;
@@ -70,6 +77,8 @@ const FOOD_TYPES = [
   { key: 'prepared_meals', icon: '🍕', color: '#E91E63' },
   { key: 'beverages', icon: '🥤', color: '#00BCD4' },
   { key: 'supplements', icon: '💊', color: '#9C27B0' },
+  { key: 'dressings', icon: '🥫', color: '#FF5722' },
+  { key: 'sweets', icon: '🍬', color: '#E040FB' },
   { key: 'other', icon: '🍽️', color: '#607D8B' },
 ];
 
@@ -279,19 +288,31 @@ export default function EditDayScreen() {
 
   const calculateMacros = (food: Food, qty: number) => {
     if (food.quantity_type === 'units') {
+      // Usar campos calculados si existen, sino calcular desde campos base
+      const caloriesPerUnit = food.calories_per_unit ?? food.calories ?? 0;
+      const proteinPerUnit = food.protein_per_unit ?? food.protein_g ?? 0;
+      const carbsPerUnit = food.carbs_per_unit ?? food.carbs_g ?? 0;
+      const fatPerUnit = food.fat_per_unit ?? food.fat_g ?? 0;
+      
       return {
-        calories: Math.round((food.calories_per_unit || 0) * qty),
-        protein: Math.round((food.protein_per_unit || 0) * qty * 10) / 10,
-        carbs: Math.round((food.carbs_per_unit || 0) * qty * 10) / 10,
-        fat: Math.round((food.fat_per_unit || 0) * qty * 10) / 10,
+        calories: Math.round(caloriesPerUnit * qty),
+        protein: Math.round(proteinPerUnit * qty * 10) / 10,
+        carbs: Math.round(carbsPerUnit * qty * 10) / 10,
+        fat: Math.round(fatPerUnit * qty * 10) / 10,
       };
     } else {
+      // Usar campos calculados si existen, sino calcular desde campos base
+      const caloriesPer100g = food.calories_per_100g ?? food.calories ?? 0;
+      const proteinPer100g = food.protein_per_100g ?? food.protein_g ?? 0;
+      const carbsPer100g = food.carbs_per_100g ?? food.carbs_g ?? 0;
+      const fatPer100g = food.fat_per_100g ?? food.fat_g ?? 0;
+      
       const factor = qty / 100;
       return {
-        calories: Math.round((food.calories_per_100g || 0) * factor),
-        protein: Math.round((food.protein_per_100g || 0) * factor * 10) / 10,
-        carbs: Math.round((food.carbs_per_100g || 0) * factor * 10) / 10,
-        fat: Math.round((food.fat_per_100g || 0) * factor * 10) / 10,
+        calories: Math.round(caloriesPer100g * factor),
+        protein: Math.round(proteinPer100g * factor * 10) / 10,
+        carbs: Math.round(carbsPer100g * factor * 10) / 10,
+        fat: Math.round(fatPer100g * factor * 10) / 10,
       };
     }
   };
@@ -348,9 +369,68 @@ export default function EditDayScreen() {
   };
 
   const handleSave = async () => {
-    // For now, just go back - in the full implementation, 
-    // this would save to the database
-    router.back();
+    if (!existingDayDbId) {
+      // Si es un plan nuevo, solo volvemos (los datos se manejan en memoria)
+      Alert.alert(
+        t('common.info'),
+        t('editDay.saveAfterPlanCreation'),
+        [{ text: t('common.ok'), onPress: () => router.back() }]
+      );
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Eliminar comidas existentes del día
+      await (supabase as any)
+        .from('nutrition_plan_meals')
+        .delete()
+        .eq('day_id', existingDayDbId);
+
+      // Guardar nuevas comidas
+      for (const meal of meals) {
+        const { data: mealData, error: mealError } = await (supabase as any)
+          .from('nutrition_plan_meals')
+          .insert({
+            day_id: existingDayDbId,
+            meal_order: meal.order,
+            meal_name: meal.name,
+          })
+          .select()
+          .single();
+
+        if (mealError) throw mealError;
+
+        // Guardar alimentos de la comida
+        for (const food of meal.foods) {
+          const { error: foodError } = await (supabase as any)
+            .from('nutrition_plan_meal_foods')
+            .insert({
+              meal_id: mealData.id,
+              food_id: food.food.id,
+              quantity: food.quantity,
+              quantity_unit: food.quantityUnit,
+              calculated_calories: Math.round(food.calculatedCalories),
+              calculated_protein: Math.round(food.calculatedProtein * 10) / 10,
+              calculated_carbs: Math.round(food.calculatedCarbs * 10) / 10,
+              calculated_fat: Math.round(food.calculatedFat * 10) / 10,
+            });
+
+          if (foodError) throw foodError;
+        }
+      }
+
+      Alert.alert(
+        t('common.success'),
+        t('editDay.dayUpdated'),
+        [{ text: t('common.ok'), onPress: () => router.back() }]
+      );
+    } catch (err) {
+      console.error('Error saving day:', err);
+      Alert.alert(t('common.error'), t('editDay.saveError'));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const getFoodName = (food: Food) => {
@@ -397,17 +477,26 @@ export default function EditDayScreen() {
   const renderMealCard = (meal: Meal) => (
     <View key={meal.id} style={styles.mealCard}>
       <View style={styles.mealHeader}>
-        <TouchableOpacity
-          style={styles.mealTitleRow}
-          onPress={() => openMealNameEdit(meal)}
-        >
+        <View style={styles.mealTitleRow}>
           <Text style={styles.mealNumber}>{meal.order}</Text>
           <Text style={styles.mealName}>{meal.name}</Text>
-          <Ionicons name="pencil" size={14} color="#888" />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => removeMeal(meal.id)}>
-          <Ionicons name="trash-outline" size={20} color="#f44336" />
-        </TouchableOpacity>
+        </View>
+        <View style={styles.mealActions}>
+          <TouchableOpacity
+            style={styles.mealActionButton}
+            onPress={() => openMealNameEdit(meal)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="create-outline" size={22} color="#ffb300" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.mealActionButton}
+            onPress={() => removeMeal(meal.id)}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="trash-outline" size={22} color="#f44336" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {meal.foods.length === 0 ? (
@@ -464,15 +553,20 @@ export default function EditDayScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ffb300" />
-        </View>
-      </SafeAreaView>
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#ffb300" />
+          </View>
+        </SafeAreaView>
+      </>
     );
   }
 
   return (
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
@@ -642,8 +736,8 @@ export default function EditDayScreen() {
                       <Text style={styles.foodListName}>{getFoodName(food)}</Text>
                       <Text style={styles.foodListMacros}>
                         {food.quantity_type === 'units'
-                          ? `${food.calories_per_unit} kcal / ${t('editDay.unit')}`
-                          : `${food.calories_per_100g} kcal / 100g`}
+                          ? `${food.calories_per_unit ?? food.calories ?? 0} kcal / ${t('editDay.unit')}`
+                          : `${food.calories_per_100g ?? food.calories ?? 0} kcal / 100g`}
                       </Text>
                     </View>
                     <Ionicons name="chevron-forward" size={20} color="#666" />
@@ -812,7 +906,8 @@ export default function EditDayScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -934,6 +1029,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     flex: 1,
+  },
+  mealActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  mealActionButton: {
+    padding: 4,
   },
   mealNumber: {
     width: 28,

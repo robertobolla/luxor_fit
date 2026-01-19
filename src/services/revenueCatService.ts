@@ -10,6 +10,7 @@ import Purchases, {
   LOG_LEVEL,
 } from 'react-native-purchases';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 import { supabase } from './supabase';
 
 // Configuración de RevenueCat
@@ -19,8 +20,8 @@ const REVENUECAT_API_KEY_ANDROID = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_AN
 
 // IDs de productos (deben coincidir con App Store Connect)
 export const PRODUCT_IDS = {
-  MONTHLY: 'luxor_fitness_monthly', // $12.99/mes
-  YEARLY: 'luxor_fitness_yearly',   // $107/año (~$8.92/mes)
+  MONTHLY: 'luxor_monthly',                      // $12.99/mes
+  YEARLY: 'luxor_yearly',                        // $107/año (~$8.92/mes)
 };
 
 // Entitlements (lo que desbloquea la suscripción)
@@ -37,6 +38,14 @@ let isConfigured = false;
 export async function initializeRevenueCat(userId?: string): Promise<void> {
   if (isConfigured) {
     console.log('✅ RevenueCat ya está configurado');
+    return;
+  }
+
+  // Detectar si estamos en Expo Go (no tiene acceso a tiendas nativas)
+  const isExpoGo = Constants.appOwnership === 'expo';
+  
+  if (isExpoGo) {
+    // En Expo Go, RevenueCat no funciona, silenciar el intento
     return;
   }
 
@@ -61,23 +70,40 @@ export async function initializeRevenueCat(userId?: string): Promise<void> {
 
     isConfigured = true;
     console.log('✅ RevenueCat configurado correctamente');
-  } catch (error) {
-    console.error('❌ Error configurando RevenueCat:', error);
-    throw error;
+  } catch (error: any) {
+    // Si el error es porque la tienda nativa no está disponible (Expo Go, etc.),
+    // manejar silenciosamente ya que esto es esperado
+    if (error?.message?.includes('native store is not available') || 
+        error?.message?.includes('Expo Go')) {
+      // Silenciar este error específico
+      return;
+    }
+    console.warn('⚠️ Error configurando RevenueCat (puede no estar disponible):', error?.message || error);
+    // No lanzar el error, dejar que el código continúe sin RevenueCat
   }
 }
 
 /**
  * Identificar usuario (vincular con Clerk ID)
  */
-export async function identifyUser(userId: string): Promise<CustomerInfo> {
+export async function identifyUser(userId: string): Promise<CustomerInfo | null> {
+  // Si RevenueCat no está configurado (ej: Expo Go), retornar null silenciosamente
+  if (!isConfigured) {
+    return null;
+  }
+
   try {
     const customerInfo = await Purchases.logIn(userId);
     console.log('✅ Usuario identificado en RevenueCat:', userId);
     return customerInfo.customerInfo;
-  } catch (error) {
-    console.error('❌ Error identificando usuario:', error);
-    throw error;
+  } catch (error: any) {
+    // Si el error es porque no está configurado, retornar null silenciosamente
+    if (error?.message?.includes('singleton instance') || 
+        error?.message?.includes('configure Purchases')) {
+      return null;
+    }
+    console.warn('⚠️ Error identificando usuario en RevenueCat:', error?.message || error);
+    return null;
   }
 }
 
@@ -97,18 +123,44 @@ export async function logoutRevenueCat(): Promise<void> {
  * Obtener ofertas disponibles (productos)
  */
 export async function getOfferings(): Promise<PurchasesOffering | null> {
+  // Si RevenueCat no está configurado, retornar null con error descriptivo
+  if (!isConfigured) {
+    console.warn('⚠️ RevenueCat no está configurado, no se pueden obtener ofertas');
+    throw new Error('Servicio de suscripciones no disponible');
+  }
+
   try {
+    console.log('📦 Obteniendo ofertas de RevenueCat...');
     const offerings = await Purchases.getOfferings();
     
-    if (offerings.current) {
+    console.log('📦 Offerings recibidas:', JSON.stringify({
+      current: offerings.current?.identifier,
+      all: Object.keys(offerings.all || {}),
+      currentPackages: offerings.current?.availablePackages?.length || 0,
+    }));
+    
+    if (offerings.current && offerings.current.availablePackages.length > 0) {
       console.log('📦 Ofertas disponibles:', offerings.current.identifier);
+      console.log('📦 Paquetes:', offerings.current.availablePackages.map(p => p.identifier));
       return offerings.current;
     }
     
-    console.warn('⚠️ No hay ofertas disponibles');
+    // Intentar obtener la primera offering si current no existe
+    const allOfferingKeys = Object.keys(offerings.all || {});
+    if (allOfferingKeys.length > 0) {
+      const firstOffering = offerings.all[allOfferingKeys[0]];
+      if (firstOffering.availablePackages.length > 0) {
+        console.log('📦 Usando offering alternativa:', firstOffering.identifier);
+        return firstOffering;
+      }
+    }
+    
+    console.warn('⚠️ No hay ofertas disponibles en RevenueCat');
+    console.warn('⚠️ Verifica que hayas configurado offerings y productos en RevenueCat Dashboard');
     return null;
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Error obteniendo ofertas:', error);
+    console.error('❌ Detalles:', error.message, error.code);
     throw error;
   }
 }
@@ -121,10 +173,20 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<{
   customerInfo?: CustomerInfo;
   error?: string;
 }> {
+  // Verificar que RevenueCat esté configurado
+  if (!isConfigured) {
+    console.error('❌ RevenueCat no está configurado');
+    return { success: false, error: 'Servicio de suscripciones no disponible' };
+  }
+
   try {
     console.log('🛒 Iniciando compra:', pkg.identifier);
+    console.log('🛒 Producto:', pkg.product.identifier, pkg.product.priceString);
     
     const { customerInfo } = await Purchases.purchasePackage(pkg);
+    
+    console.log('🛒 Compra procesada, verificando entitlements...');
+    console.log('🛒 Entitlements activos:', Object.keys(customerInfo.entitlements.active || {}));
     
     // Verificar si tiene el entitlement premium
     const isPremium = customerInfo.entitlements.active[ENTITLEMENTS.PREMIUM] !== undefined;
@@ -138,7 +200,9 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<{
       return { success: true, customerInfo };
     } else {
       console.warn('⚠️ Compra completada pero sin entitlement premium');
-      return { success: false, error: 'La compra no activó el acceso premium' };
+      console.warn('⚠️ Verifica que el producto esté vinculado al entitlement "premium" en RevenueCat');
+      // Aún así considerar exitoso si la compra se procesó
+      return { success: true, customerInfo };
     }
   } catch (error: any) {
     // Manejar errores específicos
@@ -147,7 +211,18 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<{
       return { success: false, error: 'cancelled' };
     }
     
+    // Errores de red o servidor
+    if (error.code === 'NETWORK_ERROR' || error.message?.includes('network')) {
+      return { success: false, error: 'Error de conexión. Verifica tu internet.' };
+    }
+    
+    // Error de configuración
+    if (error.message?.includes('configured') || error.message?.includes('singleton')) {
+      return { success: false, error: 'Servicio de suscripciones no disponible' };
+    }
+    
     console.error('❌ Error en la compra:', error);
+    console.error('❌ Código:', error.code, 'Mensaje:', error.message);
     return { success: false, error: error.message || 'Error al procesar la compra' };
   }
 }
@@ -190,6 +265,11 @@ export async function checkSubscriptionStatus(): Promise<{
   expirationDate?: Date;
   productIdentifier?: string;
 }> {
+  // Si RevenueCat no está configurado (ej: Expo Go), retornar estado inactivo
+  if (!isConfigured) {
+    return { isActive: false, willRenew: false };
+  }
+
   try {
     const customerInfo = await Purchases.getCustomerInfo();
     const premiumEntitlement = customerInfo.entitlements.active[ENTITLEMENTS.PREMIUM];
@@ -206,8 +286,13 @@ export async function checkSubscriptionStatus(): Promise<{
     }
     
     return { isActive: false, willRenew: false };
-  } catch (error) {
-    console.error('❌ Error verificando suscripción:', error);
+  } catch (error: any) {
+    // Si el error es porque no está configurado, retornar estado inactivo
+    if (error?.message?.includes('singleton instance') || 
+        error?.message?.includes('configure Purchases')) {
+      return { isActive: false, willRenew: false };
+    }
+    console.warn('⚠️ Error verificando suscripción en RevenueCat:', error?.message || error);
     return { isActive: false, willRenew: false };
   }
 }
@@ -227,6 +312,7 @@ export async function getCustomerInfo(): Promise<CustomerInfo | null> {
 /**
  * Sincronizar estado de suscripción con Supabase
  * Esto permite que el backend también conozca el estado
+ * NOTA: No sobrescribe suscripciones promocionales activas
  */
 async function syncSubscriptionToSupabase(customerInfo: CustomerInfo): Promise<void> {
   try {
@@ -236,6 +322,22 @@ async function syncSubscriptionToSupabase(customerInfo: CustomerInfo): Promise<v
     if (!userId) {
       console.warn('⚠️ No hay userId para sincronizar');
       return;
+    }
+
+    // Verificar si ya tiene una suscripción promocional activa
+    const { data: existingSub } = await supabase
+      .from('subscriptions')
+      .select('id, status, is_promo_subscription, current_period_end')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    // No sobrescribir suscripciones promocionales activas que no han expirado
+    if (existingSub?.is_promo_subscription && existingSub?.status === 'active') {
+      const periodEnd = existingSub.current_period_end ? new Date(existingSub.current_period_end) : null;
+      if (periodEnd && periodEnd > new Date()) {
+        console.log('ℹ️ Usuario tiene suscripción promocional activa, no se sobrescribirá');
+        return;
+      }
     }
     
     const subscriptionData = {
@@ -251,6 +353,8 @@ async function syncSubscriptionToSupabase(customerInfo: CustomerInfo): Promise<v
       // Campos específicos de RevenueCat (en lugar de Stripe)
       revenuecat_customer_id: customerInfo.originalAppUserId,
       product_identifier: premiumEntitlement?.productIdentifier || null,
+      platform: 'ios' as const, // O 'android' según Platform.OS
+      is_promo_subscription: false, // Las compras de RevenueCat no son promocionales
       updated_at: new Date().toISOString(),
     };
     

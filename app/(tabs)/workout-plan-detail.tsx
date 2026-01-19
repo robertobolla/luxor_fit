@@ -99,11 +99,18 @@ type NormalizedWorkoutPlan = Omit<WorkoutPlanRow, 'plan_data'> & { plan_data: Pl
 
 type FriendsResult = { success: boolean; data?: any[]; error?: string };
 
-const { t } = useTranslation();
+// Fallbacks hardcodeados para cuando las traducciones no estén disponibles
+const FALLBACK_PRINCIPLES = [
+  'Progresión gradual de cargas',
+  'Técnica correcta antes de aumentar peso',
+  'Descanso adecuado entre series',
+];
 
-const DEFAULT_PRINCIPLES = t('training.principles', { returnObjects: true }) as string[];
-const DEFAULT_RECOMMENDATIONS = t('training.recommendations', { returnObjects: true }) as string[];
-
+const FALLBACK_RECOMMENDATIONS = [
+  'Mantén una hidratación adecuada',
+  'Respeta los tiempos de descanso',
+  'Escucha a tu cuerpo',
+];
 
 const getParamString = (v: string | string[] | undefined): string | undefined => {
   if (!v) return undefined;
@@ -251,16 +258,25 @@ export default function WorkoutPlanDetailScreen() {
           .limit(1)
           .maybeSingle();
 
-        // Si falla justo al abrir la app porque la sesión aún no está lista,
-        // reintentamos una vez antes de mostrar error para evitar el "parpadeo"
-        if ((sbError || !data) && allowRetry && (status === 401 || status === 406)) {
-          console.warn(
-            'Reintentando carga de plan tras error de sesión inicial:',
-            { status, sbError }
-          );
-          await new Promise((resolve) => setTimeout(resolve, 400));
+        // Si falla justo al abrir la app (errores transitorios), reintentamos una vez
+        // Esto incluye errores de sesión (401, 406), errores de red, o cuando no hay data
+        const isTransientError = sbError || !data;
+        const shouldRetry = allowRetry && isTransientError && (
+          !status || // Sin status puede indicar error de red
+          status === 401 || // No autenticado
+          status === 406 || // No aceptable (sesión no lista)
+          status === 0 || // Network error
+          status >= 500 // Error del servidor
+        );
 
-          const { data: retryData, error: retryError, status: retryStatus } = await supabase
+        if (shouldRetry) {
+          console.warn(
+            'Reintentando carga de plan tras error transitorio:',
+            { status, error: sbError?.message, hasData: !!data }
+          );
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          const { data: retryData, error: retryError } = await supabase
             .from('workout_plans')
             .select('*')
             .eq('id', planId)
@@ -276,10 +292,7 @@ export default function WorkoutPlanDetailScreen() {
           }
 
           if (!retryData) {
-            console.warn('Plan no encontrado después del reintento:', {
-              planId,
-              retryStatus,
-            });
+            console.warn('Plan no encontrado después del reintento:', { planId });
             setError(str(t('workoutPlanDetail.planNotFound'), 'Plan no encontrado'));
             return;
           }
@@ -518,75 +531,90 @@ export default function WorkoutPlanDetailScreen() {
   };
 
   const safePlanData = useMemo(() => {
+    // Obtener traducciones o usar fallbacks
+    const translatedPrinciples = t('training.principles', { returnObjects: true });
+    const translatedRecommendations = t('training.recommendations', { returnObjects: true });
+    
+    const defaultPrinciples = Array.isArray(translatedPrinciples) ? translatedPrinciples : FALLBACK_PRINCIPLES;
+    const defaultRecommendations = Array.isArray(translatedRecommendations) ? translatedRecommendations : FALLBACK_RECOMMENDATIONS;
+
+    const defaultData = {
+      duration_weeks: 4,
+      days_per_week: 3,
+      weekly_structure: [] as WeeklyDay[],
+      multi_week_structure: [] as MultiWeek[],
+      key_principles: defaultPrinciples,
+      progression: str(t('workout.progressionDefault'), 'Progresión semanal'),
+      recommendations: defaultRecommendations,
+    };
+
     if (!plan) {
-      return {
-        duration_weeks: 4,
-        days_per_week: 3,
-        weekly_structure: [] as WeeklyDay[],
-        multi_week_structure: [] as MultiWeek[],
-        key_principles: DEFAULT_PRINCIPLES,
-        progression: str(t('workout.progressionDefault'), 'Progresión semanal'),
-        recommendations: DEFAULT_RECOMMENDATIONS,
-      };
+      return defaultData;
     }
 
-    const pd = plan.plan_data;
+    try {
+      // Asegurar que plan_data existe y es un objeto
+      const pd = (plan.plan_data && typeof plan.plan_data === 'object') ? plan.plan_data : {};
 
-    const weeklyStructure = Array.isArray(pd.weekly_structure)
-      ? pd.weekly_structure
-      : Array.isArray(plan.weekly_structure)
-        ? (plan.weekly_structure as WeeklyDay[])
-        : [];
+      const weeklyStructure = Array.isArray(pd.weekly_structure)
+        ? pd.weekly_structure
+        : Array.isArray(plan.weekly_structure)
+          ? (plan.weekly_structure as WeeklyDay[])
+          : [];
 
-    const multiWeekStructure = Array.isArray(pd.multi_week_structure) ? pd.multi_week_structure : [];
+      const multiWeekStructure = Array.isArray(pd.multi_week_structure) ? pd.multi_week_structure : [];
 
-    const durationWeeks = toNumber(pd.duration_weeks ?? plan.duration_weeks, 4);
-    const daysPerWeek = toNumber(pd.days_per_week ?? plan.days_per_week ?? weeklyStructure.length, weeklyStructure.length || 3);
+      const durationWeeks = toNumber(pd.duration_weeks ?? plan.duration_weeks, 4);
+      const daysPerWeek = toNumber(pd.days_per_week ?? plan.days_per_week ?? weeklyStructure.length, weeklyStructure.length || 3);
 
-    const keyPrinciples = coerceStringArray(
-      pd.key_principles ||
-        pd.principles ||
-        pd.core_principles ||
-        pd.keyPrinciples ||
-        plan.key_principles ||
-        plan.principles ||
-        plan.core_principles ||
-        plan.keyPrinciples ||
-        pd.principios_clave
-    );
+      const keyPrinciples = coerceStringArray(
+        pd.key_principles ||
+          pd.principles ||
+          pd.core_principles ||
+          pd.keyPrinciples ||
+          plan.key_principles ||
+          plan.principles ||
+          plan.core_principles ||
+          plan.keyPrinciples ||
+          pd.principios_clave
+      );
 
-    const recommendations = coerceStringArray(
-      pd.recommendations ||
-        pd.tips ||
-        pd.advice ||
-        pd.suggestions ||
-        plan.recommendations ||
-        plan.tips ||
-        plan.advice ||
-        plan.suggestions ||
-        pd.recomendaciones
-    );
+      const recommendations = coerceStringArray(
+        pd.recommendations ||
+          pd.tips ||
+          pd.advice ||
+          pd.suggestions ||
+          plan.recommendations ||
+          plan.tips ||
+          plan.advice ||
+          plan.suggestions ||
+          pd.recomendaciones
+      );
 
-    const progression = coerceString(
-      pd.progression ||
-        pd.progress ||
-        pd.progression_notes ||
-        plan.progression ||
-        plan.progress ||
-        plan.progression_notes ||
-        pd.progresion,
-      str(t('workout.progressionDefault'), 'Progresión semanal')
-    );
+      const progression = coerceString(
+        pd.progression ||
+          pd.progress ||
+          pd.progression_notes ||
+          plan.progression ||
+          plan.progress ||
+          plan.progression_notes ||
+          pd.progresion,
+        str(t('workout.progressionDefault'), 'Progresión semanal')
+      );
 
-    return {
-      duration_weeks: durationWeeks,
-      days_per_week: daysPerWeek,
-      weekly_structure: weeklyStructure,
-      multi_week_structure: multiWeekStructure,
-      key_principles: keyPrinciples.length ? keyPrinciples : DEFAULT_PRINCIPLES,
-      progression,
-      recommendations: recommendations.length ? recommendations : DEFAULT_RECOMMENDATIONS,
-    };
+      return {
+        duration_weeks: durationWeeks,
+        days_per_week: daysPerWeek,
+        weekly_structure: weeklyStructure,
+        multi_week_structure: multiWeekStructure,
+        key_principles: keyPrinciples.length ? keyPrinciples : defaultPrinciples,
+        progression,
+        recommendations: recommendations.length ? recommendations : defaultRecommendations,
+      };
+    } catch (error) {
+      console.error('Error procesando plan_data:', error);
+      return defaultData;
+    }
   }, [plan, t]);
 
   const isCustomPlan = useMemo(() => {
@@ -964,7 +992,10 @@ export default function WorkoutPlanDetailScreen() {
   {t('workout.keyPrinciples')}
 </Text>
           <View style={styles.principlesContainer}>
-            {safePlanData.key_principles.map((principle, index) => (
+            {(Array.isArray(safePlanData.key_principles) && safePlanData.key_principles.length > 0 
+              ? safePlanData.key_principles 
+              : FALLBACK_PRINCIPLES
+            ).map((principle, index) => (
               <View key={index} style={styles.principleItem}>
                 <Ionicons name="bulb" size={16} color="#FFD700" />
                 <Text style={styles.principleText}>{principle}</Text>
@@ -976,7 +1007,7 @@ export default function WorkoutPlanDetailScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{str(t('workout.progressionTitle'), 'Progresión')}</Text>
           <View style={styles.infoCard}>
-            <Text style={styles.infoText}>{safePlanData.progression}</Text>
+            <Text style={styles.infoText}>{safePlanData.progression || str(t('workout.progressionDefault'), 'Progresión semanal')}</Text>
           </View>
         </View>
 
@@ -985,7 +1016,10 @@ export default function WorkoutPlanDetailScreen() {
   {t('workout.recommendations')}
 </Text>
           <View style={styles.recommendationsContainer}>
-            {safePlanData.recommendations.map((rec, index) => (
+            {(Array.isArray(safePlanData.recommendations) && safePlanData.recommendations.length > 0
+              ? safePlanData.recommendations
+              : FALLBACK_RECOMMENDATIONS
+            ).map((rec, index) => (
               <View key={index} style={styles.recommendationItem}>
                 <Ionicons name="star" size={16} color="#ffb300" />
                 <Text style={styles.recommendationText}>{rec}</Text>
@@ -1054,8 +1088,8 @@ export default function WorkoutPlanDetailScreen() {
       <ConfirmModal
         visible={showShareSuccess}
         onClose={() => setShowShareSuccess(false)}
-        title={str(t('workoutPlan.workoutShared'), 'Listo')}
-        message={str(t('workoutPlan.sharedWithFriend'), 'Compartido')}
+        title={str(t('workoutPlanDetail.workoutShared'), '¡Entrenamiento compartido!')}
+        message={str(t('workoutPlanDetail.sharedWithFriend'), 'El entrenamiento se ha compartido correctamente con tu amigo.')}
         confirmText={str(t('common.ok'), 'OK')}
         cancelText=""
         onConfirm={() => setShowShareSuccess(false)}
@@ -1064,8 +1098,8 @@ export default function WorkoutPlanDetailScreen() {
       <ConfirmModal
         visible={!!shareError}
         onClose={() => setShareError(null)}
-        title={str(t('workoutPlan.errorSharing'), 'Error')}
-        message={shareError || str(t('chat.couldNotShare'), 'No se pudo compartir')}
+        title={str(t('workoutPlanDetail.errorSharing'), 'Error al compartir')}
+        message={shareError || str(t('workoutPlanDetail.couldNotShare'), 'No se pudo compartir')}
         confirmText={str(t('common.ok'), 'OK')}
         cancelText=""
         onConfirm={() => setShareError(null)}

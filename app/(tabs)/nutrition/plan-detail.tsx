@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
@@ -60,7 +60,7 @@ interface Week {
 
 interface NutritionPlan {
   id: string;
-  name: string;
+  plan_name: string;
   description: string | null;
   is_active: boolean;
   is_ai_generated: boolean;
@@ -226,7 +226,7 @@ export default function PlanDetailScreen() {
 
     Alert.alert(
       t('planDetail.deletePlan'),
-      t('planDetail.deleteConfirm', { name: plan.name }),
+      t('planDetail.deleteConfirm', { name: plan.plan_name }),
       [
         { text: t('common.cancel'), style: 'cancel' },
         {
@@ -334,9 +334,19 @@ export default function PlanDetailScreen() {
             </View>
             <View style={styles.dayHeaderInfo}>
               <Text style={styles.dayName}>{day.day_name}</Text>
-              <Text style={styles.dayMacrosSummary}>
-                {totals.calories} kcal • P: {Math.round(totals.protein)}g • C: {Math.round(totals.carbs)}g • F: {Math.round(totals.fat)}g
-              </Text>
+              <View style={styles.dayMacrosRow}>
+                <Text style={[styles.dayMacroItem, { color: '#ffb300' }]}>{totals.calories}</Text>
+                <Text style={[styles.dayMacroUnit, { color: '#ffb300' }]}>kcal</Text>
+                <Text style={styles.dayMacroDot}>•</Text>
+                <Text style={[styles.dayMacroItem, { color: '#4CAF50' }]}>{Math.round(totals.protein)}</Text>
+                <Text style={[styles.dayMacroUnit, { color: '#4CAF50' }]}>g P</Text>
+                <Text style={styles.dayMacroDot}>•</Text>
+                <Text style={[styles.dayMacroItem, { color: '#2196F3' }]}>{Math.round(totals.carbs)}</Text>
+                <Text style={[styles.dayMacroUnit, { color: '#2196F3' }]}>g C</Text>
+                <Text style={styles.dayMacroDot}>•</Text>
+                <Text style={[styles.dayMacroItem, { color: '#FF9800' }]}>{Math.round(totals.fat)}</Text>
+                <Text style={[styles.dayMacroUnit, { color: '#FF9800' }]}>g F</Text>
+              </View>
             </View>
           </View>
           <Ionicons
@@ -348,25 +358,6 @@ export default function PlanDetailScreen() {
 
         {isExpanded && (
           <View style={styles.dayContent}>
-            {/* Targets vs Actual */}
-            <View style={styles.targetComparison}>
-              <View style={styles.targetItem}>
-                <Text style={styles.targetLabel}>{t('planDetail.target')}</Text>
-                <Text style={styles.targetValue}>{day.target_calories} kcal</Text>
-              </View>
-              <View style={styles.targetItem}>
-                <Text style={styles.targetLabel}>{t('planDetail.actual')}</Text>
-                <Text style={[
-                  styles.targetValue,
-                  totals.calories > day.target_calories * 1.05 ? { color: '#f44336' } :
-                  totals.calories >= day.target_calories * 0.9 ? { color: '#4CAF50' } :
-                  { color: '#ffb300' }
-                ]}>
-                  {totals.calories} kcal
-                </Text>
-              </View>
-            </View>
-
             {day.nutrition_plan_meals?.length === 0 ? (
               <Text style={styles.noMealsText}>{t('planDetail.noMeals')}</Text>
             ) : (
@@ -416,39 +407,47 @@ export default function PlanDetailScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#ffb300" />
-        </View>
-      </SafeAreaView>
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#ffb300" />
+          </View>
+        </SafeAreaView>
+      </>
     );
   }
 
   if (!plan) {
     return (
+      <>
+        <Stack.Screen options={{ headerShown: false }} />
+        <SafeAreaView style={styles.container} edges={['top']}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>{t('planDetail.notFound')}</Text>
+            <View style={{ width: 40 }} />
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{t('planDetail.notFound')}</Text>
-          <View style={{ width: 40 }} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{plan.name}</Text>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{plan.plan_name}</Text>
           {plan.is_active && (
             <View style={styles.activeBadge}>
-              <Ionicons name="checkmark-circle" size={12} color="#4CAF50" />
+              <Ionicons name="checkmark-circle" size={12} color="#ffb300" />
               <Text style={styles.activeBadgeText}>{t('planDetail.active')}</Text>
             </View>
           )}
@@ -579,11 +578,11 @@ export default function PlanDetailScreen() {
                 disabled={activating}
               >
                 {activating ? (
-                  <ActivityIndicator size="small" color="#4CAF50" />
+                  <ActivityIndicator size="small" color="#ffb300" />
                 ) : (
-                  <Ionicons name="checkmark-circle-outline" size={22} color="#4CAF50" />
+                  <Ionicons name="checkmark-circle-outline" size={22} color="#ffb300" />
                 )}
-                <Text style={[styles.modalOptionText, { color: '#4CAF50' }]}>
+                <Text style={[styles.modalOptionText, { color: '#ffb300' }]}>
                   {t('planDetail.activate')}
                 </Text>
               </TouchableOpacity>
@@ -606,7 +605,8 @@ export default function PlanDetailScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -650,7 +650,7 @@ const styles = StyleSheet.create({
   },
   activeBadgeText: {
     fontSize: 12,
-    color: '#4CAF50',
+    color: '#ffb300',
   },
   optionsButton: {
     padding: 8,
@@ -781,10 +781,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#fff',
   },
-  dayMacrosSummary: {
-    fontSize: 11,
+  dayMacrosRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 3,
+  },
+  dayMacroItem: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  dayMacroUnit: {
+    fontSize: 10,
     color: '#888',
-    marginTop: 2,
+    marginLeft: 2,
+  },
+  dayMacroDot: {
+    fontSize: 10,
+    color: '#444',
+    marginHorizontal: 5,
   },
   dayContent: {
     paddingHorizontal: 14,

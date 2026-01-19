@@ -30,293 +30,22 @@ import {
   getNutritionProfile,
   upsertNutritionProfile,
   applyWeeklyAdjustment,
-  getWeeklyHistory,
-  getNextWeekStart,
-  WeekSummary,
 } from '../../../src/services/nutrition';
 import NutritionAdjustmentModal from '../../../src/components/NutritionAdjustmentModal';
 import WeeklyRenewalModal from '../../../src/components/WeeklyRenewalModal';
 import PlanAdjustmentModal from '../../../src/components/PlanAdjustmentModal';
+import AIWeeklyRenewalModal from '../../../src/components/AIWeeklyRenewalModal';
 import { useNutritionStore } from '../../../src/store/nutritionStore';
 import { NutritionTarget, MealLog } from '../../../src/types/nutrition';
 import { useTutorial } from '@/contexts/TutorialContext';
 import { HelpModal } from '@/components/HelpModal';
 import { TutorialTooltip } from '@/components/TutorialTooltip';
-
-// Componente memoizado para las tarjetas de semana
-const WeekCard = React.memo(({ 
-  week, 
-  isCurrent = false, 
-  onPress 
-}: { 
-  week: WeekSummary; 
-  isCurrent?: boolean; 
-  onPress: () => void;
-}) => {
-  const { t } = useTranslation();
-  const weekStartDate = useMemo(() => {
-    // Parsear como fecha local para evitar problemas de UTC
-    const [year, month, day] = week.weekStart.split('-').map(Number);
-    return new Date(year, month - 1, day);
-  }, [week.weekStart]);
-  
-  const weekEndDate = useMemo(() => {
-    // Parsear como fecha local para evitar problemas de UTC
-    const [year, month, day] = week.weekEnd.split('-').map(Number);
-    return new Date(year, month - 1, day);
-  }, [week.weekEnd]);
-  
-  const dateRange = useMemo(() => {
-    const start = weekStartDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-    const end = weekEndDate.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-    return `${start} - ${end}`;
-  }, [weekStartDate, weekEndDate]);
-
-  const adherenceColor = useMemo(() => {
-    return week.adherence >= 70 ? '#ffb300' : week.adherence >= 50 ? '#FFD93D' : '#FF6B6B';
-  }, [week.adherence]);
-
-  return (
-    <TouchableOpacity
-      style={[styles.weekCard, isCurrent && styles.currentWeekCard]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.weekCardHeader}>
-        <Text style={styles.weekCardTitle}>
-          {isCurrent ? t('nutritionIndex.thisWeek') : dateRange}
-        </Text>
-        {isCurrent ? (
-          <View style={styles.currentBadge}>
-            <Text style={styles.currentBadgeText}>{t('nutritionIndex.current')}</Text>
-          </View>
-        ) : null}
-      </View>
-      {isCurrent && (
-        <Text style={styles.weekCardDate}>{dateRange}</Text>
-      )}
-      {!isCurrent && (
-        <Text style={styles.weekCardSubtitle}>{t('nutritionIndex.lastWeek')}</Text>
-      )}
-      
-      {/* Adherencia */}
-      <View style={styles.adherenceContainer}>
-        <Text style={styles.adherenceLabel}>{t('nutrition.adherence')}</Text>
-        <View style={styles.adherenceBar}>
-          <View
-            style={[
-              styles.adherenceFill,
-              {
-                width: `${week.adherence}%`,
-                backgroundColor: adherenceColor,
-              },
-            ]}
-          />
-        </View>
-        <Text style={styles.adherenceText}>{week.adherence}%</Text>
-      </View>
-
-      {/* Resumen */}
-      <View style={styles.weekSummary}>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>{t('nutritionIndex.calories')}</Text>
-          <Text style={styles.summaryValue}>
-            {week.avgCalories} / {week.targetCalories}
-          </Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>{t('nutritionIndex.meals')}</Text>
-          <Text style={styles.summaryValue}>
-            {week.loggedMeals} / {week.expectedMeals}
-          </Text>
-        </View>
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>{t('nutritionIndex.days')}</Text>
-          <Text style={styles.summaryValue}>{week.daysLogged} / 7</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
-});
-
-// Componente para la semana futura
-const NextWeekCard = React.memo(({ onPress }: { onPress: () => void }) => {
-  const nextWeekStart = useMemo(() => getNextWeekStart(), []);
-  const nextWeekEnd = useMemo(() => {
-    const end = new Date(nextWeekStart);
-    end.setDate(nextWeekStart.getDate() + 6);
-    return end;
-  }, [nextWeekStart]);
-
-  const dateRange = useMemo(() => {
-    return `${nextWeekStart.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} - ${nextWeekEnd.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}`;
-  }, [nextWeekStart, nextWeekEnd]);
-
-  return (
-    <TouchableOpacity
-      style={[styles.weekCard, styles.nextWeekCard]}
-      onPress={onPress}
-      activeOpacity={0.7}
-    >
-      <View style={styles.weekCardHeader}>
-        <Text style={styles.weekCardTitle}>Próxima Semana</Text>
-        <Ionicons name="lock-closed" size={16} color="#888888" />
-      </View>
-      <Text style={styles.weekCardDate}>{dateRange}</Text>
-      <Text style={styles.weekCardSubtext}>Disponible el lunes</Text>
-    </TouchableOpacity>
-  );
-});
-
-// Skeleton para tarjeta de semana
-const SkeletonWeekCard = React.memo(() => (
-  <View style={styles.weekCard}>
-    <View style={styles.weekCardHeader}>
-      <SkeletonBox width="60%" height={16} borderRadius={4} />
-      <SkeletonBox width={50} height={20} borderRadius={12} />
-    </View>
-    <SkeletonBox width="40%" height={12} borderRadius={4} style={{ marginBottom: 12 }} />
-    
-    {/* Adherencia skeleton */}
-    <View style={styles.adherenceContainer}>
-      <SkeletonBox width="50%" height={12} borderRadius={4} style={{ marginBottom: 4 }} />
-      <View style={styles.adherenceBar}>
-        <SkeletonBox width="70%" height={6} borderRadius={3} />
-      </View>
-      <SkeletonBox width="30%" height={12} borderRadius={4} style={{ alignSelf: 'flex-end', marginTop: 4 }} />
-    </View>
-
-    {/* Resumen skeleton */}
-    <View style={styles.weekSummary}>
-      <View style={styles.summaryRow}>
-        <SkeletonBox width="40%" height={11} borderRadius={4} />
-        <SkeletonBox width="35%" height={11} borderRadius={4} />
-      </View>
-      <View style={styles.summaryRow}>
-        <SkeletonBox width="40%" height={11} borderRadius={4} />
-        <SkeletonBox width="35%" height={11} borderRadius={4} />
-      </View>
-      <View style={styles.summaryRow}>
-        <SkeletonBox width="40%" height={11} borderRadius={4} />
-        <SkeletonBox width="35%" height={11} borderRadius={4} />
-      </View>
-    </View>
-  </View>
-));
-
-// Componente para el scroll de historial
-const WeeklyHistoryScrollView = React.memo(({
-  weeklyHistory,
-  onSelectDate,
-  onPressNextWeek,
-  onNavigateToPlan,
-}: {
-  weeklyHistory: WeekSummary[];
-  onSelectDate: (date: string) => void;
-  onPressNextWeek: () => void;
-  onNavigateToPlan: (weekStart?: string) => void;
-}) => {
-  const scrollViewRef = useRef<ScrollView>(null);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
-
-  const pastWeeks = useMemo(() => {
-    return weeklyHistory
-      .filter((week) => todayStr > week.weekEnd)
-      .reverse();
-  }, [weeklyHistory, todayStr]);
-
-  const currentWeek = useMemo(() => {
-    return weeklyHistory.find(
-      (week) => todayStr >= week.weekStart && todayStr <= week.weekEnd
-    );
-  }, [weeklyHistory, todayStr]);
-
-  // Scroll automático a la semana actual cuando se carga
-  const handleContentSizeChange = () => {
-    if (scrollViewRef.current && pastWeeks.length > 0) {
-      // Calcular la posición X: cada tarjeta tiene ~292px de ancho (280px + 12px margin)
-      const cardWidth = 292;
-      const scrollPosition = pastWeeks.length * cardWidth;
-      
-      scrollViewRef.current.scrollTo({
-        x: scrollPosition,
-        animated: false, // Sin animación para que sea instantáneo
-      });
-    }
-  };
-
-  // También intentar scroll cuando cambian las semanas pasadas
-  useEffect(() => {
-    if (scrollViewRef.current && pastWeeks.length > 0) {
-      // Limpiar timeout anterior si existe
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-      
-      // Usar requestAnimationFrame para asegurar que el layout esté completo
-      requestAnimationFrame(() => {
-        scrollTimeoutRef.current = setTimeout(() => {
-          const cardWidth = 292;
-          const scrollPosition = pastWeeks.length * cardWidth;
-          
-          scrollViewRef.current?.scrollTo({
-            x: scrollPosition,
-            animated: false,
-          });
-          scrollTimeoutRef.current = null; // Limpiar referencia después de ejecutar
-        }, 50);
-      });
-    }
-    
-    // Cleanup al desmontar
-    return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-        console.log('🧹 Timeout de scroll limpiado');
-      }
-    };
-  }, [pastWeeks.length, weeklyHistory.length]);
-
-  return (
-    <ScrollView 
-      ref={scrollViewRef}
-      horizontal 
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.weeksContainer}
-      removeClippedSubviews={false}
-      scrollEventThrottle={16}
-      onContentSizeChange={handleContentSizeChange}
-    >
-      {/* Semanas pasadas (izquierda) */}
-      {pastWeeks.map((week) => (
-        <WeekCard
-          key={week.weekStart}
-          week={week}
-          isCurrent={false}
-          onPress={() => onNavigateToPlan(week.weekStart)}
-        />
-      ))}
-
-      {/* Semana actual (centro) */}
-      {currentWeek && (
-        <WeekCard
-          key={currentWeek.weekStart}
-          week={currentWeek}
-          isCurrent={true}
-          onPress={() => onNavigateToPlan(currentWeek.weekStart)}
-        />
-      )}
-
-      {/* Semana siguiente (futura - derecha) */}
-      <NextWeekCard onPress={onPressNextWeek} />
-    </ScrollView>
-  );
-});
+import { useUnitsStore, conversions, formatHeight } from '@/store/unitsStore';
 
 export default function NutritionHomeScreen() {
   const { user } = useUser();
   const { t, i18n } = useTranslation();
+  const { weightUnit, heightUnit } = useUnitsStore();
   const { isLoading, setLoading, executeAsync } = useLoadingState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [todayTarget, setTodayTarget] = useState<NutritionTarget | null>(null);
@@ -326,19 +55,59 @@ export default function NutritionHomeScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   const [adjustmentData, setAdjustmentData] = useState<any>(null);
-  const [weeklyHistory, setWeeklyHistory] = useState<WeekSummary[]>([]);
   const [showNextWeekModal, setShowNextWeekModal] = useState(false);
-  const [loadingHistory, setLoadingHistory] = useState(false);
   const [showSelectionModal, setShowSelectionModal] = useState(false);
+  const [selectionModalVisible, setSelectionModalVisible] = useState(false);
+  const [modalReady, setModalReady] = useState(false);
   const [showGeneratePlanModal, setShowGeneratePlanModal] = useState(false);
   const [activePlanData, setActivePlanData] = useState<any>(null);
   const [mealsPerDay, setMealsPerDay] = useState(3);
+  const [nutritionGoal, setNutritionGoal] = useState<'lose_fat' | 'gain_muscle' | 'maintain'>('maintain');
+  const [fitnessLevel, setFitnessLevel] = useState<'beginner' | 'intermediate' | 'advanced'>('intermediate');
+  const [userWeightKg, setUserWeightKg] = useState(0); // Siempre en kg internamente
+  const [displayWeight, setDisplayWeight] = useState(''); // Mostrado en la unidad del usuario
+  const [userHeight, setUserHeight] = useState('');
+  const [userSex, setUserSex] = useState<'male' | 'female'>('male');
+  const [bodyFatPercentage, setBodyFatPercentage] = useState('');
+  const [muscleMassPercentage, setMuscleMassPercentage] = useState('');
   const [customPrompts, setCustomPrompts] = useState<string[]>([]);
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [messageModalData, setMessageModalData] = useState<{
+    type: 'success' | 'error' | 'info';
+    title: string;
+    message: string;
+    onClose?: () => void;
+  } | null>(null);
+  const [showConfirmGenerateModal, setShowConfirmGenerateModal] = useState(false);
+  const [showActivatePlanModal, setShowActivatePlanModal] = useState(false);
+  const [generatedPlanId, setGeneratedPlanId] = useState<string | null>(null);
+
+  const showMessage = (type: 'success' | 'error' | 'info', title: string, message: string, onClose?: () => void) => {
+    setMessageModalData({ type, title, message, onClose });
+    setShowMessageModal(true);
+  };
+
+  const closeMessageModal = () => {
+    setShowMessageModal(false);
+    if (messageModalData?.onClose) {
+      messageModalData.onClose();
+    }
+    setMessageModalData(null);
+  };
   const [newPrompt, setNewPrompt] = useState('');
   const [showWeeklyRenewalModal, setShowWeeklyRenewalModal] = useState(false);
   const [pendingWeeklyRenewal, setPendingWeeklyRenewal] = useState(false);
   const [showPlanAdjustmentModal, setShowPlanAdjustmentModal] = useState(false);
   const [planAdjustmentData, setPlanAdjustmentData] = useState<any>(null);
+  
+  // Estados para modal de renovación de planes IA
+  const [showAIRenewalModal, setShowAIRenewalModal] = useState(false);
+  const [aiPlanRenewalData, setAIPlanRenewalData] = useState<{
+    planId: string;
+    activatedAt: string | null;
+    initialWeight: number | null;
+    nutritionGoal: 'lose_fat' | 'maintain' | 'gain_muscle' | null;
+  } | null>(null);
 
   // Tutorial states
   const { 
@@ -356,8 +125,8 @@ export default function NutritionHomeScreen() {
     if (user?.id) {
       loadNutritionData();
       checkProfileChanges();
-      loadWeeklyHistory();
-      checkWeeklyRenewal();
+      // NOTA: Ya no verificamos renovación automáticamente
+      // Solo se verifica cuando el usuario hace clic en "Ver Plan"
     }
   }, [user]);
 
@@ -376,9 +145,94 @@ export default function NutritionHomeScreen() {
     React.useCallback(() => {
       if (user?.id) {
         loadTodayData();
+        loadActivePlanTargets(); // Recargar macros del plan activo
       }
     }, [user])
   );
+
+  // Función para cargar solo los targets del plan activo (sin recargar todo)
+  // Calcula los macros sumando los alimentos de las comidas del día correspondiente
+  const loadActivePlanTargets = async () => {
+    if (!user?.id) return;
+
+    try {
+      const { data: activePlan, error: activePlanError } = await (supabase as any)
+        .from('nutrition_plans')
+        .select(`
+          id,
+          nutrition_plan_weeks (
+            id,
+            week_number,
+            nutrition_plan_days (
+              id,
+              day_number,
+              day_name,
+              target_calories,
+              target_protein,
+              target_carbs,
+              target_fat,
+              nutrition_plan_meals (
+                id,
+                meal_order,
+                nutrition_plan_meal_foods (
+                  calculated_calories,
+                  calculated_protein,
+                  calculated_carbs,
+                  calculated_fat
+                )
+              )
+            )
+          )
+        `)
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (activePlan && !activePlanError) {
+        // Usar selectedDate para calcular el día de la semana
+        const targetDate = new Date(selectedDate + 'T12:00:00');
+        const dayOfWeek = targetDate.getDay();
+        const dayNumber = dayOfWeek === 0 ? 7 : dayOfWeek;
+        
+        const weeks = activePlan.nutrition_plan_weeks || [];
+        const currentWeek = weeks[0];
+        
+        if (currentWeek) {
+          const days = currentWeek.nutrition_plan_days || [];
+          const todayPlan = days.find((d: any) => d.day_number === dayNumber) || days[0];
+          
+          if (todayPlan) {
+            // Calcular totales sumando los alimentos de las comidas (igual que plan-detail.tsx)
+            let totalCalories = 0;
+            let totalProtein = 0;
+            let totalCarbs = 0;
+            let totalFat = 0;
+
+            todayPlan.nutrition_plan_meals?.forEach((meal: any) => {
+              meal.nutrition_plan_meal_foods?.forEach((food: any) => {
+                totalCalories += food.calculated_calories || 0;
+                totalProtein += food.calculated_protein || 0;
+                totalCarbs += food.calculated_carbs || 0;
+                totalFat += food.calculated_fat || 0;
+              });
+            });
+
+            // Si hay alimentos, usar los totales calculados; si no, usar los targets guardados
+            const hasFood = totalCalories > 0 || totalProtein > 0 || totalCarbs > 0 || totalFat > 0;
+            
+            setTodayTarget({
+              calories: hasFood ? Math.round(totalCalories) : (todayPlan.target_calories || 0),
+              protein_g: hasFood ? Math.round(totalProtein) : (todayPlan.target_protein || 0),
+              carbs_g: hasFood ? Math.round(totalCarbs) : (todayPlan.target_carbs || 0),
+              fats_g: hasFood ? Math.round(totalFat) : (todayPlan.target_fat || 0),
+            } as NutritionTarget);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error loading active plan targets:', err);
+    }
+  };
 
   const loadTodayData = async () => {
     if (!user?.id) return;
@@ -412,19 +266,30 @@ export default function NutritionHomeScreen() {
 
       setTodayWater(waterData?.water_ml || 0);
 
-      // Cargar target del día seleccionado
-      const { data: targetData, error: targetError } = await supabase
-        .from('nutrition_targets')
-        .select('*')
+      // PRIMERO verificar si hay un plan activo en nutrition_plans
+      const { data: activePlan } = await (supabase as any)
+        .from('nutrition_plans')
+        .select('id')
         .eq('user_id', user.id)
-        .eq('date', targetDate)
+        .eq('is_active', true)
         .maybeSingle();
 
-      if (targetError && targetError.code !== 'PGRST116') {
-        console.error('Error loading target:', targetError);
-      }
+      // Solo cargar de nutrition_targets si NO hay plan activo
+      // (los targets del plan activo se cargan en loadActivePlanTargets)
+      if (!activePlan) {
+        const { data: targetData, error: targetError } = await supabase
+          .from('nutrition_targets')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('date', targetDate)
+          .maybeSingle();
 
-      setTodayTarget((targetData as NutritionTarget) || null);
+        if (targetError && targetError.code !== 'PGRST116') {
+          console.error('Error loading target:', targetError);
+        }
+
+        setTodayTarget((targetData as NutritionTarget) || null);
+      }
     } catch (err) {
       console.error('Error loading today data:', err);
     }
@@ -434,6 +299,7 @@ export default function NutritionHomeScreen() {
   useEffect(() => {
     if (user?.id) {
       loadTodayData();
+      loadActivePlanTargets(); // Recargar macros del plan activo para la fecha seleccionada
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate]);
@@ -591,13 +457,13 @@ export default function NutritionHomeScreen() {
       // Guardar el nuevo hash
       await saveProfileHash(newHash);
 
-      Alert.alert(t('nutrition.caloriesUpdated'), t('nutrition.caloriesUpdatedMessage'));
+      showMessage('success', t('nutrition.caloriesUpdated'), t('nutrition.caloriesUpdatedMessage'));
       
       // Recargar datos
       loadNutritionData();
     } catch (err: any) {
       console.error('Error recalculating targets:', err);
-      Alert.alert(t('common.error'), t('nutrition.recalcError'));
+      showMessage('error', t('common.error'), t('nutrition.recalcError'));
     } finally {
       setIsInitializing(false);
     }
@@ -678,90 +544,116 @@ export default function NutritionHomeScreen() {
       // Guardar el nuevo hash
       await saveProfileHash(newHash);
 
-      Alert.alert(t('nutrition.planRegenerated'), t('nutrition.planRegeneratedMessage'));
+      showMessage('success', t('nutrition.planRegenerated'), t('nutrition.planRegeneratedMessage'));
       
       // Recargar datos
       loadNutritionData();
     } catch (err: any) {
       console.error('Error regenerating plan:', err);
-      Alert.alert(t('common.error'), t('nutrition.regenerateError'));
+      showMessage('error', t('common.error'), t('nutrition.regenerateError'));
     } finally {
       setIsInitializing(false);
     }
   };
 
-  const handleGenerateNewPlan = async () => {
+  // Debug useEffect para modal
+  useEffect(() => {
+    console.log('showSelectionModal changed to:', showSelectionModal);
+  }, [showSelectionModal]);
+
+  useEffect(() => {
+    console.log('selectionModalVisible changed to:', selectionModalVisible);
+  }, [selectionModalVisible]);
+
+  const handleGenerateNewPlan = () => {
+    console.log('handleGenerateNewPlan called, user:', user?.id);
+    if (!user?.id) {
+      console.log('No user id, returning');
+      return;
+    }
+    console.log('Setting showSelectionModal to true');
+    setShowSelectionModal(true);
+    console.log('After setShowSelectionModal, value:', showSelectionModal);
+  };
+
+  const loadProfileDataForAI = async () => {
     if (!user?.id) return;
 
     try {
-      // Verificar si hay plan activo
-      const { data: activePlan } = await supabase
-        .from('workout_plans')
-        .select('*')
+      const { data: profile, error } = await supabase
+        .from('user_profiles')
+        .select('weight, height, gender')
         .eq('user_id', user.id)
-        .eq('is_active', true)
-        .maybeSingle();
+        .single();
 
-      // Mostrar modal de selección
-      if (activePlan) {
-        // Extraer datos del plan activo
-        let planData = activePlan.plan_data;
-        if (typeof planData === 'string') {
-          try {
-            planData = JSON.parse(planData);
-          } catch (e) {
-            console.error('Error parseando plan_data:', e);
-            planData = {};
-          }
+      console.log('Profile data for AI:', profile, 'Error:', error);
+
+      if (profile) {
+        const weightKg = profile.weight || 0;
+        const heightCm = profile.height || 0;
+        
+        setUserWeightKg(weightKg);
+        setUserHeight(heightCm.toString());
+        setUserSex(profile.gender === 'female' ? 'female' : 'male');
+        // Los campos de composición corporal se dejan vacíos para que el usuario los ingrese opcionalmente
+        setBodyFatPercentage('');
+        setMuscleMassPercentage('');
+        
+        // Mostrar peso en la unidad del usuario
+        if (weightUnit === 'lb') {
+          const weightLb = conversions.kgToLb(weightKg);
+          setDisplayWeight(weightLb > 0 ? weightLb.toFixed(1) : '');
+        } else {
+          setDisplayWeight(weightKg > 0 ? weightKg.toFixed(1) : '');
         }
         
-        const typedPlanData = planData as { userData?: any; fitness_level?: string; goals?: string[]; available_days?: number; days_per_week?: number } | null;
-        const workoutPlanData = {
-          fitness_level: typedPlanData?.userData?.fitness_level || typedPlanData?.fitness_level,
-          goals: typedPlanData?.userData?.goals || typedPlanData?.goals || [],
-          available_days: typedPlanData?.userData?.available_days || typedPlanData?.available_days || typedPlanData?.days_per_week,
-        };
-        
-        setActivePlanData(workoutPlanData);
-        setShowSelectionModal(true);
-      } else {
-        // No hay plan activo, mostrar cartel
-        Alert.alert(
-          t('nutrition.noActivePlan'),
-          t('nutrition.noActivePlanMessage'),
-          [
-            {
-              text: 'Cerrar',
-              style: 'cancel',
-            },
-            {
-              text: 'Ir a Entrenamiento',
-              onPress: () => {
-                router.push('/(tabs)/workout' as any);
-              },
-            },
-          ]
-        );
+        console.log('Loaded - Weight:', weightKg, 'Height:', heightCm);
       }
-    } catch (err: any) {
-      console.error('Error checking active plan:', err);
-      Alert.alert(t('common.error'), t('nutrition.verifyPlanError'));
+    } catch (err) {
+      console.error('Error loading profile for AI:', err);
+    }
+  };
+
+  const handleWeightChange = (value: string) => {
+    setDisplayWeight(value);
+  };
+
+  const handleWeightBlur = async () => {
+    if (!user?.id || !displayWeight) return;
+
+    const inputValue = parseFloat(displayWeight);
+    if (isNaN(inputValue) || inputValue <= 0) return;
+
+    // Convertir a kg si está en libras
+    const weightInKg = weightUnit === 'lb' 
+      ? conversions.lbToKg(inputValue) 
+      : inputValue;
+
+    setUserWeightKg(weightInKg);
+
+    try {
+      await supabase
+        .from('user_profiles')
+        .update({ weight: Math.round(weightInKg * 10) / 10 })
+        .eq('user_id', user.id);
+    } catch (err) {
+      console.error('Error updating weight:', err);
     }
   };
 
   const addPrompt = () => {
     if (!newPrompt.trim()) {
-      Alert.alert(t('common.error'), t('nutrition.writePreference'));
+      showMessage('error', t('common.error'), t('nutrition.writePreference'));
       return;
     }
 
     if (newPrompt.length > 80) {
-      Alert.alert(t('common.error'), t('nutrition.maxCharsPreference'));
+      showMessage('error', t('common.error'), t('nutrition.maxCharsPreference'));
       return;
     }
 
     if (customPrompts.length >= 10) {
-      Alert.alert(t('common.error'), t('nutrition.maxPreferences'));
+      showMessage('error', t('common.error'), t('nutrition.maxPreferences'));
       return;
     }
 
@@ -774,69 +666,252 @@ export default function NutritionHomeScreen() {
   };
 
   const handleGenerateWithActivePlan = async () => {
-    if (!user?.id || !activePlanData) return;
+    if (!user?.id) return;
 
     // Validaciones
     if (mealsPerDay < 1 || mealsPerDay > 6) {
-      Alert.alert(t('common.error'), t('nutrition.mealsPerDayError'));
+      showMessage('error', t('common.error'), t('nutrition.mealsPerDayError'));
       return;
     }
 
     if (customPrompts.length > 10) {
-      Alert.alert(t('common.error'), t('nutrition.maxPreferencesError'));
+      showMessage('error', t('common.error'), t('nutrition.maxPreferencesError'));
       return;
     }
 
-    // Confirmar antes de generar
-    Alert.alert(
-      t('nutrition.generateNewPlan'),
-      t('nutrition.generateNewPlanConfirm'),
-      [
-        {
-          text: t('common.cancel'),
-          style: 'cancel',
-        },
-        {
-          text: t('common.generate'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Guardar configuración de nutrición
-              const currentProfile = await getNutritionProfile(user.id);
-              const existingHash = currentProfile?.custom_prompts?.find((p: string) => 
-                p.startsWith('__PROFILE_HASH__:')
-              );
-              
-              const promptsToSave = existingHash 
-                ? [...customPrompts, existingHash]
-                : customPrompts;
+    // Mostrar modal de confirmación
+    setShowConfirmGenerateModal(true);
+  };
 
-              await upsertNutritionProfile(user.id, {
-                meals_per_day: mealsPerDay,
-                fasting_window: null,
-                custom_prompts: promptsToSave,
-              });
+  const confirmAndGeneratePlan = async () => {
+    if (!user?.id) return;
 
-              // Obtener el plan activo completo
-              const { data: activePlan } = await supabase
-                .from('workout_plans')
-                .select('*')
-                .eq('user_id', user.id)
-                .eq('is_active', true)
-                .maybeSingle();
+    setShowConfirmGenerateModal(false);
+    setShowGeneratePlanModal(false);
+    setIsInitializing(true);
 
-              if (activePlan) {
-                setShowGeneratePlanModal(false);
-                await regenerateMealPlan(true, activePlan);
-              }
-            } catch (err: any) {
-              console.error('Error saving configuration:', err);
-              Alert.alert(t('common.error'), t('nutrition.saveConfigError'));
-            }
-          },
-        },
-      ]
-    );
+    try {
+      // Guardar configuración de nutrición
+      const currentProfile = await getNutritionProfile(user.id);
+      const existingHash = currentProfile?.custom_prompts?.find((p: string) => 
+        p.startsWith('__PROFILE_HASH__:')
+      );
+      
+      const promptsToSave = existingHash 
+        ? [...customPrompts, existingHash]
+        : customPrompts;
+
+      await upsertNutritionProfile(user.id, {
+        meals_per_day: mealsPerDay,
+        fasting_window: null,
+        custom_prompts: promptsToSave,
+      });
+
+      // Generar el plan con IA y guardarlo en nutrition_plans
+      const planId = await generateAINutritionPlan();
+      
+      if (planId) {
+        setGeneratedPlanId(planId);
+        setShowActivatePlanModal(true);
+      }
+    } catch (err: any) {
+      console.error('Error generating plan:', err);
+      showMessage('error', t('common.error'), t('nutrition.regenerateError'));
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  const generateAINutritionPlan = async (): Promise<string | null> => {
+    if (!user?.id) return null;
+
+    try {
+      // Calcular macros basados en los datos del usuario
+      const weight = userWeightKg || 70;
+      const height = parseFloat(userHeight) || 170;
+      const bodyFat = bodyFatPercentage ? parseFloat(bodyFatPercentage) : null;
+      const muscleMass = muscleMassPercentage ? parseFloat(muscleMassPercentage) : null;
+
+      // Calcular BMR usando Katch-McArdle si tenemos body fat, sino Mifflin-St Jeor
+      let bmr: number;
+      if (bodyFat && muscleMass) {
+        // Katch-McArdle (más preciso con composición corporal)
+        const leanMass = weight * (1 - bodyFat / 100);
+        bmr = 370 + (21.6 * leanMass);
+      } else {
+        // Mifflin-St Jeor (aproximación)
+        const age = 30; // Edad por defecto si no se tiene
+        if (userSex === 'male') {
+          bmr = (10 * weight) + (6.25 * height) - (5 * age) + 5;
+        } else {
+          bmr = (10 * weight) + (6.25 * height) - (5 * age) - 161;
+        }
+      }
+
+      // Factor de actividad basado en nivel de fitness
+      const activityFactors: Record<string, number> = {
+        beginner: 1.4,
+        intermediate: 1.6,
+        advanced: 1.75,
+      };
+      const activityFactor = activityFactors[fitnessLevel] || 1.5;
+      const tdee = Math.round(bmr * activityFactor);
+
+      // Ajustar calorías según objetivo
+      let targetCalories: number;
+      let proteinPerKg: number;
+      let fatPercentage: number;
+
+      switch (nutritionGoal) {
+        case 'lose_fat':
+          targetCalories = Math.round(tdee * 0.8); // Déficit del 20%
+          proteinPerKg = 2.2; // Alto para preservar músculo
+          fatPercentage = 0.25;
+          break;
+        case 'gain_muscle':
+          targetCalories = Math.round(tdee * 1.1); // Superávit del 10%
+          proteinPerKg = 2.0;
+          fatPercentage = 0.25;
+          break;
+        default: // maintain
+          targetCalories = tdee;
+          proteinPerKg = 1.8;
+          fatPercentage = 0.30;
+      }
+
+      const proteinGrams = Math.round(weight * proteinPerKg);
+      const fatGrams = Math.round((targetCalories * fatPercentage) / 9);
+      const carbsGrams = Math.round((targetCalories - (proteinGrams * 4) - (fatGrams * 9)) / 4);
+
+      // Crear el plan en nutrition_plans
+      const planName = t('nutrition.aiGeneratedPlan') + ' - ' + new Date().toLocaleDateString();
+      
+      const { data: newPlan, error: planError } = await supabase
+        .from('nutrition_plans')
+        .insert({
+          user_id: user.id,
+          plan_name: planName,
+          description: t('nutrition.aiPlanDescription'),
+          is_ai_generated: true,
+          is_active: false,
+          total_weeks: 1,
+        })
+        .select('id')
+        .single();
+
+      if (planError) {
+        console.error('Error creating plan:', planError);
+        throw planError;
+      }
+
+      // Crear la semana
+      const { data: weekData, error: weekError } = await supabase
+        .from('nutrition_plan_weeks')
+        .insert({
+          plan_id: newPlan.id,
+          week_number: 1,
+          name: t('nutrition.week') + ' 1',
+        })
+        .select('id')
+        .single();
+
+      if (weekError) {
+        console.error('Error creating week:', weekError);
+        throw weekError;
+      }
+
+      // Crear 7 días
+      const dayNames = [
+        t('weekDays.monday'),
+        t('weekDays.tuesday'),
+        t('weekDays.wednesday'),
+        t('weekDays.thursday'),
+        t('weekDays.friday'),
+        t('weekDays.saturday'),
+        t('weekDays.sunday'),
+      ];
+
+      for (let i = 0; i < 7; i++) {
+        const { data: dayData, error: dayError } = await supabase
+          .from('nutrition_plan_days')
+          .insert({
+            week_id: weekData.id,
+            day_number: i + 1,
+            name: dayNames[i],
+            target_calories: targetCalories,
+            target_protein: proteinGrams,
+            target_carbs: carbsGrams,
+            target_fats: fatGrams,
+          })
+          .select('id')
+          .single();
+
+        if (dayError) {
+          console.error('Error creating day:', dayError);
+          throw dayError;
+        }
+
+        // Crear comidas para cada día
+        const mealNames = [
+          t('nutrition.breakfast'),
+          t('nutrition.lunch'),
+          t('nutrition.dinner'),
+          t('nutrition.snack') + ' 1',
+          t('nutrition.snack') + ' 2',
+          t('nutrition.snack') + ' 3',
+        ];
+
+        for (let j = 0; j < mealsPerDay; j++) {
+          await supabase
+            .from('nutrition_plan_meals')
+            .insert({
+              day_id: dayData.id,
+              meal_number: j + 1,
+              name: mealNames[j] || `${t('nutrition.meal')} ${j + 1}`,
+            });
+        }
+      }
+
+      return newPlan.id;
+    } catch (err) {
+      console.error('Error generating AI plan:', err);
+      throw err;
+    }
+  };
+
+  const handleActivateGeneratedPlan = async (activate: boolean) => {
+    if (!user?.id || !generatedPlanId) return;
+
+    setShowActivatePlanModal(false);
+
+    if (activate) {
+      try {
+        // Desactivar otros planes activos
+        await supabase
+          .from('nutrition_plans')
+          .update({ is_active: false })
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+
+        // Activar el nuevo plan
+        await supabase
+          .from('nutrition_plans')
+          .update({ is_active: true })
+          .eq('id', generatedPlanId);
+
+        showMessage('success', t('nutrition.planActivated'), t('nutrition.planActivatedMessage'));
+        
+        // Navegar al detalle del plan
+        router.push(`/(tabs)/nutrition/plan-detail?id=${generatedPlanId}` as any);
+      } catch (err) {
+        console.error('Error activating plan:', err);
+        showMessage('error', t('common.error'), t('nutrition.activationError'));
+      }
+    } else {
+      showMessage('success', t('nutrition.planSaved'), t('nutrition.planSavedToLibrary'));
+    }
+
+    setGeneratedPlanId(null);
   };
 
   const regenerateMealPlan = async (useActivePlan: boolean, activePlan: any) => {
@@ -909,27 +984,13 @@ export default function NutritionHomeScreen() {
       // Regenerar plan (pasar datos del plan activo si corresponde)
       await createOrUpdateMealPlan(user.id, mondayStr, workoutPlanData);
 
-      Alert.alert(t('nutrition.ready'), t('nutrition.mealPlanGenerated'));
+      showMessage('success', t('nutrition.ready'), t('nutrition.mealPlanGenerated'));
       loadNutritionData();
     } catch (err: any) {
       console.error('Error regenerating plan:', err);
-      Alert.alert(t('common.error'), t('nutrition.regenerateError'));
+      showMessage('error', t('common.error'), t('nutrition.regenerateError'));
     } finally {
       setIsInitializing(false);
-    }
-  };
-
-  const loadWeeklyHistory = async () => {
-    if (!user?.id) return;
-
-    setLoadingHistory(true);
-    try {
-      const history = await getWeeklyHistory(user.id, 8); // Últimas 8 semanas
-      setWeeklyHistory(history);
-    } catch (err) {
-      console.error('Error loading weekly history:', err);
-    } finally {
-      setLoadingHistory(false);
     }
   };
 
@@ -991,16 +1052,369 @@ export default function NutritionHomeScreen() {
   };
 
   /**
-   * Función para navegar al plan semanal verificando si hay renovación pendiente
+   * Verificar si un plan de IA necesita renovación semanal
+   * Solo se llama cuando el usuario hace clic en "Ver Plan"
+   * 
+   * Retorna true si:
+   * - El plan tiene múltiples semanas
+   * - La semana actual del plan ha terminado (comparando con activated_at)
+   * - No se ha completado la renovación para esta transición de semana
    */
-  const handleNavigateToPlan = (weekStart?: string) => {
+  const checkIfAIPlanNeedsRenewal = async (activePlan: {
+    id: string;
+    is_ai_generated: boolean;
+    activated_at: string | null;
+    total_weeks?: number;
+    current_week_number?: number;
+    renewal_completed?: boolean;
+    last_renewal_date?: string | null;
+  }): Promise<boolean> => {
+    try {
+      // Si no es plan de IA o no tiene fecha de activación, no necesita renovación
+      if (!activePlan.is_ai_generated || !activePlan.activated_at) {
+        return false;
+      }
+      
+      // Si es un plan de 1 semana, no necesita renovación
+      const totalWeeks = activePlan.total_weeks || 1;
+      if (totalWeeks <= 1) {
+        return false;
+      }
+      
+      const today = new Date();
+      const activatedAt = new Date(activePlan.activated_at);
+      
+      // Calcular cuántos días han pasado desde la activación
+      const daysSinceActivation = Math.floor((today.getTime() - activatedAt.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Calcular en qué semana debería estar el usuario (1-indexed)
+      const expectedWeekNumber = Math.min(Math.floor(daysSinceActivation / 7) + 1, totalWeeks);
+      const currentWeek = activePlan.current_week_number || 1;
+      
+      // Si la semana esperada es mayor que la actual, necesita renovación
+      if (expectedWeekNumber > currentWeek) {
+        // Verificar si ya se completó la renovación para esta transición
+        const todayStr = today.toISOString().split('T')[0];
+        
+        // Calcular el lunes de esta semana para comparar
+        const dayOfWeek = today.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const thisMonday = new Date(today);
+        thisMonday.setDate(today.getDate() + diff);
+        const thisMondayStr = thisMonday.toISOString().split('T')[0];
+        
+        // Si ya se completó la renovación esta semana, no mostrar el modal
+        if (activePlan.renewal_completed && activePlan.last_renewal_date === thisMondayStr) {
+          return false;
+        }
+        
+        return true; // Necesita renovación
+      }
+      
+      return false;
+    } catch (err) {
+      console.error('Error checking if AI plan needs renewal:', err);
+      return false;
+    }
+  };
+
+  /**
+   * Manejar "Repetir Semana" en el modal de renovación de IA
+   */
+  const handleAIRepeatWeek = async () => {
+    if (!user?.id || !aiPlanRenewalData) return;
+
+    try {
+      const today = new Date();
+      const thisMondayStr = today.toISOString().split('T')[0];
+      const planId = aiPlanRenewalData.planId;
+
+      // Marcar renovación como completada
+      await supabase
+        .from('nutrition_plans')
+        .update({
+          renewal_completed: true,
+          last_renewal_date: thisMondayStr,
+        })
+        .eq('id', planId);
+
+      // Cerrar modal y limpiar estado
+      setShowAIRenewalModal(false);
+      setAIPlanRenewalData(null);
+
+      // Navegar al plan después de cerrar el modal
+      setTimeout(() => {
+        router.push(`/(tabs)/nutrition/plan-detail?id=${planId}` as any);
+      }, 300);
+    } catch (err) {
+      console.error('Error repeating week:', err);
+      setShowAIRenewalModal(false);
+      setAIPlanRenewalData(null);
+      showMessage('error', t('common.error'), t('common.errorOccurred'));
+    }
+  };
+
+  /**
+   * Manejar "Ajustar Plan" en el modal de renovación de IA
+   */
+  const handleAIAdjustPlan = async (metrics: {
+    weight: number;
+    bodyFat?: number;
+    muscleMass?: number;
+  }) => {
+    if (!user?.id || !aiPlanRenewalData) return;
+
+    try {
+      const { planId, initialWeight, nutritionGoal } = aiPlanRenewalData;
+      
+      // Calcular ajuste basado en el objetivo y el cambio de peso
+      const weightChange = initialWeight ? metrics.weight - initialWeight : 0;
+      const adjustmentResult = calculateMacroAdjustment(
+        nutritionGoal || 'maintain',
+        weightChange,
+        initialWeight || metrics.weight
+      );
+
+      // Obtener el plan actual para duplicar la última semana con ajustes
+      const { data: currentPlan, error: planError } = await supabase
+        .from('nutrition_plans')
+        .select(`
+          id,
+          total_weeks,
+          current_week_number,
+          nutrition_plan_weeks (
+            id,
+            week_number,
+            nutrition_plan_days (
+              id,
+              day_number,
+              day_name,
+              target_calories,
+              target_protein,
+              target_carbs,
+              target_fat
+            )
+          )
+        `)
+        .eq('id', planId)
+        .single();
+
+      if (planError || !currentPlan) throw new Error('Plan not found');
+
+      // Obtener la semana actual para copiar su estructura
+      const weeks = currentPlan.nutrition_plan_weeks || [];
+      const currentWeek = weeks.find((w: any) => w.week_number === currentPlan.current_week_number) || weeks[0];
+
+      if (!currentWeek) throw new Error('Current week not found');
+
+      // Crear nueva semana con macros ajustados
+      const newWeekNumber = currentPlan.total_weeks + 1;
+      
+      const { data: newWeek, error: weekError } = await supabase
+        .from('nutrition_plan_weeks')
+        .insert({
+          plan_id: planId,
+          week_number: newWeekNumber,
+        })
+        .select('id')
+        .single();
+
+      if (weekError || !newWeek) throw weekError;
+
+      // Crear días con macros ajustados
+      for (const day of currentWeek.nutrition_plan_days || []) {
+        const adjustedCalories = Math.round(day.target_calories * adjustmentResult.calorieMultiplier);
+        const adjustedCarbs = Math.round(day.target_carbs * adjustmentResult.carbMultiplier);
+        const adjustedFat = Math.round(day.target_fat * adjustmentResult.fatMultiplier);
+        // Proteína se mantiene igual para preservar músculo
+        const adjustedProtein = day.target_protein;
+
+        await supabase
+          .from('nutrition_plan_days')
+          .insert({
+            week_id: newWeek.id,
+            day_number: day.day_number,
+            day_name: day.day_name,
+            target_calories: adjustedCalories,
+            target_protein: adjustedProtein,
+            target_carbs: adjustedCarbs,
+            target_fat: adjustedFat,
+          });
+      }
+
+      // Actualizar el plan
+      const today = new Date();
+      const thisMondayStr = today.toISOString().split('T')[0];
+
+      await supabase
+        .from('nutrition_plans')
+        .update({
+          total_weeks: newWeekNumber,
+          current_week_number: newWeekNumber,
+          renewal_completed: true,
+          last_renewal_date: thisMondayStr,
+          initial_weight_kg: metrics.weight, // Actualizar peso inicial para la próxima semana
+          initial_body_fat: metrics.bodyFat || null,
+          initial_muscle_mass: metrics.muscleMass || null,
+        })
+        .eq('id', planId);
+
+      // Actualizar perfil del usuario
+      await supabase
+        .from('user_profiles')
+        .update({
+          weight: metrics.weight,
+          body_fat_percentage: metrics.bodyFat || null,
+          muscle_percentage: metrics.muscleMass || null,
+        })
+        .eq('user_id', user.id);
+
+      // Cerrar modal y limpiar estado
+      setShowAIRenewalModal(false);
+      setAIPlanRenewalData(null);
+
+      // Recargar datos
+      loadActivePlanTargets();
+
+      // Navegar al plan después de cerrar el modal
+      setTimeout(() => {
+        router.push(`/(tabs)/nutrition/plan-detail?id=${planId}` as any);
+      }, 300);
+    } catch (err) {
+      console.error('Error adjusting plan:', err);
+      setShowAIRenewalModal(false);
+      setAIPlanRenewalData(null);
+      showMessage('error', t('common.error'), t('common.errorOccurred'));
+    }
+  };
+
+  /**
+   * Calcular el ajuste de macros basado en el objetivo y cambio de peso
+   */
+  const calculateMacroAdjustment = (
+    goal: 'lose_fat' | 'maintain' | 'gain_muscle',
+    weightChange: number,
+    currentWeight: number
+  ): { calorieMultiplier: number; carbMultiplier: number; fatMultiplier: number; explanation: string } => {
+    const weightChangePercent = (weightChange / currentWeight) * 100;
+
+    switch (goal) {
+      case 'lose_fat':
+        // Objetivo: perder 0.5-1% del peso por semana
+        if (weightChangePercent < -1) {
+          // Perdió más del 1% - muy rápido
+          return { calorieMultiplier: 1.08, carbMultiplier: 1.10, fatMultiplier: 1.05, explanation: 'loseFatFastProgress' };
+        } else if (weightChangePercent >= -0.5 && weightChangePercent <= 0) {
+          // Perdió menos del 0.5% - muy lento
+          return { calorieMultiplier: 0.92, carbMultiplier: 0.90, fatMultiplier: 0.95, explanation: 'loseFatSlowProgress' };
+        } else if (weightChangePercent > 0) {
+          // Ganó peso - reducir más
+          return { calorieMultiplier: 0.88, carbMultiplier: 0.85, fatMultiplier: 0.90, explanation: 'loseFatSlowProgress' };
+        }
+        // Rango ideal
+        return { calorieMultiplier: 1, carbMultiplier: 1, fatMultiplier: 1, explanation: 'loseFatGoodProgress' };
+
+      case 'gain_muscle':
+        // Objetivo: ganar 0.25-0.5% del peso por semana
+        if (weightChangePercent > 1) {
+          // Ganó más del 1% - muy rápido (probablemente grasa)
+          return { calorieMultiplier: 0.95, carbMultiplier: 0.95, fatMultiplier: 0.90, explanation: 'gainMuscleFastProgress' };
+        } else if (weightChangePercent < 0.25) {
+          // Ganó muy poco o perdió peso
+          return { calorieMultiplier: 1.08, carbMultiplier: 1.10, fatMultiplier: 1.05, explanation: 'gainMuscleSlowProgress' };
+        }
+        // Rango ideal
+        return { calorieMultiplier: 1, carbMultiplier: 1, fatMultiplier: 1, explanation: 'gainMuscleGoodProgress' };
+
+      case 'maintain':
+      default:
+        // Objetivo: mantener peso (±0.5kg)
+        if (weightChange > 0.5) {
+          // Ganó peso
+          return { calorieMultiplier: 0.95, carbMultiplier: 0.95, fatMultiplier: 0.95, explanation: 'maintainGained' };
+        } else if (weightChange < -0.5) {
+          // Perdió peso
+          return { calorieMultiplier: 1.05, carbMultiplier: 1.05, fatMultiplier: 1.05, explanation: 'maintainLost' };
+        }
+        // Estable
+        return { calorieMultiplier: 1, carbMultiplier: 1, fatMultiplier: 1, explanation: 'maintainGood' };
+    }
+  };
+
+  /**
+   * Generar mensaje de ajuste para mostrar al usuario
+   */
+  const getAdjustmentMessage = (
+    goal: 'lose_fat' | 'maintain' | 'gain_muscle',
+    weightChange: number,
+    adjustment: { calorieMultiplier: number; explanation: string }
+  ): string => {
+    const changeText = weightChange > 0 
+      ? `+${weightChange.toFixed(1)} kg`
+      : `${weightChange.toFixed(1)} kg`;
+    
+    const adjustmentPercent = Math.round((adjustment.calorieMultiplier - 1) * 100);
+    const adjustmentText = adjustmentPercent > 0 
+      ? `+${adjustmentPercent}%`
+      : `${adjustmentPercent}%`;
+
+    return t(`nutrition.${adjustment.explanation}`) + 
+      (adjustmentPercent !== 0 ? ` (${t('nutrition.calories')}: ${adjustmentText})` : '');
+  };
+
+  /**
+   * Función para navegar al plan activo (nuevo sistema o viejo)
+   * Solo aquí se verifica si el plan de IA necesita renovación
+   */
+  const handleNavigateToPlan = async (weekStart?: string) => {
+    if (!user?.id) return;
+
+    try {
+      // Verificar si hay un plan de IA activo que necesite renovación
+      const { data: activePlan, error } = await supabase
+        .from('nutrition_plans')
+        .select('id, is_ai_generated, activated_at, initial_weight_kg, nutrition_goal, renewal_completed, last_renewal_date, current_week_number, total_weeks')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (!error && activePlan?.id) {
+        // Si es un plan de IA, verificar si necesita renovación
+        if (activePlan.is_ai_generated) {
+          const needsRenewal = await checkIfAIPlanNeedsRenewal(activePlan);
+          
+          if (needsRenewal) {
+            // Mostrar modal de renovación en lugar de navegar
+            const validGoals = ['lose_fat', 'maintain', 'gain_muscle'] as const;
+            const nutritionGoal = validGoals.includes(activePlan.nutrition_goal as any) 
+              ? (activePlan.nutrition_goal as 'lose_fat' | 'maintain' | 'gain_muscle')
+              : null;
+              
+            setAIPlanRenewalData({
+              planId: activePlan.id,
+              activatedAt: activePlan.activated_at,
+              initialWeight: activePlan.initial_weight_kg,
+              nutritionGoal: nutritionGoal,
+            });
+            setShowAIRenewalModal(true);
+            return;
+          }
+        }
+        
+        // Hay un plan activo y no necesita renovación, navegar a plan-detail
+        router.push(`/(tabs)/nutrition/plan-detail?id=${activePlan.id}` as any);
+        return;
+      }
+    } catch (err) {
+      console.error('Error checking active plan:', err);
+    }
+
+    // Si no hay plan en el nuevo sistema, usar el viejo sistema
     if (pendingWeeklyRenewal) {
-      // Si hay renovación pendiente, mostrar modal
       setShowWeeklyRenewalModal(true);
       return;
     }
     
-    // Si no hay renovación pendiente, navegar al plan
     if (weekStart) {
       router.push(`/(tabs)/nutrition/plan?weekStart=${weekStart}` as any);
     } else {
@@ -1166,7 +1580,6 @@ export default function NutritionHomeScreen() {
 
       // 8. Recargar datos
       await loadNutritionData();
-      await loadWeeklyHistory();
 
       // 9. Mostrar modal de ajuste
       const calorieChange = newCalories - oldCalories;
@@ -1219,54 +1632,133 @@ export default function NutritionHomeScreen() {
         return;
       }
 
-      // Cargar target del día
-      const { data: targetData, error: targetError } = await supabase
-        .from('nutrition_targets')
-        .select('*')
+      // PRIMERO: Verificar si hay un plan activo en nutrition_plans
+      const { data: activePlan, error: activePlanError } = await supabase
+        .from('nutrition_plans')
+        .select(`
+          id,
+          nutrition_plan_weeks (
+            id,
+            week_number,
+            nutrition_plan_days (
+              id,
+              day_number,
+              day_name,
+              target_calories,
+              target_protein,
+              target_carbs,
+              target_fat,
+              nutrition_plan_meals (
+                id,
+                meal_order,
+                nutrition_plan_meal_foods (
+                  calculated_calories,
+                  calculated_protein,
+                  calculated_carbs,
+                  calculated_fat
+                )
+              )
+            )
+          )
+        `)
         .eq('user_id', user.id)
-        .eq('date', today)
+        .eq('is_active', true)
         .maybeSingle();
 
-      if (targetError && targetError.code !== 'PGRST116') {
-        console.error('Error loading target:', targetError);
-      }
+      if (activePlan && !activePlanError) {
+        // Hay un plan activo - usar sus valores
+        // Usar selectedDate para calcular el día de la semana
+        const targetDate = new Date(selectedDate + 'T12:00:00');
+        const dayOfWeek = targetDate.getDay(); // 0 = domingo, 1 = lunes, etc.
+        // Convertir a formato 1-7 donde 1 = lunes
+        const dayNumber = dayOfWeek === 0 ? 7 : dayOfWeek;
+        
+        // Buscar el día correspondiente en el plan
+        const weeks = activePlan.nutrition_plan_weeks || [];
+        const currentWeek = weeks[0]; // Usar la primera semana por ahora
+        
+        if (currentWeek) {
+          const days = currentWeek.nutrition_plan_days || [];
+          const todayPlan = days.find((d: any) => d.day_number === dayNumber) || days[0];
+          
+          if (todayPlan) {
+            // Calcular totales sumando los alimentos de las comidas (igual que plan-detail.tsx)
+            let totalCalories = 0;
+            let totalProtein = 0;
+            let totalCarbs = 0;
+            let totalFat = 0;
 
-      if (!targetData) {
-        // No hay target, inicializar (pero no bloquear la UI)
-        setLoading(false); // Quitar loading antes de inicializar para que no se quede cargando
-        await initializeWeek();
-        // Recargar datos después de inicializar
-        await loadTodayData();
-        return;
+            todayPlan.nutrition_plan_meals?.forEach((meal: any) => {
+              meal.nutrition_plan_meal_foods?.forEach((food: any) => {
+                totalCalories += food.calculated_calories || 0;
+                totalProtein += food.calculated_protein || 0;
+                totalCarbs += food.calculated_carbs || 0;
+                totalFat += food.calculated_fat || 0;
+              });
+            });
+
+            // Si hay alimentos, usar los totales calculados; si no, usar los targets guardados
+            const hasFood = totalCalories > 0 || totalProtein > 0 || totalCarbs > 0 || totalFat > 0;
+            
+            // Crear target con los valores del plan activo
+            setTodayTarget({
+              calories: hasFood ? Math.round(totalCalories) : (todayPlan.target_calories || 0),
+              protein_g: hasFood ? Math.round(totalProtein) : (todayPlan.target_protein || 0),
+              carbs_g: hasFood ? Math.round(totalCarbs) : (todayPlan.target_carbs || 0),
+              fats_g: hasFood ? Math.round(totalFat) : (todayPlan.target_fat || 0),
+            } as NutritionTarget);
+          }
+        }
       } else {
-        setTodayTarget(targetData as NutritionTarget);
-        
-        // Verificar si existe plan de comidas para esta semana
-        const todayDate = new Date();
-        const dayOfWeek = todayDate.getDay();
-        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-        const monday = new Date(todayDate);
-        monday.setDate(todayDate.getDate() + diff);
-        const mondayStr = monday.toISOString().split('T')[0];
-        
-        const { data: planData, error: planError } = await supabase
-          .from('meal_plans')
-          .select('id')
+        // No hay plan activo, usar el sistema anterior (nutrition_targets)
+        const { data: targetData, error: targetError } = await supabase
+          .from('nutrition_targets')
+          .select('*')
           .eq('user_id', user.id)
-          .eq('week_start', mondayStr)
+          .eq('date', today)
           .maybeSingle();
 
-        if (planError && planError.code !== 'PGRST116') {
-          console.error('Error loading meal plan:', planError);
+        if (targetError && targetError.code !== 'PGRST116') {
+          console.error('Error loading target:', targetError);
         }
-        
-        if (!planData) {
-          // No hay plan, generarlo en segundo plano (no bloquear)
-          console.log('📋 No se encontró plan de comidas, generando...');
-          // Generar plan sin bloquear la UI
-          createOrUpdateMealPlan(user.id, mondayStr).catch((err) => {
-            console.error('Error generating meal plan:', err);
-          });
+
+        if (!targetData) {
+          // No hay target, inicializar (pero no bloquear la UI)
+          setLoading(false); // Quitar loading antes de inicializar para que no se quede cargando
+          await initializeWeek();
+          // Recargar datos después de inicializar
+          await loadTodayData();
+          return;
+        } else {
+          setTodayTarget(targetData as NutritionTarget);
+          
+          // Verificar si existe plan de comidas para esta semana
+          const todayDate = new Date();
+          const dayOfWeek = todayDate.getDay();
+          const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+          const monday = new Date(todayDate);
+          monday.setDate(todayDate.getDate() + diff);
+          const mondayStr = monday.toISOString().split('T')[0];
+          
+          const { data: planData, error: planError } = await supabase
+            .from('meal_plans')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('week_start', mondayStr)
+            .maybeSingle();
+
+          if (planError && planError.code !== 'PGRST116') {
+            console.error('Error loading meal plan:', planError);
+          }
+          
+          if (!planData) {
+            // No hay plan, generarlo en segundo plano (no bloquear)
+            console.log('📋 No se encontró plan de comidas, generando...');
+            // Generar plan sin bloquear la UI
+            createOrUpdateMealPlan(user.id, mondayStr).catch((err) => {
+              console.error('Error generating meal plan:', err);
+            });
+          }
         }
       }
 
@@ -1296,7 +1788,7 @@ export default function NutritionHomeScreen() {
       setTodayWater(waterData?.water_ml || 0);
     } catch (err) {
       console.error('Error loading nutrition data:', err);
-      Alert.alert(t('common.error'), t('nutrition.loadNutritionError'));
+      showMessage('error', t('common.error'), t('nutrition.loadNutritionError'));
     } finally {
       setLoading(false);
     }
@@ -1344,10 +1836,10 @@ export default function NutritionHomeScreen() {
         }
       }
 
-      Alert.alert(t('nutrition.ready'), t('nutrition.planInitialized'));
+      showMessage('success', t('nutrition.ready'), t('nutrition.planInitialized'));
     } catch (err) {
       console.error('Error initializing week:', err);
-      Alert.alert(t('common.error'), t('nutrition.initError'));
+      showMessage('error', t('common.error'), t('nutrition.initError'));
     } finally {
       setIsInitializing(false);
     }
@@ -1449,7 +1941,9 @@ export default function NutritionHomeScreen() {
 
             <TouchableOpacity
               style={styles.actionCard}
-              onPress={handleGenerateNewPlan}
+              onPress={() => {
+                router.push('/(tabs)/nutrition/select-plan-type' as any);
+              }}
             >
               <Ionicons name="create" size={32} color="#ffb300" />
               <Text style={styles.actionText}>{t('nutritionIndex.generatePlan')}</Text>
@@ -1628,29 +2122,6 @@ export default function NutritionHomeScreen() {
           </View>
         </View>
 
-        {/* Historial Semanal */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📅 {t('nutritionIndex.weeklyHistory')}</Text>
-          {loadingHistory ? (
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.weeksContainer}
-            >
-              <SkeletonWeekCard />
-              <SkeletonWeekCard />
-              <SkeletonWeekCard />
-            </ScrollView>
-          ) : (
-            <WeeklyHistoryScrollView
-              weeklyHistory={weeklyHistory}
-              onSelectDate={setSelectedDate}
-              onPressNextWeek={() => setShowNextWeekModal(true)}
-              onNavigateToPlan={handleNavigateToPlan}
-            />
-          )}
-        </View>
-
         <View style={{ height: 50 }} />
       </ScrollView>
 
@@ -1670,6 +2141,24 @@ export default function NutritionHomeScreen() {
           userId={user?.id || ''}
           lastWeekStart={lastWeekData.weekStart}
           lastWeekEnd={lastWeekData.weekEnd}
+        />
+      )}
+
+      {/* Modal de renovación semanal para planes de IA */}
+      {aiPlanRenewalData && (
+        <AIWeeklyRenewalModal
+          visible={showAIRenewalModal}
+          onClose={() => {
+            setShowAIRenewalModal(false);
+            setAIPlanRenewalData(null);
+          }}
+          onRepeatWeek={handleAIRepeatWeek}
+          onAdjustPlan={handleAIAdjustPlan}
+          userId={user?.id || ''}
+          planId={aiPlanRenewalData.planId}
+          activatedAt={aiPlanRenewalData.activatedAt}
+          initialWeight={aiPlanRenewalData.initialWeight}
+          nutritionGoal={aiPlanRenewalData.nutritionGoal}
         />
       )}
 
@@ -1723,74 +2212,87 @@ export default function NutritionHomeScreen() {
 
       {/* Modal de selección de tipo de plan */}
       <Modal
-        visible={showSelectionModal}
+        visible={selectionModalVisible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowSelectionModal(false)}
-        onDismiss={() => {
-          // Este callback se ejecuta cuando el modal se cierra completamente
+        onRequestClose={() => {
+          setSelectionModalVisible(false);
+          setShowSelectionModal(false);
+          setModalReady(false);
         }}
       >
-        <View style={styles.selectionModalOverlay} pointerEvents="box-none">
-          <View style={styles.selectionModalContent} pointerEvents="box-none">
-            <View pointerEvents="auto">
-              <Text style={styles.selectionModalTitle}>{t('nutrition.howToCreatePlan')}</Text>
-              <Text style={styles.selectionModalSubtitle}>
-                {t('nutrition.chooseMethod')}
+        <View style={styles.selectionModalOverlay}>
+          <View style={styles.selectionModalContent}>
+            <Text style={styles.selectionModalTitle}>{t('nutrition.howToCreatePlan')}</Text>
+            <Text style={styles.selectionModalSubtitle}>
+              {t('nutrition.chooseMethod')}
+            </Text>
+            
+            {/* Opción 1: Crear plan personalizado */}
+            <TouchableOpacity
+              style={[styles.selectionOption, styles.selectionOptionPrimary, !modalReady && { opacity: 0.7 }]}
+              onPress={() => {
+                if (!modalReady) return;
+                console.log('Option 1 pressed - Custom plan');
+                setSelectionModalVisible(false);
+                setShowSelectionModal(false);
+                setModalReady(false);
+                setTimeout(() => {
+                  router.push('/(tabs)/nutrition/custom-plan-setup' as any);
+                }, 100);
+              }}
+              activeOpacity={0.8}
+              disabled={!modalReady}
+            >
+              <View style={styles.optionIconContainer}>
+                <Ionicons name="create-outline" size={28} color="#ffb300" />
+              </View>
+              <Text style={styles.selectionOptionTitlePrimary}>{t('nutrition.createCustomPlan')}</Text>
+              <Text style={styles.selectionOptionDescriptionPrimary}>
+                {t('nutrition.createCustomPlanDesc')}
               </Text>
-              
-              {/* Opción 1: Crear plan personalizado */}
-              <TouchableOpacity
-                style={[styles.selectionOption, styles.selectionOptionPrimary]}
-                onPress={async () => {
-                  setShowSelectionModal(false);
-                  requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                      router.push('/(tabs)/nutrition/custom-plan-setup' as any);
-                    });
-                  });
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={styles.optionIconContainer}>
-                  <Ionicons name="create-outline" size={28} color="#ffb300" />
-                </View>
-                <Text style={styles.selectionOptionTitlePrimary}>{t('nutrition.createCustomPlan')}</Text>
-                <Text style={styles.selectionOptionDescriptionPrimary}>
-                  {t('nutrition.createCustomPlanDesc')}
-                </Text>
-              </TouchableOpacity>
+            </TouchableOpacity>
 
-              {/* Opción 2: Generar plan con IA */}
-              <TouchableOpacity
-                style={[styles.selectionOption, styles.selectionOptionSecondary]}
-                onPress={async () => {
-                  setShowSelectionModal(false);
-                  requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                      setShowGeneratePlanModal(true);
-                    });
-                  });
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={styles.optionIconContainer}>
-                  <Ionicons name="sparkles" size={28} color="#ffb300" />
-                </View>
-                <Text style={styles.selectionOptionTitleSecondary}>{t('nutrition.generateWithAI')}</Text>
-                <Text style={styles.selectionOptionDescriptionSecondary}>
-                  {t('nutrition.generateWithAIDesc')}
-                </Text>
-              </TouchableOpacity>
+            {/* Opción 2: Generar plan con IA */}
+            <TouchableOpacity
+              style={[styles.selectionOption, styles.selectionOptionSecondary, !modalReady && { opacity: 0.7 }]}
+              onPress={async () => {
+                if (!modalReady) return;
+                console.log('Option 2 pressed - AI plan');
+                setSelectionModalVisible(false);
+                setShowSelectionModal(false);
+                setModalReady(false);
+                await loadProfileDataForAI();
+                setTimeout(() => {
+                  setShowGeneratePlanModal(true);
+                }, 100);
+              }}
+              activeOpacity={0.8}
+              disabled={!modalReady}
+            >
+              <View style={styles.optionIconContainer}>
+                <Ionicons name="sparkles" size={28} color="#ffb300" />
+              </View>
+              <Text style={styles.selectionOptionTitleSecondary}>{t('nutrition.generateWithAI')}</Text>
+              <Text style={styles.selectionOptionDescriptionSecondary}>
+                {t('nutrition.generateWithAIDesc')}
+              </Text>
+            </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.selectionModalCloseButton}
-                onPress={() => setShowSelectionModal(false)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.selectionModalCloseButtonText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              style={[styles.selectionModalCloseButton, !modalReady && { opacity: 0.7 }]}
+              onPress={() => {
+                if (!modalReady) return;
+                console.log('Cancel pressed');
+                setSelectionModalVisible(false);
+                setShowSelectionModal(false);
+                setModalReady(false);
+              }}
+              activeOpacity={0.7}
+              disabled={!modalReady}
+            >
+              <Text style={styles.selectionModalCloseButtonText}>{t('common.cancel')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1802,10 +2304,9 @@ export default function NutritionHomeScreen() {
         animationType="fade"
         onRequestClose={() => setShowGeneratePlanModal(false)}
       >
-        <View style={styles.generatePlanModalOverlay} pointerEvents="box-none">
-          <View style={styles.generatePlanModalContent} pointerEvents="box-none">
-            <View pointerEvents="auto">
-              <View style={styles.generatePlanModalHeader}>
+        <View style={styles.generatePlanModalOverlay}>
+          <View style={styles.generatePlanModalContent}>
+            <View style={styles.generatePlanModalHeader}>
                 <Text style={styles.generatePlanModalTitle}>{t('nutrition.generatePlan')}</Text>
                 <TouchableOpacity
                   onPress={() => setShowGeneratePlanModal(false)}
@@ -1820,49 +2321,193 @@ export default function NutritionHomeScreen() {
                 contentContainerStyle={styles.generatePlanModalScrollContent}
                 showsVerticalScrollIndicator={false}
               >
-              {/* Información del Plan Activo */}
-              {activePlanData && (
-                <View style={styles.generatePlanSection}>
-                  <Text style={styles.generatePlanSectionTitle}>📋 {t('nutrition.activeWorkoutPlan')}</Text>
-                  <View style={styles.generatePlanInfoCard}>
-                    <View style={styles.generatePlanInfoRow}>
-                    <Text style={styles.generatePlanInfoLabel}>
-  {t('nutrition.fitnessLevelLabel')}
-</Text>
-
-<Text style={styles.generatePlanInfoValue}>
-  {activePlanData.fitness_level
-    ? t(`fitnessLevels.${activePlanData.fitness_level}`)
-    : t('common.notAvailable')}
-</Text>
-
+              {/* Datos del perfil */}
+              <View style={styles.generatePlanSection}>
+                <Text style={styles.generatePlanSectionTitle}>📊 {t('nutrition.yourData')}</Text>
+                <View style={styles.profileDataCard}>
+                  {/* Fila 1: Sexo y Altura */}
+                  <View style={styles.profileDataRow}>
+                    <View style={styles.profileDataHalf}>
+                      <Text style={styles.profileDataLabel}>{t('nutrition.sex')}</Text>
+                      <View style={styles.profileDataValueBox}>
+                        <Text style={styles.profileDataValue}>
+                          {userSex === 'male' ? t('profile.male') : t('profile.female')}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.generatePlanInfoRow}>
-                    <Text style={styles.generatePlanInfoLabel}>
-  {t('workout.goalsLabel')}
-</Text>
-<View style={styles.generatePlanTagsContainer}>
-  {(activePlanData.goals || []).map((goal: string, index: number) => (
-    <View key={index} style={styles.generatePlanTag}>
-      <Text style={styles.generatePlanTagText}>
-        {t(`fitnessGoals.${goal}`)}
-      </Text>
-    </View>
-  ))}
-</View>
-
+                    <View style={styles.profileDataHalf}>
+                      <Text style={styles.profileDataLabel}>{t('nutrition.height')}</Text>
+                      <View style={styles.profileDataValueBox}>
+                        <Text style={styles.profileDataValue}>
+                          {heightUnit === 'ft' 
+                            ? formatHeight(parseFloat(userHeight) || 0, 'ft')
+                            : `${userHeight || 0} cm`
+                          }
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.generatePlanInfoRow}>
-                      <Text style={styles.generatePlanInfoLabel}>Días por Semana:</Text>
-                      <Text style={styles.generatePlanInfoValue}>{activePlanData.available_days || 0} días</Text>
-                    </View>
-                    <View style={styles.generatePlanInfoRow}>
-                      <Text style={styles.generatePlanInfoLabel}>Duración por Sesión:</Text>
-                      <Text style={styles.generatePlanInfoValue}>{activePlanData.session_duration || 0} minutos</Text>
+                  </View>
+                  {/* Fila 2: Peso */}
+                  <View style={styles.profileDataRowWeight}>
+                    <Text style={styles.profileDataLabel}>{t('nutrition.weight')}</Text>
+                    <View style={styles.weightInputBox}>
+                      <TextInput
+                        style={styles.weightInputText}
+                        value={displayWeight}
+                        onChangeText={handleWeightChange}
+                        onBlur={handleWeightBlur}
+                        keyboardType="numeric"
+                        placeholder={weightUnit === 'lb' ? '150' : '70'}
+                        placeholderTextColor="#555"
+                      />
+                      <Text style={styles.weightUnitText}>{weightUnit}</Text>
                     </View>
                   </View>
                 </View>
-              )}
+              </View>
+
+              {/* Objetivo Nutricional */}
+              <View style={styles.generatePlanSection}>
+                <Text style={styles.generatePlanSectionTitle}>🎯 {t('nutrition.nutritionGoal')}</Text>
+                <View style={styles.goalOptionsContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.goalOption,
+                      nutritionGoal === 'lose_fat' && styles.goalOptionActive,
+                    ]}
+                    onPress={() => setNutritionGoal('lose_fat')}
+                  >
+                    <Ionicons 
+                      name="flame" 
+                      size={24} 
+                      color={nutritionGoal === 'lose_fat' ? '#000' : '#f44336'} 
+                    />
+                    <Text style={[
+                      styles.goalOptionText,
+                      nutritionGoal === 'lose_fat' && styles.goalOptionTextActive,
+                    ]}>{t('nutrition.loseFat')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.goalOption,
+                      nutritionGoal === 'maintain' && styles.goalOptionActive,
+                    ]}
+                    onPress={() => setNutritionGoal('maintain')}
+                  >
+                    <Ionicons 
+                      name="sync" 
+                      size={24} 
+                      color={nutritionGoal === 'maintain' ? '#000' : '#2196F3'} 
+                    />
+                    <Text style={[
+                      styles.goalOptionText,
+                      nutritionGoal === 'maintain' && styles.goalOptionTextActive,
+                    ]}>{t('nutrition.maintain')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.goalOption,
+                      nutritionGoal === 'gain_muscle' && styles.goalOptionActive,
+                    ]}
+                    onPress={() => setNutritionGoal('gain_muscle')}
+                  >
+                    <Ionicons 
+                      name="barbell" 
+                      size={24} 
+                      color={nutritionGoal === 'gain_muscle' ? '#000' : '#4CAF50'} 
+                    />
+                    <Text style={[
+                      styles.goalOptionText,
+                      nutritionGoal === 'gain_muscle' && styles.goalOptionTextActive,
+                    ]}>{t('nutrition.gainMuscle')}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Nivel de Fitness */}
+              <View style={styles.generatePlanSection}>
+                <Text style={styles.generatePlanSectionTitle}>💪 {t('nutrition.fitnessLevel')}</Text>
+                <View style={styles.goalOptionsContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.goalOption,
+                      fitnessLevel === 'beginner' && styles.goalOptionActive,
+                    ]}
+                    onPress={() => setFitnessLevel('beginner')}
+                  >
+                    <Text style={[
+                      styles.goalOptionText,
+                      fitnessLevel === 'beginner' && styles.goalOptionTextActive,
+                    ]}>{t('nutrition.beginner')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.goalOption,
+                      fitnessLevel === 'intermediate' && styles.goalOptionActive,
+                    ]}
+                    onPress={() => setFitnessLevel('intermediate')}
+                  >
+                    <Text style={[
+                      styles.goalOptionText,
+                      fitnessLevel === 'intermediate' && styles.goalOptionTextActive,
+                    ]}>{t('nutrition.intermediate')}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.goalOption,
+                      fitnessLevel === 'advanced' && styles.goalOptionActive,
+                    ]}
+                    onPress={() => setFitnessLevel('advanced')}
+                  >
+                    <Text style={[
+                      styles.goalOptionText,
+                      fitnessLevel === 'advanced' && styles.goalOptionTextActive,
+                    ]}>{t('nutrition.advanced')}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Composición corporal (opcional) */}
+              <View style={styles.generatePlanSection}>
+                <Text style={styles.generatePlanSectionTitle}>📐 {t('nutrition.bodyComposition')}</Text>
+                <Text style={styles.optionalLabel}>{t('nutrition.optional')}</Text>
+                <View style={styles.bodyCompRow}>
+                  <View style={styles.bodyCompItem}>
+                    <Text style={styles.bodyCompLabel}>{t('nutrition.bodyFat')}</Text>
+                    <View style={styles.bodyCompInputContainer}>
+                      <TextInput
+                        style={styles.bodyCompInput}
+                        value={bodyFatPercentage}
+                        onChangeText={setBodyFatPercentage}
+                        keyboardType="numeric"
+                        placeholder="15"
+                        placeholderTextColor="#666"
+                      />
+                      <Text style={styles.bodyCompUnit}>%</Text>
+                    </View>
+                  </View>
+                  <View style={styles.bodyCompItem}>
+                    <Text style={styles.bodyCompLabel}>{t('nutrition.muscleMass')}</Text>
+                    <View style={styles.bodyCompInputContainer}>
+                      <TextInput
+                        style={styles.bodyCompInput}
+                        value={muscleMassPercentage}
+                        onChangeText={setMuscleMassPercentage}
+                        keyboardType="numeric"
+                        placeholder="35"
+                        placeholderTextColor="#666"
+                      />
+                      <Text style={styles.bodyCompUnit}>%</Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.precisionNote}>
+                  <Ionicons name="information-circle" size={16} color="#ffb300" />
+                  <Text style={styles.precisionNoteText}>
+                    {t('nutrition.precisionNote')}
+                  </Text>
+                </View>
+              </View>
 
               {/* Comidas por día */}
               <View style={styles.generatePlanSection}>
@@ -1942,26 +2587,23 @@ export default function NutritionHomeScreen() {
               </View>
 
               {/* Botón generar */}
-              <TouchableOpacity
-                style={[styles.generatePlanButton, isInitializing && styles.generatePlanButtonDisabled]}
-                onPress={handleGenerateWithActivePlan}
-                disabled={isInitializing}
-              >
-                {isInitializing ? (
-                  <ActivityIndicator size="small" color="#1a1a1a" />
-                ) : (
-                  <>
-                    <Ionicons name="create" size={24} color="#1a1a1a" />
-                    <Text style={styles.generatePlanButtonText}>
-  {t('nutrition.generatePlan')}
-</Text>
-                  </>
-                )}
-              </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.generatePlanButton, isInitializing && styles.generatePlanButtonDisabled]}
+              onPress={handleGenerateWithActivePlan}
+              disabled={isInitializing}
+            >
+              {isInitializing ? (
+                <ActivityIndicator size="small" color="#1a1a1a" />
+              ) : (
+                <>
+                  <Ionicons name="create" size={24} color="#1a1a1a" />
+                  <Text style={styles.generatePlanButtonText}>{t('nutrition.generatePlan')}</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
-                <View style={{ height: 20 }} />
-              </ScrollView>
-            </View>
+            <View style={{ height: 20 }} />
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -2008,6 +2650,106 @@ export default function NutritionHomeScreen() {
           }}
         />
       )}
+
+      {/* Modal de mensajes personalizado */}
+      <Modal
+        visible={showMessageModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeMessageModal}
+      >
+        <View style={styles.messageModalOverlay}>
+          <View style={styles.messageModalContent}>
+            <View style={styles.messageModalIcon}>
+              <Ionicons 
+                name={
+                  messageModalData?.type === 'success' ? 'checkmark-circle' : 
+                  messageModalData?.type === 'error' ? 'alert-circle' : 'information-circle'
+                } 
+                size={60} 
+                color={
+                  messageModalData?.type === 'success' ? '#4CAF50' : 
+                  messageModalData?.type === 'error' ? '#f44336' : '#ffb300'
+                } 
+              />
+            </View>
+            <Text style={styles.messageModalTitle}>{messageModalData?.title}</Text>
+            <Text style={styles.messageModalText}>{messageModalData?.message}</Text>
+            <TouchableOpacity
+              style={styles.messageModalButton}
+              onPress={closeMessageModal}
+            >
+              <Text style={styles.messageModalButtonText}>{t('common.ok')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de confirmación para generar plan */}
+      <Modal
+        visible={showConfirmGenerateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowConfirmGenerateModal(false)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalContent}>
+            <View style={styles.confirmModalIcon}>
+              <Ionicons name="sparkles" size={48} color="#ffb300" />
+            </View>
+            <Text style={styles.confirmModalTitle}>{t('nutrition.generateNewPlan')}</Text>
+            <Text style={styles.confirmModalText}>{t('nutrition.generateNewPlanConfirm')}</Text>
+            <View style={styles.confirmModalButtons}>
+              <TouchableOpacity
+                style={styles.confirmModalCancelButton}
+                onPress={() => setShowConfirmGenerateModal(false)}
+              >
+                <Text style={styles.confirmModalCancelText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmModalConfirmButton}
+                onPress={confirmAndGeneratePlan}
+              >
+                <Ionicons name="create" size={20} color="#000" />
+                <Text style={styles.confirmModalConfirmText}>{t('common.generate')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal para activar plan generado */}
+      <Modal
+        visible={showActivatePlanModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => handleActivateGeneratedPlan(false)}
+      >
+        <View style={styles.confirmModalOverlay}>
+          <View style={styles.confirmModalContent}>
+            <View style={styles.confirmModalIcon}>
+              <Ionicons name="checkmark-circle" size={48} color="#4CAF50" />
+            </View>
+            <Text style={styles.confirmModalTitle}>{t('nutrition.planGenerated')}</Text>
+            <Text style={styles.confirmModalText}>{t('nutrition.activatePlanQuestion')}</Text>
+            <View style={styles.confirmModalButtons}>
+              <TouchableOpacity
+                style={styles.confirmModalCancelButton}
+                onPress={() => handleActivateGeneratedPlan(false)}
+              >
+                <Text style={styles.confirmModalCancelText}>{t('nutrition.saveOnly')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.confirmModalConfirmButton}
+                onPress={() => handleActivateGeneratedPlan(true)}
+              >
+                <Ionicons name="flash" size={20} color="#000" />
+                <Text style={styles.confirmModalConfirmText}>{t('nutrition.activate')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -2239,109 +2981,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
-  weeksContainer: {
-    paddingVertical: 8,
-    gap: 12,
-  },
-  weekCard: {
-    width: 280,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
-    marginRight: 12,
-  },
-  currentWeekCard: {
-    borderColor: '#ffb300',
-    backgroundColor: '#1a2a2a',
-  },
-  nextWeekCard: {
-    borderColor: '#444444',
-    backgroundColor: '#1a1a1a',
-    opacity: 0.7,
-  },
-  weekCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  weekCardTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#ffffff',
-  },
-  weekCardDate: {
-    fontSize: 12,
-    color: '#888888',
-    marginBottom: 12,
-  },
-  weekCardSubtitle: {
-    fontSize: 11,
-    color: '#666666',
-    fontStyle: 'italic',
-    marginBottom: 12,
-  },
-  weekCardSubtext: {
-    fontSize: 11,
-    color: '#666666',
-    fontStyle: 'italic',
-    marginTop: 4,
-  },
-  currentBadge: {
-    backgroundColor: '#ffb300',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  currentBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#1a1a1a',
-  },
-  adherenceContainer: {
-    marginBottom: 12,
-  },
-  adherenceLabel: {
-    fontSize: 12,
-    color: '#888888',
-    marginBottom: 4,
-  },
-  adherenceBar: {
-    height: 6,
-    backgroundColor: '#2a2a2a',
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  adherenceFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  adherenceText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#ffffff',
-    textAlign: 'right',
-  },
-  weekSummary: {
-    gap: 6,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  summaryLabel: {
-    fontSize: 11,
-    color: '#888888',
-  },
-  summaryValue: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
   modalHeader: {
     alignItems: 'center',
     marginBottom: 20,
@@ -2450,6 +3089,202 @@ const styles = StyleSheet.create({
   generatePlanTagText: {
     fontSize: 14,
     color: '#ffffff',
+  },
+  profileDataCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  profileDataRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 12,
+  },
+  profileDataHalf: {
+    flex: 1,
+  },
+  profileDataRowWeight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  profileDataLabel: {
+    fontSize: 11,
+    color: '#888',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  profileDataValueBox: {
+    backgroundColor: '#0d0d0d',
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  profileDataValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  weightInputBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0d0d0d',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: '#ffb300',
+    minWidth: 120,
+  },
+  weightInputText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+    minWidth: 60,
+    paddingVertical: 2,
+  },
+  weightUnitText: {
+    fontSize: 14,
+    color: '#888',
+    marginLeft: 4,
+  },
+  goalOptionsContainer: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  goalOption: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  goalOptionActive: {
+    backgroundColor: '#ffb300',
+    borderColor: '#ffb300',
+  },
+  goalOptionText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#fff',
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  goalOptionTextActive: {
+    color: '#000',
+  },
+  optionalLabel: {
+    fontSize: 11,
+    color: '#888',
+    fontStyle: 'italic',
+    marginTop: -8,
+    marginBottom: 12,
+  },
+  bodyCompRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  bodyCompItem: {
+    flex: 1,
+  },
+  bodyCompLabel: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 6,
+  },
+  bodyCompInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  bodyCompInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    paddingVertical: 12,
+    textAlign: 'center',
+  },
+  bodyCompUnit: {
+    fontSize: 14,
+    color: '#888',
+  },
+  precisionNote: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255, 179, 0, 0.1)',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+    gap: 8,
+  },
+  precisionNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#ccc',
+    lineHeight: 18,
+  },
+  messageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  messageModalContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 24,
+    padding: 32,
+    width: '100%',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  messageModalIcon: {
+    marginBottom: 20,
+  },
+  messageModalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  messageModalText: {
+    fontSize: 15,
+    color: '#aaa',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  messageModalButton: {
+    backgroundColor: '#ffb300',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    minWidth: 150,
+    alignItems: 'center',
+  },
+  messageModalButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000',
   },
   generatePlanStepperContainer: {
     flexDirection: 'row',
@@ -2632,6 +3467,75 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Estilos del modal de confirmación
+  confirmModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  confirmModalContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 24,
+    padding: 32,
+    width: '100%',
+    maxWidth: 360,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  confirmModalIcon: {
+    marginBottom: 20,
+  },
+  confirmModalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  confirmModalText: {
+    fontSize: 15,
+    color: '#aaa',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  confirmModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  confirmModalCancelButton: {
+    flex: 1,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  confirmModalCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#999',
+  },
+  confirmModalConfirmButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#ffb300',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  confirmModalConfirmText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#000',
   },
 });
 

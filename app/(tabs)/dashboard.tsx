@@ -119,7 +119,6 @@ export default function DashboardScreen() {
     gymDaysGoal: 3,
     weight: 78,
     glucose: 0,
-    mindfulnessDays: 0,
     food: 0,
     water: 0,
     waterGoal: 2000,
@@ -369,7 +368,6 @@ export default function DashboardScreen() {
         gymDaysGoal: gymData.goal, // Meta basada en el plan de entrenamiento activo
         weight: userWeight,
         glucose: healthData.glucose || 0,
-        mindfulnessDays: 2, // Esto requiere tracking manual
         food: healthData.food || 0,
         water: healthData.water || 0,
         waterGoal: 2000,
@@ -556,7 +554,8 @@ export default function DashboardScreen() {
   const mainMetricConfig = getMetricConfig(mainMetric);
   const mainMetricData = getMetricData(mainMetric);
 
-  const weekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+  // Días de la semana traducidos (Lunes a Domingo)
+  const weekDays = t('common.weekDaysShort', { returnObjects: true }) as string[];
   const completedDays = [false, false, false, false, false, true, false]; // Ejemplo
 
   // Mostrar loading mientras se verifica el onboarding
@@ -648,7 +647,7 @@ export default function DashboardScreen() {
             {mainMetricData.displayValue}
             {mainMetricData.unit && <Text style={styles.mainUnit}> {mainMetricData.unit}</Text>}
           </Text>
-          <Text style={styles.mainLabel}>{mainMetricConfig.name}</Text>
+          <Text style={styles.mainLabel}>{mainMetricConfig.name?.startsWith('dashboard.') ? t(mainMetricConfig.name) : mainMetricConfig.name}</Text>
         </View>
 
         {/* Círculos Secundarios */}
@@ -670,9 +669,7 @@ export default function DashboardScreen() {
                 <Text style={styles.secondaryNumber}>
                   {metricData.displayValue}
                 </Text>
-                <Text style={styles.secondaryLabel}>
-                  {metricData.unit || metricConfig.name}
-                </Text>
+                <Text style={styles.secondaryLabel}>{metricData.unit || (metricConfig.name?.startsWith('dashboard.') ? t(metricConfig.name) : metricConfig.name)}</Text>
               </View>
             );
           })}
@@ -877,24 +874,6 @@ export default function DashboardScreen() {
               </View>
               <View style={styles.iconCircle}>
                 <Ionicons name="water" size={22} color="#ffb300" />
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Sección de Estrés y mindfulness */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('dashboard.section.stressAndMindfulness')}</Text>
-          
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{t('dashboard.mindfulnessDays')}</Text>
-                <Text style={styles.cardValue}>{t('dashboard.start')}</Text>
-                <Text style={styles.cardSubtitle}>{t('dashboard.tapToConfigure')}</Text>
-              </View>
-              <View style={styles.iconCircle}>
-                <Ionicons name="flower" size={22} color="#ffb300" />
               </View>
             </View>
           </View>

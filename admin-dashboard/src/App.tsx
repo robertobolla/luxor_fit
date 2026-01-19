@@ -20,35 +20,39 @@ import GymMemberDetail from './pages/GymMemberDetail';
 import Layout from './components/Layout';
 import { checkAdminRole } from './services/adminService';
 import { ViewAsProvider } from './contexts/ViewAsContext';
+import { ToastProvider } from './contexts/ToastContext';
+import { logger } from './utils/logger';
 
 function App() {
   return (
-    <ViewAsProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<ProtectedRoute />}>
-            <Route index element={<Dashboard />} />
-            <Route path="empresario-dashboard" element={<EmpresarioDashboard />} />
-            <Route path="mensajeria" element={<Mensajeria />} />
-            <Route path="users" element={<Users />} />
-            <Route path="users/:userId" element={<UserDetail />} />
-            <Route path="partners" element={<Partners />} />
-            <Route path="exercises" element={<Exercises />} />
-            <Route path="foods" element={<Foods />} />
-            <Route path="partner-payments" element={<PartnerPayments />} />
-            <Route path="partner-payments/:partnerId" element={<PartnerPayments />} />
-            <Route path="empresarios" element={<Empresarios />} />
-            <Route path="empresarios/:empresarioId" element={<EmpresarioUsers />} />
-            <Route path="empresarios/:empresarioId/members/:userId/:userName/:userEmail" element={<GymMemberDetail />} />
-            <Route path="stats" element={<Stats />} />
-            <Route path="admin-tools" element={<AdminTools />} />
-            <Route path="create-user" element={<CreateUser />} />
-            <Route path="partner-referrals" element={<PartnerReferrals />} />
-            <Route path="empresario-users" element={<EmpresarioUsers />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </ViewAsProvider>
+    <ToastProvider>
+      <ViewAsProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<ProtectedRoute />}>
+              <Route index element={<Dashboard />} />
+              <Route path="empresario-dashboard" element={<EmpresarioDashboard />} />
+              <Route path="mensajeria" element={<Mensajeria />} />
+              <Route path="users" element={<Users />} />
+              <Route path="users/:userId" element={<UserDetail />} />
+              <Route path="partners" element={<Partners />} />
+              <Route path="exercises" element={<Exercises />} />
+              <Route path="foods" element={<Foods />} />
+              <Route path="partner-payments" element={<PartnerPayments />} />
+              <Route path="partner-payments/:partnerId" element={<PartnerPayments />} />
+              <Route path="empresarios" element={<Empresarios />} />
+              <Route path="empresarios/:empresarioId" element={<EmpresarioUsers />} />
+              <Route path="empresarios/:empresarioId/members/:userId/:userName/:userEmail" element={<GymMemberDetail />} />
+              <Route path="stats" element={<Stats />} />
+              <Route path="admin-tools" element={<AdminTools />} />
+              <Route path="create-user" element={<CreateUser />} />
+              <Route path="partner-referrals" element={<PartnerReferrals />} />
+              <Route path="empresario-users" element={<EmpresarioUsers />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </ViewAsProvider>
+    </ToastProvider>
   );
 }
 
@@ -59,7 +63,7 @@ function ProtectedRoute() {
   React.useEffect(() => {
     if (!isLoaded) {
       const timeout = setTimeout(() => {
-        console.error('⚠️ Clerk no ha cargado después de 10 segundos. Verifica la clave VITE_CLERK_PUBLISHABLE_KEY');
+        logger.error('⚠️ Clerk no ha cargado después de 10 segundos. Verifica la clave VITE_CLERK_PUBLISHABLE_KEY');
       }, 10000);
       return () => clearTimeout(timeout);
     }
@@ -119,7 +123,15 @@ function ProtectedRoute() {
   );
 }
 
-function AdminCheck({ user }: { user: any }) {
+interface AdminCheckProps {
+  user: {
+    id?: string;
+    primaryEmailAddress?: { emailAddress?: string } | null;
+    emailAddresses?: Array<{ emailAddress?: string }>;
+  } | null;
+}
+
+function AdminCheck({ user }: AdminCheckProps) {
   const [isAdmin, setIsAdmin] = React.useState<boolean | null>(null);
   const [loading, setLoading] = React.useState(true);
 

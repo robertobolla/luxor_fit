@@ -3,13 +3,15 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { getUsers, searchUsers, deleteUser, getUserRole, deactivateUserSubscription, activateUserSubscription } from '../services/adminService';
 import type { UserProfile } from '../services/adminService';
+import { useToastContext } from '../contexts/ToastContext';
+import { useErrorHandler } from '../hooks/useErrorHandler';
 import './Users.css';
 
 export default function Users() {
-  console.log('🚀🚀🚀 COMPONENTE Users.tsx SE ESTÁ RENDERIZANDO');
-  
   const { user } = useUser();
   const navigate = useNavigate();
+  const toast = useToastContext();
+  const { handleApiError } = useErrorHandler();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -30,23 +32,12 @@ export default function Users() {
   const limit = 20;
   
   const isAdmin = userRole === 'admin';
-  
-  // Debug: Verificar que isAdmin se calcule correctamente - SIEMPRE loggear
-  useEffect(() => {
-    console.log('🔍🔍🔍 DEBUG isAdmin:', {
-      userRole,
-      isAdmin: userRole === 'admin',
-      clerkUserId: user?.id,
-      timestamp: new Date().toISOString()
-    });
-  }, [userRole, user?.id]);
 
   useEffect(() => {
     async function loadRole() {
       if (user?.id) {
         const userEmail = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress;
         const role = await getUserRole(user.id, userEmail);
-        console.log('🔍 Rol del usuario actual:', role);
         setUserRole(role);
       }
     }
@@ -91,7 +82,7 @@ export default function Users() {
     try {
       setDeleting(true);
       await deleteUser(userToDelete.id);
-      alert('Usuario eliminado exitosamente');
+      toast.success('Usuario eliminado exitosamente');
       setShowDeleteModal(false);
       setUserToDelete(null);
       
@@ -105,9 +96,9 @@ export default function Users() {
         setUsers(data.users);
         setTotal(data.total);
       }
-    } catch (error: any) {
-      console.error('Error eliminando usuario:', error);
-      alert(error.message || 'Error al eliminar usuario');
+    } catch (error: unknown) {
+      const errorMessage = handleApiError(error, 'Error al eliminar usuario');
+      toast.error(errorMessage);
     } finally {
       setDeleting(false);
     }
@@ -131,7 +122,7 @@ export default function Users() {
     try {
       setDeactivating(true);
       await deactivateUserSubscription(userToDeactivate.id, user.id, 'Desactivado por administrador desde dashboard');
-      alert('Plan desactivado exitosamente');
+      toast.success('Plan desactivado exitosamente');
       setShowDeactivateModal(false);
       setUserToDeactivate(null);
       
@@ -145,9 +136,9 @@ export default function Users() {
         setUsers(data.users);
         setTotal(data.total);
       }
-    } catch (error: any) {
-      console.error('Error desactivando plan:', error);
-      alert(error.message || 'Error al desactivar plan');
+    } catch (error: unknown) {
+      const errorMessage = handleApiError(error, 'Error al desactivar plan');
+      toast.error(errorMessage);
     } finally {
       setDeactivating(false);
     }
@@ -171,7 +162,7 @@ export default function Users() {
     try {
       setActivating(true);
       await activateUserSubscription(userToActivate.id, user.id, 'Reactivado por administrador desde dashboard');
-      alert('Plan reactivado exitosamente');
+      toast.success('Plan reactivado exitosamente');
       setShowActivateModal(false);
       setUserToActivate(null);
       
@@ -185,9 +176,9 @@ export default function Users() {
         setUsers(data.users);
         setTotal(data.total);
       }
-    } catch (error: any) {
-      console.error('Error reactivando plan:', error);
-      alert(error.message || 'Error al reactivar plan');
+    } catch (error: unknown) {
+      const errorMessage = handleApiError(error, 'Error al reactivar plan');
+      toast.error(errorMessage);
     } finally {
       setActivating(false);
     }
@@ -195,26 +186,6 @@ export default function Users() {
 
   const totalPages = Math.ceil(total / limit);
 
-  // Debug: Log para ver qué usuarios tienen suscripción
-  useEffect(() => {
-    if (users.length > 0) {
-      console.log('🔍 DEBUG - Estado del usuario actual:', {
-        isAdmin,
-        userRole,
-        clerkUserId: user?.id
-      });
-      console.log('🔍 DEBUG - Usuarios en la tabla:', users.map(u => ({
-        name: u.name,
-        email: u.email,
-        role_type: u.role_type,
-        subscription_status: u.subscription_status,
-        subscription_is_active: u.subscription_is_active,
-        canShowButtons: isAdmin && !u.role_type && u.subscription_status,
-        shouldShowActivate: isAdmin && !u.role_type && u.subscription_status && u.subscription_is_active === false,
-        shouldShowDeactivate: isAdmin && !u.role_type && u.subscription_status && u.subscription_is_active === true
-      })));
-    }
-  }, [users, isAdmin, userRole, user?.id]);
 
   return (
     <div className="users-page">
@@ -282,22 +253,6 @@ export default function Users() {
               </thead>
               <tbody>
                 {users.map((user) => {
-                  // Debug: Loggear TODOS los usuarios para diagnóstico
-                  const isNormalUser = !user.role_type;
-                  const hasSubscription = user.subscription_status !== null && user.subscription_status !== undefined;
-                  const userRoleIsAdmin = userRole === 'admin';
-                  
-                  console.log(`🔍 Usuario en tabla: ${user.name || user.email}`, {
-                    isNormalUser,
-                    userRole,
-                    userRoleIsAdmin,
-                    role_type: user.role_type,
-                    subscription_status: user.subscription_status,
-                    subscription_is_active: user.subscription_is_active,
-                    hasSubscription,
-                    subscription_current_period_end: user.subscription_current_period_end
-                  });
-                  
                   return (
                   <tr key={user.id || user.user_id}>
                     <td>{user.name || 'Sin nombre'}</td>

@@ -260,13 +260,55 @@ export default function WorkoutDayDetailScreen() {
 
       if (planData?.plan_data) {
         const fullPlan = planData.plan_data as Record<string, any>;
-        console.log('📦 Plan completo cargado:', JSON.stringify(fullPlan, null, 2));
+        console.log('📦 Plan completo cargado, buscando día:', dayName);
 
-        // Encontrar los datos del día específico
-        const dayDataFromDB = fullPlan[dayName];
+        let dayDataFromDB = null;
+
+        // Método 1: Buscar directamente por dayName (estructura plana)
+        if (fullPlan[dayName]) {
+          dayDataFromDB = fullPlan[dayName];
+          console.log('✅ Día encontrado en estructura plana');
+        }
+        
+        // Método 2: Buscar en multi_week_structure
+        if (!dayDataFromDB && fullPlan.multi_week_structure && Array.isArray(fullPlan.multi_week_structure)) {
+          // dayName puede ser "week_X_day_Y" o "Día X"
+          const weekMatch = dayName.match(/week_(\d+)_day_(\d+)/i);
+          
+          for (const week of fullPlan.multi_week_structure) {
+            if (week.days && Array.isArray(week.days)) {
+              for (let i = 0; i < week.days.length; i++) {
+                const day = week.days[i];
+                // Buscar por coincidencia de dayKey o por índice
+                if (day.day === dayName || 
+                    (weekMatch && week.week_number === parseInt(weekMatch[1]) && i === parseInt(weekMatch[2]) - 1)) {
+                  dayDataFromDB = day;
+                  console.log('✅ Día encontrado en multi_week_structure');
+                  break;
+                }
+              }
+            }
+            if (dayDataFromDB) break;
+          }
+        }
+        
+        // Método 3: Buscar en weekly_structure
+        if (!dayDataFromDB && fullPlan.weekly_structure && Array.isArray(fullPlan.weekly_structure)) {
+          const dayMatch = dayName.match(/day_(\d+)/i);
+          const dayIndex = dayMatch ? parseInt(dayMatch[1]) - 1 : -1;
+          
+          for (let i = 0; i < fullPlan.weekly_structure.length; i++) {
+            const day = fullPlan.weekly_structure[i];
+            if (day.day === dayName || i === dayIndex) {
+              dayDataFromDB = day;
+              console.log('✅ Día encontrado en weekly_structure');
+              break;
+            }
+          }
+        }
         
         if (dayDataFromDB) {
-          console.log('✅ Datos del día encontrados:', JSON.stringify(dayDataFromDB, null, 2));
+          console.log('✅ Datos del día encontrados:', JSON.stringify(dayDataFromDB, null, 2).substring(0, 500));
           
           // Enriquecer ejercicios con progresión si no tienen setTypes
           const enrichedDayData = enrichDayExercises(dayDataFromDB);
@@ -274,7 +316,9 @@ export default function WorkoutDayDetailScreen() {
           
           setDayData(enrichedDayData);
         } else {
-          console.warn('⚠️ No se encontraron datos para', dayName);
+          console.warn('⚠️ No se encontraron datos para', dayName, '- Manteniendo datos originales del parámetro');
+          // No sobrescribir dayData si no encontramos nada en la DB
+          // Los datos del parámetro ya están cargados
         }
       }
     } catch (error) {
@@ -1479,8 +1523,7 @@ const styles = StyleSheet.create({
   },
   // Nuevos estilos de badges (igual que en edición)
   setsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: 'column',
     gap: 8,
     marginBottom: 16,
     paddingHorizontal: 4,

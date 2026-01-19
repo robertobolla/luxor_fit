@@ -148,12 +148,33 @@ export default function CustomPlanDaysScreen() {
         const multiWeekStructure = planData?.multi_week_structure;
         const weeklyStructure = planData?.weekly_structure;
         
-        console.log('🔍 Estructuras encontradas:', {
-          hasMultiWeek: !!multiWeekStructure && multiWeekStructure.length > 0,
-          multiWeekLength: multiWeekStructure?.length || 0,
-          hasWeekly: !!weeklyStructure && weeklyStructure.length > 0,
-          weeklyLength: weeklyStructure?.length || 0,
-        });
+        console.log('🔍 ========================================');
+        console.log('🔍 ANALIZANDO ESTRUCTURA DEL PLAN');
+        console.log('🔍 ========================================');
+        console.log('  - Tiene multi_week_structure:', !!multiWeekStructure && multiWeekStructure.length > 0);
+        console.log('  - Semanas en multi_week:', multiWeekStructure?.length || 0);
+        console.log('  - Tiene weekly_structure:', !!weeklyStructure && weeklyStructure.length > 0);
+        console.log('  - Días en weekly:', weeklyStructure?.length || 0);
+        
+        // Detectar si es un plan de IA (tiene campos específicos)
+        const isAIPlan = !!(planData?.training_base || planData?.key_principles || planData?.progression);
+        console.log('  - Es plan de IA:', isAIPlan);
+        
+        if (weeklyStructure && weeklyStructure.length > 0) {
+          const sampleDay = weeklyStructure[0];
+          console.log('  - Primer día (muestra):');
+          console.log('    - day:', sampleDay?.day);
+          console.log('    - focus:', sampleDay?.focus);
+          console.log('    - exercises:', sampleDay?.exercises?.length || 0);
+          if (sampleDay?.exercises?.[0]) {
+            console.log('    - Primer ejercicio (muestra):');
+            console.log('      - name:', sampleDay.exercises[0].name);
+            console.log('      - reps (tipo):', typeof sampleDay.exercises[0].reps, '=', sampleDay.exercises[0].reps);
+            console.log('      - rest:', sampleDay.exercises[0].rest);
+            console.log('      - rest_seconds:', sampleDay.exercises[0].rest_seconds);
+          }
+        }
+        console.log('🔍 ========================================');
 
         if (multiWeekStructure && multiWeekStructure.length > 0) {
           // Plan multi-semana
@@ -165,32 +186,90 @@ export default function CustomPlanDaysScreen() {
             console.log(`  📅 Semana ${weekData.week_number}: ${weekData.days?.length || 0} días`);
             const weekDays: DayData[] = [];
             
-            for (const dayData of weekData.days) {
+            for (const dayData of weekData.days || []) {
               const dayNumber = weekDays.length + 1;
               
-              // Validar que dayData tenga datos
-              if (!dayData || !dayData.day) {
+              // Validar que dayData tenga datos (permitir tanto 'day' como 'focus' para planes de IA)
+              if (!dayData) {
+                console.log(`⚠️ Día ${dayNumber} es null/undefined, saltando`);
                 continue;
               }
               
+              // Los planes de IA usan 'day' como "Día 1" y 'focus' como "Pecho y Tríceps"
+              const dayName = dayData.day || dayData.focus || `Día ${dayNumber}`;
               
-              // Hacer copia profunda de ejercicios para evitar referencias compartidas
-              const exercises = (dayData.exercises || []).map((ex: any, idx: number) => ({
-                id: ex.id || `${ex.name}_${weekData.week_number}_${dayNumber}_${idx}_${Date.now()}`, // ← ID único con más contexto
-                name: ex.name || 'Ejercicio sin nombre',
-                sets: ex.sets || 3,
-                reps: Array.isArray(ex.reps) ? [...ex.reps] : [10, 10, 10],
-                rest_seconds: ex.rest_seconds || 120,
-                setTypes: Array.isArray(ex.setTypes) ? ex.setTypes.map((st: any) => ({
-                  type: st.type || 'normal',
-                  reps: st.reps || 10,
-                  rir: st.rir || null,
-                })) : [],
-              }));
+              console.log(`    📆 Cargando día ${dayNumber}: "${dayName}" con ${dayData.exercises?.length || 0} ejercicios`);
+              
+              // Hacer copia profunda de ejercicios y convertir formato de IA a formato personalizado
+              const exercises = (dayData.exercises || []).map((ex: any, idx: number) => {
+                // Los planes de IA tienen 'reps' como string (ej: "8-10 @ RIR 2")
+                // Convertir a array de números
+                let repsArray: number[] = [10, 10, 10];
+                let rirValue: number | null = null;
+                
+                if (Array.isArray(ex.reps)) {
+                  // Ya es array (formato personalizado)
+                  repsArray = [...ex.reps];
+                } else if (typeof ex.reps === 'string') {
+                  // Formato de IA: "8-10 @ RIR 2" o "8-10"
+                  const repsMatch = ex.reps.match(/(\d+)(?:-(\d+))?/);
+                  const rirMatch = ex.reps.match(/RIR\s*(\d+)/i);
+                  
+                  if (repsMatch) {
+                    const minReps = parseInt(repsMatch[1]);
+                    const maxReps = repsMatch[2] ? parseInt(repsMatch[2]) : minReps;
+                    const baseReps = Math.round((minReps + maxReps) / 2);
+                    repsArray = Array(ex.sets || 3).fill(baseReps);
+                  }
+                  
+                  if (rirMatch) {
+                    rirValue = parseInt(rirMatch[1]);
+                  }
+                }
+                
+                // Convertir 'rest' (string como "90s") a 'rest_seconds' (número)
+                let restSeconds = 120;
+                if (typeof ex.rest_seconds === 'number') {
+                  restSeconds = ex.rest_seconds;
+                } else if (typeof ex.rest === 'string') {
+                  const restMatch = ex.rest.match(/(\d+)/);
+                  if (restMatch) {
+                    restSeconds = parseInt(restMatch[1]);
+                  }
+                }
+                
+                // Crear setTypes si no existe
+                const numSets = ex.sets || 3;
+                let setTypesArray = [];
+                if (Array.isArray(ex.setTypes) && ex.setTypes.length > 0) {
+                  setTypesArray = ex.setTypes.map((st: any) => ({
+                    type: st.type || 'normal',
+                    reps: st.reps || repsArray[0] || 10,
+                    rir: st.rir ?? rirValue,
+                  }));
+                } else {
+                  setTypesArray = repsArray.map((rep) => ({
+                    type: 'normal' as const,
+                    reps: rep,
+                    rir: rirValue,
+                  }));
+                }
+                
+                return {
+                  id: ex.id || `${ex.name}_${weekData.week_number}_${dayNumber}_${idx}_${Date.now()}`,
+                  name: ex.name || 'Ejercicio sin nombre',
+                  sets: numSets,
+                  reps: repsArray,
+                  rest_seconds: restSeconds,
+                  setTypes: setTypesArray,
+                };
+              });
+              
+              console.log(`      ✅ ${exercises.length} ejercicios convertidos`);
 
               weekDays.push({
                 dayNumber,
-                name: dayData.day,
+                name: dayName,
                 exercises,
               });
 
@@ -198,7 +277,7 @@ export default function CustomPlanDaysScreen() {
               const key = `week_${weekData.week_number}_day_${dayNumber}_data`;
               await AsyncStorage.setItem(key, JSON.stringify({
                 dayNumber,
-                name: dayData.day,
+                name: dayName,
                 exercises,
               }));
             }
@@ -215,7 +294,7 @@ export default function CustomPlanDaysScreen() {
           setInitialLoadComplete(true);
           
         } else if (weeklyStructure && weeklyStructure.length > 0) {
-          // Plan de una semana (compatibilidad)
+          // Plan de una semana (compatibilidad con planes de IA)
           console.log('📅 Cargando plan de una semana:', weeklyStructure.length, 'días');
           
           const weekDays: DayData[] = [];
@@ -224,29 +303,90 @@ export default function CustomPlanDaysScreen() {
             const dayData = weeklyStructure[i];
             const dayNumber = i + 1;
             
-            // Validar que dayData tenga datos
-            if (!dayData || !dayData.day) {
+            // Validar que dayData tenga datos (permitir tanto 'day' como 'focus' para planes de IA)
+            if (!dayData) {
+              console.log(`⚠️ Día ${dayNumber} es null/undefined, saltando`);
               continue;
             }
             
+            // Los planes de IA usan 'day' como "Día 1" y 'focus' como "Pecho y Tríceps"
+            // Si no hay 'day', usar 'focus' o un nombre por defecto
+            const dayName = dayData.day || dayData.focus || `Día ${dayNumber}`;
             
-            // Hacer copia profunda de ejercicios para evitar referencias compartidas
-            const exercises = (dayData.exercises || []).map((ex: any, idx: number) => ({
-              id: ex.id || `${ex.name}_${dayNumber}_${idx}_${Date.now()}`, // ← ID único
-              name: ex.name || 'Ejercicio sin nombre',
-              sets: ex.sets || 3,
-              reps: Array.isArray(ex.reps) ? [...ex.reps] : [10, 10, 10],
-              rest_seconds: ex.rest_seconds || 120,
-              setTypes: Array.isArray(ex.setTypes) ? ex.setTypes.map((st: any) => ({
-                type: st.type || 'normal',
-                reps: st.reps || 10,
-                rir: st.rir || null,
-              })) : [],
-            }));
+            console.log(`  📆 Cargando día ${dayNumber}: "${dayName}" con ${dayData.exercises?.length || 0} ejercicios`);
+            
+            // Hacer copia profunda de ejercicios y convertir formato de IA a formato personalizado
+            const exercises = (dayData.exercises || []).map((ex: any, idx: number) => {
+              // Los planes de IA tienen 'reps' como string (ej: "8-10 @ RIR 2")
+              // Convertir a array de números
+              let repsArray: number[] = [10, 10, 10];
+              let rirValue: number | null = null;
+              
+              if (Array.isArray(ex.reps)) {
+                // Ya es array (formato personalizado)
+                repsArray = [...ex.reps];
+              } else if (typeof ex.reps === 'string') {
+                // Formato de IA: "8-10 @ RIR 2" o "8-10"
+                const repsMatch = ex.reps.match(/(\d+)(?:-(\d+))?/);
+                const rirMatch = ex.reps.match(/RIR\s*(\d+)/i);
+                
+                if (repsMatch) {
+                  const minReps = parseInt(repsMatch[1]);
+                  const maxReps = repsMatch[2] ? parseInt(repsMatch[2]) : minReps;
+                  // Usar el promedio o el máximo como base para las series
+                  const baseReps = Math.round((minReps + maxReps) / 2);
+                  repsArray = Array(ex.sets || 3).fill(baseReps);
+                }
+                
+                if (rirMatch) {
+                  rirValue = parseInt(rirMatch[1]);
+                }
+              }
+              
+              // Convertir 'rest' (string como "90s") a 'rest_seconds' (número)
+              let restSeconds = 120;
+              if (typeof ex.rest_seconds === 'number') {
+                restSeconds = ex.rest_seconds;
+              } else if (typeof ex.rest === 'string') {
+                const restMatch = ex.rest.match(/(\d+)/);
+                if (restMatch) {
+                  restSeconds = parseInt(restMatch[1]);
+                }
+              }
+              
+              // Crear setTypes si no existe (para ejercicios de IA)
+              const numSets = ex.sets || 3;
+              let setTypesArray = [];
+              if (Array.isArray(ex.setTypes) && ex.setTypes.length > 0) {
+                setTypesArray = ex.setTypes.map((st: any) => ({
+                  type: st.type || 'normal',
+                  reps: st.reps || repsArray[0] || 10,
+                  rir: st.rir ?? rirValue,
+                }));
+              } else {
+                // Crear setTypes basados en las reps calculadas
+                setTypesArray = repsArray.map((rep, repIdx) => ({
+                  type: 'normal' as const,
+                  reps: rep,
+                  rir: rirValue,
+                }));
+              }
+              
+              return {
+                id: ex.id || `${ex.name}_${dayNumber}_${idx}_${Date.now()}`,
+                name: ex.name || 'Ejercicio sin nombre',
+                sets: numSets,
+                reps: repsArray,
+                rest_seconds: restSeconds,
+                setTypes: setTypesArray,
+              };
+            });
+            
+            console.log(`    ✅ ${exercises.length} ejercicios convertidos`);
 
             weekDays.push({
               dayNumber,
-              name: dayData.day,
+              name: dayName,
               exercises,
             });
 
@@ -254,7 +394,7 @@ export default function CustomPlanDaysScreen() {
             const key = `week_1_day_${dayNumber}_data`;
             await AsyncStorage.setItem(key, JSON.stringify({
               dayNumber,
-              name: dayData.day,
+              name: dayName,
               exercises,
             }));
           }
@@ -487,6 +627,8 @@ export default function CustomPlanDaysScreen() {
     const currentWeek = weeks[currentWeekIndex];
     const dayData = currentWeek.days.find(d => d.dayNumber === dayNumber) || { dayNumber, exercises: [] };
     
+    console.log(`📍 Editando día ${dayNumber} (semana ${currentWeek.weekNumber}): ${dayData.exercises?.length || 0} ejercicios`);
+    
     router.push({
       pathname: '/(tabs)/workout/custom-plan-day-detail',
       params: {
@@ -495,6 +637,7 @@ export default function CustomPlanDaysScreen() {
         daysPerWeek: currentWeek.days.length.toString(),
         equipment: JSON.stringify(equipment),
         dayData: JSON.stringify(dayData),
+        planId: editingPlanId || '', // Pasar planId para guardar directamente en DB
       },
     });
   };

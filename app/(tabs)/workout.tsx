@@ -384,11 +384,6 @@ export default function WorkoutScreen() {
           >
             <Ionicons name="add" size={20} color="#1a1a1a" />
             <Text style={styles.generateButtonText}>{t('workout.createWorkout')}</Text>
-            {!hasCompletedTutorial('WORKOUT') && workoutPlans.length === 0 && (
-              <View style={styles.newBadge}>
-                <Text style={styles.newBadgeText}>{t('common.new')}</Text>
-              </View>
-            )}
           </TouchableOpacity>
 
           {/* Botón Modo Entrenador */}
@@ -973,23 +968,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     position: 'relative',
-  },
-  newBadge: {
-    position: 'absolute',
-    top: -8,
-    right: -8,
-    backgroundColor: '#ff6b6b',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#1a1a1a',
-  },
-  newBadgeText: {
-    color: '#ffffff',
-    fontSize: 10,
-    fontWeight: 'bold',
-    textTransform: 'uppercase',
   },
   generateButtonText: {
     color: '#1a1a1a',

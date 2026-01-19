@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import Svg, { Circle } from 'react-native-svg';
 import { getGymDaysThisWeek, getGymDaysThisMonth } from '@/services/exerciseService';
+import { useTranslation } from 'react-i18next';
 
 const { width } = Dimensions.get('window');
 
@@ -79,7 +80,7 @@ export default function GymDetailScreen() {
   const [gymDaysGoal, setGymDaysGoal] = useState(3);
   const [gymDaysThisMonth, setGymDaysThisMonth] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
+  const { t } = useTranslation();
   // Cargar datos cuando cambia la fecha
   useEffect(() => {
     if (user?.id) {
@@ -182,15 +183,21 @@ export default function GymDetailScreen() {
 
   const getWeekDays = () => {
     const today = new Date();
+    const dayOfWeek = today.getDay();
+    // Calcular inicio de semana (Lunes)
+    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay()); // Domingo
+    startOfWeek.setDate(today.getDate() - daysFromMonday);
+    
+    // Obtener los días cortos traducidos
+    const dayLabels = t('common.weekDaysShort', { returnObjects: true }) as string[];
     
     const weekDays = [];
     for (let i = 0; i < 7; i++) {
       const day = new Date(startOfWeek);
       day.setDate(startOfWeek.getDate() + i);
       weekDays.push({
-        name: day.toLocaleDateString('es-ES', { weekday: 'short' }),
+        name: dayLabels[i],
         date: day.getDate(),
         isToday: day.toDateString() === today.toDateString()
       });
@@ -223,7 +230,9 @@ export default function GymDetailScreen() {
         
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Gimnasio</Text>
-          <Text style={styles.headerSubtitle}>Entrenamientos completados</Text>
+          <Text style={styles.headerSubtitle}>
+  {t('headers.completedWorkouts')}
+</Text>
         </View>
         
         <View style={styles.headerRight}>
@@ -259,12 +268,14 @@ export default function GymDetailScreen() {
           <Text style={styles.mainNumber}>
             {gymDaysThisWeek} <Text style={styles.mainUnit}>de {gymDaysGoal}</Text>
           </Text>
-          <Text style={styles.mainLabel}>Esta semana</Text>
+          <Text style={styles.mainLabel}>  {t('time.thisWeek')}
+          </Text>
         </View>
 
         {/* Semana actual */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Esta semana</Text>
+          <Text style={styles.sectionTitle}>  {t('time.thisWeek')}
+          </Text>
           
           <View style={styles.card}>
             <View style={styles.weekDaysContainer}>
@@ -290,12 +301,17 @@ export default function GymDetailScreen() {
               ))}
             </View>
             <View style={styles.weekSummary}>
-              <Text style={styles.weekSummaryText}>
-                {gymDaysThisWeek} de {gymDaysGoal} días completados
-              </Text>
-              <Text style={styles.weekProgressText}>
-                {Math.round((gymDaysThisWeek / gymDaysGoal) * 100)}% completado
-              </Text>
+            <Text style={styles.weekSummaryText}>
+  {t('week.daysCompleted', {
+    current: gymDaysThisWeek,
+    total: gymDaysGoal,
+  })}
+</Text>
+<Text style={styles.weekProgressText}>
+  {t('week.percentCompleted', {
+    percent: Math.round((gymDaysThisWeek / gymDaysGoal) * 100),
+  })}
+</Text>
             </View>
           </View>
         </View>
@@ -346,34 +362,44 @@ export default function GymDetailScreen() {
             </View>
             
             <View style={styles.monthSummary}>
-              <Text style={styles.monthSummaryText}>
-                {gymDaysThisMonth.length} días de gimnasio en {formatMonth(selectedDate)}
-              </Text>
+            <Text style={styles.monthSummaryText}>
+  {t('month.gymDays', {
+    count: gymDaysThisMonth.length,
+    month: formatMonth(selectedDate),
+  })}
+</Text>
             </View>
           </View>
         </View>
 
         {/* Estadísticas */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Estadísticas</Text>
+        <Text style={styles.sectionTitle}>
+  {t('sections.statistics')}
+</Text>
           
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
               <Text style={styles.statValue}>{gymDaysThisWeek}</Text>
-              <Text style={styles.statLabel}>Esta semana</Text>
+              <Text style={styles.statLabel}>
+  {t('time.thisWeek')}
+</Text>
             </View>
             
             <View style={styles.statCard}>
               <Text style={styles.statValue}>{gymDaysThisMonth.length}</Text>
-              <Text style={styles.statLabel}>Este mes</Text>
+              <Text style={styles.statLabel}>
+  {t('time.thisMonth')}
+</Text>
             </View>
             
             <View style={styles.statCard}>
               <Text style={styles.statValue}>
                 {Math.round((gymDaysThisWeek / gymDaysGoal) * 100)}%
               </Text>
-              <Text style={styles.statLabel}>Progreso</Text>
-            </View>
+              <Text style={styles.statLabel}>
+  {t('stats.progress')}
+</Text>            </View>
           </View>
         </View>
 

@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../services/adminService';
+import { useToastContext } from '../contexts/ToastContext';
+import { useErrorHandler } from '../hooks/useErrorHandler';
+import { logger } from '../utils/logger';
 import './Partners.css';
 
 interface Partner {
@@ -17,6 +20,8 @@ interface Partner {
   free_access: boolean;
   is_active: boolean;
   referral_stats: any;
+  benefit_duration_days: number | null; // null = permanente
+  code_expires_at: string | null; // fecha límite para usar el código
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +38,8 @@ interface PartnerReferrals {
 }
 
 export default function Partners() {
+  const toast = useToastContext();
+  const { handleApiError } = useErrorHandler();
   const [partners, setPartners] = useState<Partner[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
@@ -49,14 +56,20 @@ export default function Partners() {
   const [deleting, setDeleting] = useState(false);
   const [updating, setUpdating] = useState(false);
 
+  // Precios fijos para referidos (compatibles con Apple)
+  const PARTNER_PRICES = {
+    monthly: { normal: 12.99, partner: 9.99, discount: 23 },
+    yearly: { normal: 107, partner: 89.99, discount: 16 },
+  };
+
   // Formulario para nuevo socio
   const [formData, setFormData] = useState({
     email: '',
     name: '',
     discount_code: '',
-    discount_percentage: 0, // Porcentaje de descuento para usuarios invitados
     commission_per_subscription: 0, // Comisión por cada suscripción activa
     commission_type: 'fixed' as 'fixed' | 'percentage',
+    code_expires_at: '' as string, // fecha límite para usar el código (vacío = sin expiración)
   });
 
   useEffect(() => {
@@ -75,7 +88,8 @@ export default function Partners() {
       if (error) throw error;
       setPartners(data || []);
     } catch (error) {
-      console.error('Error cargando socios:', error);
+      logger.error('Error cargando socios:', error);
+      toast.error('Error al cargar socios');
     } finally {
       setLoading(false);
     }
@@ -92,7 +106,7 @@ export default function Partners() {
       if (error) throw error;
       setPartnerReferrals(data || []);
     } catch (error) {
-      console.error('Error cargando referidos:', error);
+      logger.error('Error cargando referidos:', error);
     }
   }
 
@@ -106,7 +120,7 @@ export default function Partners() {
         .maybeSingle();
 
       if (existing) {
-        alert('Este código de descuento ya está en uso. Elige otro.');
+        toast.warning('Este código de descuento ya está en uso. Elige otro.');
         return;
       }
 
@@ -121,11 +135,13 @@ export default function Partners() {
           name: formData.name.trim(),
           role_type: 'socio',
           discount_code: formData.discount_code.toUpperCase().trim(),
-          discount_percentage: formData.discount_percentage || 0, // Porcentaje de descuento para invitados
-          commission_per_subscription: formData.commission_per_subscription || 0, // Comisión por suscripción activa
-          commission_type: formData.commission_type, // 'fixed' o 'percentage'
+          discount_percentage: PARTNER_PRICES.monthly.discount, // Descuento fijo (compatible con Apple)
+          commission_per_subscription: formData.commission_per_subscription || 0,
+          commission_type: formData.commission_type,
           free_access: true, // Los socios SIEMPRE tienen acceso gratuito
           is_active: true,
+          benefit_duration_days: null, // Ya no aplica - es suscripción de Apple
+          code_expires_at: formData.code_expires_at || null,
         });
 
       if (error) throw error;
@@ -138,15 +154,15 @@ export default function Partners() {
         email: '',
         name: '',
         discount_code: '',
-        discount_percentage: 0,
         commission_per_subscription: 0,
         commission_type: 'fixed',
+        code_expires_at: '',
       });
       loadPartners();
-      alert('Socio agregado e invitación enviada correctamente. Nota: El socio debe registrarse en la app con este email para activar su acceso.');
-    } catch (error: any) {
-      console.error('Error agregando socio:', error);
-      alert('Error al agregar socio: ' + (error.message || 'Error desconocido'));
+      toast.success('Socio agregado correctamente. Los usuarios que usen su código pagarán $9.99/mes o $89.99/año.');
+    } catch (error: unknown) {
+      const errorMessage = handleApiError(error, 'Error al agregar socio');
+      toast.error(errorMessage);
     }
   }
 
@@ -167,15 +183,15 @@ export default function Partners() {
       };
 
       // Aquí iría la llamada al servicio de email
-      console.log('📧 Enviando invitación:', inviteData);
+      logger.debug('Enviando invitación:', inviteData);
       
       // Simular delay
       await new Promise(resolve => setTimeout(resolve, 1000));
       
-      alert(`Invitación enviada a ${email}`);
+      toast.success(`Invitación enviada a ${email}`);
     } catch (error) {
-      console.error('Error enviando invitación:', error);
-      alert('Error al enviar invitación, pero el socio fue creado');
+      logger.error('Error enviando invitación:', error);
+      toast.warning('Error al enviar invitación, pero el socio fue creado');
     } finally {
       setSendingInvite(null);
     }
@@ -200,7 +216,8 @@ export default function Partners() {
       setPartnerToToggle(null);
       loadPartners();
     } catch (error: any) {
-      alert('Error actualizando estado: ' + (error.message || 'Error desconocido'));
+      const errorMessage = handleApiError(error, 'Error al actualizar estado');
+      toast.error(errorMessage);
     }
   }
 
@@ -210,9 +227,9 @@ export default function Partners() {
       email: partner.email || '',
       name: partner.name || '',
       discount_code: partner.discount_code || '',
-      discount_percentage: partner.discount_percentage || 0,
       commission_per_subscription: partner.commission_per_subscription || 0,
       commission_type: partner.commission_type || 'fixed',
+      code_expires_at: partner.code_expires_at ? partner.code_expires_at.split('T')[0] : '',
     });
     setShowEditModal(true);
   }
@@ -233,24 +250,19 @@ export default function Partners() {
           .maybeSingle();
 
         if (existing) {
-          alert('Este código de descuento ya está en uso');
+          toast.warning('Este código de descuento ya está en uso');
           return;
         }
       }
 
       // Validaciones
       if (!formData.email.trim()) {
-        alert('El email es requerido');
-        return;
-      }
-
-      if (formData.discount_percentage < 0 || formData.discount_percentage > 100) {
-        alert('El porcentaje de descuento debe estar entre 0 y 100');
+        toast.warning('El email es requerido');
         return;
       }
 
       if (formData.commission_per_subscription < 0) {
-        alert('La comisión no puede ser negativa');
+        toast.warning('La comisión no puede ser negativa');
         return;
       }
 
@@ -261,31 +273,33 @@ export default function Partners() {
           email: formData.email.trim(),
           name: formData.name.trim() || null,
           discount_code: formData.discount_code.toUpperCase().trim(),
-          discount_percentage: formData.discount_percentage,
+          discount_percentage: PARTNER_PRICES.monthly.discount, // Descuento fijo
           commission_per_subscription: formData.commission_per_subscription,
           commission_type: formData.commission_type,
-          free_access: true, // Los socios siempre tienen acceso gratuito
+          free_access: true,
+          code_expires_at: formData.code_expires_at || null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', partnerToEdit.id);
 
       if (error) throw error;
 
-      alert('Socio actualizado correctamente');
+      toast.success('Socio actualizado correctamente');
       setShowEditModal(false);
       setPartnerToEdit(null);
       setFormData({
         email: '',
         name: '',
         discount_code: '',
-        discount_percentage: 0,
         commission_per_subscription: 0,
         commission_type: 'fixed',
+        code_expires_at: '',
       });
       loadPartners();
     } catch (error: any) {
-      console.error('Error actualizando socio:', error);
-      alert('Error al actualizar socio: ' + (error.message || 'Error desconocido'));
+      logger.error('Error actualizando socio:', error);
+      const errorMessage = handleApiError(error, 'Error al actualizar socio');
+      toast.error(errorMessage);
     } finally {
       setUpdating(false);
     }
@@ -311,7 +325,8 @@ export default function Partners() {
       setPartnerToDelete(null);
       loadPartners();
     } catch (error: any) {
-      alert('Error eliminando socio: ' + (error.message || 'Error desconocido'));
+      const errorMessage = handleApiError(error, 'Error al eliminar socio');
+      toast.error(errorMessage);
     } finally {
       setDeleting(false);
     }
@@ -387,11 +402,10 @@ export default function Partners() {
                     <code className="discount-code">{partner.discount_code || 'N/A'}</code>
                   </td>
                   <td>
-                    {partner.discount_percentage > 0 ? (
-                      <span className="badge badge-free">{partner.discount_percentage}%</span>
-                    ) : (
-                      <span className="badge badge-info">Solo rastreo</span>
-                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <span className="badge badge-free">$9.99/mes</span>
+                      <span style={{ fontSize: '10px', color: '#888' }}>$89.99/año</span>
+                    </div>
                   </td>
                   <td>
                     {partner.commission_per_subscription > 0 ? (
@@ -544,18 +558,33 @@ export default function Partners() {
                 </button>
               </div>
             </div>
+            {/* Información del descuento fijo */}
+            <div className="form-info" style={{ background: '#1a3a1a', padding: '12px', borderRadius: '6px', marginBottom: '16px', border: '1px solid #2d5a2d' }}>
+              <p style={{ color: '#4CAF50', fontSize: '14px', margin: 0, fontWeight: '600' }}>
+                💰 Precio para referidos (fijo - compatible con Apple):
+              </p>
+              <div style={{ display: 'flex', gap: '20px', marginTop: '8px' }}>
+                <div>
+                  <span style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>$9.99/mes</span>
+                  <span style={{ color: '#888', fontSize: '12px', marginLeft: '6px' }}>(normal: $12.99)</span>
+                </div>
+                <div>
+                  <span style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>$89.99/año</span>
+                  <span style={{ color: '#888', fontSize: '12px', marginLeft: '6px' }}>(normal: $107)</span>
+                </div>
+              </div>
+            </div>
             <div className="form-group">
-              <label>Porcentaje de Descuento para Invitados</label>
+              <label>Fecha de Expiración del Código</label>
               <input
-                type="number"
-                min="0"
-                max="100"
-                value={formData.discount_percentage}
-                onChange={(e) => setFormData({ ...formData, discount_percentage: parseInt(e.target.value) || 0 })}
-                placeholder="0 (sin descuento) o ej: 10, 15, 20..."
+                type="date"
+                value={formData.code_expires_at}
+                onChange={(e) => setFormData({ ...formData, code_expires_at: e.target.value })}
+                min={new Date().toISOString().split('T')[0]}
+                style={{ width: '100%' }}
               />
               <p style={{ color: '#888', fontSize: '12px', marginTop: '4px' }}>
-                Porcentaje de descuento que recibirán los usuarios que usen este código (0 = sin descuento, solo rastreo)
+                Fecha límite para usar el código. Después de esta fecha el código ya no funcionará. Dejar vacío si el código <strong>nunca expira</strong>.
               </p>
             </div>
             <div className="form-group">
@@ -612,7 +641,7 @@ export default function Partners() {
             </div>
             <div className="form-info" style={{ background: '#1a1a1a', padding: '12px', borderRadius: '6px', marginTop: '8px' }}>
               <p style={{ color: '#ccc', fontSize: '13px', margin: 0 }}>
-                ℹ️ <strong>Los socios tienen acceso gratuito automático</strong> a la app. El código se usa para <strong>rastrear usuarios invitados</strong>, aplicar descuento (si lo configuraste) y calcular pagos por cada usuario activo.
+                ℹ️ <strong>Los socios tienen acceso gratuito automático</strong> a la app. Cuando un usuario usa el código del socio, paga el <strong>precio con descuento</strong> ($9.99/mes o $89.99/año) a través de Apple. El socio gana comisión por cada suscripción activa.
               </p>
             </div>
             <div className="modal-actions">
@@ -812,19 +841,34 @@ export default function Partners() {
                 </button>
               </div>
             </div>
+            {/* Información del descuento fijo */}
+            <div className="form-info" style={{ background: '#1a3a1a', padding: '12px', borderRadius: '6px', marginBottom: '16px', border: '1px solid #2d5a2d' }}>
+              <p style={{ color: '#4CAF50', fontSize: '14px', margin: 0, fontWeight: '600' }}>
+                💰 Precio para referidos (fijo):
+              </p>
+              <div style={{ display: 'flex', gap: '20px', marginTop: '8px' }}>
+                <div>
+                  <span style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>$9.99/mes</span>
+                  <span style={{ color: '#888', fontSize: '12px', marginLeft: '6px' }}>(23% off)</span>
+                </div>
+                <div>
+                  <span style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>$89.99/año</span>
+                  <span style={{ color: '#888', fontSize: '12px', marginLeft: '6px' }}>(16% off)</span>
+                </div>
+              </div>
+            </div>
             <div className="form-group">
-              <label>Porcentaje de Descuento para Invitados</label>
+              <label>Fecha de Expiración del Código</label>
               <input
-                type="number"
-                min="0"
-                max="100"
-                value={formData.discount_percentage}
-                onChange={(e) => setFormData({ ...formData, discount_percentage: parseInt(e.target.value) || 0 })}
-                placeholder="0 (sin descuento) o ej: 10, 15, 20..."
+                type="date"
+                value={formData.code_expires_at}
+                onChange={(e) => setFormData({ ...formData, code_expires_at: e.target.value })}
+                min={new Date().toISOString().split('T')[0]}
+                style={{ width: '100%' }}
                 disabled={updating}
               />
               <p style={{ color: '#888', fontSize: '12px', marginTop: '4px' }}>
-                Porcentaje de descuento que recibirán los usuarios que usen este código (0 = sin descuento, solo rastreo)
+                Fecha límite para usar el código. Dejar vacío si el código <strong>nunca expira</strong>.
               </p>
             </div>
             <div className="form-group">
@@ -874,9 +918,9 @@ export default function Partners() {
                     email: '',
                     name: '',
                     discount_code: '',
-                    discount_percentage: 0,
                     commission_per_subscription: 0,
                     commission_type: 'fixed',
+                    code_expires_at: '',
                   });
                 }}
                 disabled={updating}

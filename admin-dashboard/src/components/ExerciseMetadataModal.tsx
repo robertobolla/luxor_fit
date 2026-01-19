@@ -16,6 +16,7 @@ interface ExerciseMetadataModalProps {
     uses_time?: boolean | null;
   };
   isOpen: boolean;
+  isNew?: boolean; // Si es true, crea un nuevo ejercicio en vez de actualizar
   onClose: () => void;
   onSave: () => Promise<void> | void;
 }
@@ -271,7 +272,7 @@ const GOAL_LABELS: Record<string, string> = {
   general_fitness: 'Forma general',
 };
 
-export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSave }: ExerciseMetadataModalProps) {
+export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false, onClose, onSave }: ExerciseMetadataModalProps) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -333,12 +334,19 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
     setSaving(true);
     setError(null);
 
+    // Validar que tenga nombre si es nuevo
+    if (isNew && !canonicalName.trim()) {
+      setError('El nombre del ejercicio es obligatorio');
+      setSaving(false);
+      return;
+    }
+
     try {
       const selectedCategory = CATEGORIES.find(c => c.value === category);
       const movementType = selectedCategory?.movementType || null;
 
-      // Si el nombre cambió, actualizarlo también
-      const updates: any = {
+      const exerciseData: any = {
+        canonical_name: canonicalName.trim(),
         category: category || null,
         movement_type: movementType,
         exercise_type: exerciseType || null,
@@ -350,27 +358,53 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
         name_en: nameEn.trim() || null,
       };
 
-      // Solo actualizar el nombre si cambió
-      // Normalizar: cadena vacía se trata como null para comparación correcta
-      const normalizedCanonicalName = canonicalName.trim() || null;
-      const originalCanonicalName = exercise.canonical_name || null;
-      if (normalizedCanonicalName !== originalCanonicalName) {
-        updates.canonical_name = normalizedCanonicalName;
-      }
+      if (isNew) {
+        // Crear nuevo ejercicio
+        console.log('➕ Creando nuevo ejercicio:', exerciseData);
+        
+        // Agregar campos adicionales para nuevo ejercicio
+        exerciseData.name_variations = [canonicalName.trim().toLowerCase()];
+        exerciseData.is_primary = true;
+        exerciseData.priority = 1;
+        
+        const { error: insertError } = await supabase
+          .from('exercise_videos')
+          .insert(exerciseData);
 
-      console.log('💾 Guardando ejercicio:', exercise.id, updates);
-      
-      const { error: updateError } = await supabase
-        .from('exercise_videos')
-        .update(updates)
-        .eq('id', exercise.id);
+        if (insertError) {
+          console.error('❌ Error al crear:', insertError);
+          if (insertError.code === '23505') {
+            throw new Error('Ya existe un ejercicio con este nombre');
+          }
+          throw insertError;
+        }
+        
+        console.log('✅ Ejercicio creado exitosamente');
+      } else {
+        // Actualizar ejercicio existente
+        const updates = { ...exerciseData };
+        
+        // Solo actualizar el nombre si cambió
+        const normalizedCanonicalName = canonicalName.trim() || null;
+        const originalCanonicalName = exercise.canonical_name || null;
+        if (normalizedCanonicalName === originalCanonicalName) {
+          delete updates.canonical_name;
+        }
 
-      if (updateError) {
-        console.error('❌ Error al guardar:', updateError);
-        throw updateError;
+        console.log('💾 Actualizando ejercicio:', exercise.id, updates);
+        
+        const { error: updateError } = await supabase
+          .from('exercise_videos')
+          .update(updates)
+          .eq('id', exercise.id);
+
+        if (updateError) {
+          console.error('❌ Error al guardar:', updateError);
+          throw updateError;
+        }
+        
+        console.log('✅ Ejercicio actualizado');
       }
-      
-      console.log('✅ Ejercicio guardado, llamando a onSave...');
 
       // Esperar a que onSave complete la recarga de datos antes de cerrar
       await onSave();
@@ -378,7 +412,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
       console.log('✅ onSave completado, cerrando modal...');
       onClose();
     } catch (e: any) {
-      setError(e.message || 'Error al guardar metadata');
+      setError(e.message || 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -387,7 +421,13 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
   if (!isOpen) return null;
 
   const canGoNext = () => {
-    if (step === 1) return category && exerciseType;
+    if (step === 1) {
+      // Si es nuevo, requiere nombre además de categoría y tipo
+      if (isNew) {
+        return canonicalName.trim().length >= 3 && category && exerciseType;
+      }
+      return category && exerciseType;
+    }
     if (step === 2) return muscles.length > 0;
     if (step === 3) return equipment.length > 0;
     if (step === 4) return goals.length > 0;
@@ -420,24 +460,30 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <div style={{ flex: 1 }}>
             <label style={{ display: 'block', color: '#888', fontSize: 12, marginBottom: 4 }}>
-              Nombre del ejercicio:
+              Nombre del ejercicio{isNew && <span style={{ color: '#ff9800' }}> *</span>}:
             </label>
             <input
               type="text"
               value={canonicalName}
               onChange={(e) => setCanonicalName(e.target.value)}
+              autoFocus={isNew}
               style={{
                 width: '100%',
                 padding: '8px 12px',
                 borderRadius: 8,
-                border: '1px solid #2a2a2a',
+                border: `1px solid ${isNew && canonicalName.trim().length < 3 ? '#ff9800' : '#2a2a2a'}`,
                 background: '#0a0a0a',
                 color: '#fff',
                 fontSize: 18,
                 fontWeight: 'bold',
               }}
-              placeholder="Nombre del ejercicio (Español)"
+              placeholder={isNew ? "Escribe el nombre del ejercicio..." : "Nombre del ejercicio (Español)"}
             />
+            {isNew && canonicalName.length > 0 && canonicalName.trim().length < 3 && (
+              <span style={{ color: '#ff9800', fontSize: 12 }}>
+                Mínimo 3 caracteres ({3 - canonicalName.trim().length} más)
+              </span>
+            )}
             <input
               type="text"
               value={nameEn}
@@ -809,7 +855,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, onClose, onSav
                 cursor: canGoNext() && !saving ? 'pointer' : 'not-allowed',
               }}
             >
-              {saving ? 'Guardando...' : 'Guardar'}
+              {saving ? 'Guardando...' : (isNew ? 'Crear ejercicio' : 'Guardar')}
             </button>
           )}
         </div>

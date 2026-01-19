@@ -552,228 +552,200 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
     
     console.log('✅ Permisos verificados correctamente');
 
+    // IMPORTANTE: Manejar zona horaria local correctamente
+    // La librería react-native-health necesita fechas que representen el día LOCAL del usuario
     const startDate = new Date(date);
     startDate.setHours(0, 0, 0, 0);
     const endDate = new Date(date);
     endDate.setHours(23, 59, 59, 999);
     
-    const options = {
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
+    // Obtener el offset de la zona horaria en minutos
+    const timezoneOffset = startDate.getTimezoneOffset(); // En minutos, positivo para oeste de UTC
+    const timezoneOffsetHours = -timezoneOffset / 60;
+    
+    // Crear strings de fecha en formato LOCAL (YYYY-MM-DD)
+    const year = startDate.getFullYear();
+    const month = String(startDate.getMonth() + 1).padStart(2, '0');
+    const day = String(startDate.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    
+    // CORRECCIÓN CRÍTICA PARA ZONAS HORARIAS:
+    // toISOString() convierte a UTC, lo que causa que para usuarios en zonas horarias
+    // diferentes a UTC, se consulten datos del día incorrecto.
+    // 
+    // Ejemplo: Usuario en Pacific Time (UTC-8), medianoche local Jan 14:
+    // - toISOString() devuelve: "2026-01-14T08:00:00.000Z" (8am UTC)
+    // - HealthKit interpreta esto como 8am UTC, perdiendo las primeras 8 horas del día
+    //
+    // SOLUCIÓN: Crear ISO strings con el offset de zona horaria correcto
+    // Formato: YYYY-MM-DDTHH:mm:ss.sss±HH:MM
+    
+    // Calcular el string del offset (ej: "-08:00" para Pacific Time)
+    const absOffsetHours = Math.floor(Math.abs(timezoneOffset) / 60);
+    const absOffsetMinutes = Math.abs(timezoneOffset) % 60;
+    const offsetSign = timezoneOffset > 0 ? '-' : '+'; // timezoneOffset positivo = oeste de UTC
+    const offsetString = `${offsetSign}${String(absOffsetHours).padStart(2, '0')}:${String(absOffsetMinutes).padStart(2, '0')}`;
+    
+    // Crear ISO strings con zona horaria local explícita
+    const startDateISO = `${year}-${month}-${day}T00:00:00.000${offsetString}`;
+    const endDateISO = `${year}-${month}-${day}T23:59:59.999${offsetString}`;
+    
+    // Opciones para getStepCount - usa "date" como clave principal
+    const stepCountOptions = {
+      date: startDateISO,
+      includeManuallyAdded: true,
+    };
+    
+    // Opciones para métodos de samples - usan startDate/endDate
+    const samplesOptions = {
+      startDate: startDateISO,
+      endDate: endDateISO,
+      includeManuallyAdded: true,
     };
 
-    console.log('📱 Obteniendo datos de Apple Health para:', date.toISOString().split('T')[0]);
-    console.log('📱 Rango de fechas:', {
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
-    });
+    console.log('📱 ══════════════════════════════════════════');
+    console.log('📱 Obteniendo datos de Apple Health');
+    console.log('📱 Fecha solicitada (local):', dateStr);
+    console.log('📱 Zona horaria:', Intl.DateTimeFormat().resolvedOptions().timeZone);
+    console.log('📱 UTC offset:', `UTC${timezoneOffsetHours >= 0 ? '+' : ''}${timezoneOffsetHours}`);
+    console.log('📱 Offset string:', offsetString);
+    console.log('📱 startDate ISO con TZ:', startDateISO);
+    console.log('📱 endDate ISO con TZ:', endDateISO);
+    console.log('📱 startDate local (verificación):', startDate.toString());
+    console.log('📱 ══════════════════════════════════════════');
 
-    // Obtener pasos - intentar múltiples métodos para asegurar que obtenemos los datos
+    // Obtener pasos - MÉTODO PRINCIPAL: getStepCount (usa HKStatisticsQuery internamente)
+    // Este método es el más preciso porque la librería nativa usa sumQuantity que agrega todas las fuentes
     const steps = await new Promise<number>((resolve) => {
-      let attempts = 0;
-      const maxAttempts = 3;
+      console.log('📱 Obteniendo pasos con getStepCount...');
+      console.log('📱 Opciones:', JSON.stringify(stepCountOptions, null, 2));
       
-      // Método 1: Intentar con getStepCount primero (método más confiable)
-      const tryGetStepCount = () => {
-        console.log('📱 Intentando obtener pasos con getStepCount...');
-        AppleHealthKit.getStepCount(options, (err: any, results: any) => {
-          if (err) {
-            console.log('⚠️ Error en getStepCount:', JSON.stringify(err, null, 2));
-            attempts++;
-            if (attempts < maxAttempts) {
-              // Intentar con getDailyStepCountSamples como fallback
-              tryGetDailyStepCountSamples();
-            } else {
-              console.warn('⚠️ No se pudieron obtener datos de pasos después de múltiples intentos');
-              resolve(0);
-            }
+      AppleHealthKit.getStepCount(stepCountOptions, (err: any, results: any) => {
+        console.log('📱 Respuesta getStepCount:', { err: err?.message || err, results });
+        
+        if (!err && results && results.value !== undefined && results.value !== null) {
+          const stepsValue = Math.round(results.value);
+          console.log('✅ Pasos obtenidos con getStepCount:', stepsValue);
+          
+          if (stepsValue > 0) {
+            resolve(stepsValue);
             return;
           }
-          
-          console.log('📱 Resultado de getStepCount:', JSON.stringify(results, null, 2));
-          
-          if (results && results.value !== undefined && results.value !== null) {
-            const stepValue = Math.round(results.value);
-            console.log('✅ Pasos obtenidos de Apple Health (getStepCount):', stepValue);
-            console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
-            resolve(stepValue);
-            return;
-          }
-          
-          console.log('⚠️ getStepCount no devolvió un valor válido. Resultado:', results);
-          
-          // Si no hay valor, intentar con getDailyStepCountSamples
-          attempts++;
-          if (attempts < maxAttempts) {
-            tryGetDailyStepCountSamples();
-          } else {
-            console.warn('⚠️ No hay datos de pasos disponibles');
-            console.log('💡 Verifica que la app tenga permisos en Configuración > Privacidad y seguridad > Salud');
-            resolve(0);
-          }
-        });
-      };
-      
-      // Método 2: Intentar con getDailyStepCountSamples
-      const tryGetDailyStepCountSamples = () => {
+        }
+        
+        // Si getStepCount falla o retorna 0, intentar con getDailyStepCountSamples como backup
+        console.log('📱 getStepCount no dio resultados, intentando getDailyStepCountSamples...');
+        
         if (AppleHealthKit.getDailyStepCountSamples) {
-          console.log('📱 Intentando obtener pasos con getDailyStepCountSamples...');
-          AppleHealthKit.getDailyStepCountSamples(options, (err: any, results: any) => {
-            if (err) {
-              console.log('⚠️ Error en getDailyStepCountSamples:', JSON.stringify(err, null, 2));
-              attempts++;
-              if (attempts >= maxAttempts) {
-                console.warn('⚠️ No se pudieron obtener datos de pasos');
-                resolve(0);
-              }
-              return;
-            }
-            
-            console.log('📱 Resultado de getDailyStepCountSamples:', {
-              esArray: Array.isArray(results),
-              longitud: results?.length,
-              primerElemento: results?.[0],
+          AppleHealthKit.getDailyStepCountSamples(samplesOptions, (err2: any, samples: any) => {
+            console.log('📱 Respuesta getDailyStepCountSamples:', { 
+              err: err2?.message || err2, 
+              samplesCount: samples?.length,
+              firstSample: samples?.[0]
             });
             
-            if (results && Array.isArray(results) && results.length > 0) {
-              // Sumar todos los pasos del día (puede haber múltiples muestras de diferentes fuentes)
-              const totalSteps = results.reduce((total: number, sample: any) => {
+            if (!err2 && samples && Array.isArray(samples) && samples.length > 0) {
+              // La librería devuelve samples con el total del día ya calculado
+              // Normalmente es un solo sample con el valor total
+              const totalSteps = samples.reduce((total: number, sample: any) => {
                 const value = sample.value || sample.count || 0;
-                console.log('📊 Muestra de pasos:', { value, sample: JSON.stringify(sample) });
+                console.log('📊 Sample:', { value, source: sample.sourceName || sample.source });
                 return total + value;
               }, 0);
               
               if (totalSteps > 0) {
-                console.log('✅ Pasos obtenidos de Apple Health (getDailyStepCountSamples):', totalSteps);
-                console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
-                console.log('📊 Muestras encontradas:', results.length);
+                console.log('✅ Pasos de getDailyStepCountSamples:', totalSteps);
                 resolve(Math.round(totalSteps));
                 return;
-              } else {
-                console.warn('⚠️ getDailyStepCountSamples devolvió muestras pero la suma es 0');
               }
-            } else {
-              console.warn('⚠️ getDailyStepCountSamples no devolvió muestras válidas');
             }
             
-            // Si llegamos aquí, no hay datos
-            attempts++;
-            if (attempts >= maxAttempts) {
-              console.warn('⚠️ No hay datos de pasos disponibles en Apple Health');
-              console.log('💡 Verifica que:');
-              console.log('   1. La app tenga permisos en Configuración > Privacidad y seguridad > Salud');
-              console.log('   2. Haya datos de pasos en la app de Salud para esta fecha');
-              console.log('   3. Los permisos incluyan "Pasos" en la lista de datos compartidos');
-              resolve(0);
-            }
+            console.warn('⚠️ No se encontraron pasos en Apple Health');
+            resolve(0);
           });
         } else {
-          console.warn('⚠️ getDailyStepCountSamples no está disponible en esta versión');
-          // Si getDailyStepCountSamples no está disponible, solo usar getStepCount
-          if (attempts >= maxAttempts) {
-            console.warn('⚠️ No se pudieron obtener datos de pasos');
-            resolve(0);
+          console.warn('⚠️ getDailyStepCountSamples no disponible');
+          resolve(0);
+        }
+      });
+    });
+
+    // Obtener distancia - MÉTODO PRINCIPAL: getDistanceWalkingRunning
+    const distance = await new Promise<number>((resolve) => {
+      console.log('📱 Obteniendo distancia...');
+      
+      AppleHealthKit.getDistanceWalkingRunning(stepCountOptions, (err: any, results: any) => {
+        console.log('📱 Respuesta getDistanceWalkingRunning:', { err: err?.message || err, results });
+        
+        if (!err && results && results.value !== undefined && results.value !== null) {
+          const distanceKm = results.value / 1000;
+          if (distanceKm > 0) {
+            console.log('✅ Distancia obtenida:', distanceKm.toFixed(2), 'km');
+            resolve(distanceKm);
+            return;
           }
         }
-      };
-      
-      // Comenzar con getStepCount
-      tryGetStepCount();
-    });
-
-    // Obtener distancia (incluye datos de Apple Watch y otras fuentes)
-    const distance = await new Promise<number>((resolve) => {
-      // Intentar con getDailyDistanceWalkingRunningSamples primero
-      if (AppleHealthKit.getDailyDistanceWalkingRunningSamples) {
-        AppleHealthKit.getDailyDistanceWalkingRunningSamples(options, (err: any, results: any) => {
-          if (err || !results || results.length === 0) {
-            // Fallback a getDistanceWalkingRunning
-            AppleHealthKit.getDistanceWalkingRunning(options, (fallbackErr: any, fallbackResults: any) => {
-              if (fallbackErr || !fallbackResults || fallbackResults.value === undefined) {
-                console.warn('⚠️ No hay datos de distancia disponibles');
-                resolve(0);
+        
+        // Fallback
+        if (AppleHealthKit.getDailyDistanceWalkingRunningSamples) {
+          AppleHealthKit.getDailyDistanceWalkingRunningSamples(samplesOptions, (err2: any, samples: any) => {
+            if (!err2 && samples && Array.isArray(samples) && samples.length > 0) {
+              const totalMeters = samples.reduce((total: number, sample: any) => total + (sample.value || 0), 0);
+              if (totalMeters > 0) {
+                console.log('✅ Distancia de samples:', (totalMeters / 1000).toFixed(2), 'km');
+                resolve(totalMeters / 1000);
                 return;
               }
-              const distanceKm = fallbackResults.value / 1000; // Convertir metros a km
-              console.log('✅ Distancia obtenida de Apple Health (getDistanceWalkingRunning):', distanceKm.toFixed(2), 'km');
-              resolve(distanceKm);
-            });
-            return;
-          }
-          // Sumar todas las muestras de distancia
-          const totalDistance = results.reduce((total: number, sample: any) => {
-            return total + (sample.value || 0);
-          }, 0) / 1000; // Convertir metros a km
-          console.log('✅ Distancia obtenida de Apple Health (getDailyDistanceWalkingRunningSamples):', totalDistance.toFixed(2), 'km');
-          resolve(totalDistance);
-        });
-      } else {
-        AppleHealthKit.getDistanceWalkingRunning(options, (err: any, results: any) => {
-          if (err) {
-            console.error('❌ Error obteniendo distancia de Apple Health:', err);
+            }
+            console.warn('⚠️ No hay datos de distancia');
             resolve(0);
-            return;
-          }
-          if (!results || results.value === undefined) {
-            console.warn('⚠️ No hay datos de distancia disponibles');
-            resolve(0);
-            return;
-          }
-          const distanceKm = results.value / 1000; // Convertir metros a km
-          console.log('✅ Distancia obtenida de Apple Health:', distanceKm.toFixed(2), 'km');
-          console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
-          resolve(distanceKm);
-        });
-      }
+          });
+        } else {
+          console.warn('⚠️ No hay datos de distancia');
+          resolve(0);
+        }
+      });
     });
 
-    // Obtener calorías activas (incluye datos de Apple Watch y otras fuentes)
+    // Obtener calorías activas - MÉTODO PRINCIPAL: getActiveEnergyBurned
     const calories = await new Promise<number>((resolve) => {
-      // Intentar con getDailyEnergyBurnedSamples primero
-      if (AppleHealthKit.getDailyEnergyBurnedSamples) {
-        AppleHealthKit.getDailyEnergyBurnedSamples(options, (err: any, results: any) => {
-          if (err || !results || results.length === 0) {
-            // Fallback a getActiveEnergyBurned
-            AppleHealthKit.getActiveEnergyBurned(options, (fallbackErr: any, fallbackResults: any) => {
-              if (fallbackErr || !fallbackResults || fallbackResults.value === undefined) {
-                console.warn('⚠️ No hay datos de calorías disponibles');
-                resolve(0);
+      console.log('📱 Obteniendo calorías...');
+      
+      AppleHealthKit.getActiveEnergyBurned(stepCountOptions, (err: any, results: any) => {
+        console.log('📱 Respuesta getActiveEnergyBurned:', { err: err?.message || err, results });
+        
+        if (!err && results && results.value !== undefined && results.value !== null) {
+          if (results.value > 0) {
+            console.log('✅ Calorías obtenidas:', Math.round(results.value));
+            resolve(Math.round(results.value));
+            return;
+          }
+        }
+        
+        // Fallback
+        if (AppleHealthKit.getDailyEnergyBurnedSamples) {
+          AppleHealthKit.getDailyEnergyBurnedSamples(samplesOptions, (err2: any, samples: any) => {
+            if (!err2 && samples && Array.isArray(samples) && samples.length > 0) {
+              const totalCal = samples.reduce((total: number, sample: any) => total + (sample.value || 0), 0);
+              if (totalCal > 0) {
+                console.log('✅ Calorías de samples:', Math.round(totalCal));
+                resolve(Math.round(totalCal));
                 return;
               }
-              console.log('✅ Calorías obtenidas de Apple Health (getActiveEnergyBurned):', fallbackResults.value);
-              resolve(fallbackResults.value);
-            });
-            return;
-          }
-          // Sumar todas las muestras de calorías
-          const totalCalories = results.reduce((total: number, sample: any) => {
-            return total + (sample.value || 0);
-          }, 0);
-          console.log('✅ Calorías obtenidas de Apple Health (getDailyEnergyBurnedSamples):', totalCalories);
-          resolve(totalCalories);
-        });
-      } else {
-        AppleHealthKit.getActiveEnergyBurned(options, (err: any, results: any) => {
-          if (err) {
-            console.error('❌ Error obteniendo calorías de Apple Health:', err);
+            }
+            console.warn('⚠️ No hay datos de calorías');
             resolve(0);
-            return;
-          }
-          if (!results || results.value === undefined) {
-            console.warn('⚠️ No hay datos de calorías disponibles');
-            resolve(0);
-            return;
-          }
-          console.log('✅ Calorías obtenidas de Apple Health:', results.value);
-          console.log('📱 Incluye datos de iPhone, Apple Watch y otras fuentes sincronizadas');
-          resolve(results.value);
-        });
-      }
+          });
+        } else {
+          console.warn('⚠️ No hay datos de calorías');
+          resolve(0);
+        }
+      });
     });
 
     // Obtener sueño (en horas)
     const sleep = await new Promise<number>((resolve) => {
-      AppleHealthKit.getSleepSamples(options, (err, results) => {
+      AppleHealthKit.getSleepSamples(samplesOptions, (err, results) => {
         if (err || !results || results.length === 0) {
           resolve(0);
           return;
@@ -790,7 +762,7 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
 
     // Obtener peso
     const weight = await new Promise<number | undefined>((resolve) => {
-      AppleHealthKit.getLatestWeight(options, (err, results) => {
+      AppleHealthKit.getLatestWeight(samplesOptions, (err, results) => {
         if (err || !results) {
           resolve(undefined);
           return;
@@ -801,7 +773,7 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
 
     // Obtener glucosa
     const glucose = await new Promise<number | undefined>((resolve) => {
-      AppleHealthKit.getBloodGlucoseSamples(options, (err, results) => {
+      AppleHealthKit.getBloodGlucoseSamples(samplesOptions, (err, results) => {
         if (err || !results || results.length === 0) {
           resolve(undefined);
           return;
@@ -813,7 +785,7 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
 
     // Obtener agua (en ml)
     const water = await new Promise<number | undefined>((resolve) => {
-      AppleHealthKit.getWater(options, (err, results) => {
+      AppleHealthKit.getWater(samplesOptions, (err, results) => {
         if (err || !results) {
           resolve(undefined);
           return;
@@ -824,7 +796,7 @@ async function getAppleHealthData(date: Date): Promise<HealthData> {
 
     // Obtener calorías consumidas
     const food = await new Promise<number | undefined>((resolve) => {
-      AppleHealthKit.getDietaryEnergy(options, (err, results) => {
+      AppleHealthKit.getDietaryEnergy(samplesOptions, (err, results) => {
         if (err || !results) {
           resolve(undefined);
           return;

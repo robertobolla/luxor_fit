@@ -18,8 +18,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.luxorfitness.app",
-      "buildNumber": "44",
+      "buildNumber": "63",
       "icon": "./assets/icon.png",
+      "requireFullScreen": true,
       "infoPlist": {
         "NSHealthShareUsageDescription": "Luxor Fitness necesita acceso a tus datos de salud para mostrarte estadísticas personalizadas de pasos, calorías, distancia y sueño.",
         "NSHealthUpdateUsageDescription": "Luxor Fitness puede actualizar tus datos de salud cuando registres entrenamientos.",
@@ -42,6 +43,7 @@
         "backgroundColor": "#0a0a0a"
       },
       "package": "com.luxorfitness.app",
+      "versionCode": 63,
       "permissions": [
         "ACTIVITY_RECOGNITION",
         "android.permission.ACTIVITY_RECOGNITION",

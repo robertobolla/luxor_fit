@@ -103,8 +103,9 @@ export default function TrainerInvitationsScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ffb300" />
-          <Text style={styles.loadingText}>Cargando invitaciones...</Text>
-        </View>
+          <Text style={styles.loadingText}>
+  {t('invitations.loading')}
+</Text>        </View>
       </SafeAreaView>
     );
   }
@@ -118,8 +119,9 @@ export default function TrainerInvitationsScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
-        <Text style={styles.title}>Invitaciones de Entrenador</Text>
-        <View style={{ width: 40 }} />
+        <Text style={styles.title}>
+  {t('invitations.title')}
+</Text>        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -152,10 +154,8 @@ export default function TrainerInvitationsScreen() {
                 </View>
 
                 <Text style={styles.invitationText}>
-                  quiere ser tu entrenador personal y tener acceso a tus estadísticas,
-                  entrenamientos, nutrición y progreso.
-                </Text>
-
+  {t('invitations.description')}
+</Text>
                 <View style={styles.invitationActions}>
                   <TouchableOpacity
                     style={[
@@ -177,7 +177,7 @@ export default function TrainerInvitationsScreen() {
                     ) : (
                       <>
                         <Ionicons name="checkmark-circle" size={20} color="#ffffff" />
-                        <Text style={styles.acceptButtonText}>Aceptar</Text>
+                        <Text style={styles.acceptButtonText}>{t('common.accept')}</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -198,7 +198,7 @@ export default function TrainerInvitationsScreen() {
                     disabled={respondingTo === invitation.id}
                   >
                     <Ionicons name="close-circle" size={20} color="#ff4444" />
-                    <Text style={styles.rejectButtonText}>Rechazar</Text>
+                    <Text style={styles.rejectButtonText}>{t('common.reject')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -207,10 +207,12 @@ export default function TrainerInvitationsScreen() {
         ) : (
           <View style={styles.emptyState}>
             <Ionicons name="mail-outline" size={64} color="#666" />
-            <Text style={styles.emptyTitle}>No tienes invitaciones</Text>
-            <Text style={styles.emptyDescription}>
-              Cuando un entrenador te envíe una invitación, aparecerá aquí
-            </Text>
+            <Text style={styles.emptyTitle}>
+  {t('invitations.emptyTitle')}
+</Text>         
+<Text style={styles.emptyDescription}>
+  {t('invitations.emptyDescription')}
+</Text>
           </View>
         )}
       </ScrollView>

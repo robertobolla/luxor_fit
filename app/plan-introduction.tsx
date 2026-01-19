@@ -114,10 +114,13 @@ export default function PlanIntroductionScreen() {
           <Text style={styles.errorTitle}>Oops!</Text>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={generateIntroduction}>
-            <Text style={styles.retryButtonText}>Intentar nuevamente</Text>
-          </TouchableOpacity>
+          <Text style={styles.retryButtonText}>
+  {t('actions.retry')}
+</Text>          </TouchableOpacity>
           <TouchableOpacity style={styles.skipButton} onPress={handleContinue}>
-            <Text style={styles.skipButtonText}>Continuar sin introducción</Text>
+          <Text style={styles.skipButtonText}>
+  {t('actions.continueWithoutIntro')}
+</Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -131,56 +134,64 @@ export default function PlanIntroductionScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Ionicons name="fitness" size={48} color="#ffb300" />
-          <Text style={styles.headerTitle}>¡Tu Plan Está Listo, {userData.name}!</Text>
-          <Text style={styles.headerSubtitle}>
-            Hemos analizado tu perfil y creado un plan personalizado
-          </Text>
+
+          <Text style={styles.headerTitle}>
+  {t('plan.readyTitle', { name: userData.name })}
+</Text>     
+  <Text style={styles.headerSubtitle}>
+  {t('plan.readySubtitle')}
+</Text>
         </View>
 
         {/* Resumen del Perfil */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📊 Tu Perfil</Text>
-          <View style={styles.profileCard}>
+        <Text style={styles.sectionTitle}>{t('plan.sections.yourProfile')}</Text>
+        <View style={styles.profileCard}>
             <View style={styles.profileRow}>
-              <Text style={styles.profileLabel}>Nivel:</Text>
+              <Text style={styles.profileLabel}>{t('profile.level')}:</Text>
               <Text style={styles.profileValue}>{getFitnessLevelText(userData.fitness_level)}</Text>
             </View>
             <View style={styles.profileRow}>
-              <Text style={styles.profileLabel}>Objetivos:</Text>
-              <Text style={styles.profileValue}>
+            <Text style={styles.profileLabel}>
+  {t('profile.goals')}
+</Text>              <Text style={styles.profileValue}>
                 {userData.goals.map(getGoalText).join(', ')}
               </Text>
             </View>
             <View style={styles.profileRow}>
-              <Text style={styles.profileLabel}>Disponibilidad:</Text>
-              <Text style={styles.profileValue}>
-                {userData.available_days} días/semana, {userData.session_duration} min/sesión
-              </Text>
+            <Text style={styles.profileLabel}>
+  {t('profile.availability')}
+</Text>
+<Text style={styles.profileValue}>
+  {t('profile.availabilityDetails', {
+    days: userData.available_days,
+    minutes: userData.session_duration,
+  })}
+</Text>
             </View>
           </View>
         </View>
 
         {/* Introducción Generada por IA */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🎯 Tu Plan Personalizado</Text>
-          <View style={styles.introductionCard}>
+        <Text style={styles.sectionTitle}>{t('plan.sections.yourPersonalPlan')}</Text>
+        <View style={styles.introductionCard}>
             <Text style={styles.introductionText}>{introduction}</Text>
           </View>
         </View>
 
         {/* Próximos Pasos */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🚀 Próximos Pasos</Text>
-          <View style={styles.stepsCard}>
+        <Text style={styles.sectionTitle}>{t('plan.sections.nextSteps')}</Text>
+        <View style={styles.stepsCard}>
             <View style={styles.stepItem}>
               <View style={styles.stepNumber}>
                 <Text style={styles.stepNumberText}>1</Text>
               </View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Explora tu Dashboard</Text>
-                <Text style={styles.stepDescription}>
-                  Conoce tus métricas y estadísticas de salud
-                </Text>
+              <Text style={styles.stepTitle}>{t('plan.nextSteps.dashboardTitle')}</Text>
+              <Text style={styles.stepDescription}>{t('plan.nextSteps.dashboardDesc')}</Text>
+
               </View>
             </View>
 
@@ -189,10 +200,9 @@ export default function PlanIntroductionScreen() {
                 <Text style={styles.stepNumberText}>2</Text>
               </View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Comienza a Entrenar</Text>
-                <Text style={styles.stepDescription}>
-                  Accede a tus rutinas personalizadas en la pestaña Entrenamientos
-                </Text>
+              <Text style={styles.stepTitle}>{t('plan.nextSteps.trainTitle')}</Text>
+              <Text style={styles.stepDescription}>{t('plan.nextSteps.trainDesc')}</Text>
+
               </View>
             </View>
 
@@ -201,10 +211,9 @@ export default function PlanIntroductionScreen() {
                 <Text style={styles.stepNumberText}>3</Text>
               </View>
               <View style={styles.stepContent}>
-                <Text style={styles.stepTitle}>Registra tu Progreso</Text>
-                <Text style={styles.stepDescription}>
-                  Monitorea tus ejercicios y ve tu evolución
-                </Text>
+              <Text style={styles.stepTitle}>{t('plan.nextSteps.progressTitle')}</Text>
+              <Text style={styles.stepDescription}>{t('plan.nextSteps.progressDesc')}</Text>
+
               </View>
             </View>
           </View>
@@ -212,8 +221,8 @@ export default function PlanIntroductionScreen() {
 
         {/* Botón de Continuar */}
         <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-          <Text style={styles.continueButtonText}>¡Comenzar mi Viaje!</Text>
-          <Ionicons name="arrow-forward" size={24} color="#1a1a1a" />
+        <Text style={styles.continueButtonText}>{t('plan.ctaStartJourney')}</Text>
+        <Ionicons name="arrow-forward" size={24} color="#1a1a1a" />
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />

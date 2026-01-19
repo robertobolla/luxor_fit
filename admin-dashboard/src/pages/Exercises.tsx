@@ -73,8 +73,8 @@ export default function Exercises() {
   const [userRole, setUserRole] = useState<'admin' | 'socio' | 'empresario' | 'user' | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<ExerciseVideoRow | null>(null);
-  const [newExerciseName, setNewExerciseName] = useState('');
   const [metadataModalOpen, setMetadataModalOpen] = useState(false);
+  const [isCreatingNewExercise, setIsCreatingNewExercise] = useState(false);
   const [exerciseForMetadata, setExerciseForMetadata] = useState<ExerciseVideoRow | null>(null);
   const [videoModalOpen, setVideoModalOpen] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -278,39 +278,47 @@ export default function Exercises() {
       </div>
 
       {isAdmin && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <input
-            type="text"
-            placeholder="Nuevo ejercicio (nombre canónico)"
-            value={newExerciseName}
-            onChange={(e) => setNewExerciseName(e.target.value)}
-            style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #2a2a2a', background: '#0a0a0a', color: '#fff', width: 320 }}
-          />
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
           <button
             className="btn-primary"
-            disabled={saving || newExerciseName.trim().length < 3}
-            onClick={async () => {
-            setSaving(true);
-            setError(null);
-            try {
-              const { error } = await supabase
-                .from('exercise_videos')
-                .upsert({
-                  canonical_name: newExerciseName.trim(),
-                  name_variations: [],
-                  is_primary: true,
-                  priority: 1,
-                }, { onConflict: 'canonical_name' });
-              if (error) throw error;
-              setNewExerciseName('');
-              await load();
-            } catch (e: any) {
-              setError(e.message || 'Error al crear ejercicio');
-            } finally {
-              setSaving(false);
-            }
+            disabled={saving}
+            onClick={() => {
+              // Crear ejercicio vacío para el modal
+              setExerciseForMetadata({
+                id: '', // ID vacío indica que es nuevo
+                canonical_name: '',
+                name_en: null,
+                name_variations: null,
+                video_url: null,
+                storage_path: null,
+                is_storage_video: null,
+                thumbnail_url: null,
+                description: null,
+                language: null,
+                is_primary: true,
+                priority: 1,
+                category: null,
+                muscles: null,
+                muscle_zones: null,
+                movement_type: null,
+                exercise_type: null,
+                equipment: null,
+                equipment_alternatives: null,
+                goals: null,
+                uses_time: false,
+              });
+              setIsCreatingNewExercise(true);
+              setMetadataModalOpen(true);
+            }}
+            style={{ 
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: '0.95rem',
+              padding: '10px 16px',
             }}
           >
+            <span style={{ fontSize: '1.2rem' }}>+</span>
             Añadir ejercicio
           </button>
         </div>
@@ -515,6 +523,7 @@ export default function Exercises() {
                             className="btn-secondary"
                             onClick={() => {
                               setExerciseForMetadata(row);
+                              setIsCreatingNewExercise(false);
                               setMetadataModalOpen(true);
                             }}
                             style={{ fontSize: '0.85rem', padding: '6px 12px' }}
@@ -632,9 +641,11 @@ export default function Exercises() {
         <ExerciseMetadataModal
           exercise={exerciseForMetadata}
           isOpen={metadataModalOpen}
+          isNew={isCreatingNewExercise}
           onClose={() => {
             setMetadataModalOpen(false);
             setExerciseForMetadata(null);
+            setIsCreatingNewExercise(false);
           }}
           onSave={async () => {
             console.log('🔄 Recargando ejercicios después de guardar...');

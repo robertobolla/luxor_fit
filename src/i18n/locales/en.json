@@ -7,6 +7,29 @@
     "profile": "Profile"
   },
   "common": {
+    "weekDaysShort": [
+      "M",
+      "T",
+      "W",
+      "T",
+      "F",
+      "S",
+      "S"
+    ],
+    "monthsShort": [
+      "J",
+      "F",
+      "M",
+      "A",
+      "M",
+      "J",
+      "J",
+      "A",
+      "S",
+      "O",
+      "N",
+      "D"
+    ],
     "locale": "en-US",
     "loading": "Loading...",
     "add": "Add",
@@ -14,7 +37,9 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "edit": "Edit",
+    "now": "Now",
     "confirm": "Confirm",
+    "activate": "Activate",
     "back": "Back",
     "next": "Next",
     "skip": "Skip",
@@ -29,6 +54,7 @@
     "search": "Search",
     "noResults": "No results",
     "tryAgain": "Try again",
+    "retry": "Retry",
     "close": "Close",
     "continue": "Continue",
     "start": "Start",
@@ -85,10 +111,32 @@
     "noDataYet": "No data yet",
     "loadingData": "Loading data..."
   },
+  "invitations": {
+    "loading": "Loading invitations...",
+    "title": "Trainer invitations",
+    "description": "wants to be your personal trainer and have access to your statistics, workouts, nutrition, and progress.",
+    "emptyTitle": "You have no invitations",
+    "emptyDescription": "When a trainer sends you an invitation, it will appear here"
+  },
+  "students": {
+    "emptyTitle": "You don’t have any students yet",
+    "emptyDescription": "Add your first student to start training them and view their statistics"
+  },
   "metrics": {
     "weight": "Weight",
     "fat": "Fat",
     "muscle": "Muscle"
+  },
+  "stats": {
+    "exerciseDays": "exercise days"
+  },
+  "filters": {
+    "duration": "Duration",
+    "distance": "Distance"
+  },
+  "sections": {
+    "exercises": "Exercises",
+    "statistics": "Statistics"
   },
   "bodyProgress": {
     "title": "Body Progress",
@@ -194,6 +242,27 @@
     "configureNutrition": "Configure your nutrition plan",
     "offlineMessage": "No internet connection. Some features may not be available.",
     "updatingData": "Updating data..."
+  },
+  "workouts": {
+    "statsTitle": "📊 Workout statistics",
+    "completed": "Completed ({{period}})",
+    "avgMinutes": "Avg. minutes",
+    "recent": "Recent workouts",
+    "duration": "{{minutes}} minutes"
+  },
+  "bodyMetrics": {
+    "title": "📏 Body metrics",
+    "viewEvolution": "View progress",
+    "currentWeight": "Current weight",
+    "bodyFat": "Body fat",
+    "muscleMass": "Muscle mass",
+    "empty": "The student hasn’t logged their weight yet",
+    "emptySubtext": "You’ll be able to see progress once their first metrics are recorded"
+  },
+  "dailyActivity": {
+    "titleLastDays": "👟 Daily activity (last {{days}} days)",
+    "avgStepsPerDay": "Average steps/day",
+    "totalSteps": "Total steps"
   },
   "workout": {
     "title": "Workouts",
@@ -340,7 +409,27 @@
       "paused": "Paused"
     },
     "stats": {
-      "time": "Time"
+      "time": "Time",
+      "loading": "Loading statistics...",
+      "personalRecord": "Personal record",
+      "progress": "Progress",
+      "totalVolume": "Total volume",
+      "lastSession": "Last session"
+    },
+    "charts": {
+      "maxWeightPerSession": "📈 Max weight per session",
+      "totalVolumePerSession": "💪 Total volume per session"
+    },
+    "history": {
+      "sessions": "📜 Session history"
+    },
+    "empty": {
+      "title": "No data",
+      "noSets": "You haven’t logged any sets for this exercise yet.",
+      "firstWorkout": "Complete your first workout to see your statistics."
+    },
+    "sessions": {
+      "bestSet": "🏆 Best: {{value}}"
     },
     "time": "Time",
     "avgSpeed": "Avg. speed",
@@ -393,6 +482,24 @@
   "nutrition": {
     "title": "Nutrition",
     "generatePlan": "Generate Nutrition Plan",
+    "nutritionGoal": "Nutrition Goal",
+    "loseFat": "Lose Fat",
+    "maintain": "Maintain",
+    "gainMuscle": "Build Muscle",
+    "yourData": "Your Data",
+    "sex": "Sex",
+    "height": "Height",
+    "weight": "Weight",
+    "currentWeight": "Current Weight",
+    "fitnessLevel": "Fitness Level",
+    "beginner": "Beginner",
+    "intermediate": "Intermediate",
+    "advanced": "Advanced",
+    "bodyComposition": "Body Composition",
+    "optional": "Optional - for greater accuracy",
+    "bodyFat": "Body Fat %",
+    "muscleMass": "Muscle %",
+    "precisionNote": "Enter your body composition for more accurate calculations. Without this data, we'll use estimates based on your fitness level. The plan will automatically adapt based on your results and weekly progress.",
     "weeklyPlan": "Weekly Plan",
     "todayMeals": "Today's Meals",
     "breakfast": "Breakfast",
@@ -417,16 +524,55 @@
     "nutritionFacts": "Nutrition Facts",
     "weeklyRenewal": "Weekly Renewal",
     "enterMetrics": "Enter your metrics",
-    "currentWeight": "Current weight",
-    "bodyFat": "Body fat",
-    "muscleMass": "Muscle mass",
-    "optional": "optional",
     "adherence": "Adherence",
-    "lowAdherence": "Low adherence",
-    "lowAdherenceMessage": "Higher adherence is needed to adjust correctly. Plan will repeat.",
+    "weeklyRenewalTitle": "Weekly Renewal",
+    "weeklyRenewalSubtitle": "Time to evaluate your progress",
+    "renewalTooEarly": "Insufficient evaluation period",
+    "renewalTooEarlyMessage": "To make precise adjustments based on your real progress, a minimum follow-up period of 4 days is required. Your plan has been active for {{days}} days.",
+    "renewalTooEarlyRecommendation": "We recommend completing at least 4 days with your current plan before making modifications. Would you like to repeat this week and evaluate results at the end?",
+    "lowAdherence": "Insufficient adherence",
+    "lowAdherenceMessage": "Your adherence level this week was {{percentage}}%. To make accurate adjustments to your plan, we need at least 70% adherence (logging food at least 5 of 7 days).",
+    "lowAdherenceRecommendation": "We suggest repeating this week while logging your meals more frequently. Remember that plan adjustments are based on what you log, so complete tracking ensures more accurate recommendations.",
+    "goodAdherence": "Excellent adherence!",
+    "goodAdherenceMessage": "Your adherence level this week was {{percentage}}%. You're ready to evaluate your progress.",
+    "enterCurrentMetrics": "Enter your current metrics",
+    "currentWeightRequired": "Current weight (required)",
+    "bodyFatOptional": "Body fat % (optional)",
+    "muscleMassOptional": "Muscle mass % (optional)",
+    "registryImportantNote": "Important: Adjustments are calculated based on the foods you logged during the week. If your logging wasn't accurate, we recommend correcting it before adjusting or repeating the week for more exact results.",
+    "repeatWeek": "Repeat Week",
+    "adjustPlan": "Adjust Plan",
     "planAdjusted": "Plan adjusted",
     "planAdjustedMessage": "We've adjusted your diet by reducing calories by {{percentage}}% while maintaining protein.",
-    "planRepeated": "Plan will repeat this week",
+    "planRepeated": "Week repeated",
+    "planRepeatedMessage": "Your plan has been reset. Continue with the same meal structure this week.",
+    "weekAnalysis": "Your week analysis",
+    "weightChange": "Weight change",
+    "lost": "You lost",
+    "gained": "You gained",
+    "maintained": "You maintained",
+    "avgCaloriesConsumed": "Calories consumed (average)",
+    "adjustmentApplied": "Adjustment applied",
+    "newCalories": "New calories",
+    "proteinKept": "Protein (unchanged to preserve muscle)",
+    "carbsReduced": "Carbohydrates",
+    "fatsReduced": "Fats",
+    "adjustmentExplanation": "Adjustment explanation",
+    "loseFatSlowProgress": "Your progress was slower than expected. We slightly reduced your calories to accelerate fat loss while maintaining protein to preserve muscle.",
+    "loseFatGoodProgress": "Excellent progress! You're losing fat at a healthy rate. We're keeping your current plan.",
+    "loseFatFastProgress": "You're losing weight too fast, which may affect your muscle mass. We slightly increased your calories for more sustainable progress.",
+    "gainMuscleSlowProgress": "You're not gaining enough weight to build muscle. We increased your calories to favor growth.",
+    "gainMuscleGoodProgress": "Excellent! You're gaining weight at an optimal rate to build muscle. We're keeping your plan.",
+    "gainMuscleFastProgress": "You're gaining weight too fast, which may mean fat accumulation. We slightly reduced calories.",
+    "maintainGained": "You've gained weight. We slightly reduced calories to return to your target weight.",
+    "maintainLost": "You've lost weight. We slightly increased calories to maintain your weight.",
+    "maintainGood": "Perfect! Your weight is stable. We're continuing with the same plan.",
+    "weekNumber": "Week {{number}}",
+    "currentWeek": "Current week",
+    "daysLogged": "days logged",
+    "minRequired": "Minimum required",
+    "initialWeight": "Initial weight",
+    "excellent": "Excellent",
     "enterWeight": "Enter your weight to continue",
     "cantAccessPlan": "Close - I won't be able to see the weekly plan",
     "kg": "kg",
@@ -491,10 +637,6 @@
     "generateWithAI": "Generate with AI",
     "generateWithAIDesc": "Use artificial intelligence to generate a nutrition plan based on your goals",
     "activeWorkoutPlan": "Active Workout Plan",
-    "fitnessLevel": "Fitness Level",
-    "beginner": "Beginner",
-    "intermediate": "Intermediate",
-    "advanced": "Advanced",
     "goals": "Goals",
     "activityTypes": "Activity Types",
     "weightLoss": "Weight loss",
@@ -529,6 +671,18 @@
     "noMealsForDay": "No meals for this day",
     "selectGoalError": "Please select a goal for your diet.",
     "saved": "Saved!",
+    "aiGeneratedPlan": "AI Plan",
+    "aiPlanDescription": "Nutrition plan generated by artificial intelligence based on your goals and personal data.",
+    "planGenerated": "Plan Generated!",
+    "activatePlanQuestion": "Your nutrition plan has been successfully created. Would you like to activate it now as your main plan?",
+    "saveOnly": "Save Only",
+    "planSaved": "Plan Saved",
+    "planSavedToLibrary": "Your plan has been saved to the library. You can activate it whenever you want.",
+    "planActivated": "Plan Activated!",
+    "planActivatedMessage": "Your new nutrition plan is now active.",
+    "activationError": "Could not activate the plan. Please try again.",
+    "week": "Week",
+    "meal": "Meal",
     "createNewPlanQuestion": "Do you want to create a new meal plan with the new configuration?",
     "enterFoodAndWeight": "Enter the food name and its weight.",
     "weightMustBePositive": "Weight must be a positive number.",
@@ -748,7 +902,11 @@
     "deleteAccountWarning": "This action is irreversible. All your data will be permanently deleted.",
     "userFallback": "User",
     "notSpecified": "Not specified",
-    "username": "Username"
+    "username": "Username",
+    "level": "Level:",
+    "goals": "Goals:",
+    "availability": "Availability:",
+    "availabilityDetails": "{{days}} days/week, {{minutes}} min/session"
   },
   "trainer": {
     "title": "Trainer Mode",
@@ -825,7 +983,25 @@
     "noPurchases": "No Purchases",
     "noPurchasesMessage": "No previous purchases found associated with your account.",
     "selectPlan": "Please select a plan",
-    "purchaseError": "Could not complete purchase"
+    "purchaseError": "Could not complete purchase",
+    "havePromoCode": "Have a promo code?",
+    "enterPromoCode": "Enter your code",
+    "validateCode": "Apply",
+    "invalidCode": "Invalid or expired code",
+    "codeValidationError": "Error validating code",
+    "codeApplied": "Code applied!",
+    "discountApplied": "Discount applied",
+    "codeApplyError": "Error applying code",
+    "codeFrom": "Code from {{partner}}",
+    "activateFreeAccess": "Activate free access",
+    "noOffersAvailable": "No plans available at the moment. Please try again.",
+    "loadError": "Error loading offers. Check your connection.",
+    "loadingOffers": "Loading offers...",
+    "havePartnerCode": "Have a discount code?",
+    "enterPartnerCode": "Enter your code",
+    "applyCode": "Apply",
+    "discountApplied": "Discount applied!",
+    "partnerDiscount": "Special partner price"
   },
   "tutorial": {
     "initialTour": {
@@ -1003,7 +1179,92 @@
   },
   "time": {
     "minutes_one": "{{count}} minute",
-    "minutes_other": "{{count}} minutes"
+    "minutes_other": "{{count}} minutes",
+    "thisWeek": "This week",
+    "thisMonth": "This month"
+  },
+  "week": {
+    "daysCompleted": "{{current}} of {{total}} days completed",
+    "percentCompleted": "{{percent}}% completed"
+  },
+  "month": {
+    "gymDays": "{{count}} gym days in {{month}}"
+  },
+  "actions": {
+    "addExercise": "Add exercise",
+    "saveActivity": "Save activity",
+    "stopAndSave": "Stop and save",
+    "saving": "Saving...",
+    "saveChanges": "Save changes",
+    "start": "Get started!",
+    "retry": "Try again",
+    "continueWithoutIntro": "Continue without introduction",
+    "opening": "Opening...",
+    "sendMessage": "Send message",
+    "understood": "Got it"
+  },
+  "trainingPlan": {
+    "loadingStats": "Loading statistics...",
+    "activeTitle": "🏋️ Active training plan",
+    "weeks": "{{count}} weeks",
+    "daysPerWeek": "{{count}} days/week",
+    "edit": "Edit plan",
+    "empty": "No active plan"
+  },
+  "plan": {
+    "readyTitle": "Your plan is ready, {{name}}!",
+    "readySubtitle": "We’ve analyzed your profile and created a personalized plan",
+    "sections": {
+      "yourProfile": "📊 Your Profile",
+      "yourPersonalPlan": "🎯 Your Personalized Plan",
+      "nextSteps": "🚀 Next Steps"
+    },
+    "nextSteps": {
+      "dashboardTitle": "Explore your Dashboard",
+      "dashboardDesc": "Discover your health metrics and statistics",
+      "trainTitle": "Start Training",
+      "trainDesc": "Access your personalized routines in the Workouts tab",
+      "progressTitle": "Track Your Progress",
+      "progressDesc": "Monitor your exercises and see your progress over time"
+    },
+    "ctaStartJourney": "Start my journey!"
+  },
+  "form": {
+    "durationMinutesRequired": "Duration (minutes) *",
+    "intensity": {
+      "label": "Intensity level",
+      "low": "Low intensity",
+      "medium": "Medium intensity",
+      "high": "High intensity"
+    },
+    "username": "Username",
+    "required": "*",
+    "usernameHint": "This will be your unique identifier on the social network (e.g., @juan_fitness)",
+    "message": "Tu mensaje"
+  },
+  "support": {
+    "headerSubtitle": "Escribe tu mensaje y nos pondremos en contacto contigo lo antes posible",
+    "infoText": "Se incluirá tu información de usuario para que podamos ayudarte mejor"
+  },
+  "status": {
+    "available": "✓ Available"
+  },
+  "tracking": {
+    "startTracking": "Start tracking",
+    "realTimeGps": "Track your activity with real-time GPS",
+    "liveGpsMap": "Live GPS map",
+    "time": "Time",
+    "distance": "Distance"
+  },
+  "headers": {
+    "exercise": "Exercise",
+    "gym": "Gym",
+    "completedWorkouts": "Completed workouts"
+  },
+  "activity": {
+    "logActivity": "Log an activity",
+    "manualEntry": "Manually enter your exercise details",
+    "chooseActivity": "Choose activity"
   },
   "friends": {
     "title": "Friends",
@@ -1033,7 +1294,12 @@
     "accept": "Accept",
     "reject": "Reject",
     "message": "Message",
-    "userNotFound": "User"
+    "userNotFound": "User",
+    "selectTitle": "Select a friend",
+    "loading": "Loading friends...",
+    "emptyTitle": "No friends available",
+    "emptySubtext": "All your friends are already students",
+    "searchInList": "Search in friends list"
   },
   "errors": {
     "networkError": "Connection error",
@@ -1056,7 +1322,9 @@
       "submit": "Update Plan",
       "cancel": "Cancel",
       "required": "Required",
-      "updating": "Updating..."
+      "updating": "Updating...",
+      "addStudentTitle": "Add new student",
+      "addStudentSubtitle": "Search for your student by username"
     },
     "planExpiration": {
       "title": "Plan Expired",
@@ -1187,7 +1455,17 @@
     "cameraPermission": "We need camera access",
     "photoPermission": "We need access to your photos",
     "locationPermission": "We need access to your location",
-    "healthPermission": "We need access to your health data"
+    "healthPermission": "We need access to your health data",
+    "cancelEdit": {
+      "title": "Cancel editing",
+      "message": "Are you sure you want to cancel? Your changes will not be saved.",
+      "continueEditing": "Continue editing",
+      "confirmCancel": "Yes, cancel"
+    },
+    "emailError": {
+      "title": "Error",
+      "message": "Could not open the email app. Please send your inquiry manually to soporte@luxorfitnessapp.com"
+    }
   },
   "buttons": {
     "add": "Add",
@@ -1410,6 +1688,40 @@
       "health": "Health",
       "stressAndMindfulness": "Stress and mindfulness",
       "nutrition": "Nutrition"
+    },
+    "customize": {
+      "title": "Customize Today",
+      "cancel": "Cancel",
+      "save": "Save",
+      "setPriorities": "Set your priorities",
+      "showHideMetrics": "Show or hide other metrics",
+      "hiddenMetricsInfo": "Hidden metrics won't appear in your dashboard",
+      "selectUpToMetrics": "Select up to 3 metrics",
+      "customPriorities": "Custom priorities",
+      "addMetrics": "Add metrics",
+      "priorities": {
+        "sleepBetter": "Sleep better",
+        "sleepBetterDesc": "Sleep duration • Steps • Mindfulness days",
+        "eatBetter": "Eat better",
+        "eatBetterDesc": "Food • Steps • Weight",
+        "loseWeight": "Lose weight",
+        "loseWeightDesc": "Weight • Calories • Steps",
+        "activeLifestyle": "Active lifestyle",
+        "activeLifestyleDesc": "Steps • Distance • Calories"
+      },
+      "metrics": {
+        "steps": "Steps",
+        "distance": "Distance",
+        "caloriesBurned": "Calories burned",
+        "sleepDuration": "Sleep duration",
+        "exerciseDays": "Exercise days",
+        "weight": "Weight",
+        "glucose": "Glucose",
+        "mindfulnessDays": "Mindfulness days",
+        "food": "Food",
+        "water": "Water",
+        "heartRate": "Heart rate"
+      }
     }
   },
   "mealLog": {
@@ -1468,7 +1780,12 @@
     "invalidFields": "Invalid fields",
     "correctErrors": "Please correct the errors in the form before proceeding.",
     "invalidUsername": "Username is not valid",
-    "usernameInUse": "This username is already in use. Please choose another."
+    "usernameInUse": "This username is already in use. Please choose another.",
+    "genderQuestion": "What is your gender?",
+    "successTitle": "Perfect!",
+    "successSubtitle": "We have created your personalized profile",
+    "successDescription": "We can now generate workouts tailored specifically for you",
+    "loadingProfile": "Loading profile..."
   },
   "chatScreen": {
     "user": "User",
@@ -1894,7 +2211,23 @@
     "newMessage": "New message",
     "loading": "Loading notifications...",
     "emptySubtext": "Your notifications will appear here",
-    "emptyTitle": "You have no notifications"
+    "emptyTitle": "You have no notifications",
+    "planNotFound": "Plan not found or already processed",
+    "processError": "Could not process the request",
+    "acceptError": "Could not accept the plan",
+    "rejectError": "Could not reject the plan",
+    "rejectPlanTitle": "Reject plan",
+    "rejectPlanMessage": "Are you sure you want to reject this plan? This action cannot be undone.",
+    "acceptWorkoutTitle": "Workout plan",
+    "acceptNutritionTitle": "Nutrition plan",
+    "acceptPlanMessage": "Do you want to add this plan to your library or also activate it as your current plan?",
+    "sentBy": "Sent by {{name}}",
+    "acceptAndActivate": "Accept and activate",
+    "acceptOnly": "Just add to my library",
+    "reject": "Reject",
+    "accept": "Accept",
+    "youAccepted": "You have accepted this plan",
+    "youRejected": "You have rejected this plan"
   },
   "permissions": {
     "requiredTitle": "Permission required"
@@ -1979,7 +2312,12 @@
     "planDeleted": "Plan deleted successfully",
     "deleteError": "Error deleting plan",
     "planDuplicated": "Plan duplicated successfully",
-    "duplicateError": "Error duplicating plan"
+    "duplicateError": "Error duplicating plan",
+    "sharePlan": "Send to a friend",
+    "planSharedSuccess": "Plan sent",
+    "planSharedMessage": "Your nutrition plan has been sent. Your friend will receive a notification.",
+    "shareError": "Could not send the plan",
+    "noFriendsError": "You don't have friends yet. Go to the Home tab and add friends to share plans."
   },
   "customPlanSetup": {
     "title": "Create Custom Plan",
@@ -2030,7 +2368,10 @@
     "unit": "unit",
     "add": "Add",
     "editMealName": "Edit Meal Name",
-    "mealNamePlaceholder": "E.g.: Breakfast, Lunch..."
+    "mealNamePlaceholder": "E.g.: Breakfast, Lunch...",
+    "saveAfterPlanCreation": "Meals will be saved when you save the complete plan",
+    "dayUpdated": "Day has been updated successfully",
+    "saveError": "Error saving day"
   },
   "foodTypes": {
     "proteins": "Proteins",
@@ -2044,6 +2385,8 @@
     "prepared_meals": "Prepared Meals",
     "beverages": "Beverages",
     "supplements": "Supplements",
+    "dressings": "Dressings",
+    "sweets": "Sweets",
     "other": "Other"
   },
   "planDetail": {
@@ -2167,6 +2510,7 @@
     "week_singular": "week",
     "week_plural": "weeks",
     "updatePlanErrorMessage": "Could not update the plan. Please try again.",
+    "savedLocallyOnly": "Changes saved locally. If cloud save fails, press \"Save Plan\" on the previous screen.",
     "successTitle": "Success!",
     "trainerPlanUpdated": "Student's plan updated successfully",
     "planUpdatedAndActivated": "Plan updated and activated successfully",

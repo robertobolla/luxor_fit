@@ -54,19 +54,93 @@ export default function TodayDetailScreen() {
       // Usar selectedDate si viene como parámetro, si no, usar hoy
       const targetDate = selectedDate;
 
-      // Cargar target del día
-      const { data: targetData, error: targetError } = await supabase
-        .from('nutrition_targets')
-        .select('*')
+      // Calcular qué día de la semana es (1-7, donde 1 es lunes)
+      const dateObj = new Date(targetDate + 'T12:00:00');
+      let dayOfWeek = dateObj.getDay(); // 0 = domingo, 1 = lunes, etc.
+      dayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek; // Convertir domingo de 0 a 7
+
+      // Cargar target del plan activo
+      const { data: activePlan, error: planError } = await supabase
+        .from('nutrition_plans')
+        .select(`
+          id,
+          current_week_number,
+          nutrition_plan_weeks (
+            id,
+            week_number,
+            nutrition_plan_days (
+              id,
+              day_number,
+              day_name,
+              target_calories,
+              target_protein,
+              target_carbs,
+              target_fat,
+              nutrition_plan_meals (
+                id,
+                nutrition_plan_meal_foods (
+                  calculated_calories,
+                  calculated_protein,
+                  calculated_carbs,
+                  calculated_fat
+                )
+              )
+            )
+          )
+        `)
         .eq('user_id', user.id)
-        .eq('date', targetDate)
+        .eq('is_active', true)
         .maybeSingle();
 
-      if (targetError && targetError.code !== 'PGRST116') {
-        console.error('Error loading target:', targetError);
+      if (planError) {
+        console.error('Error loading active plan:', planError);
       }
 
-      setTodayTarget((targetData as NutritionTarget) || null);
+      // Obtener el target del día correspondiente del plan activo
+      if (activePlan) {
+        const weeks = activePlan.nutrition_plan_weeks || [];
+        const currentWeekNumber = activePlan.current_week_number || 1;
+        const currentWeek = weeks.find((w: any) => w.week_number === currentWeekNumber) || weeks[0];
+        
+        if (currentWeek) {
+          const todayPlan = (currentWeek.nutrition_plan_days || []).find(
+            (d: any) => d.day_number === dayOfWeek
+          );
+          
+          if (todayPlan) {
+            // Calcular macros totales de los alimentos del plan
+            let totalCalories = 0;
+            let totalProtein = 0;
+            let totalCarbs = 0;
+            let totalFat = 0;
+
+            for (const meal of todayPlan.nutrition_plan_meals || []) {
+              for (const food of meal.nutrition_plan_meal_foods || []) {
+                totalCalories += food.calculated_calories || 0;
+                totalProtein += food.calculated_protein || 0;
+                totalCarbs += food.calculated_carbs || 0;
+                totalFat += food.calculated_fat || 0;
+              }
+            }
+
+            // Si hay alimentos, usar los totales calculados; si no, usar los targets guardados
+            const hasFood = totalCalories > 0 || totalProtein > 0 || totalCarbs > 0 || totalFat > 0;
+
+            setTodayTarget({
+              calories: hasFood ? Math.round(totalCalories) : (todayPlan.target_calories || 0),
+              protein_g: hasFood ? Math.round(totalProtein) : (todayPlan.target_protein || 0),
+              carbs_g: hasFood ? Math.round(totalCarbs) : (todayPlan.target_carbs || 0),
+              fats_g: hasFood ? Math.round(totalFat) : (todayPlan.target_fat || 0),
+            } as NutritionTarget);
+          } else {
+            setTodayTarget(null);
+          }
+        } else {
+          setTodayTarget(null);
+        }
+      } else {
+        setTodayTarget(null);
+      }
 
       // Cargar logs del día
       const { data: logsData } = await supabase

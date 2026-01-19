@@ -4,7 +4,7 @@
 // Componente para registrar todas las series de un ejercicio
 // Muestra historial del último entrenamiento del mismo músculo
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,6 +17,82 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../src/services/supabase';
+import { useUnitsStore, getWeightInUserUnit, getWeightFromUserUnit } from '../../src/store/unitsStore';
+
+// Componente separado para el input de peso que maneja su propio estado
+interface WeightInputProps {
+  weightKg: number | null;
+  weightUnit: 'kg' | 'lb';
+  onChangeWeight: (valueInKg: number | null) => void;
+}
+
+function WeightInput({ weightKg, weightUnit, onChangeWeight }: WeightInputProps) {
+  // Estado local para el texto del input
+  const [inputValue, setInputValue] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Sincronizar el valor inicial cuando el componente se monta o cuando cambia weightKg desde fuera
+  useEffect(() => {
+    if (!isFocused) {
+      if (weightKg !== null && weightKg !== undefined) {
+        const displayValue = getWeightInUserUnit(weightKg, weightUnit);
+        // Mostrar sin decimales innecesarios
+        const formatted = displayValue % 1 === 0 ? displayValue.toString() : displayValue.toFixed(1);
+        setInputValue(formatted);
+      } else {
+        setInputValue('');
+      }
+    }
+  }, [weightKg, weightUnit, isFocused]);
+
+  const handleChangeText = useCallback((text: string) => {
+    // Permitir solo números y un punto decimal
+    const cleaned = text.replace(/[^0-9.]/g, '');
+    // Evitar múltiples puntos
+    const parts = cleaned.split('.');
+    const finalValue = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : cleaned;
+    
+    setInputValue(finalValue);
+
+    // Convertir a kg y notificar al padre
+    if (finalValue === '' || finalValue === '.') {
+      onChangeWeight(null);
+    } else {
+      const numValue = parseFloat(finalValue);
+      if (!isNaN(numValue)) {
+        const weightInKg = getWeightFromUserUnit(numValue, weightUnit);
+        onChangeWeight(weightInKg);
+      }
+    }
+  }, [weightUnit, onChangeWeight]);
+
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+  }, []);
+
+  const handleBlur = useCallback(() => {
+    setIsFocused(false);
+    // Formatear el valor al perder el foco
+    if (weightKg !== null && weightKg !== undefined) {
+      const displayValue = getWeightInUserUnit(weightKg, weightUnit);
+      const formatted = displayValue % 1 === 0 ? displayValue.toString() : displayValue.toFixed(1);
+      setInputValue(formatted);
+    }
+  }, [weightKg, weightUnit]);
+
+  return (
+    <TextInput
+      style={styles.input}
+      keyboardType="decimal-pad"
+      placeholder="0"
+      placeholderTextColor="#555"
+      value={inputValue}
+      onChangeText={handleChangeText}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+    />
+  );
+}
 
 interface ExerciseSet {
   set_number: number;
@@ -64,11 +140,26 @@ export function ExerciseSetTracker({
   planId,
   dayName,
 }: ExerciseSetTrackerProps) {
+  const { weightUnit } = useUnitsStore();
+  const weightUnitLabel = weightUnit === 'kg' ? 'KG' : 'LB';
   const [sets, setSets] = useState<ExerciseSet[]>([]);
   const [previousSets, setPreviousSets] = useState<PreviousSet[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  
+  // Ref para controlar si debemos notificar cambios al padre
+  // Solo notificamos cuando el usuario interactúa, no en la carga inicial
+  const shouldNotifyParent = React.useRef(false);
+  const isInitialLoad = React.useRef(true);
+
+  // Notificar al padre cuando los sets cambien (solo si el usuario interactuó)
+  useEffect(() => {
+    if (shouldNotifyParent.current && !isInitialLoad.current) {
+      onSetsChange?.(sets);
+      shouldNotifyParent.current = false;
+    }
+  }, [sets, onSetsChange]);
 
   useEffect(() => {
     loadTodaySetsOrInitialize();
@@ -119,17 +210,26 @@ export function ExerciseSetTracker({
           duration_seconds: set.duration_seconds,
         }));
         setSets(loadedSets);
-        // ⚠️ NO llamar onSetsChange aquí para evitar setState durante render
-        // onSetsChange se llamará cuando el usuario modifique algo
+        // Marcar que la carga inicial terminó (después de un pequeño delay para evitar race conditions)
+        setTimeout(() => {
+          isInitialLoad.current = false;
+        }, 100);
         console.log('✅ Series cargadas:', loadedSets.length);
       } else {
         // No hay series guardadas, inicializar vacías
         console.log('ℹ️ No hay series guardadas, inicializando vacías');
         initializeSets();
+        // Marcar que la carga inicial terminó
+        setTimeout(() => {
+          isInitialLoad.current = false;
+        }, 100);
       }
     } catch (err) {
       console.error('Error loading sets:', err);
       initializeSets();
+      setTimeout(() => {
+        isInitialLoad.current = false;
+      }, 100);
     }
   };
 
@@ -273,15 +373,16 @@ export function ExerciseSetTracker({
   const updateSet = (setNumber: number, field: 'reps' | 'weight_kg' | 'duration_seconds', value: string) => {
     const numValue = value === '' ? null : parseFloat(value);
     
-    setSets(prevSets => {
-      const newSets = prevSets.map(set => 
+    // Marcar que debemos notificar al padre (se hará en el useEffect)
+    shouldNotifyParent.current = true;
+    
+    setSets(prevSets => 
+      prevSets.map(set => 
         set.set_number === setNumber
           ? { ...set, [field]: numValue }
           : set
+      )
       );
-      onSetsChange?.(newSets);
-      return newSets;
-    });
   };
 
   // Agregar una nueva serie
@@ -297,30 +398,37 @@ export function ExerciseSetTracker({
       duration_seconds: null,
     };
     
-    setSets(prevSets => {
-      const newSets = [...prevSets, newSet];
-      onSetsChange?.(newSets);
-      return newSets;
-    });
+    // Marcar que debemos notificar al padre (se hará en el useEffect)
+    shouldNotifyParent.current = true;
+    
+    setSets(prevSets => [...prevSets, newSet]);
   };
 
   // Eliminar una serie
   const removeSet = (setNumber: number) => {
     if (sets.length <= 1) return; // No permitir eliminar si solo hay una serie
     
-    setSets(prevSets => {
+    // Marcar que debemos notificar al padre (se hará en el useEffect)
+    shouldNotifyParent.current = true;
+    
+    setSets(prevSets => 
       // Simplemente filtrar la serie eliminada sin renumerar
       // Los números de serie se mantienen consistentes con el plan original
-      const filtered = prevSets.filter(set => set.set_number !== setNumber);
-      onSetsChange?.(filtered);
-      return filtered;
-    });
+      prevSets.filter(set => set.set_number !== setNumber)
+    );
   };
 
   // Obtener el dato anterior para una serie específica
   const getPreviousData = (setNumber: number, field: 'reps' | 'weight_kg'): string => {
     const previousSet = previousSets.find(s => s.set_number === setNumber);
     if (!previousSet || previousSet[field] === null) return '-';
+    
+    // Si es peso, convertir a la unidad del usuario
+    if (field === 'weight_kg' && previousSet.weight_kg !== null) {
+      const weightInUserUnit = getWeightInUserUnit(previousSet.weight_kg, weightUnit);
+      return weightInUserUnit.toFixed(1);
+    }
+    
     return previousSet[field]!.toString();
   };
 
@@ -446,13 +554,13 @@ export function ExerciseSetTracker({
           </View>
           <View style={[styles.headerCell, styles.previousCell]}>
             <Text style={styles.headerText}>ANT.</Text>
-            <Text style={styles.headerText}>KG</Text>
+            <Text style={styles.headerText}>{weightUnitLabel}</Text>
           </View>
           <View style={[styles.headerCell, styles.inputCell]}>
             <Text style={styles.headerText}>{usesTime ? 'SEG' : 'REPS'}</Text>
           </View>
           <View style={[styles.headerCell, styles.inputCell]}>
-            <Text style={styles.headerText}>KG</Text>
+            <Text style={styles.headerText}>{weightUnitLabel}</Text>
           </View>
           <View style={[styles.headerCell, styles.actionCell]} />
         </View>
@@ -497,15 +605,14 @@ export function ExerciseSetTracker({
                 />
               </View>
 
-              {/* Input KG */}
+              {/* Input KG/LB */}
               <View style={[styles.cell, styles.inputCell]}>
-                <TextInput
-                  style={styles.input}
-                  keyboardType="decimal-pad"
-                  placeholder="0"
-                  placeholderTextColor="#555"
-                  value={set.weight_kg?.toString() || ''}
-                  onChangeText={(value) => updateSet(set.set_number, 'weight_kg', value)}
+                <WeightInput
+                  weightKg={set.weight_kg}
+                  weightUnit={weightUnit}
+                  onChangeWeight={(valueInKg) => {
+                    updateSet(set.set_number, 'weight_kg', valueInKg !== null ? valueInKg.toString() : '');
+                  }}
                 />
               </View>
 

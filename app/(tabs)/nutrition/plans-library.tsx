@@ -6,19 +6,21 @@ import {
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
-  Alert,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
+import { getFriends } from '@/services/friendsService';
+import { shareNutritionPlan } from '@/services/sharedNutritionService';
+import { FriendSelectionModal } from '@/components/CustomModal';
 
 interface NutritionPlan {
   id: string;
-  name: string;
+  plan_name: string;
   description: string | null;
   is_active: boolean;
   is_ai_generated: boolean;
@@ -36,6 +38,48 @@ export default function PlansLibraryScreen() {
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [activating, setActivating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  
+  // Estados para compartir
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [friends, setFriends] = useState<any[]>([]);
+  const [isLoadingFriends, setIsLoadingFriends] = useState(false);
+  
+  // Estados para modal de mensaje
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [messageModalData, setMessageModalData] = useState<{
+    type: 'success' | 'error' | 'info';
+    title: string;
+    message: string;
+    onClose?: () => void;
+  } | null>(null);
+
+  // Estados para modal de confirmación
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmModalData, setConfirmModalData] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    confirmColor?: string;
+  } | null>(null);
+
+  const showMessage = (type: 'success' | 'error' | 'info', title: string, message: string, onClose?: () => void) => {
+    setMessageModalData({ type, title, message, onClose });
+    setShowMessageModal(true);
+  };
+
+  const closeMessageModal = () => {
+    setShowMessageModal(false);
+    if (messageModalData?.onClose) {
+      messageModalData.onClose();
+    }
+    setMessageModalData(null);
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void, confirmText?: string, confirmColor?: string) => {
+    setConfirmModalData({ title, message, onConfirm, confirmText, confirmColor });
+    setShowConfirmModal(true);
+  };
 
   const loadPlans = async () => {
     if (!user?.id) return;
@@ -53,7 +97,7 @@ export default function PlansLibraryScreen() {
       setPlans((data as NutritionPlan[]) || []);
     } catch (err) {
       console.error('Error loading plans:', err);
-      Alert.alert(t('common.error'), t('plansLibrary.loadError'));
+      showMessage('error', t('common.error'), t('plansLibrary.loadError'));
     } finally {
       setLoading(false);
     }
@@ -84,53 +128,50 @@ export default function PlansLibraryScreen() {
 
       if (error) throw error;
 
-      Alert.alert(
+      showMessage(
+        'success',
         t('plansLibrary.planActivated'),
-        t('plansLibrary.planActivatedMessage', { name: selectedPlan.name })
+        t('plansLibrary.planActivatedMessage', { name: selectedPlan.plan_name })
       );
       setShowOptionsModal(false);
       loadPlans();
     } catch (err) {
       console.error('Error activating plan:', err);
-      Alert.alert(t('common.error'), t('plansLibrary.activateError'));
+      showMessage('error', t('common.error'), t('plansLibrary.activateError'));
     } finally {
       setActivating(false);
     }
   };
 
-  const handleDeletePlan = async () => {
+  const handleDeletePlan = () => {
     if (!selectedPlan) return;
 
-    Alert.alert(
+    showConfirm(
       t('plansLibrary.deletePlan'),
-      t('plansLibrary.deleteConfirmation', { name: selectedPlan.name }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              const { error } = await (supabase as any)
-                .from('nutrition_plans')
-                .delete()
-                .eq('id', selectedPlan.id);
+      t('plansLibrary.deleteConfirmation', { name: selectedPlan.plan_name }),
+      async () => {
+        setShowConfirmModal(false);
+        setDeleting(true);
+        try {
+          const { error } = await (supabase as any)
+            .from('nutrition_plans')
+            .delete()
+            .eq('id', selectedPlan.id);
 
-              if (error) throw error;
+          if (error) throw error;
 
-              Alert.alert(t('common.success'), t('plansLibrary.planDeleted'));
-              setShowOptionsModal(false);
-              loadPlans();
-            } catch (err) {
-              console.error('Error deleting plan:', err);
-              Alert.alert(t('common.error'), t('plansLibrary.deleteError'));
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
+          showMessage('success', t('common.success'), t('plansLibrary.planDeleted'));
+          setShowOptionsModal(false);
+          loadPlans();
+        } catch (err) {
+          console.error('Error deleting plan:', err);
+          showMessage('error', t('common.error'), t('plansLibrary.deleteError'));
+        } finally {
+          setDeleting(false);
+        }
+      },
+      t('common.delete'),
+      '#f44336'
     );
   };
 
@@ -164,7 +205,7 @@ export default function PlansLibraryScreen() {
         .from('nutrition_plans')
         .insert({
           user_id: user.id,
-          name: `${planData.name} (${t('common.copy')})`,
+          plan_name: `${planData.plan_name} (${t('common.copy')})`,
           description: planData.description,
           is_active: false,
           is_ai_generated: false,
@@ -236,12 +277,59 @@ export default function PlansLibraryScreen() {
         }
       }
 
-      Alert.alert(t('common.success'), t('plansLibrary.planDuplicated'));
+      showMessage('success', t('common.success'), t('plansLibrary.planDuplicated'));
       setShowOptionsModal(false);
       loadPlans();
     } catch (err) {
       console.error('Error duplicating plan:', err);
-      Alert.alert(t('common.error'), t('plansLibrary.duplicateError'));
+      showMessage('error', t('common.error'), t('plansLibrary.duplicateError'));
+    }
+  };
+
+  const handleSharePlan = async () => {
+    if (!selectedPlan || !user?.id) return;
+
+    setIsLoadingFriends(true);
+    setShowOptionsModal(false);
+
+    try {
+      interface FriendsResult {
+        success: boolean;
+        data?: any[];
+        error?: string;
+      }
+      
+      const friendsResult = (await getFriends(user.id)) as FriendsResult;
+
+      if (friendsResult.success && friendsResult.data && friendsResult.data.length > 0) {
+        setFriends(friendsResult.data);
+        setShowShareModal(true);
+      } else {
+        showMessage('info', t('common.info'), t('plansLibrary.noFriendsError'));
+      }
+    } catch (err) {
+      console.error('Error loading friends:', err);
+      showMessage('error', t('common.error'), t('common.errorOccurred'));
+    } finally {
+      setIsLoadingFriends(false);
+    }
+  };
+
+  const handleSelectFriend = async (friendId: string) => {
+    if (!selectedPlan || !user?.id) return;
+
+    try {
+      const result = await shareNutritionPlan(user.id, friendId, selectedPlan.id);
+      
+      if (result.success) {
+        setShowShareModal(false);
+        showMessage('success', t('plansLibrary.planSharedSuccess'), t('plansLibrary.planSharedMessage'));
+      } else {
+        showMessage('error', t('common.error'), result.error || t('plansLibrary.shareError'));
+      }
+    } catch (err) {
+      console.error('Error sharing plan:', err);
+      showMessage('error', t('common.error'), t('plansLibrary.shareError'));
     }
   };
 
@@ -264,24 +352,26 @@ export default function PlansLibraryScreen() {
         setShowOptionsModal(true);
       }}
     >
-      <View style={styles.planCardHeader}>
-        <View style={styles.planCardTitleRow}>
-          <Text style={styles.planCardName} numberOfLines={1}>
-            {plan.name}
-          </Text>
-          {plan.is_active && (
-            <View style={styles.activeBadge}>
-              <Ionicons name="checkmark-circle" size={14} color="#4CAF50" />
-              <Text style={styles.activeBadgeText}>{t('plansLibrary.active')}</Text>
-            </View>
-          )}
-        </View>
+      {/* Badges en la esquina superior izquierda */}
+      <View style={styles.badgesRow}>
+        {plan.is_active && (
+          <View style={styles.activeBadge}>
+            <Ionicons name="checkmark-circle" size={14} color="#ffb300" />
+            <Text style={styles.activeBadgeText}>{t('plansLibrary.active')}</Text>
+          </View>
+        )}
         {plan.is_ai_generated && (
           <View style={styles.aiBadge}>
-            <Ionicons name="sparkles" size={12} color="#ffb300" />
+            <Ionicons name="sparkles" size={12} color="#9C27B0" />
             <Text style={styles.aiBadgeText}>IA</Text>
           </View>
         )}
+      </View>
+
+      <View style={styles.planCardHeader}>
+        <Text style={styles.planCardName} numberOfLines={1}>
+          {plan.plan_name}
+        </Text>
       </View>
 
       {plan.description && (
@@ -315,7 +405,9 @@ export default function PlansLibraryScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <>
+      <Stack.Screen options={{ headerShown: false }} />
+      <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -380,7 +472,7 @@ export default function PlansLibraryScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle} numberOfLines={1}>
-                {selectedPlan?.name}
+                {selectedPlan?.plan_name}
               </Text>
               <TouchableOpacity onPress={() => setShowOptionsModal(false)}>
                 <Ionicons name="close" size={24} color="#888" />
@@ -417,6 +509,21 @@ export default function PlansLibraryScreen() {
               <Text style={styles.modalOptionText}>{t('plansLibrary.duplicatePlan')}</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity
+              style={styles.modalOption}
+              onPress={handleSharePlan}
+              disabled={isLoadingFriends}
+            >
+              {isLoadingFriends ? (
+                <ActivityIndicator size="small" color="#2196F3" />
+              ) : (
+                <Ionicons name="send-outline" size={22} color="#2196F3" />
+              )}
+              <Text style={[styles.modalOptionText, { color: '#2196F3' }]}>
+                {t('plansLibrary.sharePlan')}
+              </Text>
+            </TouchableOpacity>
+
             {!selectedPlan?.is_active && (
               <TouchableOpacity
                 style={styles.modalOption}
@@ -451,7 +558,88 @@ export default function PlansLibraryScreen() {
           </View>
         </TouchableOpacity>
       </Modal>
-    </SafeAreaView>
+
+      {/* Modal de selección de amigo para compartir */}
+      <FriendSelectionModal
+        visible={showShareModal}
+        onClose={() => setShowShareModal(false)}
+        friends={friends}
+        onSelectFriend={handleSelectFriend}
+        title={`${t('plansLibrary.sharePlan')} "${selectedPlan?.plan_name || ''}"`}
+      />
+
+      {/* Modal de mensaje */}
+      <Modal
+        visible={showMessageModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeMessageModal}
+      >
+        <View style={styles.messageModalOverlay}>
+          <View style={styles.messageModalContent}>
+            <View style={styles.messageModalIcon}>
+              <Ionicons 
+                name={
+                  messageModalData?.type === 'success' ? 'checkmark-circle' : 
+                  messageModalData?.type === 'error' ? 'alert-circle' : 'information-circle'
+                } 
+                size={60} 
+                color={
+                  messageModalData?.type === 'success' ? '#4CAF50' : 
+                  messageModalData?.type === 'error' ? '#f44336' : '#ffb300'
+                } 
+              />
+            </View>
+            <Text style={styles.messageModalTitle}>{messageModalData?.title}</Text>
+            <Text style={styles.messageModalText}>{messageModalData?.message}</Text>
+            <TouchableOpacity
+              style={styles.messageModalButton}
+              onPress={closeMessageModal}
+            >
+              <Text style={styles.messageModalButtonText}>{t('common.ok')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de confirmación */}
+      <Modal
+        visible={showConfirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowConfirmModal(false)}
+      >
+        <View style={styles.messageModalOverlay}>
+          <View style={styles.messageModalContent}>
+            <View style={styles.messageModalIcon}>
+              <Ionicons name="help-circle" size={60} color="#ffb300" />
+            </View>
+            <Text style={styles.messageModalTitle}>{confirmModalData?.title}</Text>
+            <Text style={styles.messageModalText}>{confirmModalData?.message}</Text>
+            <View style={styles.confirmButtonsRow}>
+              <TouchableOpacity
+                style={styles.confirmCancelButton}
+                onPress={() => setShowConfirmModal(false)}
+              >
+                <Text style={styles.confirmCancelButtonText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.confirmActionButton,
+                  confirmModalData?.confirmColor ? { backgroundColor: confirmModalData.confirmColor } : {}
+                ]}
+                onPress={() => confirmModalData?.onConfirm?.()}
+              >
+                <Text style={styles.confirmActionButtonText}>
+                  {confirmModalData?.confirmText || t('common.confirm')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -540,21 +728,20 @@ const styles = StyleSheet.create({
     borderColor: '#333',
   },
   activePlanCard: {
-    borderColor: '#4CAF50',
+    borderColor: '#ffb300',
     borderWidth: 2,
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
   },
   planCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
-  },
-  planCardTitleRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginRight: 30,
+    paddingRight: 30,
   },
   planCardName: {
     fontSize: 17,
@@ -565,7 +752,7 @@ const styles = StyleSheet.create({
   activeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    backgroundColor: 'rgba(255, 179, 0, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -574,12 +761,12 @@ const styles = StyleSheet.create({
   activeBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#4CAF50',
+    color: '#ffb300',
   },
   aiBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 179, 0, 0.15)',
+    backgroundColor: 'rgba(156, 39, 176, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -588,7 +775,7 @@ const styles = StyleSheet.create({
   aiBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#ffb300',
+    color: '#9C27B0',
   },
   planCardDescription: {
     fontSize: 13,
@@ -673,6 +860,83 @@ const styles = StyleSheet.create({
   },
   modalOptionText: {
     fontSize: 16,
+    color: '#fff',
+  },
+  // Estilos para modal de mensaje
+  messageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  messageModalContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 24,
+    padding: 32,
+    width: '100%',
+    alignItems: 'center',
+    maxWidth: 340,
+  },
+  messageModalIcon: {
+    marginBottom: 20,
+  },
+  messageModalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  messageModalText: {
+    fontSize: 15,
+    color: '#aaa',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  messageModalButton: {
+    backgroundColor: '#ffb300',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    minWidth: 150,
+    alignItems: 'center',
+  },
+  messageModalButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#000',
+  },
+  // Estilos para modal de confirmación
+  confirmButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  confirmCancelButton: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  confirmCancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#888',
+  },
+  confirmActionButton: {
+    flex: 1,
+    backgroundColor: '#ffb300',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  confirmActionButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
     color: '#fff',
   },
 });

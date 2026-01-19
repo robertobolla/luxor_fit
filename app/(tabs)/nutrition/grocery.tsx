@@ -17,17 +17,28 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import i18n from '@/i18n';
 import { useUser } from '@clerk/clerk-expo';
-import { getMealPlan, buildGroceryList } from '../../../src/services/nutrition';
-import { GroceryItem } from '../../../src/types/nutrition';
+import { supabase } from '@/services/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { EmptyState } from '../../../src/components/EmptyStates';
 import { getFriendlyErrorMessage } from '../../../src/utils/errorMessages';
+
+interface GroceryItem {
+  food_id: string;
+  food_name: string;
+  grams: number;
+  checked: boolean;
+}
+
+const GROCERY_STORAGE_KEY = 'grocery_checked_items';
 
 export default function GroceryListScreen() {
   const { t } = useTranslation();
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(true);
   const [groceryList, setGroceryList] = useState<GroceryItem[]>([]);
+  const [storageKey, setStorageKey] = useState<string>('');
 
   useEffect(() => {
     if (user?.id) {
@@ -35,33 +46,131 @@ export default function GroceryListScreen() {
     }
   }, [user]);
 
-  // Recargar lista cada vez que la pantalla recibe focus
-  useFocusEffect(
-    React.useCallback(() => {
-      if (user?.id) {
-        loadGroceryList();
-      }
-    }, [user])
-  );
+  // NO recargar en focus para mantener el estado guardado
+  // Solo cargar al montar el componente
+
+  // Guardar items seleccionados cuando cambien
+  useEffect(() => {
+    if (storageKey && groceryList.length > 0) {
+      saveCheckedItems();
+    }
+  }, [groceryList]);
+
+  const saveCheckedItems = async () => {
+    try {
+      const checkedIds = groceryList
+        .filter(item => item.checked)
+        .map(item => item.food_id);
+      await AsyncStorage.setItem(storageKey, JSON.stringify(checkedIds));
+    } catch (err) {
+      console.error('Error saving checked items:', err);
+    }
+  };
+
+  const loadCheckedItems = async (key: string): Promise<string[]> => {
+    try {
+      const stored = await AsyncStorage.getItem(key);
+      return stored ? JSON.parse(stored) : [];
+    } catch (err) {
+      console.error('Error loading checked items:', err);
+      return [];
+    }
+  };
 
   const loadGroceryList = async () => {
     if (!user?.id) return;
 
     setIsLoading(true);
     try {
-      // Obtener lunes de esta semana
-      const today = new Date();
-      const dayOfWeek = today.getDay();
-      const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-      const monday = new Date(today);
-      monday.setDate(today.getDate() + diff);
-      const mondayStr = monday.toISOString().split('T')[0];
+      // Obtener el plan activo del nuevo sistema (nutrition_plans)
+      const { data: activePlan, error: planError } = await supabase
+        .from('nutrition_plans')
+        .select(`
+          id,
+          current_week_number,
+          nutrition_plan_weeks (
+            id,
+            week_number,
+            nutrition_plan_days (
+              id,
+              nutrition_plan_meals (
+                id,
+                nutrition_plan_meal_foods (
+                  quantity,
+                  quantity_unit,
+                  foods (
+                    id,
+                    name_es,
+                    name_en
+                  )
+                )
+              )
+            )
+          )
+        `)
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle();
 
-      const plan = await getMealPlan(user.id, mondayStr);
-      if (plan) {
-        const list = buildGroceryList(plan);
-        setGroceryList(list);
+      if (planError) throw planError;
+
+      if (!activePlan) {
+        setGroceryList([]);
+        return;
       }
+
+      // Crear clave única para el almacenamiento
+      const currentWeekNumber = activePlan.current_week_number || 1;
+      const key = `${GROCERY_STORAGE_KEY}_${activePlan.id}_${currentWeekNumber}`;
+      setStorageKey(key);
+
+      // Cargar items previamente seleccionados
+      const checkedIds = await loadCheckedItems(key);
+
+      // Obtener la semana actual del plan
+      const weeks = activePlan.nutrition_plan_weeks || [];
+      const currentWeek = weeks.find((w: any) => w.week_number === currentWeekNumber) || weeks[0];
+
+      if (!currentWeek) {
+        setGroceryList([]);
+        return;
+      }
+
+      // Agregar todos los alimentos de la semana
+      const foodMap: Record<string, { name: string; grams: number }> = {};
+      const lang = i18n.language;
+
+      for (const day of currentWeek.nutrition_plan_days || []) {
+        for (const meal of day.nutrition_plan_meals || []) {
+          for (const mealFood of meal.nutrition_plan_meal_foods || []) {
+            const food = mealFood.foods;
+            if (!food) continue;
+
+            const foodName = lang === 'es' ? food.name_es : (food.name_en || food.name_es);
+            const quantity = mealFood.quantity || 0;
+            // Convertir unidades a gramos aproximados si es necesario
+            const grams = mealFood.quantity_unit === 'units' ? quantity * 100 : quantity;
+
+            if (foodMap[food.id]) {
+              foodMap[food.id].grams += grams;
+            } else {
+              foodMap[food.id] = { name: foodName, grams };
+            }
+          }
+        }
+      }
+
+      // Convertir a lista ordenada con estado guardado
+      const list: GroceryItem[] = Object.entries(foodMap)
+        .map(([foodId, item]) => ({
+          food_id: foodId,
+          food_name: item.name,
+          grams: Math.round(item.grams),
+          checked: checkedIds.includes(foodId),
+        }))
+        .sort((a, b) => a.food_name.localeCompare(b.food_name));
+
+      setGroceryList(list);
     } catch (err) {
       console.error('Error loading grocery list:', err);
       const friendlyMessage = getFriendlyErrorMessage(err, { 
@@ -78,6 +187,14 @@ export default function GroceryListScreen() {
     const newList = [...groceryList];
     newList[index].checked = !newList[index].checked;
     setGroceryList(newList);
+  };
+
+  const clearAllChecked = async () => {
+    const newList = groceryList.map(item => ({ ...item, checked: false }));
+    setGroceryList(newList);
+    if (storageKey) {
+      await AsyncStorage.removeItem(storageKey);
+    }
   };
 
   const checkedCount = groceryList.filter((item) => item.checked).length;
@@ -124,7 +241,13 @@ export default function GroceryListScreen() {
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('groceryList.title')}</Text>
-        <View style={{ width: 24 }} />
+        {checkedCount > 0 ? (
+          <TouchableOpacity onPress={clearAllChecked} style={styles.clearButton}>
+            <Ionicons name="refresh-outline" size={22} color="#ffb300" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 38 }} />
+        )}
       </View>
       
       {/* Info banner */}
@@ -189,6 +312,9 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   backIconButton: {
+    padding: 8,
+  },
+  clearButton: {
     padding: 8,
   },
   infoBanner: {

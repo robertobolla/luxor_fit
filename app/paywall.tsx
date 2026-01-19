@@ -26,6 +26,7 @@ import {
   PRODUCT_IDS,
 } from '../src/services/revenueCatService';
 import { PurchasesPackage } from 'react-native-purchases';
+import { supabase } from '../src/services/supabase';
 
 export default function PaywallScreen() {
   const { t } = useTranslation();
@@ -37,11 +38,16 @@ export default function PaywallScreen() {
   const { signOut } = useAuth();
   const router = useRouter();
   const { isActive, loading: subLoading, refresh } = useSubscription();
+  
+  // Estado para mostrar error si no hay ofertas
+  const [offeringsError, setOfferingsError] = useState<string | null>(null);
 
   // Inicializar RevenueCat y cargar ofertas
   useEffect(() => {
     async function init() {
       try {
+        setOfferingsError(null);
+        
         // Inicializar RevenueCat
         await initializeRevenueCat(user?.id);
         
@@ -52,33 +58,85 @@ export default function PaywallScreen() {
         
         // Cargar ofertas
         const offering = await getOfferings();
-        if (offering?.availablePackages) {
-          setPackages(offering.availablePackages);
-          // Seleccionar el mensual por defecto
-          const monthly = offering.availablePackages.find(
-            pkg => pkg.product.identifier === PRODUCT_IDS.MONTHLY
+        if (offering?.availablePackages && offering.availablePackages.length > 0) {
+          // Filtrar solo productos normales (no partner)
+          const normalPackages = offering.availablePackages.filter(
+            pkg => 
+              pkg.product.identifier === PRODUCT_IDS.MONTHLY ||
+              pkg.product.identifier === PRODUCT_IDS.YEARLY
           );
-          setSelectedPackage(monthly || offering.availablePackages[0]);
+          
+          if (normalPackages.length > 0) {
+            setPackages(normalPackages);
+            // Seleccionar el mensual por defecto
+            const monthly = normalPackages.find(
+              pkg => pkg.product.identifier === PRODUCT_IDS.MONTHLY
+            );
+            setSelectedPackage(monthly || normalPackages[0]);
+          } else {
+            console.warn('No hay productos normales disponibles');
+            setOfferingsError(t('paywall.noOffersAvailable'));
+          }
+        } else {
+          console.warn('No hay ofertas disponibles de RevenueCat');
+          setOfferingsError(t('paywall.noOffersAvailable'));
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Error inicializando paywall:', error);
+        setOfferingsError(error.message || t('paywall.loadError'));
       } finally {
         setLoading(false);
       }
     }
     
     init();
-  }, [user?.id]);
+  }, [user?.id, t]);
+
+  // Función para verificar perfil y redirigir apropiadamente
+  const checkProfileAndRedirect = useCallback(async () => {
+    if (!user?.id) {
+      router.replace('/(tabs)/home');
+      return;
+    }
+
+    try {
+      console.log('🔍 Verificando perfil para usuario después de pago:', user.id);
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('id, name, username')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error('❌ Error al verificar perfil:', error);
+        router.replace('/(tabs)/home');
+        return;
+      }
+
+      const hasProfile = !!data && !!data.name && !!data.username;
+      console.log('📊 Usuario tiene perfil completo:', hasProfile);
+
+      if (hasProfile) {
+        router.replace('/(tabs)/home');
+      } else {
+        // Usuario no tiene perfil, ir al onboarding
+        router.replace('/onboarding');
+      }
+    } catch (error) {
+      console.error('Error verificando perfil:', error);
+      router.replace('/(tabs)/home');
+    }
+  }, [user?.id, router]);
 
   // Redirigir si ya tiene suscripción activa
   useEffect(() => {
     if (!subLoading && isActive) {
       const timer = setTimeout(() => {
-        router.replace('/(tabs)/home');
+        checkProfileAndRedirect();
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [isActive, subLoading, router]);
+  }, [isActive, subLoading, checkProfileAndRedirect]);
 
   const handlePurchase = useCallback(async () => {
     if (!selectedPackage) {
@@ -97,9 +155,9 @@ export default function PaywallScreen() {
           [
             {
               text: t('common.start'),
-              onPress: () => {
-                refresh();
-                router.replace('/(tabs)/home');
+              onPress: async () => {
+                await refresh();
+                await checkProfileAndRedirect();
               },
             },
           ]
@@ -114,7 +172,7 @@ export default function PaywallScreen() {
     } finally {
       setPurchasing(false);
     }
-  }, [selectedPackage, refresh, router, t]);
+  }, [selectedPackage, refresh, t, checkProfileAndRedirect]);
 
   const handleRestore = useCallback(async () => {
     setPurchasing(true);
@@ -128,9 +186,9 @@ export default function PaywallScreen() {
           [
             {
               text: t('common.continue'),
-              onPress: () => {
-                refresh();
-                router.replace('/(tabs)/home');
+              onPress: async () => {
+                await refresh();
+                await checkProfileAndRedirect();
               },
             },
           ]
@@ -146,7 +204,7 @@ export default function PaywallScreen() {
     } finally {
       setPurchasing(false);
     }
-  }, [refresh, router, t]);
+  }, [refresh, t, checkProfileAndRedirect]);
 
   const handleManageSubscription = useCallback(async () => {
     const url = await getManagementURL();
@@ -189,13 +247,6 @@ export default function PaywallScreen() {
     if (period === 'P1M') return `${price}${t('paywall.perMonth')}`;
     if (period === 'P1Y') return `${price}${t('paywall.perYear')}`;
     return price;
-  };
-
-  const getSavingsText = (pkg: PurchasesPackage) => {
-    if (pkg.product.identifier === PRODUCT_IDS.YEARLY) {
-      return t('paywall.save', { percentage: '31' });
-    }
-    return null;
   };
 
   if (loading) {
@@ -260,7 +311,8 @@ export default function PaywallScreen() {
         
         {packages.map((pkg) => {
           const isSelected = selectedPackage?.identifier === pkg.identifier;
-          const savings = getSavingsText(pkg);
+          const isYearlyProduct = pkg.product.identifier === PRODUCT_IDS.YEARLY;
+          const savings = isYearlyProduct ? t('paywall.save', { percentage: '31' }) : null;
           
           return (
             <TouchableOpacity
@@ -281,10 +333,10 @@ export default function PaywallScreen() {
               <View style={styles.planContent}>
                 <View style={styles.planInfo}>
                   <Text style={[styles.planName, isSelected && styles.planNameSelected]}>
-                    {pkg.product.identifier === PRODUCT_IDS.YEARLY ? t('paywall.yearly') : t('paywall.monthly')}
+                    {isYearlyProduct ? t('paywall.yearly') : t('paywall.monthly')}
                   </Text>
                   <Text style={styles.planDescription}>
-                    {pkg.product.identifier === PRODUCT_IDS.YEARLY 
+                    {isYearlyProduct 
                       ? t('paywall.bestValue')
                       : t('paywall.fullFlexibility')}
                   </Text>
@@ -313,17 +365,71 @@ export default function PaywallScreen() {
         </Text>
       </View>
 
+      {/* Mensaje de error si no hay ofertas */}
+      {offeringsError && (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={24} color="#f44336" />
+          <Text style={styles.errorText}>{offeringsError}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={() => {
+              setLoading(true);
+              setOfferingsError(null);
+              // Reintentar carga
+              (async () => {
+                try {
+                  await initializeRevenueCat(user?.id);
+                  if (user?.id) await identifyUser(user.id);
+                  const offering = await getOfferings();
+                  if (offering?.availablePackages && offering.availablePackages.length > 0) {
+                    const normalPackages = offering.availablePackages.filter(
+                      pkg => 
+                        pkg.product.identifier === PRODUCT_IDS.MONTHLY ||
+                        pkg.product.identifier === PRODUCT_IDS.YEARLY
+                    );
+                    if (normalPackages.length > 0) {
+                      setPackages(normalPackages);
+                      const monthly = normalPackages.find(
+                        pkg => pkg.product.identifier === PRODUCT_IDS.MONTHLY
+                      );
+                      setSelectedPackage(monthly || normalPackages[0]);
+                      setOfferingsError(null);
+                    } else {
+                      setOfferingsError(t('paywall.noOffersAvailable'));
+                    }
+                  } else {
+                    setOfferingsError(t('paywall.noOffersAvailable'));
+                  }
+                } catch (error: any) {
+                  setOfferingsError(error.message || t('paywall.loadError'));
+                } finally {
+                  setLoading(false);
+                }
+              })();
+            }}
+          >
+            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Botón de compra */}
       <TouchableOpacity
-        style={[styles.purchaseButton, purchasing && styles.purchaseButtonDisabled]}
+        style={[
+          styles.purchaseButton, 
+          (purchasing || !selectedPackage || offeringsError) && styles.purchaseButtonDisabled
+        ]}
         onPress={handlePurchase}
-        disabled={purchasing || !selectedPackage}
+        disabled={purchasing || !selectedPackage || !!offeringsError}
       >
         {purchasing ? (
           <ActivityIndicator color="#000" />
         ) : (
           <Text style={styles.purchaseButtonText}>
-            {t('paywall.startTrial')}
+            {!selectedPackage && !offeringsError 
+              ? t('paywall.loadingOffers') 
+              : t('paywall.startTrial')
+            }
           </Text>
         )}
       </TouchableOpacity>
@@ -616,6 +722,33 @@ const styles = StyleSheet.create({
   },
   debugButtonText: {
     color: '#fff',
+    fontSize: 14,
+  },
+  // Estilos para errores y reintentos
+  errorContainer: {
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(244, 67, 54, 0.3)',
+  },
+  errorText: {
+    color: '#f44336',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  retryButton: {
+    backgroundColor: '#f44336',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: '600',
     fontSize: 14,
   },
 });

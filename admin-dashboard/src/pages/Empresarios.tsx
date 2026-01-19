@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getEmpresarios, getEmpresariosStats, addEmpresario, updateEmpresario, toggleEmpresarioStatus, type Empresario, type EmpresarioStats } from '../services/adminService';
+import { useToastContext } from '../contexts/ToastContext';
+import { useErrorHandler } from '../hooks/useErrorHandler';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { logger } from '../utils/logger';
 import './Empresarios.css';
 
 export default function Empresarios() {
+  const toast = useToastContext();
+  const { handleApiError } = useErrorHandler();
   const [empresarios, setEmpresarios] = useState<EmpresarioStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingEmpresario, setEditingEmpresario] = useState<EmpresarioStats | null>(null);
+  const [showConfirmToggle, setShowConfirmToggle] = useState(false);
+  const [empresarioToToggle, setEmpresarioToToggle] = useState<EmpresarioStats | null>(null);
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -32,7 +40,8 @@ export default function Empresarios() {
       const stats = await getEmpresariosStats();
       setEmpresarios(stats);
     } catch (error) {
-      console.error('Error cargando empresarios:', error);
+      logger.error('Error cargando empresarios:', error);
+      toast.error('Error al cargar empresarios');
     } finally {
       setLoading(false);
     }
@@ -41,7 +50,7 @@ export default function Empresarios() {
   async function handleAddEmpresario() {
     try {
       if (!formData.email || !formData.gym_name || !formData.monthly_fee) {
-        alert('Por favor completa todos los campos requeridos');
+        toast.warning('Por favor completa todos los campos requeridos');
         return;
       }
 
@@ -61,7 +70,7 @@ export default function Empresarios() {
         gym_phone: formData.gym_phone || undefined,
       });
 
-      alert('Empresario creado exitosamente. Nota: El empresario debe registrarse en la app con este email para activar su acceso.');
+      toast.success('Empresario creado exitosamente. Nota: El empresario debe registrarse en la app con este email para activar su acceso.');
       setShowAddModal(false);
       setFormData({
         email: '',
@@ -74,9 +83,9 @@ export default function Empresarios() {
         gym_phone: '',
       });
       loadEmpresarios();
-    } catch (error: any) {
-      console.error('Error agregando empresario:', error);
-      alert(error.message || 'Error al crear empresario');
+    } catch (error: unknown) {
+      const errorMessage = handleApiError(error, 'Error al crear empresario');
+      toast.error(errorMessage);
     }
   }
 
@@ -84,22 +93,26 @@ export default function Empresarios() {
     navigate(`/empresarios/${empresario.empresario_id}`);
   }
 
-  async function handleToggleStatus(empresario: EmpresarioStats) {
-    const currentStatus = empresario.is_active ?? true;
-    const newStatus = !currentStatus;
-    const action = newStatus ? 'activar' : 'desactivar';
+  function handleToggleStatus(empresario: EmpresarioStats) {
+    setEmpresarioToToggle(empresario);
+    setShowConfirmToggle(true);
+  }
+
+  async function confirmToggleStatus() {
+    if (!empresarioToToggle) return;
     
-    if (!window.confirm(`¿Estás seguro de ${action} a ${empresario.gym_name}?`)) {
-      return;
-    }
+    const currentStatus = empresarioToToggle.is_active ?? true;
+    const newStatus = !currentStatus;
     
     try {
-      await toggleEmpresarioStatus(empresario.empresario_id, newStatus);
-      alert(`Empresario ${newStatus ? 'activado' : 'desactivado'} exitosamente`);
+      await toggleEmpresarioStatus(empresarioToToggle.empresario_id, newStatus);
+      toast.success(`Empresario ${newStatus ? 'activado' : 'desactivado'} exitosamente`);
+      setShowConfirmToggle(false);
+      setEmpresarioToToggle(null);
       loadEmpresarios();
-    } catch (error: any) {
-      console.error('Error cambiando estado:', error);
-      alert(error.message || 'Error al cambiar estado del empresario');
+    } catch (error: unknown) {
+      const errorMessage = handleApiError(error, 'Error al cambiar estado del empresario');
+      toast.error(errorMessage);
     }
   }
 
@@ -132,7 +145,7 @@ export default function Empresarios() {
         }));
       }
     } catch (error) {
-      console.error('Error cargando detalles del empresario:', error);
+      logger.error('Error cargando detalles del empresario:', error);
     }
   }
 
@@ -141,7 +154,7 @@ export default function Empresarios() {
     
     try {
       if (!formData.email || !formData.gym_name || !formData.monthly_fee) {
-        alert('Por favor completa todos los campos requeridos');
+        toast.warning('Por favor completa todos los campos requeridos');
         return;
       }
 
@@ -156,7 +169,7 @@ export default function Empresarios() {
         gym_phone: formData.gym_phone || undefined,
       });
 
-      alert('Empresario actualizado exitosamente');
+      toast.success('Empresario actualizado exitosamente');
       setShowEditModal(false);
       setEditingEmpresario(null);
       setFormData({
@@ -170,9 +183,9 @@ export default function Empresarios() {
         gym_phone: '',
       });
       loadEmpresarios();
-    } catch (error: any) {
-      console.error('Error actualizando empresario:', error);
-      alert(error.message || 'Error al actualizar empresario');
+    } catch (error: unknown) {
+      const errorMessage = handleApiError(error, 'Error al actualizar empresario');
+      toast.error(errorMessage);
     }
   }
 
@@ -485,6 +498,20 @@ export default function Empresarios() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={showConfirmToggle}
+        title={empresarioToToggle ? `¿${empresarioToToggle.is_active ? 'Desactivar' : 'Activar'} empresario?` : ''}
+        message={empresarioToToggle ? `¿Estás seguro de ${empresarioToToggle.is_active ? 'desactivar' : 'activar'} a ${empresarioToToggle.gym_name}?` : ''}
+        confirmText={empresarioToToggle?.is_active ? 'Desactivar' : 'Activar'}
+        cancelText="Cancelar"
+        type="warning"
+        onConfirm={confirmToggleStatus}
+        onCancel={() => {
+          setShowConfirmToggle(false);
+          setEmpresarioToToggle(null);
+        }}
+      />
     </div>
   );
 }

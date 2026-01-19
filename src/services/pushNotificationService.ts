@@ -88,11 +88,22 @@ async function savePushToken(userId: string, pushToken: string) {
       });
 
     if (error) {
+      // Si el error es porque el perfil del usuario no existe aún (foreign key constraint),
+      // no mostrar error ya que el token se guardará más tarde cuando el perfil se cree
+      // El código 23503 indica violación de clave foránea
+      if (error.code === '23503') {
+        // El perfil aún no existe, el token se guardará más tarde cuando el perfil se cree
+        return;
+      }
       console.error('Error saving push token:', error);
     } else {
       console.log('Push token saved successfully');
     }
   } catch (error) {
+    // Silenciar errores relacionados con perfiles que no existen aún
+    if (error && typeof error === 'object' && 'code' in error && error.code === '23503') {
+      return;
+    }
     console.error('Error in savePushToken:', error);
   }
 }

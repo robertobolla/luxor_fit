@@ -199,31 +199,41 @@ function SubscriptionGate() {
     const isOnboarding = pathname?.startsWith('/onboarding');
     const isAuth = pathname?.startsWith('/(auth)');
 
-    // No redirigir si está en onboarding o auth (permitir completar el flujo)
-    if (isOnboarding || isAuth) {
-      console.log('🚪 SubscriptionGate: Permitiendo flujo de onboarding/auth');
+    // Permitir flujo de auth siempre
+    if (isAuth) {
+      console.log('🚪 SubscriptionGate: Permitiendo flujo de auth');
       return;
     }
 
     // Si tiene acceso activo (suscripción, admin, socio, gimnasio), permitir acceso
     if (isActive) {
       if (isPaywall) {
-        console.log('🚪 SubscriptionGate: Redirigiendo al home (tiene acceso activo)');
-        setTimeout(() => {
-          router.replace('/(tabs)/home');
-        }, 100);
+        console.log('🚪 SubscriptionGate: Redirigiendo desde paywall (tiene acceso activo)');
+        // No redirigir automáticamente aquí - el paywall lo manejará
+        // para verificar el perfil primero
+      } else if (isOnboarding) {
+        // Permitir onboarding si tiene suscripción activa
+        console.log('🚪 SubscriptionGate: Permitiendo onboarding (tiene acceso activo)');
       } else {
         console.log('🚪 SubscriptionGate: Usuario tiene acceso activo, permitiendo navegación');
       }
       return;
     }
 
+    // Usuario SIN acceso activo
+    // Si está en onboarding sin suscripción, mandarlo al paywall primero
+    if (isOnboarding) {
+      console.log('🚪 SubscriptionGate: Redirigiendo al paywall (onboarding requiere suscripción)');
+      router.replace('/paywall');
+      return;
+    }
+
     // Solo redirigir al paywall si NO tiene acceso activo y NO está en paywall
-    if (!isActive && !isPaywall) {
+    if (!isPaywall) {
       console.log('🚪 SubscriptionGate: Redirigiendo al paywall (sin acceso activo)');
       router.replace('/paywall');
     } else {
-      console.log('🚪 SubscriptionGate: Sin cambios (isActive:', isActive, 'isPaywall:', isPaywall, ')');
+      console.log('🚪 SubscriptionGate: Ya está en paywall');
     }
   }, [isSignedIn, loading, isActive, pathname, showSplash, initialLoadComplete]); // Removido 'router' de dependencias para evitar loops
 

@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTranslation } from 'react-i18next';
 import {
   DashboardConfig,
   PRESET_PRIORITIES,
@@ -40,6 +41,7 @@ export default function DashboardCustomizationModal({
   onClose,
   onSave,
 }: Props) {
+  const { t } = useTranslation();
   const [slideAnim] = useState(new Animated.Value(SCREEN_HEIGHT));
   const [config, setConfig] = useState<DashboardConfig | null>(null);
   const [selectedPriorityId, setSelectedPriorityId] = useState<string>();
@@ -81,7 +83,7 @@ export default function DashboardCustomizationModal({
     
     // Si ya existe una prioridad personalizada, cargar sus métricas
     const existingCustom = config?.customPriorities.find(
-      (p) => p.name === 'Prioridades personalizadas'
+      (p) => p.name === t('dashboard.customize.customPriorities') || p.name === 'Prioridades personalizadas'
     );
     
     if (existingCustom) {
@@ -114,7 +116,7 @@ export default function DashboardCustomizationModal({
       // Si está creando una prioridad personalizada
       if (isCreatingCustom && selectedCustomMetrics.length > 0) {
         const customPriority = await createCustomPriority(
-          'Prioridades personalizadas',
+          t('dashboard.customize.customPriorities'),
           selectedCustomMetrics
         );
         await setSelectedPriority(customPriority.id);
@@ -138,10 +140,11 @@ export default function DashboardCustomizationModal({
     }
   };
 
-  // Filtrar las prioridades personalizadas con nombre "Prioridades personalizadas"
+  // Filtrar las prioridades personalizadas con nombre "Prioridades personalizadas" o "Custom priorities"
   // para que no aparezcan duplicadas (ya que se muestra como botón)
+  const customPriorityName = t('dashboard.customize.customPriorities');
   const filteredCustomPriorities = (config?.customPriorities || []).filter(
-    (p) => p.name !== 'Prioridades personalizadas'
+    (p) => p.name !== 'Prioridades personalizadas' && p.name !== 'Custom priorities' && p.name !== customPriorityName
   );
   
   const allPriorities: Priority[] = [
@@ -154,6 +157,15 @@ export default function DashboardCustomizationModal({
       ? false 
       : selectedPriorityId === priority.id;
     const isPreset = 'description' in priority;
+
+    // Traducir el nombre si es una clave de traducción
+    const priorityName = priority.name.startsWith('dashboard.') 
+      ? t(priority.name) 
+      : priority.name;
+    
+    const priorityDescription = isPreset && (priority as PriorityPreset).description.startsWith('dashboard.')
+      ? t((priority as PriorityPreset).description)
+      : isPreset ? (priority as PriorityPreset).description : '';
 
     return (
       <TouchableOpacity
@@ -173,11 +185,11 @@ export default function DashboardCustomizationModal({
         </View>
         <View style={styles.priorityInfo}>
           <Text style={[styles.priorityName, isSelected && styles.priorityNameSelected]}>
-            {priority.name}
+            {priorityName}
           </Text>
           {isPreset && (
             <Text style={[styles.priorityDescription, isSelected && styles.priorityDescriptionSelected]}>
-              {(priority as PriorityPreset).description}
+              {priorityDescription}
             </Text>
           )}
         </View>
@@ -215,60 +227,68 @@ export default function DashboardCustomizationModal({
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={onClose}>
-              <Text style={styles.cancelButton}>Cancelar</Text>
+              <Text style={styles.cancelButton}>{t('dashboard.customize.cancel')}</Text>
             </TouchableOpacity>
-            <Text style={styles.title}>Personalizar Hoy</Text>
+            <Text style={styles.title}>{t('dashboard.customize.title')}</Text>
             <TouchableOpacity onPress={handleSave}>
-              <Text style={styles.saveButton}>Guardar</Text>
+              <Text style={styles.saveButton}>{t('dashboard.customize.save')}</Text>
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
             {/* Establecer prioridades */}
-            <Text style={styles.sectionTitle}>Establece tus prioridades</Text>
+            <Text style={styles.sectionTitle}>{t('dashboard.customize.setPriorities')}</Text>
             
             <View style={styles.prioritiesContainer}>
               {allPriorities.map(renderPriorityOption)}
               
               {/* Opción para crear prioridad personalizada */}
-              <TouchableOpacity
-                style={[
-                  styles.priorityCard,
-                  (isCreatingCustom || config?.customPriorities.find(p => p.name === 'Prioridades personalizadas' && p.id === selectedPriorityId)) && styles.priorityCardSelected,
-                ]}
-                onPress={handleCreateCustomPriority}
-              >
-                <View style={styles.priorityIconContainer}>
-                  <Ionicons
-                    name="create"
-                    size={32}
-                    color={(isCreatingCustom || config?.customPriorities.find(p => p.name === 'Prioridades personalizadas' && p.id === selectedPriorityId)) ? '#1a1a1a' : '#ffb300'}
-                  />
-                </View>
-                <View style={styles.priorityInfo}>
-                  <Text style={[styles.priorityName, (isCreatingCustom || config?.customPriorities.find(p => p.name === 'Prioridades personalizadas' && p.id === selectedPriorityId)) && styles.priorityNameSelected]}>
-                    Prioridades personalizadas
-                  </Text>
-                  <Text style={[styles.priorityDescription, (isCreatingCustom || config?.customPriorities.find(p => p.name === 'Prioridades personalizadas' && p.id === selectedPriorityId)) && styles.priorityDescriptionSelected]}>
-                    Añade métricas
-                  </Text>
-                </View>
-                {(isCreatingCustom || config?.customPriorities.find(p => p.name === 'Prioridades personalizadas' && p.id === selectedPriorityId)) && (
-                  <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
-                )}
-              </TouchableOpacity>
+              {(() => {
+                const isCustomSelected = isCreatingCustom || config?.customPriorities.find(
+                  p => (p.name === 'Prioridades personalizadas' || p.name === 'Custom priorities' || p.name === customPriorityName) && p.id === selectedPriorityId
+                );
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.priorityCard,
+                      isCustomSelected && styles.priorityCardSelected,
+                    ]}
+                    onPress={handleCreateCustomPriority}
+                  >
+                    <View style={styles.priorityIconContainer}>
+                      <Ionicons
+                        name="create"
+                        size={32}
+                        color={isCustomSelected ? '#1a1a1a' : '#ffb300'}
+                      />
+                    </View>
+                    <View style={styles.priorityInfo}>
+                      <Text style={[styles.priorityName, isCustomSelected && styles.priorityNameSelected]}>
+                        {t('dashboard.customize.customPriorities')}
+                      </Text>
+                      <Text style={[styles.priorityDescription, isCustomSelected && styles.priorityDescriptionSelected]}>
+                        {t('dashboard.customize.addMetrics')}
+                      </Text>
+                    </View>
+                    {isCustomSelected && (
+                      <Ionicons name="checkmark-circle" size={24} color="#1a1a1a" />
+                    )}
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
 
             {/* Selector de métricas personalizadas */}
             {isCreatingCustom && (
               <View style={styles.customMetricsSection}>
                 <Text style={styles.customMetricsTitle}>
-                  Selecciona hasta 3 métricas ({selectedCustomMetrics.length}/3)
+                  {t('dashboard.customize.selectUpToMetrics')} ({selectedCustomMetrics.length}/3)
                 </Text>
                 <View style={styles.metricsGrid}>
                   {AVAILABLE_METRICS.map((metric) => {
                     const isSelected = selectedCustomMetrics.includes(metric.id);
                     const isDisabled = !isSelected && selectedCustomMetrics.length >= 3;
+                    const metricName = metric.name.startsWith('dashboard.') ? t(metric.name) : metric.name;
                     
                     return (
                       <TouchableOpacity
@@ -291,7 +311,7 @@ export default function DashboardCustomizationModal({
                           isSelected && styles.metricChipTextSelected,
                           isDisabled && styles.metricChipTextDisabled,
                         ]}>
-                          {metric.name}
+                          {metricName}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -302,13 +322,14 @@ export default function DashboardCustomizationModal({
 
             {/* Mostrar u ocultar otras métricas */}
             <View style={styles.visibilitySection}>
-              <Text style={styles.sectionTitle}>Mostrar u ocultar otras métricas</Text>
+              <Text style={styles.sectionTitle}>{t('dashboard.customize.showHideMetrics')}</Text>
               <Text style={styles.visibilityDescription}>
-                Las métricas ocultas no aparecerán en tu dashboard
+                {t('dashboard.customize.hiddenMetricsInfo')}
               </Text>
               
               {AVAILABLE_METRICS.map((metric) => {
                 const isVisible = visibleMetrics.includes(metric.id);
+                const metricName = metric.name.startsWith('dashboard.') ? t(metric.name) : metric.name;
                 
                 return (
                   <TouchableOpacity
@@ -318,7 +339,7 @@ export default function DashboardCustomizationModal({
                   >
                     <View style={styles.metricToggleLeft}>
                       <Ionicons name={metric.icon as any} size={24} color={metric.color} />
-                      <Text style={styles.metricToggleText}>{metric.name}</Text>
+                      <Text style={styles.metricToggleText}>{metricName}</Text>
                     </View>
                     <View
                       style={[

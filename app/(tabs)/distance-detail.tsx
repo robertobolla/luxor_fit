@@ -26,7 +26,7 @@ interface DistanceData {
 
 export default function DistanceDetailScreen() {
   const { user } = useUser();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { distanceUnit } = useUnitsStore();
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -84,7 +84,7 @@ export default function DistanceDetailScreen() {
       
       case 'week':
         // Datos por día de la semana
-        const weekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+        const weekDays = t('common.weekDaysShort', { returnObjects: true }) as string[];
         return weekDays.map((day) => ({
           label: day,
           value: Math.random() * 5,
@@ -112,7 +112,7 @@ export default function DistanceDetailScreen() {
       
       case 'year':
         // Datos por mes del año
-        const months = ['E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+        const months = t('common.monthsShort', { returnObjects: true }) as string[];
         return months.map((month) => ({
           label: month,
           value: Math.random() * 150,

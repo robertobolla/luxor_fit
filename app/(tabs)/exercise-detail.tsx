@@ -68,7 +68,7 @@ export default function ExerciseDetailScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [modalStep, setModalStep] = useState<ModalStep>('initial');
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
-  const [targetDays, setTargetDays] = useState<number>(5); // meta semanal (se reemplaza con Supabase)
+  const [targetDays, setTargetDays] = useState<number>(7); // meta semanal (se reemplaza con Supabase)
 
   // Estados para registro manual
   const [duration, setDuration] = useState('');
@@ -90,7 +90,8 @@ export default function ExerciseDetailScreen() {
   const lastLocation = useRef<Location.LocationObject | null>(null);
   const totalDistance = useRef(0);
 
-  const weekDays = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+  // Días de la semana traducidos (Lunes a Domingo)
+  const weekDays = t('common.weekDaysShort', { returnObjects: true }) as string[];
   
   // Función para calcular distancia entre dos coordenadas (fórmula de Haversine)
   const calculateDistance = (
@@ -196,37 +197,40 @@ export default function ExerciseDetailScreen() {
       setMonthExerciseDays(days);
     } else {
       // Para vista semanal, calcular qué días de la semana tienen ejercicio
-      const currentDay = currentDate.getDay(); // 0 = domingo, 6 = sábado
+      // Calcular el inicio de la semana (Lunes)
+      const currentDay = currentDate.getDay(); // 0 = domingo, 1 = lunes, etc.
+      const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1; // Cuántos días desde el lunes
       const weekStart = new Date(currentDate);
-      weekStart.setDate(currentDate.getDate() - currentDay);
+      weekStart.setDate(currentDate.getDate() - daysFromMonday);
       weekStart.setHours(0, 0, 0, 0);
-      
+
       // Cache para almacenar datos por mes
       const monthCache: { [key: string]: number[] } = {};
       const weekDaysWithExercise: number[] = [];
-      
+
+      // Iterar de Lunes (i=0) a Domingo (i=6)
       for (let i = 0; i < 7; i++) {
         const dayDate = new Date(weekStart);
         dayDate.setDate(weekStart.getDate() + i);
-        
+
         const year = dayDate.getFullYear();
         const month = dayDate.getMonth();
         const day = dayDate.getDate();
-        
+
         // Crear clave para el cache
         const cacheKey = `${year}-${month}`;
-        
+
         // Obtener ejercicios para ese mes (usar cache si existe)
         if (!monthCache[cacheKey]) {
           monthCache[cacheKey] = await getDaysWithExercise(user.id, year, month);
         }
-        
+
         // Verificar si ese día tiene ejercicio
         if (monthCache[cacheKey].includes(day)) {
           weekDaysWithExercise.push(i);
         }
       }
-      
+
       setExerciseDays(weekDaysWithExercise);
     }
   };
@@ -375,25 +379,35 @@ export default function ExerciseDetailScreen() {
     }
   };
 
+  // Obtener el número de días objetivo según la vista
+  const getTargetDays = () => {
+    if (viewMode === 'week') {
+      return targetDays; // 7 por defecto para semana
+    } else {
+      return daysInMonth; // Días del mes actual
+    }
+  };
+
   // Obtener el texto descriptivo
   const getExerciseText = () => {
     const count = getExerciseCount();
+    const target = getTargetDays();
   
     if (count === 0) {
-      return t('exercise.noActivity');
+      return t('exercises.noActivity');
     }
   
     if (count === 1) {
-      return t('exercise.goodStart');
+      return t('exercises.goodStart');
     }
   
-    if (count < targetDays) {
-      return t('exercise.daysToGoal', {
-        days: targetDays - count,
+    if (count < target) {
+      return t('exercises.daysToGoal', {
+        days: target - count,
       });
     }
   
-    return t('exercise.goalAchieved') + ' 🎉';
+    return t('exercises.goalAchieved') + ' 🎉';
   };
   
   
@@ -629,11 +643,14 @@ export default function ExerciseDetailScreen() {
       );
     }
     
+    // Días de la semana empezando por Domingo para el calendario mensual
+    const calendarWeekDays = t('calendar.weekDays', { returnObjects: true }) as string[];
+    
     return (
       <View style={styles.calendarGrid}>
         {/* Headers de días de la semana */}
         <View style={styles.calendarHeader}>
-          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, index) => (
+          {calendarWeekDays.map((day, index) => (
             <Text key={index} style={styles.calendarHeaderText}>{day}</Text>
           ))}
         </View>
@@ -703,9 +720,11 @@ export default function ExerciseDetailScreen() {
         {/* Estadística principal */}
         <View style={styles.statsCard}>
           <Text style={styles.statsNumber}>
-          {getExerciseCount()} <Text style={styles.statsGoal}>de {targetDays}</Text>
+          {getExerciseCount()} <Text style={styles.statsGoal}>de {getTargetDays()}</Text>
           </Text>
-          <Text style={styles.statsLabel}>días de ejercicio</Text>
+          <Text style={styles.statsLabel}>
+            {t('stats.exerciseDays')}
+          </Text>
           <Text style={styles.statsSubtext}>
             {getExerciseText()}
           </Text>
@@ -720,14 +739,18 @@ export default function ExerciseDetailScreen() {
             <TouchableOpacity style={[styles.filterTab, styles.filterTabActive]}>
               <Ionicons name="checkmark" size={16} color="#1a1a1a" style={styles.filterIcon} />
               <Text style={[styles.filterTabText, styles.filterTabTextActive]}>
-                Días de ejercicio
+                {t('stats.exerciseDays')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterTab}>
-              <Text style={styles.filterTabText}>Duración</Text>
+              <Text style={styles.filterTabText}>
+                {t('filters.duration')}
+              </Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.filterTab}>
-              <Text style={styles.filterTabText}>Distancia</Text>
+            <TouchableOpacity style={styles.filterTab}>             
+              <Text style={styles.filterTabText}>
+                {t('filters.distance')}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -738,11 +761,13 @@ export default function ExerciseDetailScreen() {
             <Text style={styles.sectionTitle}>
               {currentDate.toLocaleDateString('es-ES', { month: 'long' })}
             </Text>
-            <Text style={styles.sectionSubtitle}>Ejercicios</Text>
-            
-            {/* Botón Esta semana */}
-            <TouchableOpacity style={styles.weekButton}>
-              <Text style={styles.weekButtonText}>Esta semana</Text>
+            <Text style={styles.sectionSubtitle}>
+              {t('sections.exercises')}
+            </Text>            
+            {/* Botón Añadir ejercicio */}
+            <TouchableOpacity style={styles.weekButton} onPress={() => setShowAddModal(true)}>
+              <Ionicons name="add" size={20} color="#ffffff" />
+              <Text style={styles.weekButtonText}>{t('actions.addExercise')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -756,7 +781,7 @@ export default function ExerciseDetailScreen() {
         onPress={() => setShowAddModal(true)}
       >
         <Ionicons name="add" size={24} color="#ffffff" />
-        <Text style={styles.fabText}>Añadir ejercicio</Text>
+        <Text style={styles.fabText}>  {t('actions.addExercise')}</Text>
       </TouchableOpacity>
 
       {/* Modal para añadir ejercicio */}
@@ -772,7 +797,7 @@ export default function ExerciseDetailScreen() {
             {modalStep === 'initial' && (
               <>
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Añadir ejercicio</Text>
+                  <Text style={styles.modalTitle}>  {t('actions.addExercise')}</Text>
                   <TouchableOpacity onPress={handleCloseModal}>
                     <Ionicons name="close" size={28} color="#ffffff" />
                   </TouchableOpacity>
@@ -787,10 +812,11 @@ export default function ExerciseDetailScreen() {
                       <Ionicons name="play-circle" size={40} color="#ffb300" />
                     </View>
                     <View style={styles.optionTextContainer}>
-                      <Text style={styles.optionTitle}>Empezar a monitorizar</Text>
-                      <Text style={styles.optionDescription}>
-                        Rastrea tu actividad con GPS en tiempo real
-                      </Text>
+                    <Text style={styles.optionTitle}>
+  {t('tracking.startTracking')}
+</Text>                      <Text style={styles.optionDescription}>
+  {t('tracking.realTimeGps')}
+</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={24} color="#666" />
                   </TouchableOpacity>
@@ -805,10 +831,12 @@ export default function ExerciseDetailScreen() {
                       <Ionicons name="create" size={40} color="#ffb300" />
                     </View>
                     <View style={styles.optionTextContainer}>
-                      <Text style={styles.optionTitle}>Registrar una actividad</Text>
-                      <Text style={styles.optionDescription}>
-                        Ingresa manualmente los detalles de tu ejercicio
-                      </Text>
+                    <Text style={styles.optionTitle}>
+  {t('activity.logActivity')}
+</Text>                      
+<Text style={styles.optionDescription}>
+  {t('activity.manualEntry')}
+</Text>
                     </View>
                     <Ionicons name="chevron-forward" size={24} color="#666" />
                   </TouchableOpacity>
@@ -823,7 +851,8 @@ export default function ExerciseDetailScreen() {
                   <TouchableOpacity onPress={() => setModalStep('initial')}>
                     <Ionicons name="arrow-back" size={28} color="#ffffff" />
                   </TouchableOpacity>
-                  <Text style={styles.modalTitle}>Elige actividad</Text>
+                  <Text style={styles.modalTitle}>  {t('activity.chooseActivity')}
+                  </Text>
                   <TouchableOpacity onPress={handleCloseModal}>
                     <Ionicons name="close" size={28} color="#ffffff" />
                   </TouchableOpacity>
@@ -857,7 +886,8 @@ export default function ExerciseDetailScreen() {
                   <TouchableOpacity onPress={() => setModalStep('initial')}>
                     <Ionicons name="arrow-back" size={28} color="#ffffff" />
                   </TouchableOpacity>
-                  <Text style={styles.modalTitle}>Elige actividad</Text>
+                  <Text style={styles.modalTitle}>  {t('activity.chooseActivity')}
+                  </Text>
                   <TouchableOpacity onPress={handleCloseModal}>
                     <Ionicons name="close" size={28} color="#ffffff" />
                   </TouchableOpacity>
@@ -901,7 +931,8 @@ export default function ExerciseDetailScreen() {
                   <View style={styles.mapPlaceholder}>
                     <Ionicons name="map" size={80} color="#ffb300" />
                     <Text style={styles.mapPlaceholderText}>
-                      Mapa GPS en vivo
+                    {t('tracking.liveGpsMap')}
+
                     </Text>
                   </View>
 
@@ -911,7 +942,8 @@ export default function ExerciseDetailScreen() {
                       <Text style={styles.trackingStatValue}>
                         {Math.floor(trackingTime / 60)}:{String(trackingTime % 60).padStart(2, '0')}
                       </Text>
-                      <Text style={styles.trackingStatLabel}>Tiempo</Text>
+                      <Text style={styles.trackingStatLabel}>  {t('tracking.time')}
+                      </Text>
                     </View>
 
                     <View style={styles.trackingStat}>
@@ -919,7 +951,8 @@ export default function ExerciseDetailScreen() {
                       <Text style={styles.trackingStatValue}>
                         {displayDistance(distance).toFixed(2)} {distanceLabel}
                       </Text>
-                      <Text style={styles.trackingStatLabel}>Distancia</Text>
+                      <Text style={styles.trackingStatLabel}>  {t('tracking.distance')}
+                      </Text>
                     </View>
 
                     <View style={styles.trackingStat}>
@@ -936,8 +969,8 @@ export default function ExerciseDetailScreen() {
                     onPress={handleStopTracking}
                   >
                     <Ionicons name="stop-circle" size={60} color="#ff4444" />
-                    <Text style={styles.stopButtonText}>Detener y guardar</Text>
-                  </TouchableOpacity>
+                    {t('actions.stopAndSave')}
+                    </TouchableOpacity>
                 </View>
               </>
             )}
@@ -957,8 +990,8 @@ export default function ExerciseDetailScreen() {
 
                 <ScrollView style={styles.manualEntryContainer}>
                   <View style={styles.formSection}>
-                    <Text style={styles.formLabel}>Duración (minutos) *</Text>
-                    <TextInput
+                  {t('form.durationMinutesRequired')}
+                  <TextInput
                       style={styles.input}
                       placeholder="Ej: 30"
                       placeholderTextColor="#666"
@@ -969,8 +1002,7 @@ export default function ExerciseDetailScreen() {
                   </View>
 
                   <View style={styles.formSection}>
-                    <Text style={styles.formLabel}>Nivel de intensidad *</Text>
-                    <View style={styles.intensityContainer}>
+                  {t('form.intensity.label')} {t('form.required')}                    <View style={styles.intensityContainer}>
                       <TouchableOpacity
                         style={[
                           styles.intensityButton,
@@ -978,12 +1010,12 @@ export default function ExerciseDetailScreen() {
                         ]}
                         onPress={() => setIntensity('low')}
                       >
-                        <Text style={[
-                          styles.intensityButtonText,
-                          intensity === 'low' && styles.intensityButtonTextActive
-                        ]}>
-                          Poco intenso
-                        </Text>
+                     <Text style={[
+  styles.intensityButtonText,
+  intensity === 'low' && styles.intensityButtonTextActive
+]}>
+  {t('form.intensity.low')}
+</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -993,12 +1025,12 @@ export default function ExerciseDetailScreen() {
                         ]}
                         onPress={() => setIntensity('medium')}
                       >
-                        <Text style={[
-                          styles.intensityButtonText,
-                          intensity === 'medium' && styles.intensityButtonTextActive
-                        ]}>
-                          Medio intenso
-                        </Text>
+                      <Text style={[
+  styles.intensityButtonText,
+  intensity === 'medium' && styles.intensityButtonTextActive
+]}>
+  {t('form.intensity.medium')}
+</Text>
                       </TouchableOpacity>
 
                       <TouchableOpacity
@@ -1008,12 +1040,12 @@ export default function ExerciseDetailScreen() {
                         ]}
                         onPress={() => setIntensity('high')}
                       >
-                        <Text style={[
-                          styles.intensityButtonText,
-                          intensity === 'high' && styles.intensityButtonTextActive
-                        ]}>
-                          Intenso
-                        </Text>
+                    <Text style={[
+  styles.intensityButtonText,
+  intensity === 'high' && styles.intensityButtonTextActive
+]}>
+  {t('form.intensity.high')}
+</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1022,7 +1054,8 @@ export default function ExerciseDetailScreen() {
                     style={styles.saveButton}
                     onPress={handleSaveManualActivity}
                   >
-                    <Text style={styles.saveButtonText}>Guardar actividad</Text>
+                    <Text style={styles.saveButtonText}>  {t('actions.saveActivity')}
+                    </Text>
                   </TouchableOpacity>
                 </ScrollView>
               </>
@@ -1239,14 +1272,19 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   weekButton: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: '#2a6d5e',
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   weekButtonText: {
     fontSize: 16,
     color: '#ffffff',
+    fontWeight: '600',
   },
   fab: {
     position: 'absolute',

@@ -1,6 +1,4 @@
 import { supabase } from './supabase';
-import { sendMessage } from './chatService';
-import { getOrCreateChat } from './chatService';
 
 export interface SharedWorkout {
   id: string;
@@ -55,11 +53,12 @@ export async function shareWorkout(
     const planName = workoutPlan?.plan_name || 'un entrenamiento';
 
     // Crear notificación en lugar de mensaje en el chat
+    // Usamos 'workout_plan_shared' para solicitudes (el receptor puede aceptar/rechazar)
     const { data: notification, error: notificationError } = await supabase
       .from('user_notifications')
       .insert({
         user_id: receiverId,
-        notification_type: 'workout_plan',
+        notification_type: 'workout_plan_shared',
         title: '💪 Plan de entrenamiento compartido',
         message: message || `${senderName} te ha compartido el plan "${planName}"`,
         sender_name: senderName,
@@ -75,13 +74,18 @@ export async function shareWorkout(
     }
 
     // Crear registro de entrenamiento compartido
+    console.log('Creando shared_workout con:', { 
+      sender_id: senderId, 
+      receiver_id: receiverId, 
+      workout_plan_id: workoutPlanId 
+    });
+    
     const { data, error } = await supabase
       .from('shared_workouts')
       .insert({
         sender_id: senderId,
         receiver_id: receiverId,
         workout_plan_id: workoutPlanId,
-        message_id: notification.id, // Guardamos el ID de la notificación
         status: 'pending',
       })
       .select()
@@ -92,6 +96,7 @@ export async function shareWorkout(
       return { success: false, error: error.message };
     }
 
+    console.log('shared_workout creado:', data);
     return { success: true, data };
   } catch (error: any) {
     console.error('Error sharing workout:', error);
@@ -184,30 +189,29 @@ export async function acceptSharedWorkout(
     }
 
     // Crear notificación de confirmación para el remitente
-    if (sharedWorkout.message_id) {
-      const { data: receiverProfile } = await supabase
-        .from('user_profiles')
-        .select('name, username')
-        .eq('user_id', receiverId)
+    // Usamos 'workout_plan_accepted' para que sea solo informativa (sin botones de aceptar/rechazar)
+    const { data: receiverProfile } = await supabase
+      .from('user_profiles')
+      .select('name, username')
+      .eq('user_id', receiverId)
         .single();
 
-      const receiverName = receiverProfile?.name || receiverProfile?.username || 'Un usuario';
-      const messageText = makeActive 
-        ? `${receiverName} ha aceptado tu entrenamiento y lo ha activado como su plan actual`
-        : `${receiverName} ha aceptado tu entrenamiento`;
-
-      await supabase
-        .from('user_notifications')
-        .insert({
-          user_id: sharedWorkout.sender_id,
-          notification_type: 'workout_plan',
-          title: '✅ Entrenamiento aceptado',
-          message: messageText,
-          sender_name: receiverName,
-          related_id: sharedWorkout.workout_plan_id,
-          is_read: false,
-        });
-    }
+    const receiverName = receiverProfile?.name || receiverProfile?.username || 'Un usuario';
+        const messageText = makeActive 
+      ? `${receiverName} ha aceptado tu entrenamiento y lo ha activado como su plan actual`
+      : `${receiverName} ha aceptado tu entrenamiento`;
+        
+    await supabase
+      .from('user_notifications')
+      .insert({
+        user_id: sharedWorkout.sender_id,
+        notification_type: 'workout_plan_accepted',
+        title: '✅ Entrenamiento aceptado',
+        message: messageText,
+        sender_name: receiverName,
+        related_id: sharedWorkout.workout_plan_id,
+        is_read: false,
+      });
 
     return { success: true, data: updated };
   } catch (error: any) {
@@ -249,27 +253,26 @@ export async function rejectSharedWorkout(
     }
 
     // Crear notificación de rechazo para el remitente
-    if (sharedWorkout.message_id) {
-      const { data: receiverProfile } = await supabase
-        .from('user_profiles')
-        .select('name, username')
-        .eq('user_id', receiverId)
+    // Usamos 'workout_plan_rejected' para que sea solo informativa (sin botones de aceptar/rechazar)
+    const { data: receiverProfile } = await supabase
+      .from('user_profiles')
+      .select('name, username')
+      .eq('user_id', receiverId)
         .single();
 
-      const receiverName = receiverProfile?.name || receiverProfile?.username || 'Un usuario';
+    const receiverName = receiverProfile?.name || receiverProfile?.username || 'Un usuario';
 
-      await supabase
-        .from('user_notifications')
-        .insert({
-          user_id: sharedWorkout.sender_id,
-          notification_type: 'workout_plan',
-          title: '❌ Entrenamiento rechazado',
-          message: `${receiverName} ha rechazado tu entrenamiento compartido`,
-          sender_name: receiverName,
-          related_id: sharedWorkout.workout_plan_id,
-          is_read: false,
-        });
-    }
+    await supabase
+      .from('user_notifications')
+      .insert({
+        user_id: sharedWorkout.sender_id,
+        notification_type: 'workout_plan_rejected',
+        title: '❌ Entrenamiento rechazado',
+        message: `${receiverName} ha rechazado tu entrenamiento compartido`,
+        sender_name: receiverName,
+        related_id: sharedWorkout.workout_plan_id,
+        is_read: false,
+      });
 
     return { success: true };
   } catch (error: any) {

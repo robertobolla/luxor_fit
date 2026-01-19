@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { supabase, getUserRole } from '../services/adminService';
 
+const STORAGE_BUCKET = 'food-images';
+
 // Mapeos de traducción para tipos de alimentos
 const FOOD_TYPE_LABELS: Record<string, string> = {
   proteins: 'Proteínas',
@@ -15,6 +17,8 @@ const FOOD_TYPE_LABELS: Record<string, string> = {
   nuts: 'Frutos secos',
   beverages: 'Bebidas',
   prepared_meals: 'Comidas preparadas',
+  dressings: 'Aderezos',
+  sweets: 'Dulces',
 };
 
 const QUANTITY_TYPE_LABELS: Record<string, string> = {
@@ -78,6 +82,12 @@ export default function Foods() {
     image_url: '',
     tags: '',
   });
+
+  // Estado para subir imagen
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = userRole === 'admin';
 
@@ -198,6 +208,9 @@ export default function Foods() {
     });
     setEditingFood(food);
     setIsCreating(false);
+    setSelectedImage(null);
+    // Si tiene imagen existente, mostrarla como preview
+    setImagePreview(food.image_url || null);
     setShowModal(true);
   };
 
@@ -205,6 +218,72 @@ export default function Foods() {
     setShowModal(false);
     setEditingFood(null);
     setIsCreating(false);
+    setSelectedImage(null);
+    setImagePreview(null);
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validar tipo de archivo
+      if (!file.type.startsWith('image/')) {
+        setError('Por favor selecciona un archivo de imagen válido');
+        return;
+      }
+      // Validar tamaño (máximo 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('La imagen no puede superar los 5MB');
+        return;
+      }
+      setSelectedImage(file);
+      setImagePreview(URL.createObjectURL(file));
+      setError(null);
+    }
+  };
+
+  const uploadImage = async (file: File): Promise<string | null> => {
+    try {
+      setUploadingImage(true);
+      
+      // Generar nombre único para el archivo
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `foods/${fileName}`;
+
+      // Subir a Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw new Error(`Error al subir imagen: ${uploadError.message}`);
+      }
+
+      // Obtener URL pública
+      const { data: urlData } = supabase.storage
+        .from(STORAGE_BUCKET)
+        .getPublicUrl(filePath);
+
+      return urlData.publicUrl;
+    } catch (err: any) {
+      console.error('Error uploading image:', err);
+      throw err;
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const removeImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    setFormData({ ...formData, image_url: '' });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleSave = async () => {
@@ -223,6 +302,15 @@ export default function Foods() {
     setSuccess(null);
 
     try {
+      // Si hay una imagen seleccionada, subirla primero
+      let imageUrl = formData.image_url.trim() || null;
+      if (selectedImage) {
+        const uploadedUrl = await uploadImage(selectedImage);
+        if (uploadedUrl) {
+          imageUrl = uploadedUrl;
+        }
+      }
+
       // Determinar estado basado en si tiene toda la info necesaria
       const hasAllInfo = 
         formData.name_es.trim() && 
@@ -244,7 +332,7 @@ export default function Foods() {
         unit_weight_g: formData.unit_weight_g ? parseFloat(formData.unit_weight_g) : null,
         unit_name_es: formData.unit_name_es || 'unidad',
         unit_name_en: formData.unit_name_en || 'unit',
-        image_url: formData.image_url.trim() || null,
+        image_url: imageUrl,
         tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(t => t) : [],
         status: hasAllInfo ? 'complete' : 'incomplete',
       };
@@ -536,6 +624,71 @@ export default function Foods() {
     statLabel: {
       color: '#888',
       fontSize: '0.85rem',
+    },
+    // Image upload styles
+    imageUploadContainer: {
+      border: '2px dashed #444',
+      borderRadius: '12px',
+      padding: '1.5rem',
+      textAlign: 'center' as const,
+      cursor: 'pointer',
+      transition: 'border-color 0.2s',
+      backgroundColor: '#252525',
+    },
+    imageUploadContainerHover: {
+      borderColor: '#ffb300',
+    },
+    imagePreviewContainer: {
+      position: 'relative' as const,
+      display: 'inline-block',
+    },
+    imagePreview: {
+      maxWidth: '200px',
+      maxHeight: '200px',
+      borderRadius: '8px',
+      objectFit: 'cover' as const,
+    },
+    removeImageButton: {
+      position: 'absolute' as const,
+      top: '-10px',
+      right: '-10px',
+      width: '28px',
+      height: '28px',
+      borderRadius: '50%',
+      backgroundColor: '#f44336',
+      color: '#fff',
+      border: 'none',
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '16px',
+      fontWeight: 'bold' as const,
+    },
+    uploadIcon: {
+      fontSize: '2.5rem',
+      marginBottom: '0.5rem',
+    },
+    uploadText: {
+      color: '#888',
+      fontSize: '0.9rem',
+    },
+    uploadSubtext: {
+      color: '#666',
+      fontSize: '0.75rem',
+      marginTop: '0.25rem',
+    },
+    currentImageContainer: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '1rem',
+      marginTop: '0.5rem',
+    },
+    currentImageThumb: {
+      width: '60px',
+      height: '60px',
+      borderRadius: '8px',
+      objectFit: 'cover' as const,
     },
   };
 
@@ -885,14 +1038,91 @@ export default function Foods() {
             )}
 
             <div style={styles.formGroup}>
-              <label style={styles.formLabel}>URL de Imagen</label>
+              <label style={styles.formLabel}>Imagen del Alimento</label>
+              
+              {/* Input file oculto */}
               <input
-                type="text"
-                style={styles.formInput}
-                value={formData.image_url}
-                onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
-                placeholder="https://ejemplo.com/imagen.jpg"
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                accept="image/*"
+                onChange={handleImageSelect}
               />
+              
+              {imagePreview || formData.image_url ? (
+                // Mostrar preview de la imagen
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+                  <div style={styles.imagePreviewContainer}>
+                    <img
+                      src={imagePreview || formData.image_url}
+                      alt="Preview"
+                      style={styles.imagePreview}
+                    />
+                    <button
+                      type="button"
+                      style={styles.removeImageButton}
+                      onClick={removeImage}
+                      title="Eliminar imagen"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <button
+                      type="button"
+                      style={{ ...styles.buttonSecondary, marginBottom: '0.5rem' }}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      📷 Cambiar imagen
+                    </button>
+                    {selectedImage && (
+                      <p style={{ color: '#4CAF50', fontSize: '0.8rem', margin: 0 }}>
+                        ✓ Nueva imagen seleccionada: {selectedImage.name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                // Mostrar zona de carga
+                <div
+                  style={styles.imageUploadContainer}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.style.borderColor = '#ffb300';
+                  }}
+                  onDragLeave={(e) => {
+                    e.currentTarget.style.borderColor = '#444';
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.currentTarget.style.borderColor = '#444';
+                    const file = e.dataTransfer.files?.[0];
+                    if (file && file.type.startsWith('image/')) {
+                      if (file.size <= 5 * 1024 * 1024) {
+                        setSelectedImage(file);
+                        setImagePreview(URL.createObjectURL(file));
+                      } else {
+                        setError('La imagen no puede superar los 5MB');
+                      }
+                    }
+                  }}
+                >
+                  <div style={styles.uploadIcon}>📷</div>
+                  <div style={styles.uploadText}>
+                    Haz clic o arrastra una imagen aquí
+                  </div>
+                  <div style={styles.uploadSubtext}>
+                    JPG, PNG o GIF • Máximo 5MB
+                  </div>
+                </div>
+              )}
+              
+              {uploadingImage && (
+                <p style={{ color: '#ffb300', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+                  ⏳ Subiendo imagen...
+                </p>
+              )}
             </div>
 
             <div style={styles.formGroup}>
