@@ -1733,7 +1733,7 @@
     "weight": "Weight (grams)",
     "weightPlaceholder": "E.g: 300",
     "weightHint": "Weight of cooked food (or specify 'raw')",
-    "calculateWithAI": "Calculate with AI",
+    "calculateWithAI": "Calculate",
     "orManually": "or enter manually",
     "registerMeal": "Register Meal",
     "savingButtonText": "Saving...",

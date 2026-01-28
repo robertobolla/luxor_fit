@@ -97,15 +97,13 @@ export default function TodayDetailScreen() {
       }
 
       // Obtener el target del día correspondiente del plan activo
-      if (activePlan) {
+      if (activePlan && !planError) {
         const weeks = activePlan.nutrition_plan_weeks || [];
-        const currentWeekNumber = activePlan.current_week_number || 1;
-        const currentWeek = weeks.find((w: any) => w.week_number === currentWeekNumber) || weeks[0];
+        const currentWeek = weeks[0]; // Tomar la primera semana (igual que en index.tsx)
         
         if (currentWeek) {
-          const todayPlan = (currentWeek.nutrition_plan_days || []).find(
-            (d: any) => d.day_number === dayOfWeek
-          );
+          const days = currentWeek.nutrition_plan_days || [];
+          const todayPlan = days.find((d: any) => d.day_number === dayOfWeek) || days[0];
           
           if (todayPlan) {
             // Calcular macros totales de los alimentos del plan
@@ -114,14 +112,14 @@ export default function TodayDetailScreen() {
             let totalCarbs = 0;
             let totalFat = 0;
 
-            for (const meal of todayPlan.nutrition_plan_meals || []) {
-              for (const food of meal.nutrition_plan_meal_foods || []) {
+            todayPlan.nutrition_plan_meals?.forEach((meal: any) => {
+              meal.nutrition_plan_meal_foods?.forEach((food: any) => {
                 totalCalories += food.calculated_calories || 0;
                 totalProtein += food.calculated_protein || 0;
                 totalCarbs += food.calculated_carbs || 0;
                 totalFat += food.calculated_fat || 0;
-              }
-            }
+              });
+            });
 
             // Si hay alimentos, usar los totales calculados; si no, usar los targets guardados
             const hasFood = totalCalories > 0 || totalProtein > 0 || totalCarbs > 0 || totalFat > 0;

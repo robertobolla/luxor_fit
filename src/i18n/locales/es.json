@@ -1733,7 +1733,7 @@
     "weight": "Peso (gramos)",
     "weightPlaceholder": "Ej: 300",
     "weightHint": "Peso del alimento cocido (o especifica 'crudo')",
-    "calculateWithAI": "Calcular con IA",
+    "calculateWithAI": "Calcular",
     "orManually": "o ingresa manualmente",
     "registerMeal": "Registrar Comida",
     "savingButtonText": "Guardando...",
