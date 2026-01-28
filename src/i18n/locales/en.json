@@ -59,6 +59,7 @@
     "continue": "Continue",
     "start": "Start",
     "finish": "Finish",
+    "end": "End",
     "settings": "Settings",
     "help": "Help",
     "logout": "Log Out",
@@ -1850,7 +1851,7 @@
     "walking": "Walking",
     "cycling": "Cycling",
     "hiking": "Hiking",
-    "weights": "Weights",
+    "yoga": "Yoga",
     "calisthenics": "Calisthenics",
     "soccer": "Soccer",
     "otherActivity": "Other activity",
@@ -1873,7 +1874,10 @@
     "locationPermissionNeeded": "We need access to your location to track",
     "errorStartingGPS": "Error starting GPS",
     "couldNotStartGPS": "Could not start GPS tracking",
-    "enterDuration": "Please enter the activity duration"
+    "enterDuration": "Please enter the activity duration",
+    "noRouteData": "No route data available",
+    "manualActivity": "Manually recorded activity",
+    "recorded": "Recorded"
   },
   "notificationSettings": {
     "notifications": "Notifications",

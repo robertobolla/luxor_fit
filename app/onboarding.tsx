@@ -8,15 +8,37 @@ import {
   TextInput,
   Alert,
   StatusBar,
+  Modal,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useUser, useAuth } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../src/services/supabase';
 import { Gender } from '../src/types';
 import { getClerkUserEmail } from '../src/utils/clerkHelpers';
-import { validateEmail, validateAge, validateWeight, validateHeight, validateRequired, validateMinLength, validateUsernameFormat } from '../src/utils/formValidation';
+import { validateEmail, validateWeight, validateHeight, validateRequired, validateMinLength, validateUsernameFormat } from '../src/utils/formValidation';
+
+// Función para calcular la edad a partir de la fecha de nacimiento
+const calculateAge = (birthDate: Date): number => {
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+// Función para formatear la fecha
+const formatDate = (date: Date): string => {
+  const day = date.getDate().toString().padStart(2, '0');
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
 
 const STEPS = [
   'welcome',
@@ -39,12 +61,14 @@ export default function OnboardingScreen() {
     name: '',
     email: '',
     username: '',
-    age: '',
+    birthDate: null as Date | null,
     gender: Gender.MALE,
     height: '',
     weight: '',
   });
   const [checkingUsername, setCheckingUsername] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [tempDate, setTempDate] = useState({ day: '', month: '', year: '' });
 
   // Cargar email de Clerk y perfil existente
   React.useEffect(() => {
@@ -93,11 +117,21 @@ export default function OnboardingScreen() {
           // Prioridad: email de Clerk > email del perfil guardado
           const emailToUse = clerkEmail || data.email || '';
           
+          // Parsear fecha de nacimiento si existe
+          let birthDate: Date | null = null;
+          if (data.birth_date) {
+            birthDate = new Date(data.birth_date);
+          } else if (data.age) {
+            // Fallback: si solo hay edad, calcular una fecha aproximada
+            const currentYear = new Date().getFullYear();
+            birthDate = new Date(currentYear - data.age, 0, 1);
+          }
+          
           setFormData({
             name: data.name || '',
             email: emailToUse,
             username: data.username || '',
-            age: data.age?.toString() || '',
+            birthDate: birthDate,
             gender: allowedGenders.includes(data.gender as Gender) ? (data.gender as Gender) : Gender.MALE,
             height: data.height?.toString() || '',
             weight: data.weight?.toString() || '',
@@ -159,10 +193,16 @@ export default function OnboardingScreen() {
       errors.name = nameValidation.error || '';
     }
 
-    // Validar edad
-    const ageValidation = validateAge(formData.age);
-    if (!ageValidation.isValid) {
-      errors.age = ageValidation.error || '';
+    // Validar fecha de nacimiento
+    if (!formData.birthDate) {
+      errors.birthDate = 'La fecha de nacimiento es requerida';
+    } else {
+      const age = calculateAge(formData.birthDate);
+      if (age < 13) {
+        errors.birthDate = 'Debes tener al menos 13 años';
+      } else if (age > 120) {
+        errors.birthDate = 'La fecha de nacimiento no es válida';
+      }
     }
 
     // Validar altura
@@ -338,12 +378,16 @@ export default function OnboardingScreen() {
       }
 
       // Preparar datos base
+      const birthDateISO = formData.birthDate ? formData.birthDate.toISOString().split('T')[0] : null;
+      const age = formData.birthDate ? calculateAge(formData.birthDate) : 0;
+      
       const profileData: any = {
         user_id: userId,
         email: userEmail,
         username: formData.username.toLowerCase().trim(),
         name: formData.name,
-        age: parseInt(formData.age),
+        birth_date: birthDateISO,
+        age: age, // Mantener age para compatibilidad
         gender: formData.gender,
         height: parseInt(formData.height),
         weight: parseInt(formData.weight),
@@ -659,37 +703,34 @@ export default function OnboardingScreen() {
 </Text>              )}
             </View>
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Edad *</Text>
-              <TextInput
-                style={[styles.input, fieldErrors.age && styles.inputError]}
-                value={formData.age}
-                onChangeText={(text) => {
-                  setFormData(prev => ({ ...prev, age: text }));
-                  if (text.trim().length > 0) {
-                    const validation = validateAge(text);
-                    if (!validation.isValid) {
-                      setFieldErrors(prev => ({ ...prev, age: validation.error || '' }));
-                    } else {
-                      setFieldErrors(prev => {
-                        const newErrors = { ...prev };
-                        delete newErrors.age;
-                        return newErrors;
-                      });
-                    }
-                  } else {
-                    setFieldErrors(prev => {
-                      const newErrors = { ...prev };
-                      delete newErrors.age;
-                      return newErrors;
+              <Text style={styles.label}>Fecha de nacimiento *</Text>
+              <TouchableOpacity
+                style={[styles.input, styles.dateInput, fieldErrors.birthDate && styles.inputError]}
+                onPress={() => {
+                  if (formData.birthDate) {
+                    setTempDate({
+                      day: formData.birthDate.getDate().toString(),
+                      month: (formData.birthDate.getMonth() + 1).toString(),
+                      year: formData.birthDate.getFullYear().toString(),
                     });
+                  } else {
+                    setTempDate({ day: '', month: '', year: '' });
                   }
+                  setShowDatePicker(true);
                 }}
-                placeholder="25"
-                placeholderTextColor="#666"
-                keyboardType="numeric"
-              />
-              {fieldErrors.age && (
-                <Text style={styles.errorText}>{fieldErrors.age}</Text>
+              >
+                <Text style={formData.birthDate ? styles.dateText : styles.datePlaceholder}>
+                  {formData.birthDate ? formatDate(formData.birthDate) : 'DD/MM/AAAA'}
+                </Text>
+                <Ionicons name="calendar-outline" size={20} color="#666" />
+              </TouchableOpacity>
+              {formData.birthDate && (
+                <Text style={styles.ageDisplay}>
+                  {calculateAge(formData.birthDate)} años
+                </Text>
+              )}
+              {fieldErrors.birthDate && (
+                <Text style={styles.errorText}>{fieldErrors.birthDate}</Text>
               )}
             </View>
             <View style={styles.inputGroup}>
@@ -813,7 +854,7 @@ export default function OnboardingScreen() {
   const canProceed = () => {
     switch (STEPS[currentStep]) {
       case 'personal_info':
-        return formData.name && formData.username && formData.age && formData.height && formData.weight;
+        return formData.name && formData.username && formData.birthDate && formData.height && formData.weight;
       default:
         return true;
     }
@@ -884,6 +925,98 @@ export default function OnboardingScreen() {
           </TouchableOpacity>
         )}
       </View>
+      
+      {/* Modal para seleccionar fecha de nacimiento */}
+      <Modal
+        visible={showDatePicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDatePicker(false)}
+      >
+        <View style={styles.dateModalOverlay}>
+          <View style={styles.dateModalContainer}>
+            <Text style={styles.dateModalTitle}>Fecha de nacimiento</Text>
+            
+            <View style={styles.dateInputsRow}>
+              <View style={styles.dateInputGroup}>
+                <Text style={styles.dateInputLabel}>Día</Text>
+                <TextInput
+                  style={styles.dateInputField}
+                  value={tempDate.day}
+                  onChangeText={(text) => setTempDate(prev => ({ ...prev, day: text.replace(/[^0-9]/g, '').slice(0, 2) }))}
+                  placeholder="DD"
+                  placeholderTextColor="#666"
+                  keyboardType="numeric"
+                  maxLength={2}
+                />
+              </View>
+              
+              <View style={styles.dateInputGroup}>
+                <Text style={styles.dateInputLabel}>Mes</Text>
+                <TextInput
+                  style={styles.dateInputField}
+                  value={tempDate.month}
+                  onChangeText={(text) => setTempDate(prev => ({ ...prev, month: text.replace(/[^0-9]/g, '').slice(0, 2) }))}
+                  placeholder="MM"
+                  placeholderTextColor="#666"
+                  keyboardType="numeric"
+                  maxLength={2}
+                />
+              </View>
+              
+              <View style={styles.dateInputGroup}>
+                <Text style={styles.dateInputLabel}>Año</Text>
+                <TextInput
+                  style={[styles.dateInputField, { width: 80 }]}
+                  value={tempDate.year}
+                  onChangeText={(text) => setTempDate(prev => ({ ...prev, year: text.replace(/[^0-9]/g, '').slice(0, 4) }))}
+                  placeholder="AAAA"
+                  placeholderTextColor="#666"
+                  keyboardType="numeric"
+                  maxLength={4}
+                />
+              </View>
+            </View>
+            
+            <View style={styles.dateModalButtons}>
+              <TouchableOpacity
+                style={styles.dateModalCancelButton}
+                onPress={() => setShowDatePicker(false)}
+              >
+                <Text style={styles.dateModalCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.dateModalConfirmButton}
+                onPress={() => {
+                  const day = parseInt(tempDate.day);
+                  const month = parseInt(tempDate.month);
+                  const year = parseInt(tempDate.year);
+                  
+                  if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900 && year <= new Date().getFullYear()) {
+                    const newDate = new Date(year, month - 1, day);
+                    if (newDate.getDate() === day && newDate.getMonth() === month - 1) {
+                      setFormData(prev => ({ ...prev, birthDate: newDate }));
+                      setFieldErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.birthDate;
+                        return newErrors;
+                      });
+                      setShowDatePicker(false);
+                    } else {
+                      Alert.alert('Error', 'La fecha ingresada no es válida');
+                    }
+                  } else {
+                    Alert.alert('Error', 'Por favor ingresa una fecha válida');
+                  }
+                }}
+              >
+                <Text style={styles.dateModalConfirmText}>Confirmar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1006,6 +1139,101 @@ const styles = StyleSheet.create({
     color: '#FF6B6B',
     fontSize: 12,
     marginTop: 4,
+  },
+  dateInput: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  dateText: {
+    color: '#ffffff',
+    fontSize: 16,
+  },
+  datePlaceholder: {
+    color: '#666',
+    fontSize: 16,
+  },
+  ageDisplay: {
+    color: '#ffb300',
+    fontSize: 14,
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  dateModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  dateModalContainer: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  dateModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#ffffff',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  dateInputsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 16,
+    marginBottom: 24,
+  },
+  dateInputGroup: {
+    alignItems: 'center',
+  },
+  dateInputLabel: {
+    color: '#888',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  dateInputField: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 14,
+    width: 60,
+    fontSize: 18,
+    color: '#ffffff',
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  dateModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dateModalCancelButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#333',
+    alignItems: 'center',
+  },
+  dateModalCancelText: {
+    color: '#888',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  dateModalConfirmButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#ffb300',
+    alignItems: 'center',
+  },
+  dateModalConfirmText: {
+    color: '#1a1a1a',
+    fontSize: 16,
+    fontWeight: '600',
   },
   optionButton: {
     backgroundColor: '#2a2a2a',

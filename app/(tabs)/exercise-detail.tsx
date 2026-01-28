@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef,useMemo  } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,12 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useUser } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
-import { saveExercise, getDaysWithExercise } from '@/services/exerciseService';
+import { saveExercise, getDaysWithExercise, getExercisesByDateRange, Exercise } from '@/services/exerciseService';
 import { supabase } from '../../src/services/supabase';
 import { useUnitsStore, conversions } from '../../src/store/unitsStore';
 
@@ -43,7 +43,7 @@ const getMonitorActivities = (t: any): Activity[] => [
 ];
 
 const getManualActivities = (t: any): Activity[] => [
-  { id: 'weights', name: t('exerciseDetail.weights'), icon: 'barbell', hasGPS: false },
+  { id: 'yoga', name: t('exerciseDetail.yoga'), icon: 'heart-half-sharp', hasGPS: false },
   { id: 'calisthenics', name: t('exerciseDetail.calisthenics'), icon: 'body', hasGPS: false },
   { id: 'soccer', name: t('exerciseDetail.soccer'), icon: 'football', hasGPS: false },
   { id: 'other', name: t('exerciseDetail.otherActivity'), icon: 'add-circle', hasGPS: false },
@@ -73,6 +73,7 @@ export default function ExerciseDetailScreen() {
   // Estados para registro manual
   const [duration, setDuration] = useState('');
   const [intensity, setIntensity] = useState<IntensityLevel>('medium');
+  const [customActivityName, setCustomActivityName] = useState('');
   
   // Estados para tracking GPS
   const [isTracking, setIsTracking] = useState(false);
@@ -83,6 +84,8 @@ export default function ExerciseDetailScreen() {
   // Estados para días con ejercicio
   const [exerciseDays, setExerciseDays] = useState<number[]>([]);
   const [monthExerciseDays, setMonthExerciseDays] = useState<number[]>([]);
+  const [monthExercises, setMonthExercises] = useState<Exercise[]>([]);
+  const [weekExercises, setWeekExercises] = useState<Exercise[]>([]);
   
   // Referencias para el tracking
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
@@ -195,6 +198,13 @@ export default function ExerciseDetailScreen() {
       const month = currentDate.getMonth();
       const days = await getDaysWithExercise(user.id, year, month);
       setMonthExerciseDays(days);
+      
+      // Cargar los ejercicios del mes para mostrar detalles
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+      const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      const exercises = await getExercisesByDateRange(user.id, startDate, endDate);
+      setMonthExercises(exercises);
     } else {
       // Para vista semanal, calcular qué días de la semana tienen ejercicio
       // Calcular el inicio de la semana (Lunes)
@@ -203,6 +213,10 @@ export default function ExerciseDetailScreen() {
       const weekStart = new Date(currentDate);
       weekStart.setDate(currentDate.getDate() - daysFromMonday);
       weekStart.setHours(0, 0, 0, 0);
+      
+      // Calcular fin de semana (Domingo)
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekStart.getDate() + 6);
 
       // Cache para almacenar datos por mes
       const monthCache: { [key: string]: number[] } = {};
@@ -232,6 +246,12 @@ export default function ExerciseDetailScreen() {
       }
 
       setExerciseDays(weekDaysWithExercise);
+      
+      // Cargar los ejercicios de la semana para mostrar detalles
+      const startDate = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+      const endDate = `${weekEnd.getFullYear()}-${String(weekEnd.getMonth() + 1).padStart(2, '0')}-${String(weekEnd.getDate()).padStart(2, '0')}`;
+      const exercises = await getExercisesByDateRange(user.id, startDate, endDate);
+      setWeekExercises(exercises);
     }
   };
 
@@ -239,6 +259,13 @@ export default function ExerciseDetailScreen() {
   useEffect(() => {
     loadExerciseDays();
   }, [currentDate, viewMode, user]);
+
+  // Recargar datos cuando la pantalla obtiene el foco (volver de otra pantalla)
+  useFocusEffect(
+    useCallback(() => {
+      loadExerciseDays();
+    }, [currentDate, viewMode, user])
+  );
 
   type UserProfileDaysRow = {
     available_days: number | null;
@@ -265,7 +292,7 @@ export default function ExerciseDetailScreen() {
       if (Number.isFinite(days) && days > 0) {
         setTargetDays(days);
       } else {
-        setTargetDays(5); // o el default que quieras
+        setTargetDays(7); // default: 7 días por semana (consistente con progress.tsx)
       }
     };
   
@@ -382,7 +409,7 @@ export default function ExerciseDetailScreen() {
   // Obtener el número de días objetivo según la vista
   const getTargetDays = () => {
     if (viewMode === 'week') {
-      return targetDays; // 7 por defecto para semana
+      return 7; // Siempre 7 días en una semana
     } else {
       return daysInMonth; // Días del mes actual
     }
@@ -510,6 +537,12 @@ export default function ExerciseDetailScreen() {
       return;
     }
     
+    // Si es "otra actividad", validar que tenga nombre
+    if (selectedActivity?.id === 'other' && !customActivityName.trim()) {
+      Alert.alert(t('common.error'), 'Por favor ingresa el nombre de la actividad');
+      return;
+    }
+    
     // Guardar en la base de datos
     if (user && selectedActivity) {
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
@@ -517,10 +550,13 @@ export default function ExerciseDetailScreen() {
       // Crear nota con la intensidad
       const intensityText = intensity === 'low' ? 'Poco intenso' : intensity === 'medium' ? 'Medio intenso' : 'Intenso';
       
+      // Usar el nombre personalizado si es "otra actividad"
+      const activityName = selectedActivity.id === 'other' ? customActivityName.trim() : selectedActivity.name;
+      
       const result = await saveExercise({
         user_id: user.id,
-        activity_type: selectedActivity.id,
-        activity_name: selectedActivity.name,
+        activity_type: selectedActivity.id === 'other' ? 'custom' : selectedActivity.id,
+        activity_name: activityName,
         date: today,
         duration_minutes: parseInt(duration),
         notes: `Intensidad: ${intensityText}`,
@@ -534,7 +570,7 @@ export default function ExerciseDetailScreen() {
         
         Alert.alert(
           '¡Guardado! ✅',
-          `Tu sesión de ${selectedActivity?.name.toLowerCase()} ha sido guardada correctamente`,
+          `Tu sesión de ${activityName.toLowerCase()} ha sido guardada correctamente`,
           [{ text: 'OK', onPress: handleCloseModal }]
         );
       } else {
@@ -564,6 +600,7 @@ export default function ExerciseDetailScreen() {
     setCurrentSpeed(0);
     setDuration('');
     setIntensity('medium'); // Resetear a valor por defecto
+    setCustomActivityName(''); // Resetear nombre personalizado
     
     // Resetear referencias
     lastLocation.current = null;
@@ -571,15 +608,32 @@ export default function ExerciseDetailScreen() {
   };
 
   const renderWeekView = () => {
-    // Calcular el inicio de la semana basado en currentDate
+    // Calcular el inicio de la semana (Lunes) basado en currentDate
     const currentDay = currentDate.getDay();
+    // Convertir: Domingo (0) -> 6, Lunes (1) -> 0, Martes (2) -> 1, etc.
+    const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1;
     const weekStart = new Date(currentDate);
-    weekStart.setDate(currentDate.getDate() - currentDay);
+    weekStart.setDate(currentDate.getDate() - daysFromMonday);
     weekStart.setHours(0, 0, 0, 0);
     
     // Fecha actual para comparar
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    
+    // Función para obtener el icono de la actividad
+    const getActivityIcon = (type: string) => {
+      switch (type) {
+        case 'running': return 'fitness';
+        case 'walking': return 'walk';
+        case 'cycling': return 'bicycle';
+        case 'hiking': return 'trail-sign';
+        case 'yoga': return 'heart-half-sharp';
+        case 'calisthenics': return 'body';
+        case 'soccer': return 'football';
+        case 'custom': return 'star';
+        default: return 'fitness';
+      }
+    };
     
     return (
       <View style={styles.weekContainer}>
@@ -590,6 +644,7 @@ export default function ExerciseDetailScreen() {
             // Calcular si este día es hoy
             const dayDate = new Date(weekStart);
             dayDate.setDate(weekStart.getDate() + index);
+            dayDate.setHours(0, 0, 0, 0);
             const isToday = dayDate.getTime() === today.getTime();
             
             return (
@@ -603,6 +658,104 @@ export default function ExerciseDetailScreen() {
               </View>
             );
           })}
+        </View>
+        
+        {/* Lista de ejercicios de la semana */}
+        <View style={styles.weekExercisesSection}>
+          <Text style={styles.sectionTitle}>
+            Ejercicios de la semana
+          </Text>
+          
+          {weekExercises.length > 0 ? (
+            <View style={styles.exercisesList}>
+              {weekExercises.map((exercise, index) => {
+                const exerciseDate = new Date(exercise.date + 'T00:00:00');
+                const formattedDate = exerciseDate.toLocaleDateString('es-ES', { 
+                  weekday: 'long', 
+                  day: 'numeric', 
+                  month: 'short' 
+                });
+                
+                const handleCardPress = () => {
+                  if (exercise.id) {
+                    router.push({
+                      pathname: '/(tabs)/exercise-activity-detail',
+                      params: { exerciseId: exercise.id }
+                    } as any);
+                  }
+                };
+                
+                return (
+                  <TouchableOpacity 
+                    key={exercise.id || index} 
+                    style={styles.exerciseCard}
+                    onPress={handleCardPress}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.exerciseCardHeader}>
+                      <View style={styles.exerciseIconContainer}>
+                        <Ionicons name={getActivityIcon(exercise.activity_type) as any} size={24} color="#ffb300" />
+                      </View>
+                      <View style={styles.exerciseCardInfo}>
+                        <Text style={styles.exerciseCardTitle}>{exercise.activity_name}</Text>
+                        <Text style={styles.exerciseCardDate}>{formattedDate}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color="#666" />
+                    </View>
+                    
+                    <View style={styles.exerciseCardStats}>
+                      <View style={styles.exerciseCardStat}>
+                        <Ionicons name="time-outline" size={16} color="#888" />
+                        <Text style={styles.exerciseCardStatText}>{exercise.duration_minutes} min</Text>
+                      </View>
+                      
+                      {exercise.distance_km !== undefined && exercise.distance_km > 0 && (
+                        <View style={styles.exerciseCardStat}>
+                          <Ionicons name="navigate-outline" size={16} color="#888" />
+                          <Text style={styles.exerciseCardStatText}>
+                            {displayDistance(exercise.distance_km).toFixed(2)} {distanceLabel}
+                          </Text>
+                        </View>
+                      )}
+                      
+                      {exercise.average_speed_kmh !== undefined && exercise.average_speed_kmh > 0 && (
+                        <View style={styles.exerciseCardStat}>
+                          <Ionicons name="speedometer-outline" size={16} color="#888" />
+                          <Text style={styles.exerciseCardStatText}>
+                            {displaySpeed(exercise.average_speed_kmh).toFixed(1)} {speedLabel}
+                          </Text>
+                        </View>
+                      )}
+                      
+                      {exercise.elevation_gain !== undefined && exercise.elevation_gain > 0 && (
+                        <View style={styles.exerciseCardStat}>
+                          <Ionicons name="trending-up" size={16} color="#4CAF50" />
+                          <Text style={[styles.exerciseCardStatText, { color: '#4CAF50' }]}>{exercise.elevation_gain}m ↑</Text>
+                        </View>
+                      )}
+                      
+                      {exercise.elevation_loss !== undefined && exercise.elevation_loss > 0 && (
+                        <View style={styles.exerciseCardStat}>
+                          <Ionicons name="trending-down" size={16} color="#f44336" />
+                          <Text style={[styles.exerciseCardStatText, { color: '#f44336' }]}>{exercise.elevation_loss}m ↓</Text>
+                        </View>
+                      )}
+                    </View>
+                    
+                    {exercise.notes && (
+                      <Text style={styles.exerciseCardNotes}>{exercise.notes}</Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.emptyExercises}>
+              <Ionicons name="fitness-outline" size={48} color="#444" />
+              <Text style={styles.emptyExercisesText}>No hay ejercicios registrados esta semana</Text>
+              <Text style={styles.emptyExercisesSubtext}>Usa el botón de abajo para añadir uno</Text>
+            </View>
+          )}
         </View>
       </View>
     );
@@ -668,7 +821,7 @@ export default function ExerciseDetailScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity 
-          onPress={() => router.back()}
+          onPress={() => router.replace('/(tabs)/progress' as any)}
         >
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
@@ -730,42 +883,119 @@ export default function ExerciseDetailScreen() {
         {/* Vista de calendario */}
         {viewMode === 'week' ? renderWeekView() : renderMonthView()}
 
-        {/* Tabs de filtros (solo en vista de mes) */}
-        {viewMode === 'month' && (
-          <View style={styles.filterTabs}>
-            <TouchableOpacity style={[styles.filterTab, styles.filterTabActive]}>
-              <Ionicons name="checkmark" size={16} color="#1a1a1a" style={styles.filterIcon} />
-              <Text style={[styles.filterTabText, styles.filterTabTextActive]}>
-                {t('stats.exerciseDays')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterTab}>
-              <Text style={styles.filterTabText}>
-                {t('filters.duration')}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterTab}>             
-              <Text style={styles.filterTabText}>
-                {t('filters.distance')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {/* Sección de ejercicios */}
+        {/* Sección de ejercicios del mes */}
         {viewMode === 'month' && (
           <View style={styles.exercisesSection}>
             <Text style={styles.sectionTitle}>
-              {currentDate.toLocaleDateString('es-ES', { month: 'long' })}
+              Días de Ejercicio de {currentDate.toLocaleDateString('es-ES', { month: 'long' }).charAt(0).toUpperCase() + currentDate.toLocaleDateString('es-ES', { month: 'long' }).slice(1)}
             </Text>
-            <Text style={styles.sectionSubtitle}>
-              {t('sections.exercises')}
-            </Text>            
-            {/* Botón Añadir ejercicio */}
-            <TouchableOpacity style={styles.weekButton} onPress={() => setShowAddModal(true)}>
-              <Ionicons name="add" size={20} color="#ffffff" />
-              <Text style={styles.weekButtonText}>{t('actions.addExercise')}</Text>
-            </TouchableOpacity>
+            
+            {/* Lista de ejercicios del mes */}
+            {monthExercises.length > 0 ? (
+              <View style={styles.exercisesList}>
+                {monthExercises.map((exercise, index) => {
+                  const exerciseDate = new Date(exercise.date + 'T00:00:00');
+                  const formattedDate = exerciseDate.toLocaleDateString('es-ES', { 
+                    weekday: 'long', 
+                    day: 'numeric', 
+                    month: 'short' 
+                  });
+                  
+                  // Determinar el icono según el tipo de actividad
+                  const getActivityIcon = (type: string) => {
+                    switch (type) {
+                      case 'running': return 'fitness';
+                      case 'walking': return 'walk';
+                      case 'cycling': return 'bicycle';
+                      case 'hiking': return 'trail-sign';
+                      case 'yoga': return 'heart-half-sharp';
+                      case 'calisthenics': return 'body';
+                      case 'soccer': return 'football';
+                      case 'custom': return 'star';
+                      default: return 'fitness';
+                    }
+                  };
+                  
+                  const handleCardPress = () => {
+                    if (exercise.id) {
+                      router.push({
+                        pathname: '/(tabs)/exercise-activity-detail',
+                        params: { exerciseId: exercise.id }
+                      } as any);
+                    }
+                  };
+                  
+                  return (
+                    <TouchableOpacity 
+                      key={exercise.id || index} 
+                      style={styles.exerciseCard}
+                      onPress={handleCardPress}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.exerciseCardHeader}>
+                        <View style={styles.exerciseIconContainer}>
+                          <Ionicons name={getActivityIcon(exercise.activity_type) as any} size={24} color="#ffb300" />
+                        </View>
+                        <View style={styles.exerciseCardInfo}>
+                          <Text style={styles.exerciseCardTitle}>{exercise.activity_name}</Text>
+                          <Text style={styles.exerciseCardDate}>{formattedDate}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#666" />
+                      </View>
+                      
+                      <View style={styles.exerciseCardStats}>
+                        <View style={styles.exerciseCardStat}>
+                          <Ionicons name="time-outline" size={16} color="#888" />
+                          <Text style={styles.exerciseCardStatText}>{exercise.duration_minutes} min</Text>
+                        </View>
+                        
+                        {exercise.distance_km !== undefined && exercise.distance_km > 0 && (
+                          <View style={styles.exerciseCardStat}>
+                            <Ionicons name="navigate-outline" size={16} color="#888" />
+                            <Text style={styles.exerciseCardStatText}>
+                              {displayDistance(exercise.distance_km).toFixed(2)} {distanceLabel}
+                            </Text>
+                          </View>
+                        )}
+                        
+                        {exercise.average_speed_kmh !== undefined && exercise.average_speed_kmh > 0 && (
+                          <View style={styles.exerciseCardStat}>
+                            <Ionicons name="speedometer-outline" size={16} color="#888" />
+                            <Text style={styles.exerciseCardStatText}>
+                              {displaySpeed(exercise.average_speed_kmh).toFixed(1)} {speedLabel}
+                            </Text>
+                          </View>
+                        )}
+                        
+                        {exercise.elevation_gain !== undefined && exercise.elevation_gain > 0 && (
+                          <View style={styles.exerciseCardStat}>
+                            <Ionicons name="trending-up" size={16} color="#4CAF50" />
+                            <Text style={[styles.exerciseCardStatText, { color: '#4CAF50' }]}>{exercise.elevation_gain}m ↑</Text>
+                          </View>
+                        )}
+                        
+                        {exercise.elevation_loss !== undefined && exercise.elevation_loss > 0 && (
+                          <View style={styles.exerciseCardStat}>
+                            <Ionicons name="trending-down" size={16} color="#f44336" />
+                            <Text style={[styles.exerciseCardStatText, { color: '#f44336' }]}>{exercise.elevation_loss}m ↓</Text>
+                          </View>
+                        )}
+                      </View>
+                      
+                      {exercise.notes && (
+                        <Text style={styles.exerciseCardNotes}>{exercise.notes}</Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ) : (
+              <View style={styles.emptyExercises}>
+                <Ionicons name="fitness-outline" size={48} color="#444" />
+                <Text style={styles.emptyExercisesText}>No hay ejercicios registrados este mes</Text>
+                <Text style={styles.emptyExercisesSubtext}>Usa el botón de abajo para añadir uno</Text>
+              </View>
+            )}
           </View>
         )}
 
@@ -965,16 +1195,33 @@ export default function ExerciseDetailScreen() {
                   <TouchableOpacity onPress={() => setModalStep('selectManualActivity')}>
                     <Ionicons name="arrow-back" size={28} color="#ffffff" />
                   </TouchableOpacity>
-                  <Text style={styles.modalTitle}>{selectedActivity.name}</Text>
+                  <Text style={styles.modalTitle}>
+                    {selectedActivity.id === 'other' ? 'Nueva actividad' : selectedActivity.name}
+                  </Text>
                   <TouchableOpacity onPress={handleCloseModal}>
                     <Ionicons name="close" size={28} color="#ffffff" />
                   </TouchableOpacity>
                 </View>
 
                 <ScrollView style={styles.manualEntryContainer}>
+                  {/* Campo de nombre para "Otra actividad" */}
+                  {selectedActivity.id === 'other' && (
+                    <View style={styles.formSection}>
+                      <Text style={styles.formLabel}>Nombre de la actividad *</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Ej: Natación, Boxeo, Pilates..."
+                        placeholderTextColor="#666"
+                        value={customActivityName}
+                        onChangeText={setCustomActivityName}
+                        autoCapitalize="words"
+                      />
+                    </View>
+                  )}
+                  
                   <View style={styles.formSection}>
-                  {t('form.durationMinutesRequired')}
-                  <TextInput
+                    <Text style={styles.formLabel}>{t('form.durationMinutesRequired')}</Text>
+                    <TextInput
                       style={styles.input}
                       placeholder="Ej: 30"
                       placeholderTextColor="#666"
@@ -985,7 +1232,8 @@ export default function ExerciseDetailScreen() {
                   </View>
 
                   <View style={styles.formSection}>
-                  {t('form.intensity.label')} {t('form.required')}                    <View style={styles.intensityContainer}>
+                    <Text style={styles.formLabel}>{t('form.intensity.label')} {t('form.required')}</Text>
+                    <View style={styles.intensityContainer}>
                       <TouchableOpacity
                         style={[
                           styles.intensityButton,
@@ -1142,6 +1390,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
   },
+  weekExercisesSection: {
+    marginTop: 24,
+  },
   dayColumn: {
     alignItems: 'center',
     gap: 8,
@@ -1242,17 +1493,93 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   sectionTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#ffffff',
-    marginBottom: 8,
-    textTransform: 'capitalize',
+    marginBottom: 16,
+    marginTop: 8,
   },
   sectionSubtitle: {
     fontSize: 18,
     fontWeight: '600',
     color: '#ffffff',
     marginBottom: 16,
+  },
+  exercisesList: {
+    gap: 12,
+  },
+  exerciseCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  exerciseCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  exerciseIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 179, 0, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  exerciseCardInfo: {
+    flex: 1,
+  },
+  exerciseCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 2,
+  },
+  exerciseCardDate: {
+    fontSize: 13,
+    color: '#888',
+    textTransform: 'capitalize',
+  },
+  exerciseCardStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+  },
+  exerciseCardStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  exerciseCardStatText: {
+    fontSize: 13,
+    color: '#888',
+  },
+  exerciseCardNotes: {
+    fontSize: 13,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a2a',
+  },
+  emptyExercises: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 8,
+  },
+  emptyExercisesText: {
+    fontSize: 16,
+    color: '#888',
+    textAlign: 'center',
+  },
+  emptyExercisesSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
   },
   weekButton: {
     backgroundColor: '#2a6d5e',

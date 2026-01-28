@@ -59,6 +59,7 @@
     "continue": "Continuar",
     "start": "Comenzar",
     "finish": "Finalizar",
+    "end": "Fin",
     "settings": "Configuración",
     "help": "Ayuda",
     "logout": "Cerrar sesión",
@@ -1850,7 +1851,7 @@
     "walking": "Caminar",
     "cycling": "Bicicleta",
     "hiking": "Senderismo",
-    "weights": "Pesas",
+    "yoga": "Yoga",
     "calisthenics": "Calistenia",
     "soccer": "Fútbol",
     "otherActivity": "Otra actividad",
@@ -1873,7 +1874,10 @@
     "locationPermissionNeeded": "Necesitamos acceso a tu ubicación para rastrear",
     "errorStartingGPS": "Error al iniciar GPS",
     "couldNotStartGPS": "No se pudo iniciar el tracking GPS",
-    "enterDuration": "Por favor ingresa la duración de la actividad"
+    "enterDuration": "Por favor ingresa la duración de la actividad",
+    "noRouteData": "No hay datos de ruta disponibles",
+    "manualActivity": "Actividad registrada manualmente",
+    "recorded": "Registrado"
   },
   "notificationSettings": {
     "notifications": "Notificaciones",

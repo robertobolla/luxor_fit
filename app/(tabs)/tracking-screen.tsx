@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,9 @@ import {
   TouchableOpacity,
   StatusBar,
   Dimensions,
-  Modal,
   ActivityIndicator,
 } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
@@ -23,6 +22,7 @@ const { width, height } = Dimensions.get('window');
 interface RoutePoint {
   latitude: number;
   longitude: number;
+  altitude?: number;
 }
 
 export default function TrackingScreen() {
@@ -40,20 +40,19 @@ export default function TrackingScreen() {
   const activityName = params.activityName as string;
   const activityType = params.activityType as string;
 
-  // Estados
-  const [isTracking, setIsTracking] = useState(true);
+  // Estado de la pantalla: 'tracking' | 'confirm' | 'saving' | 'success' | 'error'
+  type ScreenState = 'tracking' | 'confirm' | 'saving' | 'success' | 'error';
+  const [screenState, setScreenState] = useState<ScreenState>('tracking');
+  
+  // Estados de tracking
   const [isPaused, setIsPaused] = useState(false);
   const [distance, setDistance] = useState(0);
   const [trackingTime, setTrackingTime] = useState(0);
   const [currentSpeed, setCurrentSpeed] = useState(0);
   const [routePoints, setRoutePoints] = useState<RoutePoint[]>([]);
   const [currentLocation, setCurrentLocation] = useState<Location.LocationObject | null>(null);
-  
-  // Estados para modales
-  const [showFinishModal, setShowFinishModal] = useState(false);
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [savedStats, setSavedStats] = useState<{ time: string; distance: number; speed: number } | null>(null);
+  const [savedExerciseId, setSavedExerciseId] = useState<string | null>(null);
 
   // Referencias
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
@@ -63,6 +62,52 @@ export default function TrackingScreen() {
   const mapRef = useRef<MapView>(null);
   const locationCount = useRef(0); // Contador de ubicaciones recibidas
   const gpsStabilized = useRef(false); // Indica si el GPS ya está estable
+  const isStopped = useRef(false); // Para evitar actualizaciones después de detener
+  const isSavingRef = useRef(false); // Para evitar doble-clicks
+  const elevationGain = useRef(0); // Desnivel positivo acumulado
+  const elevationLoss = useRef(0); // Desnivel negativo acumulado
+  const lastAltitude = useRef<number | null>(null); // Última altitud registrada
+
+  // Función para resetear y comenzar tracking
+  const resetAndStartTracking = useCallback(() => {
+    // Detener cualquier tracking anterior
+    stopGPSTracking();
+    
+    // Resetear todos los estados a sus valores iniciales
+    setScreenState('tracking');
+    setIsPaused(false);
+    setDistance(0);
+    setTrackingTime(0);
+    setCurrentSpeed(0);
+    setRoutePoints([]);
+    setCurrentLocation(null);
+    setSavedStats(null);
+    setSavedExerciseId(null);
+    isSavingRef.current = false;
+    isStopped.current = false;
+    totalDistance.current = 0;
+    locationCount.current = 0;
+    gpsStabilized.current = false;
+    lastLocation.current = null;
+    elevationGain.current = 0;
+    elevationLoss.current = 0;
+    lastAltitude.current = null;
+    
+    // Iniciar nuevo tracking
+    startGPSTracking();
+  }, []);
+
+  // Resetear estados cada vez que la pantalla obtiene foco
+  useFocusEffect(
+    useCallback(() => {
+      resetAndStartTracking();
+
+      return () => {
+        // Limpieza al perder foco
+        stopGPSTracking();
+      };
+    }, [resetAndStartTracking])
+  );
   
   // Constantes para filtrado de GPS
   const MIN_ACCURACY_METERS = 20; // Precisión mínima aceptable
@@ -95,16 +140,18 @@ export default function TrackingScreen() {
   // Iniciar tracking GPS
   const startGPSTracking = async () => {
     try {
-      // Resetear contadores
+      // Resetear contadores y flags
       locationCount.current = 0;
       gpsStabilized.current = false;
       totalDistance.current = 0;
       lastLocation.current = null;
+      isStopped.current = false; // Resetear flag de parada
       setDistance(0);
       setRoutePoints([]);
       
       // Iniciar timer
       timerInterval.current = setInterval(() => {
+        if (isStopped.current) return; // No actualizar si está detenido
         setTrackingTime((prev) => prev + 1);
       }, 1000);
 
@@ -116,6 +163,9 @@ export default function TrackingScreen() {
           distanceInterval: 5,
         },
         (location) => {
+          // Ignorar actualizaciones si el tracking está detenido
+          if (isStopped.current) return;
+          
           locationCount.current += 1;
           const accuracy = location.coords.accuracy || 999;
           
@@ -140,15 +190,17 @@ export default function TrackingScreen() {
             if (locationCount.current === WARMUP_LOCATIONS) {
               lastLocation.current = location;
               gpsStabilized.current = true;
+              lastAltitude.current = location.coords.altitude || null;
               // Agregar primer punto a la ruta
               setRoutePoints([{
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,
+                altitude: location.coords.altitude || undefined,
               }]);
               console.log('✅ GPS estabilizado, comenzando tracking');
             }
-            // Centrar mapa
-            if (mapRef.current) {
+            // Centrar mapa (solo si no está detenido)
+            if (mapRef.current && !isStopped.current) {
               mapRef.current.animateToRegion({
                 latitude: location.coords.latitude,
                 longitude: location.coords.longitude,
@@ -159,12 +211,32 @@ export default function TrackingScreen() {
             return;
           }
           
+          // Verificar otra vez por si se detuvo durante el warmup
+          if (isStopped.current) return;
+          
           setCurrentLocation(location);
+          
+          // Calcular desnivel si tenemos altitud
+          const currentAltitude = location.coords.altitude;
+          if (currentAltitude !== null && currentAltitude !== undefined && lastAltitude.current !== null) {
+            const altitudeDiff = currentAltitude - lastAltitude.current;
+            if (Math.abs(altitudeDiff) > 1) { // Solo contar diferencias mayores a 1 metro para evitar ruido
+              if (altitudeDiff > 0) {
+                elevationGain.current += altitudeDiff;
+              } else {
+                elevationLoss.current += Math.abs(altitudeDiff);
+              }
+            }
+            lastAltitude.current = currentAltitude;
+          } else if (currentAltitude !== null && currentAltitude !== undefined) {
+            lastAltitude.current = currentAltitude;
+          }
           
           // Agregar punto a la ruta
           const newPoint: RoutePoint = {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
+            altitude: currentAltitude || undefined,
           };
           setRoutePoints((prev) => [...prev, newPoint]);
           
@@ -205,8 +277,8 @@ export default function TrackingScreen() {
           // Guardar ubicación actual
           lastLocation.current = location;
           
-          // Centrar mapa en ubicación actual
-          if (mapRef.current && location.coords) {
+          // Centrar mapa en ubicación actual (solo si está activo el tracking)
+          if (mapRef.current && location.coords && !isStopped.current) {
             mapRef.current.animateToRegion({
               latitude: location.coords.latitude,
               longitude: location.coords.longitude,
@@ -225,6 +297,9 @@ export default function TrackingScreen() {
 
   // Detener tracking GPS
   const stopGPSTracking = () => {
+    // Marcar como detenido primero para evitar actualizaciones
+    isStopped.current = true;
+    
     if (timerInterval.current) {
       clearInterval(timerInterval.current);
       timerInterval.current = null;
@@ -260,17 +335,17 @@ export default function TrackingScreen() {
 
   // Terminar entrenamiento
   const handleFinish = () => {
-    // Pausar el timer mientras se muestra el modal
+    // Pausar el timer mientras se muestra la confirmación
     if (timerInterval.current) {
       clearInterval(timerInterval.current);
       timerInterval.current = null;
     }
-    setShowFinishModal(true);
+    setScreenState('confirm');
   };
 
-  // Cancelar el modal y reanudar el timer
+  // Cancelar y volver a tracking
   const handleCancelFinish = () => {
-    setShowFinishModal(false);
+    setScreenState('tracking');
     // Reanudar el timer si no está pausado
     if (!isPaused) {
       timerInterval.current = setInterval(() => {
@@ -280,73 +355,59 @@ export default function TrackingScreen() {
   };
 
   const handleDiscard = () => {
-    setShowFinishModal(false);
     stopGPSTracking();
-    router.push('/(tabs)/workout' as any);
+    router.replace('/(tabs)/exercise-detail' as any);
   };
 
   const handleSave = async () => {
-    setShowFinishModal(false);
-    setIsSaving(true);
+    // Prevenir doble-clicks
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
+    
+    // Detener tracking y cambiar a pantalla de guardando
     stopGPSTracking();
-    setIsTracking(false);
+    setScreenState('saving');
 
-    const avgSpeed = trackingTime > 0 ? distance / (trackingTime / 3600) || 0 : 0;
-
-    // Guardar stats antes de la operación async
-    const currentStats = {
-      time: formatTime(trackingTime),
-      distance: distance,
+    // Capturar valores actuales
+    const currentTrackingTime = trackingTime;
+    const currentDistance = distance;
+    const avgSpeed = currentTrackingTime > 0 ? currentDistance / (currentTrackingTime / 3600) || 0 : 0;
+    const stats = {
+      time: formatTime(currentTrackingTime),
+      distance: currentDistance,
       speed: avgSpeed,
     };
+
+    let saveSuccess = false;
+    let exerciseId: string | null = null;
 
     if (user) {
       try {
         const today = new Date().toISOString().split('T')[0];
-
-        // Timeout de 10 segundos para evitar que se congele
-        const savePromise = saveExercise({
+        const result = await saveExercise({
           user_id: user.id,
           activity_type: activityType,
           activity_name: activityName,
           date: today,
-          duration_minutes: Math.ceil(trackingTime / 60),
-          distance_km: distance,
+          duration_minutes: Math.ceil(currentTrackingTime / 60),
+          distance_km: currentDistance,
           has_gps: true,
           average_speed_kmh: avgSpeed,
+          route_points: routePoints,
+          elevation_gain: Math.round(elevationGain.current),
+          elevation_loss: Math.round(elevationLoss.current),
         });
-
-        const timeoutPromise = new Promise<{ success: false; error: string }>((_, reject) => 
-          setTimeout(() => reject({ success: false, error: 'Timeout' }), 10000)
-        );
-
-        const result = await Promise.race([savePromise, timeoutPromise]);
-
-        setIsSaving(false);
-
-        if (result.success) {
-          setSavedStats(currentStats);
-          setShowSuccessModal(true);
-        } else {
-          // En caso de error, mostrar modal de error
-          console.error('❌ Error guardando actividad:', result.error);
-          setSavedStats(null);
-          setShowSuccessModal(true);
-        }
+        saveSuccess = result.success;
+        exerciseId = result.exerciseId || null;
       } catch (error) {
-        console.error('❌ Error o timeout guardando actividad:', error);
-        setIsSaving(false);
-        // Mostrar modal de error en caso de excepción
-        setSavedStats(null);
-        setShowSuccessModal(true);
+        console.error('Error guardando:', error);
       }
-    } else {
-      // Si no hay usuario, mostrar error
-      console.warn('⚠️ No hay usuario autenticado para guardar');
-      setIsSaving(false);
-      setSavedStats(null);
-      setShowSuccessModal(true);
     }
+
+    // Mostrar resultado
+    setSavedStats(saveSuccess ? stats : null);
+    setSavedExerciseId(exerciseId);
+    setScreenState(saveSuccess ? 'success' : 'error');
   };
 
   // Formatear tiempo
@@ -361,140 +422,99 @@ export default function TrackingScreen() {
     return `${minutes}:${String(secs).padStart(2, '0')}`;
   };
 
-  // Iniciar tracking al montar
-  useEffect(() => {
-    startGPSTracking();
-    
-    return () => {
-      stopGPSTracking();
-    };
-  }, []);
-
-  return (
-    <View style={styles.container}>
-      <StatusBar hidden />
-      
-      {/* Header con actividad */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Ionicons name="fitness" size={24} color="#ffb300" />
-          <Text style={styles.activityName}>{activityName}</Text>
+  // Renderizar pantalla de guardando
+  if (screenState === 'saving') {
+    return (
+      <View style={styles.container}>
+        <StatusBar hidden />
+        <View style={styles.fullScreenOverlay}>
+          <ActivityIndicator size="large" color="#ffb300" />
+          <Text style={styles.savingText}>{t('common.saving')}...</Text>
         </View>
-        {isPaused && (
-          <View style={styles.pausedBadge}>
-<Text style={styles.pausedText}>
-  {t('workout.status.paused')}
-</Text>
-          </View>
-        )}
       </View>
+    );
+  }
 
-      {/* Contenedor del Mapa */}
-      <View style={styles.mapContainer}>
-        <MapView
-          ref={mapRef}
-          provider={PROVIDER_DEFAULT}
-          style={styles.map}
-          initialRegion={{
-            latitude: currentLocation?.coords.latitude || 37.78825,
-            longitude: currentLocation?.coords.longitude || -122.4324,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-          }}
-          showsUserLocation
-          showsMyLocationButton={false}
-          followsUserLocation
-          mapType="standard"
-        >
-          {/* Ruta recorrida */}
-          {routePoints.length > 1 && (
-            <Polyline
-              coordinates={routePoints}
-              strokeColor="#ffb300"
-              strokeWidth={5}
-            />
-          )}
-          
-          {/* Punto de inicio */}
-          {routePoints.length > 0 && (
-            <Marker
-              coordinate={routePoints[0]}
-              title="Inicio"
-              pinColor="#ffb300"
-            />
-          )}
-        </MapView>
-      </View>
-
-      {/* Panel de estadísticas */}
-      <View style={styles.statsPanel}>
-        {/* Estadística principal: Tiempo */}
-        <View style={styles.mainStat}>
-          <Text style={styles.mainStatValue}>{formatTime(trackingTime)}</Text>
-          <Text style={styles.mainStatLabel}>
-  {t('workout.stats.time')}
-</Text>
-        </View>
-
-        {/* Estadísticas secundarias */}
-        <View style={styles.secondaryStats}>
-          <View style={styles.secondaryStat}>
-            <Ionicons name="navigate" size={20} color="#ffb300" />
-            <Text style={styles.secondaryStatValue}>{displayDistance(distance).toFixed(2)}</Text>
-            <Text style={styles.secondaryStatLabel}>{distanceLabel}</Text>
-          </View>
-
-          <View style={styles.secondaryStat}>
-            <Ionicons name="speedometer" size={20} color="#ffb300" />
-            <Text style={styles.secondaryStatValue}>{displaySpeed(currentSpeed).toFixed(1)}</Text>
-            <Text style={styles.secondaryStatLabel}>{speedLabel}</Text>
-          </View>
-
-          <View style={styles.secondaryStat}>
-            <Ionicons name="analytics" size={20} color="#ffb300" />
-            <Text style={styles.secondaryStatValue}>
-              {trackingTime > 0 ? ((distance / (trackingTime / 3600)) || 0).toFixed(1) : '0.0'}
-            </Text>
-            <Text style={styles.secondaryStatLabel}>prom</Text>
+  // Renderizar pantalla de éxito o error
+  if (screenState === 'success' || screenState === 'error') {
+    return (
+      <View style={styles.container}>
+        <StatusBar hidden />
+        <View style={styles.fullScreenOverlay}>
+          <View style={styles.resultContainer}>
+            {screenState === 'success' && savedStats ? (
+              <>
+                <View style={[styles.modalIconContainer, styles.successIconContainer]}>
+                  <Ionicons name="checkmark-circle" size={60} color="#4CAF50" />
+                </View>
+                
+                <Text style={styles.modalTitle}>{t('workout.finishWorkout.savedTitle')}</Text>
+                <Text style={styles.modalMessage}>
+                  {t('workout.finishWorkout.savedMessage', { activity: activityName.toLowerCase() })}
+                </Text>
+                
+                <View style={styles.successSummary}>
+                  <View style={styles.successSummaryRow}>
+                    <View style={styles.successSummaryItem}>
+                      <Ionicons name="time-outline" size={24} color="#ffb300" />
+                      <Text style={styles.successSummaryLabel}>{t('workout.time')}</Text>
+                      <Text style={styles.successSummaryValue}>{savedStats.time}</Text>
+                    </View>
+                    <View style={styles.successSummaryItem}>
+                      <Ionicons name="navigate-outline" size={24} color="#ffb300" />
+                      <Text style={styles.successSummaryLabel}>{t('dashboard.distance')}</Text>
+                      <Text style={styles.successSummaryValue}>
+                        {displayDistance(savedStats.distance).toFixed(2)} {distanceLabel}
+                      </Text>
+                    </View>
+                    <View style={styles.successSummaryItem}>
+                      <Ionicons name="speedometer-outline" size={24} color="#ffb300" />
+                      <Text style={styles.successSummaryLabel}>{t('workout.avgSpeed')}</Text>
+                      <Text style={styles.successSummaryValue}>
+                        {displaySpeed(savedStats.speed).toFixed(1)} {speedLabel}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={[styles.modalIconContainer, styles.errorIconContainer]}>
+                  <Ionicons name="close-circle" size={60} color="#f44336" />
+                </View>
+                <Text style={styles.modalTitle}>{t('common.error')}</Text>
+                <Text style={styles.modalMessage}>{t('workout.couldNotSaveWorkout')}</Text>
+              </>
+            )}
+            
+            <TouchableOpacity
+              style={styles.modalButtonOk}
+              onPress={() => {
+                if (savedExerciseId) {
+                  router.replace({
+                    pathname: '/(tabs)/exercise-activity-detail',
+                    params: { exerciseId: savedExerciseId }
+                  } as any);
+                } else {
+                  router.replace('/(tabs)/exercise-detail' as any);
+                }
+              }}
+            >
+              <Text style={styles.modalButtonOkText}>{t('common.ok')}</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </View>
+    );
+  }
 
-      {/* Botones de control */}
-      <View style={styles.controlsPanel}>
-        <TouchableOpacity
-          style={[styles.controlButton, styles.pauseButton]}
-          onPress={handlePauseResume}
-        >
-          <Ionicons
-            name={isPaused ? 'play' : 'pause'}
-            size={24}
-            color="#ffffff"
-          />
-          <Text style={styles.controlButtonText}>
-  {isPaused ? t('common.resume') : t('common.pause')}
-</Text>
-
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.controlButton, styles.finishButton]}
-          onPress={handleFinish}
-        >
-          <Ionicons name="stop" size={24} color="#ffffff" />
-          <Text style={styles.controlButtonText}>{t('common.finish')}</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Modal de Finalizar Entrenamiento */}
-      <Modal
-        visible={showFinishModal}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCancelFinish}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
+  // Renderizar pantalla de confirmación
+  if (screenState === 'confirm') {
+    return (
+      <View style={styles.container}>
+        <StatusBar hidden />
+        <View style={styles.fullScreenOverlay}>
+          <View style={styles.resultContainer}>
             <View style={styles.modalIconContainer}>
               <Ionicons name="flag" size={40} color="#ffb300" />
             </View>
@@ -502,7 +522,6 @@ export default function TrackingScreen() {
             <Text style={styles.modalTitle}>{t('workout.finishWorkout.title')}</Text>
             <Text style={styles.modalMessage}>{t('workout.finishWorkout.message')}</Text>
             
-            {/* Resumen del entrenamiento */}
             <View style={styles.modalSummary}>
               <View style={styles.modalSummaryItem}>
                 <Ionicons name="time" size={20} color="#ffb300" />
@@ -548,88 +567,113 @@ export default function TrackingScreen() {
             </View>
           </View>
         </View>
-      </Modal>
+      </View>
+    );
+  }
 
-      {/* Modal de Guardando */}
-      <Modal visible={isSaving} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.savingContainer}>
-            <ActivityIndicator size="large" color="#ffb300" />
-            <Text style={styles.savingText}>{t('common.saving')}...</Text>
+  // Renderizar pantalla de tracking (estado por defecto)
+  return (
+    <View style={styles.container}>
+      <StatusBar hidden />
+      
+      {/* Header con actividad */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Ionicons name="fitness" size={24} color="#ffb300" />
+          <Text style={styles.activityName}>{activityName}</Text>
+        </View>
+        {isPaused && (
+          <View style={styles.pausedBadge}>
+            <Text style={styles.pausedText}>{t('workout.status.paused')}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Contenedor del Mapa */}
+      <View style={styles.mapContainer}>
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_DEFAULT}
+          style={styles.map}
+          initialRegion={{
+            latitude: currentLocation?.coords.latitude || 37.78825,
+            longitude: currentLocation?.coords.longitude || -122.4324,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          }}
+          showsUserLocation={!isPaused}
+          showsMyLocationButton={false}
+          followsUserLocation={!isPaused}
+          mapType="standard"
+        >
+          {routePoints.length > 1 && (
+            <Polyline
+              coordinates={routePoints}
+              strokeColor="#ffb300"
+              strokeWidth={5}
+            />
+          )}
+          
+          {routePoints.length > 0 && (
+            <Marker
+              coordinate={routePoints[0]}
+              title="Inicio"
+              pinColor="#ffb300"
+            />
+          )}
+        </MapView>
+      </View>
+
+      {/* Panel de estadísticas */}
+      <View style={styles.statsPanel}>
+        <View style={styles.mainStat}>
+          <Text style={styles.mainStatValue}>{formatTime(trackingTime)}</Text>
+          <Text style={styles.mainStatLabel}>{t('workout.stats.time')}</Text>
+        </View>
+
+        <View style={styles.secondaryStats}>
+          <View style={styles.secondaryStat}>
+            <Ionicons name="navigate" size={20} color="#ffb300" />
+            <Text style={styles.secondaryStatValue}>{displayDistance(distance).toFixed(2)}</Text>
+            <Text style={styles.secondaryStatLabel}>{distanceLabel}</Text>
+          </View>
+
+          <View style={styles.secondaryStat}>
+            <Ionicons name="speedometer" size={20} color="#ffb300" />
+            <Text style={styles.secondaryStatValue}>{displaySpeed(currentSpeed).toFixed(1)}</Text>
+            <Text style={styles.secondaryStatLabel}>{speedLabel}</Text>
+          </View>
+
+          <View style={styles.secondaryStat}>
+            <Ionicons name="analytics" size={20} color="#ffb300" />
+            <Text style={styles.secondaryStatValue}>
+              {trackingTime > 0 ? ((distance / (trackingTime / 3600)) || 0).toFixed(1) : '0.0'}
+            </Text>
+            <Text style={styles.secondaryStatLabel}>prom</Text>
           </View>
         </View>
-      </Modal>
+      </View>
 
-      {/* Modal de Éxito */}
-      <Modal
-        visible={showSuccessModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setShowSuccessModal(false);
-          router.push('/(tabs)/workout' as any);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            {savedStats ? (
-              <>
-                <View style={[styles.modalIconContainer, styles.successIconContainer]}>
-                  <Ionicons name="checkmark-circle" size={50} color="#4CAF50" />
-                </View>
-                
-                <Text style={styles.modalTitle}>{t('workout.finishWorkout.savedTitle')}</Text>
-                <Text style={styles.modalMessage}>
-                  {t('workout.finishWorkout.savedMessage', { activity: activityName.toLowerCase() })}
-                </Text>
-                
-                {/* Resumen final */}
-                <View style={styles.successSummary}>
-                  <View style={styles.successSummaryRow}>
-                    <View style={styles.successSummaryItem}>
-                      <Ionicons name="time-outline" size={24} color="#ffb300" />
-                      <Text style={styles.successSummaryLabel}>{t('workout.time')}</Text>
-                      <Text style={styles.successSummaryValue}>{savedStats.time}</Text>
-                    </View>
-                    <View style={styles.successSummaryItem}>
-                      <Ionicons name="navigate-outline" size={24} color="#ffb300" />
-                      <Text style={styles.successSummaryLabel}>{t('dashboard.distance')}</Text>
-                      <Text style={styles.successSummaryValue}>
-                        {displayDistance(savedStats.distance).toFixed(2)} {distanceLabel}
-                      </Text>
-                    </View>
-                    <View style={styles.successSummaryItem}>
-                      <Ionicons name="speedometer-outline" size={24} color="#ffb300" />
-                      <Text style={styles.successSummaryLabel}>{t('workout.avgSpeed')}</Text>
-                      <Text style={styles.successSummaryValue}>
-                        {displaySpeed(savedStats.speed).toFixed(1)} {speedLabel}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </>
-            ) : (
-              <>
-                <View style={[styles.modalIconContainer, styles.errorIconContainer]}>
-                  <Ionicons name="close-circle" size={50} color="#f44336" />
-                </View>
-                <Text style={styles.modalTitle}>{t('common.error')}</Text>
-                <Text style={styles.modalMessage}>{t('workout.couldNotSaveWorkout')}</Text>
-              </>
-            )}
-            
-            <TouchableOpacity
-              style={styles.modalButtonOk}
-              onPress={() => {
-                setShowSuccessModal(false);
-                router.push('/(tabs)/workout' as any);
-              }}
-            >
-              <Text style={styles.modalButtonOkText}>{t('common.ok')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Botones de control */}
+      <View style={styles.controlsPanel}>
+        <TouchableOpacity
+          style={[styles.controlButton, styles.pauseButton]}
+          onPress={handlePauseResume}
+        >
+          <Ionicons name={isPaused ? 'play' : 'pause'} size={24} color="#ffffff" />
+          <Text style={styles.controlButtonText}>
+            {isPaused ? t('common.resume') : t('common.pause')}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.controlButton, styles.finishButton]}
+          onPress={handleFinish}
+        >
+          <Ionicons name="stop" size={24} color="#ffffff" />
+          <Text style={styles.controlButtonText}>{t('common.finish')}</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -819,26 +863,31 @@ const styles = StyleSheet.create({
   },
   modalButtons: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     width: '100%',
+    marginTop: 8,
   },
   modalButtonCancel: {
     flex: 1,
     paddingVertical: 14,
+    paddingHorizontal: 8,
     borderRadius: 12,
     backgroundColor: '#333',
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 48,
   },
   modalButtonCancelText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#999',
+    textAlign: 'center',
   },
   modalButtonDiscard: {
-    flex: 1,
+    flex: 1.2,
     flexDirection: 'row',
     paddingVertical: 14,
+    paddingHorizontal: 12,
     borderRadius: 12,
     backgroundColor: 'rgba(244, 67, 54, 0.15)',
     alignItems: 'center',
@@ -846,24 +895,27 @@ const styles = StyleSheet.create({
     gap: 6,
     borderWidth: 1,
     borderColor: '#f44336',
+    minHeight: 48,
   },
   modalButtonDiscardText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#f44336',
   },
   modalButtonSave: {
-    flex: 1,
+    flex: 1.2,
     flexDirection: 'row',
     paddingVertical: 14,
+    paddingHorizontal: 12,
     borderRadius: 12,
     backgroundColor: '#ffb300',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    minHeight: 48,
   },
   modalButtonSaveText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#1a1a1a',
   },
@@ -877,9 +929,28 @@ const styles = StyleSheet.create({
     borderColor: '#333',
   },
   savingText: {
-    fontSize: 16,
+    fontSize: 18,
     color: '#ffffff',
     fontWeight: '500',
+    marginTop: 16,
+  },
+  fullScreenOverlay: {
+    flex: 1,
+    backgroundColor: '#0a0a0a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  resultContainer: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    width: '100%',
+    maxWidth: 380,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
   },
   successSummary: {
     width: '100%',

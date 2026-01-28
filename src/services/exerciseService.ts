@@ -1,5 +1,12 @@
 import { supabase } from './supabase';
 
+export interface RoutePoint {
+  latitude: number;
+  longitude: number;
+  altitude?: number;
+  timestamp?: number;
+}
+
 export interface Exercise {
   id?: string;
   user_id: string;
@@ -12,13 +19,16 @@ export interface Exercise {
   notes?: string;
   has_gps: boolean;
   average_speed_kmh?: number;
+  route_points?: RoutePoint[];
+  elevation_gain?: number; // Desnivel positivo en metros
+  elevation_loss?: number; // Desnivel negativo en metros
   created_at?: string;
 }
 
 /**
  * Guardar una nueva actividad de ejercicio
  */
-export async function saveExercise(exercise: Exercise): Promise<{ success: boolean; error?: string }> {
+export async function saveExercise(exercise: Exercise): Promise<{ success: boolean; error?: string; exerciseId?: string }> {
   try {
     console.log('💾 Guardando ejercicio:', exercise);
 
@@ -34,7 +44,7 @@ export async function saveExercise(exercise: Exercise): Promise<{ success: boole
     }
 
     console.log('✅ Ejercicio guardado:', data);
-    return { success: true };
+    return { success: true, exerciseId: data?.id };
   } catch (error) {
     console.error('❌ Error inesperado al guardar ejercicio:', error);
     return { success: false, error: 'Error inesperado al guardar' };
@@ -455,6 +465,29 @@ export async function getGymDaysThisMonth(
   } catch (error) {
     console.error('❌ Error inesperado al obtener días de gimnasio:', error);
     return [];
+  }
+}
+
+/**
+ * Obtener un ejercicio por ID
+ */
+export async function getExerciseById(exerciseId: string): Promise<Exercise | null> {
+  try {
+    const { data, error } = await supabase
+      .from('exercises')
+      .select('*')
+      .eq('id', exerciseId)
+      .single();
+
+    if (error) {
+      console.error('❌ Error al obtener ejercicio:', error);
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('❌ Error inesperado al obtener ejercicio:', error);
+    return null;
   }
 }
 
