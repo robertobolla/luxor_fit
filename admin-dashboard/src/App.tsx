@@ -17,6 +17,7 @@ import PartnerPayments from './pages/PartnerPayments';
 import Empresarios from './pages/Empresarios';
 import EmpresarioUsers from './pages/EmpresarioUsers';
 import GymMemberDetail from './pages/GymMemberDetail';
+import DeleteAccount from './pages/DeleteAccount';
 import Layout from './components/Layout';
 import { checkAdminRole } from './services/adminService';
 import { ViewAsProvider } from './contexts/ViewAsContext';
@@ -29,6 +30,10 @@ function App() {
       <ViewAsProvider>
         <BrowserRouter>
           <Routes>
+            {/* Ruta pública para eliminar cuenta - solo requiere autenticación, no rol de admin */}
+            <Route path="/delete-account" element={<DeleteAccountRoute />} />
+            
+            {/* Rutas protegidas que requieren rol de admin/socio/empresario */}
             <Route path="/" element={<ProtectedRoute />}>
               <Route index element={<Dashboard />} />
               <Route path="empresario-dashboard" element={<EmpresarioDashboard />} />
@@ -53,6 +58,61 @@ function App() {
         </BrowserRouter>
       </ViewAsProvider>
     </ToastProvider>
+  );
+}
+
+// Ruta especial para eliminar cuenta - cualquier usuario autenticado puede acceder
+function DeleteAccountRoute() {
+  const { isLoaded } = useUser();
+
+  if (!isLoaded) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        flexDirection: 'column',
+        gap: '1rem'
+      }}>
+        <div style={{ 
+          width: '40px', 
+          height: '40px', 
+          border: '4px solid #333',
+          borderTopColor: '#ffd54a',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <p>Cargando...</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <SignedOut>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh',
+          flexDirection: 'column',
+          gap: '2rem',
+          padding: '2rem'
+        }}>
+          <div style={{ textAlign: 'center', maxWidth: '400px' }}>
+            <h1 style={{ fontSize: '2rem', marginBottom: '1rem' }}>Luxor Fitness</h1>
+            <p style={{ color: '#888', marginBottom: '2rem' }}>
+              Inicia sesión para eliminar tu cuenta
+            </p>
+            <SignIn />
+          </div>
+        </div>
+      </SignedOut>
+      <SignedIn>
+        <DeleteAccount />
+      </SignedIn>
+    </>
   );
 }
 

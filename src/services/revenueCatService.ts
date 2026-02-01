@@ -20,8 +20,8 @@ const REVENUECAT_API_KEY_ANDROID = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_AN
 
 // IDs de productos (deben coincidir con App Store Connect)
 export const PRODUCT_IDS = {
-  MONTHLY: 'luxor_monthly',                      // $12.99/mes
-  YEARLY: 'luxor_yearly',                        // $107/año (~$8.92/mes)
+  MONTHLY: 'luxor_fitness_monthly',              // $12.99/mes
+  YEARLY: 'luxor_fitness_yearly',                // $107/año (~$8.92/mes)
 };
 
 // Entitlements (lo que desbloquea la suscripción)

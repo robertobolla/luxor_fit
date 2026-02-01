@@ -11,6 +11,8 @@ import {
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
+  Platform,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
@@ -45,6 +47,15 @@ type NutritionTargetRow = {
   // agregá más campos si los usás en UI
 };
 
+type NutritionPlanRow = {
+  id: string;
+  plan_name: string | null;
+  is_active: boolean;
+  is_ai_generated: boolean | null;
+  current_week_number: number | null;
+  total_weeks: number | null;
+};
+
 
 export default function HomeScreen() {
   const { t } = useTranslation();
@@ -53,6 +64,7 @@ export default function HomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [todayWorkout, setTodayWorkout] = useState<any>(null);
   const [todayNutrition, setTodayNutrition] = useState<any>(null);
+  const [activeNutritionPlan, setActiveNutritionPlan] = useState<NutritionPlanRow | null>(null);
   const [userName, setUserName] = useState('');
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
@@ -200,7 +212,21 @@ export default function HomeScreen() {
         }
       }
 
-      // Cargar nutrición de hoy
+      // Cargar plan nutricional activo
+      const { data: nutritionPlanData, error: nutritionPlanError } = await supabase
+        .from('nutrition_plans')
+        .select('id, plan_name, is_active, is_ai_generated, current_week_number, total_weeks')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .maybeSingle<NutritionPlanRow>();
+
+      if (nutritionPlanError && nutritionPlanError.code !== 'PGRST116') {
+        console.error('Error loading nutrition plan:', nutritionPlanError);
+      }
+
+      setActiveNutritionPlan(nutritionPlanData || null);
+
+      // Cargar nutrición de hoy (targets)
       const today = new Date().toISOString().split('T')[0];
       const { data: targetData, error: targetError } = await supabase
         .from('nutrition_targets')
@@ -285,7 +311,7 @@ export default function HomeScreen() {
   if (isLoading) {
     return (
       <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-        <StatusBar barStyle="light-content" />
+        <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
         <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 30 }]}>
           <SkeletonProfile />
           <SkeletonCard />
@@ -297,7 +323,7 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
       <ScrollView 
         contentContainerStyle={[
           styles.scrollContent,
@@ -305,11 +331,20 @@ export default function HomeScreen() {
         ]}
         showsVerticalScrollIndicator={true}
         refreshControl={
-          <CustomRefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            title={t('home.updatingData')}
-          />
+          Platform.OS === 'android' ? (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#ffb300']}
+              progressBackgroundColor="#2a2a2a"
+            />
+          ) : (
+            <CustomRefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              title={t('home.updatingData')}
+            />
+          )
         }
       >
         {/* Banner de sin conexión */}
@@ -468,21 +503,39 @@ export default function HomeScreen() {
         {/* Tarjeta: Dieta de Hoy */}
         <TouchableOpacity 
           style={styles.activityCard}
-          onPress={() => router.push('/(tabs)/nutrition/today-detail' as any)}
-          >
-            <View style={[styles.activityIcon, { backgroundColor: '#ffb30020' }]}>
-              <Ionicons name="restaurant" size={32} color="#ffb300" />
-            </View>
-            <View style={styles.activityContent}>
-              <Text style={styles.activityTitle}>{t('home.todayDiet')}</Text>
-              <Text style={styles.activitySubtitle}>
-                {todayNutrition 
-                  ? t('home.goalCalories', { calories: todayNutrition.calories })
-                  : t('home.configureNutrition')}
+          onPress={() => {
+            if (activeNutritionPlan) {
+              // Si hay plan activo, ir al detalle del plan
+              router.push(`/(tabs)/nutrition/plan-detail?id=${activeNutritionPlan.id}` as any);
+            } else {
+              // Si no hay plan, ir a la pantalla de nutrición para crear uno
+              router.push('/(tabs)/nutrition' as any);
+            }
+          }}
+        >
+          <View style={[styles.activityIcon, { backgroundColor: '#ffb30020' }]}>
+            <Ionicons name="restaurant" size={32} color="#ffb300" />
+          </View>
+          <View style={styles.activityContent}>
+            <Text style={styles.activityTitle}>{t('home.todayDiet')}</Text>
+            <Text style={styles.activitySubtitle}>
+              {activeNutritionPlan 
+                ? activeNutritionPlan.plan_name || t('home.activePlan')
+                : t('home.configureNutrition')}
+            </Text>
+            {activeNutritionPlan && (
+              <Text style={styles.activityExtraInfo}>
+                {activeNutritionPlan.is_ai_generated 
+                  ? t('home.aiGeneratedPlan') 
+                  : t('home.customPlan')}
+                {activeNutritionPlan.current_week_number && activeNutritionPlan.total_weeks && (
+                  ` • ${t('home.week')} ${activeNutritionPlan.current_week_number}/${activeNutritionPlan.total_weeks}`
+                )}
               </Text>
-            </View>
-            <Ionicons name="chevron-forward" size={24} color="#888888" />
-          </TouchableOpacity>
+            )}
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#888888" />
+        </TouchableOpacity>
 
         <View style={{ height: 30 }} />
       </ScrollView>

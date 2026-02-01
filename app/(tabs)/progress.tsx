@@ -10,6 +10,7 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser, useAuth } from '@clerk/clerk-expo';
@@ -227,58 +228,99 @@ export default function ProgressScreen() {
   const [permissionsChecked, setPermissionsChecked] = useState(false);
 
   // Solicitar permisos al cargar por primera vez (solo una vez por sesión)
+  // NOTA: Solo mostramos alert si realmente no hay datos disponibles
   useEffect(() => {
     if (isCheckingOnboarding || permissionsChecked) return;
 
     const initializeHealthData = async () => {
-      const alreadyHasPermissions = await hasHealthPermissions();
+      // Primero intentar obtener datos de salud directamente
+      // Si hay datos, los permisos funcionan (no importa lo que diga hasHealthPermissions)
+      try {
+        const healthData = await getHealthDataForDate(new Date());
+        
+        const hasAnyData =
+          healthData &&
+          ((healthData as any).steps > 0 ||
+            (healthData as any).distance > 0 ||
+            (healthData as any).activeEnergyBurned > 0 ||
+            (healthData as any).sleepHours > 0);
 
-      if (!alreadyHasPermissions) {
-        const granted = await requestHealthPermissions();
-
-        if (!granted) {
-          setTimeout(async () => {
-            const healthData = await getHealthDataForDate(new Date());
-
-            // ✅ FIX (activeEnergyBurned no existe en HealthData)
-            const activeEnergy = (healthData as any)?.activeEnergyBurned ?? 0;
-
-            const hasData =
-              healthData &&
-              ((healthData as any).steps > 0 ||
-                (healthData as any).distance > 0 ||
-                activeEnergy > 0);
-
-            if (!hasData) {
-              const platformMessage =
-                Platform.OS === 'ios'
-                  ? t('progress.healthPermissions.iosSteps')
-                  : t('progress.healthPermissions.androidSteps');
-
-              Alert.alert(
-                t('progress.healthPermissions.title'),
-                t('progress.healthPermissions.message') + '\n\n' + platformMessage,
-                [
-                  { text: t('common.later'), style: 'cancel' },
-                  {
-                    text: t('common.tryAgain'),
-                    onPress: async () => {
-                      resetPermissionsCache();
-                      setPermissionsChecked(false);
-                      await requestHealthPermissions();
-                    },
-                  },
-                ]
-              );
-            } else {
-              console.log('✅ Datos de salud disponibles, permisos funcionando correctamente');
-            }
-          }, 1000);
-        } else {
-          console.log('✅ Permisos de salud otorgados correctamente');
+        if (hasAnyData) {
+          // Si hay datos, los permisos funcionan correctamente
+          console.log('✅ Datos de salud disponibles, permisos funcionando correctamente');
+          setPermissionsChecked(true);
+          return;
         }
-      } else {
-        console.log('✅ Ya tiene permisos de salud');
+
+        // Si no hay datos, puede ser que:
+        // 1. No hay permisos
+        // 2. Es temprano y el usuario no ha caminado/dormido
+        // 3. El usuario no usa Apple Health/Google Fit
+        
+        // Verificar si el usuario ya descartó el alert anteriormente
+        const dismissedHealthAlert = await AsyncStorage.getItem('health_permissions_dismissed');
+        if (dismissedHealthAlert === 'true') {
+          console.log('ℹ️ Usuario ya descartó el alert de permisos de salud');
+          setPermissionsChecked(true);
+          return;
+        }
+
+        // Solo solicitar permisos si no hay datos
+        const alreadyHasPermissions = await hasHealthPermissions();
+        
+        if (!alreadyHasPermissions) {
+          // Solicitar permisos silenciosamente
+          await requestHealthPermissions();
+          
+          // Después de solicitar, verificar una vez más si hay datos
+          const recheckData = await getHealthDataForDate(new Date());
+          const hasDataAfterRequest =
+            recheckData &&
+            ((recheckData as any).steps > 0 ||
+              (recheckData as any).distance > 0 ||
+              (recheckData as any).activeEnergyBurned > 0 ||
+              (recheckData as any).sleepHours > 0);
+
+          if (hasDataAfterRequest) {
+            console.log('✅ Datos de salud disponibles después de solicitar permisos');
+            setPermissionsChecked(true);
+            return;
+          }
+
+          // Solo mostrar alert si realmente no hay datos después de todo
+          // Y el usuario no lo ha descartado antes
+          const platformMessage =
+            Platform.OS === 'ios'
+              ? t('progress.healthPermissions.iosSteps')
+              : t('progress.healthPermissions.androidSteps');
+
+          Alert.alert(
+            t('progress.healthPermissions.title'),
+            t('progress.healthPermissions.message') + '\n\n' + platformMessage,
+            [
+              { 
+                text: t('common.later'), 
+                style: 'cancel',
+                onPress: async () => {
+                  await AsyncStorage.setItem('health_permissions_dismissed', 'true');
+                  console.log('ℹ️ Usuario eligió "más tarde", no se volverá a mostrar el alert');
+                }
+              },
+              {
+                text: t('common.tryAgain'),
+                onPress: async () => {
+                  resetPermissionsCache();
+                  setPermissionsChecked(false);
+                  await requestHealthPermissions();
+                },
+              },
+            ]
+          );
+        } else {
+          console.log('✅ Ya tiene permisos de salud');
+        }
+      } catch (error) {
+        console.log('⚠️ Error verificando datos de salud:', error);
       }
 
       setPermissionsChecked(true);

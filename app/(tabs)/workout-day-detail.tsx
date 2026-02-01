@@ -486,10 +486,10 @@ export default function WorkoutDayDetailScreen() {
     }
   };
 
-  const toggleExercise = (exerciseName: string) => {
+  const toggleExercise = (exerciseKey: string) => {
     setExpandedExercises(prev => ({
       ...prev,
-      [exerciseName]: !prev[exerciseName],
+      [exerciseKey]: !prev[exerciseKey],
     }));
   };
 
@@ -774,15 +774,18 @@ export default function WorkoutDayDetailScreen() {
 </Text>
           {dayData.exercises?.map((exercise: any, index: number) => {
             const isOldFormat = typeof exercise === 'string';
-            const exerciseName = isOldFormat ? exercise : exercise.name;
+            const isSuperset = !isOldFormat && exercise.type === 'superset';
+            const exerciseName = isOldFormat ? exercise : (isSuperset ? 'SUPERSERIE' : exercise.name);
             const sets = isOldFormat ? null : exercise.sets;
             const reps = isOldFormat ? null : exercise.reps;
             const rest = isOldFormat ? null : exercise.rest;
             const setTypes = isOldFormat ? null : exercise.setTypes;
+            const supersetExercises = isSuperset ? (exercise.exercises || []) : [];
 
             // Debug log
             console.log('Exercise:', { 
               isOldFormat, 
+              isSuperset,
               exercise, 
               sets, 
               reps, 
@@ -790,7 +793,99 @@ export default function WorkoutDayDetailScreen() {
               setTypes
             });
 
-            const isExpanded = expandedExercises[exerciseName] || false;
+            const isExpanded = expandedExercises[exerciseName + '_' + index] || false;
+
+            // Renderizado especial para superseries
+            if (isSuperset) {
+              const supersetSets = sets || 1;
+              
+              return (
+                <View key={index} style={[styles.exerciseCard, styles.supersetCard]}>
+                  <View style={styles.exerciseHeader}>
+                    <View style={[styles.exerciseNumberBadge, styles.supersetBadge]}>
+                      <Text style={styles.exerciseNumber}>#{index + 1}</Text>
+                    </View>
+                    <View style={styles.exerciseTitleContainer}>
+                      <Text style={[styles.exerciseName, styles.supersetTitle]}>SUPERSERIE</Text>
+                      <Text style={styles.supersetSubtitle}>
+                        {supersetExercises.length} ejercicios • {supersetSets} {supersetSets === 1 ? 'serie' : 'series'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Temporizador de descanso para superserie - igual que ejercicios normales */}
+                  {exercise.rest_seconds && (
+                    <TouchableOpacity
+                      style={styles.restTimerContainer}
+                      onPress={() => handleOpenRestTimer(exercise.rest_seconds || 90)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="timer-outline" size={18} color="#ffb300" />
+                      <Text style={styles.restTimerLabel}>{t('workoutDay.restTimerLabel')}</Text>
+                      <Text style={styles.restTimerValue}>
+                        {formatRestTime(exercise.rest_seconds || 90)}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={16} color="#666" />
+                    </TouchableOpacity>
+                  )}
+
+                  {/* Lista de ejercicios de la superserie */}
+                  <View style={styles.supersetExercisesList}>
+                    {supersetExercises.map((ssEx: any, ssIdx: number) => {
+                      // Calcular las reps a mostrar según las series de la superserie
+                      let repsDisplay = '';
+                      if (ssEx.reps) {
+                        if (Array.isArray(ssEx.reps)) {
+                          // Tomar solo las reps correspondientes al número de series
+                          const repsToShow = ssEx.reps.slice(0, supersetSets);
+                          repsDisplay = repsToShow.length === 1 
+                            ? `${repsToShow[0]} reps` 
+                            : `${repsToShow.join('/')} reps`;
+                        } else {
+                          repsDisplay = `${ssEx.reps} reps`;
+                        }
+                      }
+                      
+                      return (
+                        <View key={ssIdx} style={styles.supersetExerciseItem}>
+                          <View style={styles.supersetExerciseBullet}>
+                            <Text style={styles.supersetExerciseBulletText}>{ssIdx + 1}</Text>
+                          </View>
+                          <Text style={styles.supersetExerciseName}>{ssEx.name}</Text>
+                          {repsDisplay && (
+                            <Text style={styles.supersetExerciseReps}>{repsDisplay}</Text>
+                          )}
+                          <TouchableOpacity 
+                            style={styles.supersetVideoButton}
+                            onPress={async () => {
+                              try {
+                                const url = await getExerciseVideoUrl(ssEx.name);
+                                if (url) {
+                                  setVideoUrl(url);
+                                  setVideoExerciseName(ssEx.name);
+                                  setShowVideoModal(true);
+                                } else {
+                                  Alert.alert(
+                                    'Video no disponible',
+                                    `No hay video asignado para "${ssEx.name}".`,
+                                    [{ text: 'OK' }]
+                                  );
+                                }
+                              } catch (error) {
+                                console.error('Error al obtener video:', error);
+                                Alert.alert(t('workoutDay.videoError'), t('workoutDay.couldNotLoadVideo'));
+                              }
+                            }}
+                          >
+                            <Ionicons name="play-circle" size={22} color="#ffb300" />
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            }
 
             return (
               <View key={index} style={styles.exerciseCard}>
@@ -804,7 +899,7 @@ export default function WorkoutDayDetailScreen() {
                   <View style={styles.exerciseActions}>
                     <TouchableOpacity 
                       style={styles.registerButton}
-                      onPress={() => toggleExercise(exerciseName)}
+                      onPress={() => toggleExercise(exerciseName + '_' + index)}
                     >
                       <Ionicons 
                         name={isExpanded ? "chevron-up-circle" : "add-circle"} 
@@ -882,7 +977,7 @@ export default function WorkoutDayDetailScreen() {
                     defaultSets={sets || 3}
                     usesTime={false} // TODO: Detectar si el ejercicio usa tiempo
                     setTypes={setTypes || []} // Pasar tipos de series para excluir calentamiento
-                    onSetsChange={(sets) => handleSetsChange(exerciseName, sets)}
+                    onSetsChange={(sets) => handleSetsChange(exerciseName + '_' + index, sets)}
                     planId={planId} // Identificar por plan
                     dayName={dayName} // Identificar por día de rutina
                   />
@@ -1828,6 +1923,87 @@ const styles = StyleSheet.create({
     color: '#1a1a1a',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // Estilos para superseries
+  supersetCard: {
+    borderColor: '#9C27B0',
+    borderWidth: 2,
+  },
+  supersetBadge: {
+    borderColor: '#9C27B0',
+  },
+  supersetTitle: {
+    color: '#9C27B0',
+  },
+  supersetSubtitle: {
+    fontSize: 13,
+    color: '#ffffff',
+    marginTop: 2,
+  },
+  supersetExercisesList: {
+    marginTop: 8,
+    marginBottom: 12,
+    paddingLeft: 4,
+    gap: 8,
+  },
+  supersetExerciseItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    gap: 10,
+  },
+  supersetExerciseBullet: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#9C27B0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  supersetExerciseBulletText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  supersetExerciseName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  supersetExerciseReps: {
+    fontSize: 13,
+    color: '#9C27B0',
+    fontWeight: '600',
+  },
+  supersetVideoButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  supersetTrackerContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+  },
+  supersetTrackerTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#9C27B0',
+    marginBottom: 12,
+  },
+  supersetTrackerExercise: {
+    marginBottom: 16,
+  },
+  supersetTrackerExerciseName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffffff',
+    marginBottom: 8,
+    paddingLeft: 4,
   },
 });
 

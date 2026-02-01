@@ -183,7 +183,7 @@ export function TutorialTooltip({ steps, visible, onComplete, onSkip }: Tutorial
                   currentStepData.title?.includes('✨') ? 'barbell' :
                   currentStepData.title?.includes('📋') ? 'list' :
                   currentStepData.title?.includes('🏠') ? 'home' :
-                  currentStepData.title?.includes('🥗') ? 'nutrition' :
+                  currentStepData.title?.includes('🥗') ? 'restaurant' :
                   currentStepData.title?.includes('📊') ? 'stats-chart' :
                   currentStepData.title?.includes('❓') ? 'help-circle' :
                   currentStepData.title?.includes('📈') ? 'trending-up' :

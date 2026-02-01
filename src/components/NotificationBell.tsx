@@ -94,10 +94,10 @@ export default function NotificationBell() {
             
             enriched[i] = {
               ...notification,
-              shared_status: sharedWorkout?.status || null,
+              shared_status: (sharedWorkout as any)?.status || null,
             };
           } else {
-            const { data: sharedNutrition } = await supabase
+            const { data: sharedNutrition } = await (supabase as any)
               .from('shared_nutrition_plans')
               .select('status')
               .eq('nutrition_plan_id', notification.related_id)
@@ -313,7 +313,7 @@ export default function NotificationBell() {
         
       } else {
         // Nutrition plan (type === 'nutrition_plan_shared' || type === 'nutrition_plan')
-        let { data: sharedPlan } = await supabase
+        let { data: sharedPlan } = await (supabase as any)
           .from('shared_nutrition_plans')
           .select('*')
           .eq('nutrition_plan_id', notification.related_id)
@@ -324,7 +324,7 @@ export default function NotificationBell() {
           .maybeSingle();
 
         if (!sharedPlan) {
-          const { data: altSearch } = await supabase
+          const { data: altSearch } = await (supabase as any)
             .from('shared_nutrition_plans')
             .select('*')
             .eq('nutrition_plan_id', notification.related_id)
@@ -340,13 +340,13 @@ export default function NotificationBell() {
           return;
         }
 
-        const nutritionReceiverId = sharedPlan.receiver_id || user.id;
+        const nutritionReceiverId = sharedPlan?.receiver_id || user.id;
 
         setConfirmView({
           active: true,
           type: 'nutrition',
           notification,
-          sharedId: sharedPlan.id,
+          sharedId: sharedPlan?.id,
           receiverId: nutritionReceiverId,
           isLoading: false,
         });
@@ -443,7 +443,7 @@ export default function NotificationBell() {
         
       } else {
         // Nutrition plan (type === 'nutrition_plan_shared' || type === 'nutrition_plan')
-        let { data: sharedPlan } = await supabase
+        let { data: sharedPlan } = await (supabase as any)
           .from('shared_nutrition_plans')
           .select('*')
           .eq('nutrition_plan_id', notification.related_id)
@@ -454,7 +454,7 @@ export default function NotificationBell() {
           .maybeSingle();
 
         if (!sharedPlan) {
-          const { data: altSearch } = await supabase
+          const { data: altSearch } = await (supabase as any)
             .from('shared_nutrition_plans')
             .select('*')
             .eq('nutrition_plan_id', notification.related_id)
@@ -470,13 +470,13 @@ export default function NotificationBell() {
           return;
         }
 
-        const nutritionReceiverId = sharedPlan.receiver_id || user.id;
+        const nutritionReceiverId = sharedPlan?.receiver_id || user.id;
 
         setConfirmView({
           active: true,
           type: 'reject',
           notification,
-          sharedId: sharedPlan.id,
+          sharedId: sharedPlan?.id,
           receiverId: nutritionReceiverId,
           isLoading: false,
         });

@@ -880,6 +880,30 @@ export default function WorkoutPlanDetailScreen() {
                             <Text style={styles.exercisesTitle}>Ejercicios ({safeDay.exercises.length}):</Text>
                             <View style={styles.exercisesList}>
                               {safeDay.exercises.map((exercise: WorkoutExercise, idx: number) => {
+                                // Verificar si es una superserie
+                                const isSuperset = typeof exercise === 'object' && (exercise as any).type === 'superset';
+                                
+                                if (isSuperset) {
+                                  const supersetExercises = (exercise as any).exercises || [];
+                                  const exerciseNames = supersetExercises.map((ex: any) => ex.name).filter(Boolean);
+                                  return (
+                                    <View key={idx} style={styles.exercisePreviewItem}>
+                                      <Ionicons name="checkmark-circle" size={14} color="#ffb300" />
+                                      <Text style={styles.exercisePreviewText}>
+                                        <Text style={{ color: '#9C27B0' }}>Superserie: </Text>
+                                        {exerciseNames.map((name: string, nameIdx: number) => (
+                                          <Text key={nameIdx}>
+                                            <Text style={{ color: '#ffffff' }}>{name}</Text>
+                                            {nameIdx < exerciseNames.length - 1 && (
+                                              <Text style={{ color: '#9C27B0' }}> + </Text>
+                                            )}
+                                          </Text>
+                                        ))}
+                                      </Text>
+                                    </View>
+                                  );
+                                }
+                                
                                 const name = typeof exercise === 'string' ? exercise : str(exercise.name, 'Ejercicio');
                                 return (
                                   <View key={idx} style={styles.exercisePreviewItem}>
@@ -966,6 +990,30 @@ export default function WorkoutPlanDetailScreen() {
                     <Text style={styles.exercisesTitle}>Ejercicios ({safeDay.exercises.length}):</Text>
                     <View style={styles.exercisesList}>
                       {safeDay.exercises.map((exercise: WorkoutExercise, idx: number) => {
+                        // Verificar si es una superserie
+                        const isSuperset = typeof exercise === 'object' && (exercise as any).type === 'superset';
+                        
+                        if (isSuperset) {
+                          const supersetExercises = (exercise as any).exercises || [];
+                          const exerciseNames = supersetExercises.map((ex: any) => ex.name).filter(Boolean);
+                          return (
+                            <View key={idx} style={styles.exercisePreviewItem}>
+                              <Ionicons name="checkmark-circle" size={14} color="#ffb300" />
+                              <Text style={styles.exercisePreviewText}>
+                                <Text style={{ color: '#9C27B0' }}>Superserie: </Text>
+                                {exerciseNames.map((name: string, nameIdx: number) => (
+                                  <Text key={nameIdx}>
+                                    <Text style={{ color: '#ffffff' }}>{name}</Text>
+                                    {nameIdx < exerciseNames.length - 1 && (
+                                      <Text style={{ color: '#9C27B0' }}> + </Text>
+                                    )}
+                                  </Text>
+                                ))}
+                              </Text>
+                            </View>
+                          );
+                        }
+                        
                         const name = typeof exercise === 'string' ? exercise : str(exercise.name, 'Ejercicio');
                         return (
                           <View key={idx} style={styles.exercisePreviewItem}>
@@ -1382,7 +1430,7 @@ const styles = StyleSheet.create({
   },
   exercisePreviewItem: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 4,
   },
   exercisePreviewText: {

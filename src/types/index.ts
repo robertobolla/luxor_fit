@@ -14,6 +14,7 @@ export interface UserProfile {
   username?: string | null; // nombre de usuario único para red social
   name: string;
   age: number;
+  birth_date?: string | null; // fecha de nacimiento (YYYY-MM-DD)
   gender: Gender; // género del usuario
   height: number; // en cm
   weight: number; // en kg

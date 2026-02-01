@@ -119,8 +119,9 @@ export default function OnboardingScreen() {
           
           // Parsear fecha de nacimiento si existe
           let birthDate: Date | null = null;
-          if (data.birth_date) {
-            birthDate = new Date(data.birth_date);
+          const profileData = data as any; // Cast para acceder a birth_date
+          if (profileData.birth_date) {
+            birthDate = new Date(profileData.birth_date);
           } else if (data.age) {
             // Fallback: si solo hay edad, calcular una fecha aproximada
             const currentYear = new Date().getFullYear();

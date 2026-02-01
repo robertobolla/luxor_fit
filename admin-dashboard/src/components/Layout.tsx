@@ -102,12 +102,14 @@ export default function Layout() {
     ? [
         { path: '/', label: 'Dashboard', icon: '📊' },
         { path: '/partner-referrals', label: 'Mis Referidos', icon: '👥' },
+        { path: '/delete-account', label: 'Eliminar Cuenta', icon: '🗑️' },
       ]
     : effectiveRole === 'empresario'
     ? [
         { path: '/empresario-dashboard', label: 'Dashboard', icon: '📊' },
         { path: '/empresario-users', label: 'Mis Usuarios', icon: '👥' },
         { path: '/mensajeria', label: 'Mensajería', icon: '📧' },
+        { path: '/delete-account', label: 'Eliminar Cuenta', icon: '🗑️' },
         ...(userRole === 'admin' ? [{ path: '/admin-tools', label: 'Admin Tools', icon: '🛠️' }] : []),
       ]
     : (() => {
@@ -121,6 +123,7 @@ export default function Layout() {
           { path: '/empresarios', label: 'Empresarios', icon: '🏢' },
           { path: '/stats', label: 'Estadísticas', icon: '📈' },
           { path: '/admin-tools', label: 'Admin Tools', icon: '🛠️' },
+          { path: '/delete-account', label: 'Eliminar Cuenta', icon: '🗑️' },
         ];
         
         // Solo admins ven Ejercicios y Alimentos

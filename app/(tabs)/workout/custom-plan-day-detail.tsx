@@ -13,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   LogBox,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,31 +24,7 @@ import { useCustomAlert } from '../../../src/components/CustomAlert';
 import Constants from 'expo-constants';
 import { useUser } from '@clerk/clerk-expo';
 
-// ============================================================================
-// 🚀 DRAG & DROP - DETECCIÓN AUTOMÁTICA DE ENTORNO
-// ============================================================================
-// Detectar automáticamente si estamos en Expo Go o en un build nativo
-const isExpoGo = Constants.appOwnership === 'expo';
-const DRAG_DROP_ENABLED = !isExpoGo; // Solo activar si NO es Expo Go
-
-// Imports condicionales - solo cargar si no es Expo Go
-let DraggableFlatList: any;
-let ScaleDecorator: any;
-let GestureHandlerRootView: any;
-
-if (DRAG_DROP_ENABLED) {
-  const draggable = require('react-native-draggable-flatlist');
-  const gesture = require('react-native-gesture-handler');
-  DraggableFlatList = draggable.default;
-  ScaleDecorator = draggable.ScaleDecorator;
-  GestureHandlerRootView = gesture.GestureHandlerRootView;
-}
-
-console.log('🎯 Entorno detectado:', {
-  isExpoGo,
-  DRAG_DROP_ENABLED,
-  appOwnership: Constants.appOwnership
-});
+// Nota: Drag & Drop eliminado - se usan botones ↑↓ para reordenar
 
 // Suprimir warning de keys - todas las keys están implementadas correctamente
 LogBox.ignoreLogs([
@@ -61,6 +38,7 @@ interface SetInfo {
   type: SetType;
   reps: number | null; // null para series al fallo
   rir: number | null; // Reps In Reserve para intensidad (opcional)
+  dropCount?: number | null; // Cantidad de descargas para drop sets (2, 3, 4, etc.)
 }
 
 interface Exercise {
@@ -73,18 +51,47 @@ interface Exercise {
   notes?: string; // Notas del entrenador o usuario para este ejercicio
 }
 
+// ============================================================================
+// SUPERSERIES
+// ============================================================================
+
+// Ejercicio dentro de una superserie (sin RIR, solo reps por serie)
+interface SupersetExercise {
+  id: string;
+  name: string;
+  reps: number[]; // Reps para cada serie (ej: [10, 10, 8] para 3 series)
+}
+
+// Una superserie completa
+interface Superset {
+  id: string;
+  type: 'superset'; // Identificador para distinguir de ejercicios normales
+  exercises: SupersetExercise[]; // 2-4 ejercicios
+  sets: number; // Número de series/rondas
+  rest_seconds: number; // Descanso entre rondas
+  notes?: string;
+}
+
+// Tipo unión para la lista de ejercicios
+type ExerciseItem = Exercise | Superset;
+
+// Helper para verificar si es superserie
+const isSuperset = (item: ExerciseItem): item is Superset => {
+  return 'type' in item && item.type === 'superset';
+};
+
 export default function CustomPlanDayDetailScreen() {
   const router = useRouter();
-  const { t, i18n  } = useTranslation();
+  const { t, i18n } = useTranslation();
   const params = useLocalSearchParams();
   const { showAlert, AlertComponent } = useCustomAlert();
   const { user } = useUser();
-  
+
   // Obtener planId de los parámetros (si estamos editando un plan existente)
   const editingPlanId = params.planId as string | undefined;
   const isTrainerView = params.isTrainerView === 'true';
   const studentId = params.studentId as string | undefined;
-  
+
   // Parsear parámetros con validación
   const parseDayNumber = (value: string | undefined): number => {
     if (!value) return 1;
@@ -125,10 +132,10 @@ export default function CustomPlanDayDetailScreen() {
   const [dayName, setDayName] = useState<string>(
     t('customPlan.dayWithNumber', { number: dayNumber })
   );
-  
+
   // Clave única para forzar recarga cuando cambian los parámetros
   const paramsKey = `${params.weekNumber}_${params.dayNumber}`;
-    const [isEditingDayName, setIsEditingDayName] = useState(false);
+  const [isEditingDayName, setIsEditingDayName] = useState(false);
   const [showAddExercise, setShowAddExercise] = useState(false);
   const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [sets, setSets] = useState('');
@@ -137,7 +144,19 @@ export default function CustomPlanDayDetailScreen() {
   const [setTypes, setSetTypes] = useState<SetInfo[]>([]);
   const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
   const [exerciseNotes, setExerciseNotes] = useState<string>(''); // Notas del ejercicio
-  
+
+  // ============================================================================
+  // ESTADOS PARA SUPERSERIES
+  // ============================================================================
+  const [showSupersetCountModal, setShowSupersetCountModal] = useState(false);
+  const [supersetExerciseCount, setSupersetExerciseCount] = useState(0); // Cantidad de ejercicios en la superserie
+  const [supersetExercisesSelected, setSupersetExercisesSelected] = useState<SupersetExercise[]>([]); // Ejercicios seleccionados
+  const [showSupersetConfigModal, setShowSupersetConfigModal] = useState(false); // Modal de configuración de series
+  const [supersetSets, setSupersetSets] = useState<number>(1); // Número de series por defecto
+  const [supersetReps, setSupersetReps] = useState<{ [exerciseId: string]: string[] }>({}); // Reps por ejercicio y serie
+  const [supersetRestSeconds, setSupersetRestSeconds] = useState<string>('90'); // Descanso entre rondas
+  const [editingSupersetId, setEditingSupersetId] = useState<string | null>(null); // ID de la superserie que se está editando
+
   // Ref para saber si hay cambios sin guardar (para no sobrescribir con AsyncStorage)
   const hasLocalChanges = React.useRef(false);
   // Ref para mantener siempre la referencia actualizada de exercises
@@ -146,15 +165,16 @@ export default function CustomPlanDayDetailScreen() {
   const isSavingToStorage = React.useRef(false);
   const saveTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const modalTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
-  
+
   // Mantener exercisesRef actualizado
   React.useEffect(() => {
     exercisesRef.current = exercises;
   }, [exercises]);
-  
+
   // Estados para el modal de cambio de tipo de serie
   const [showSetTypeModal, setShowSetTypeModal] = useState(false);
   const [selectedSetIndex, setSelectedSetIndex] = useState<number>(-1);
+  const [showDropCountSelection, setShowDropCountSelection] = useState(false); // Para mostrar opciones de descargas en drop sets
 
   // Estados para el modal de configuración de tiempo de descanso
   const [showRestTimerModal, setShowRestTimerModal] = useState(false);
@@ -231,28 +251,28 @@ export default function CustomPlanDayDetailScreen() {
   useEffect(() => {
     if (editingExercise) {
       console.log('📝 Inicializando modal con datos del ejercicio:', editingExercise.name);
-      
+
       // Resetear modal de tipos al abrir configuración
       setShowSetTypeModal(false);
       setSelectedSetIndex(-1);
-      
+
       // Verificar si el ejercicio tiene setTypes configurados
       const exerciseSetTypes = editingExercise.setTypes || [];
       const hasConfiguredSets = exerciseSetTypes.length > 0;
-      
+
       if (hasConfiguredSets) {
         // Ejercicio existente con configuración - copiar profundamente
         console.log('📋 Cargando configuración existente');
         const exerciseReps = exerciseSetTypes.map(st => st.reps?.toString() || '');
         const exerciseRir = exerciseSetTypes.map(st => st.rir?.toString() || '');
-        
+
         // Crear copias profundas para evitar referencias compartidas
         const copiedSetTypes = exerciseSetTypes.map(st => ({
           type: st.type,
           reps: st.reps,
           rir: st.rir,
         }));
-        
+
         setSetTypes(copiedSetTypes);
         setReps([...exerciseReps]);
         setRirValues([...exerciseRir]);
@@ -266,16 +286,16 @@ export default function CustomPlanDayDetailScreen() {
           reps: null,
           rir: null,
         }));
-        
+
         setSetTypes(defaultSetTypes);
         setReps(Array(defaultSets).fill(''));
         setRirValues(Array(defaultSets).fill(''));
         setSets(defaultSets.toString());
       }
-      
+
       // Inicializar notas del ejercicio
       setExerciseNotes(editingExercise.notes || '');
-      
+
       console.log('✅ Estados inicializados para:', editingExercise.name);
     } else {
       // Limpiar estados cuando se cierra el modal
@@ -294,10 +314,10 @@ export default function CustomPlanDayDetailScreen() {
   // Usar paramsKey para detectar cambios en los parámetros crudos
   useEffect(() => {
     console.log('🔄 Parámetros cambiaron, reseteando estado:', { weekNumber, dayNumber, paramsKey });
-    
+
     // Resetear flag de cambios locales para evitar usar estado anterior
     hasLocalChanges.current = false;
-    
+
     // Resetear todos los estados
     setExercises([]);
     setDayName(initialDayData.name || t('customPlan.dayWithNumber', { number: dayNumber }));
@@ -309,7 +329,7 @@ export default function CustomPlanDayDetailScreen() {
     setSetTypes([]);
     setExpandedExercises(new Set());
     setExerciseNotes('');
-    
+
     // Cargar ejercicios desde los parámetros si existen
     if (initialDayData.exercises && initialDayData.exercises.length > 0) {
       console.log('📦 Cargando', initialDayData.exercises.length, 'ejercicios desde parámetros');
@@ -336,12 +356,12 @@ export default function CustomPlanDayDetailScreen() {
     const newReps = [...reps, ''];
     const newRirValues = [...rirValues, ''];
     const newSetTypes: SetInfo[] = [...setTypes, { type: 'normal' as SetType, reps: null, rir: null }];
-    
+
     setReps(newReps);
     setRirValues(newRirValues);
     setSetTypes(newSetTypes);
     setSets(newSetTypes.length.toString());
-    
+
     console.log('➕ Serie agregada, total:', newSetTypes.length);
   };
 
@@ -353,19 +373,19 @@ export default function CustomPlanDayDetailScreen() {
         [{ text: t('common.ok') }],
         { icon: 'alert-circle', iconColor: '#F44336' }
       );
-      
+
       return;
     }
-    
+
     const newReps = reps.filter((_, i) => i !== index);
     const newRirValues = rirValues.filter((_, i) => i !== index);
     const newSetTypes = setTypes.filter((_, i) => i !== index);
-    
+
     setReps(newReps);
     setRirValues(newRirValues);
     setSetTypes(newSetTypes);
     setSets(newSetTypes.length.toString());
-    
+
     console.log('➖ Serie eliminada, total:', newSetTypes.length);
   };
 
@@ -373,7 +393,7 @@ export default function CustomPlanDayDetailScreen() {
     const newReps = [...reps];
     newReps[index] = text;
     setReps(newReps);
-    
+
     // Actualizar también el tipo de serie
     const newSetTypes = [...setTypes];
     if (newSetTypes[index]) {
@@ -389,14 +409,14 @@ export default function CustomPlanDayDetailScreen() {
     const newRirValues = [...rirValues];
     newRirValues[index] = text;
     setRirValues(newRirValues);
-    
+
     const rirValue = text ? parseInt(text) : null;
-    
+
     // Actualizar también el tipo de serie
     const newSetTypes = [...setTypes];
     if (newSetTypes[index]) {
       const currentType = newSetTypes[index].type;
-      
+
       // Lógica automática: RIR 0 = al fallo, RIR >= 1 = normal
       let newType = currentType;
       if (rirValue === 0) {
@@ -406,14 +426,14 @@ export default function CustomPlanDayDetailScreen() {
         // Si está al fallo y cambias RIR a >= 1, volver a normal
         newType = 'normal';
       }
-      
+
       newSetTypes[index] = {
         ...newSetTypes[index],
         type: newType,
         rir: rirValue,
       };
       setSetTypes(newSetTypes);
-      
+
       console.log(`🔄 RIR cambiado a ${rirValue}, tipo ahora es: ${newType}`);
     }
   };
@@ -422,7 +442,7 @@ export default function CustomPlanDayDetailScreen() {
     // Para warmup y drop, devolver letra directamente
     if (setType.type === 'warmup') return 'C';
     if (setType.type === 'drop') return 'D';
-    
+
     // Para series normales y al fallo: contar cuántas series normales + failure hay hasta este índice
     let seriesCount = 0;
     for (let i = 0; i <= index; i++) {
@@ -431,12 +451,12 @@ export default function CustomPlanDayDetailScreen() {
         seriesCount++;
       }
     }
-    
+
     // Para failure: mostrar número + "F"
     if (setType.type === 'failure') {
       return `${seriesCount} F`;
     }
-    
+
     // Para series normales: mostrar solo el número
     return `${seriesCount}`;
   };
@@ -457,28 +477,37 @@ export default function CustomPlanDayDetailScreen() {
 
   const handleChangeSetType = (newType: SetType) => {
     console.log('🔄 Cambiando tipo de serie:', { selectedSetIndex, newType });
-    
+
     if (selectedSetIndex === -1) {
       console.error('❌ Índice de serie inválido');
       setShowSetTypeModal(false);
+      setShowDropCountSelection(false);
       return;
     }
-    
+
+    // Si es drop, mostrar selección de cantidad de descargas
+    if (newType === 'drop') {
+      console.log('🟣 Mostrando selección de descargas para drop set');
+      setShowDropCountSelection(true);
+      return;
+    }
+
     const newSetTypes = [...setTypes];
     const currentReps = newSetTypes[selectedSetIndex]?.reps || null;
     const currentRir = newSetTypes[selectedSetIndex]?.rir || null;
-    
+
     // Si cambia a 'warmup', limpiar reps y RIR (no se necesitan)
     // Si cambia a 'failure', actualizar RIR a 0 automáticamente
     const updatedReps = newType === 'warmup' ? null : currentReps;
     const updatedRir = newType === 'warmup' ? null : (newType === 'failure' ? 0 : currentRir);
-    
+
     newSetTypes[selectedSetIndex] = {
       type: newType,
       reps: updatedReps,
       rir: updatedRir,
+      dropCount: null, // Limpiar dropCount si no es drop
     };
-    
+
     // Actualizar valores visuales
     if (newType === 'failure') {
       const newRirValues = [...rirValues];
@@ -493,22 +522,53 @@ export default function CustomPlanDayDetailScreen() {
       setReps(newRepsValues);
       setRirValues(newRirValues);
     }
-    
+
     console.log('✅ Nuevo array de setTypes:', newSetTypes);
     setSetTypes(newSetTypes);
-    
+
     // Cerrar modal
     setShowSetTypeModal(false);
+    setShowDropCountSelection(false);
+    setSelectedSetIndex(-1);
+  };
+
+  // Manejar selección de cantidad de descargas para drop sets
+  const handleSelectDropCount = (dropCount: number) => {
+    console.log('🟣 Drop set con', dropCount, 'descargas');
+
+    if (selectedSetIndex === -1) {
+      console.error('❌ Índice de serie inválido');
+      setShowSetTypeModal(false);
+      setShowDropCountSelection(false);
+      return;
+    }
+
+    const newSetTypes = [...setTypes];
+    const currentReps = newSetTypes[selectedSetIndex]?.reps || null;
+
+    newSetTypes[selectedSetIndex] = {
+      type: 'drop',
+      reps: currentReps,
+      rir: null, // Drop sets no tienen RIR
+      dropCount: dropCount,
+    };
+
+    console.log('✅ Drop set configurado:', newSetTypes[selectedSetIndex]);
+    setSetTypes(newSetTypes);
+
+    // Cerrar modal
+    setShowSetTypeModal(false);
+    setShowDropCountSelection(false);
     setSelectedSetIndex(-1);
   };
 
   const handleSaveExercise = () => {
     if (!editingExercise) return;
-    
+
     // Cerrar modal de tipos si está abierto
     setShowSetTypeModal(false);
     setSelectedSetIndex(-1);
-    
+
     const numSets = setTypes.length;
     if (numSets === 0) {
       showAlert(
@@ -523,12 +583,12 @@ export default function CustomPlanDayDetailScreen() {
     // Validar que todas las series (excepto calentamiento) tengan reps
     for (let i = 0; i < setTypes.length; i++) {
       const setType = setTypes[i].type;
-      
+
       // Las series de calentamiento no requieren reps
       if (setType === 'warmup') {
         continue;
       }
-      
+
       const repsValue = parseInt(reps[i]);
       if (!repsValue || repsValue === 0) {
         showAlert(
@@ -554,24 +614,24 @@ export default function CustomPlanDayDetailScreen() {
 
     const updatedExercises = exercises.map(ex =>
       ex.id === editingExercise.id
-        ? { 
-            ...ex, 
-            sets: numSets, 
-            reps: repsArray, 
-            setTypes: finalSetTypes,
-            // Mantener rest_seconds si existe
-            rest_seconds: ex.rest_seconds || 120,
-            // Guardar notas del ejercicio
-            notes: exerciseNotes.trim() || undefined,
-          }
+        ? {
+          ...ex,
+          sets: numSets,
+          reps: repsArray,
+          setTypes: finalSetTypes,
+          // Mantener rest_seconds si existe
+          rest_seconds: ex.rest_seconds || 120,
+          // Guardar notas del ejercicio
+          notes: exerciseNotes.trim() || undefined,
+        }
         : ex
     );
     setExercises(updatedExercises);
-    
+
     // Marcar que hay cambios locales sin guardar
     hasLocalChanges.current = true;
     console.log('✏️ Ejercicio modificado, marcando cambios locales');
-    
+
     setEditingExercise(null);
     setSets('');
     setReps([]);
@@ -582,9 +642,9 @@ export default function CustomPlanDayDetailScreen() {
   const toggleExerciseExpansion = (exerciseId: string) => {
     console.log('🔄 Toggle expansion para ejercicio:', exerciseId);
     console.log('📊 Estado actual de expandedExercises:', Array.from(expandedExercises));
-    
+
     const newExpanded = new Set(expandedExercises);
-    
+
     if (newExpanded.has(exerciseId)) {
       console.log('📦 Contrayendo ejercicio:', exerciseId);
       newExpanded.delete(exerciseId);
@@ -592,7 +652,7 @@ export default function CustomPlanDayDetailScreen() {
       console.log('📂 Expandiendo ejercicio:', exerciseId);
       newExpanded.add(exerciseId);
     }
-    
+
     console.log('📊 Nuevo estado de expandedExercises:', Array.from(newExpanded));
     setExpandedExercises(newExpanded);
   };
@@ -600,10 +660,11 @@ export default function CustomPlanDayDetailScreen() {
   const handleDeleteExercise = (exerciseId: string) => {
     showAlert(
       t('customPlan.deleteExerciseTitle'),
-  t('customPlan.deleteExerciseConfirm'),
+      t('customPlan.deleteExerciseConfirm'),
       [
         { text: t('common.cancel'), style: 'cancel' },
-        { text: t('common.delete'), style: 'destructive',
+        {
+          text: t('common.delete'), style: 'destructive',
           onPress: () => {
             setExercises(exercises.filter(ex => ex.id !== exerciseId));
             // Marcar que hay cambios locales sin guardar
@@ -622,6 +683,26 @@ export default function CustomPlanDayDetailScreen() {
     // Marcar que hay cambios locales sin guardar
     hasLocalChanges.current = true;
     console.log('✅ Orden de ejercicios actualizado');
+  };
+
+  // Mover ejercicio hacia arriba
+  const handleMoveExerciseUp = (index: number) => {
+    if (index === 0) return; // Ya está en la primera posición
+    const newExercises = [...exercises];
+    [newExercises[index - 1], newExercises[index]] = [newExercises[index], newExercises[index - 1]];
+    setExercises(newExercises);
+    hasLocalChanges.current = true;
+    console.log('⬆️ Ejercicio movido hacia arriba');
+  };
+
+  // Mover ejercicio hacia abajo
+  const handleMoveExerciseDown = (index: number) => {
+    if (index === exercises.length - 1) return; // Ya está en la última posición
+    const newExercises = [...exercises];
+    [newExercises[index], newExercises[index + 1]] = [newExercises[index + 1], newExercises[index]];
+    setExercises(newExercises);
+    hasLocalChanges.current = true;
+    console.log('⬇️ Ejercicio movido hacia abajo');
   };
 
   const handleOpenRestTimerModal = (exerciseId: string) => {
@@ -658,24 +739,24 @@ export default function CustomPlanDayDetailScreen() {
     // Guardar los ejercicios del día en AsyncStorage para que la pantalla de días los pueda leer
     try {
       console.log('💾 Guardando día con ejercicios:', exercises.map(ex => ({ name: ex.name, id: ex.id })));
-      
+
       const dayDataToSave = {
         dayNumber,
         name: dayName,
         exercises,
       };
       await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayDataToSave));
-      
+
       // ============================================================================
       // 🆕 GUARDAR DIRECTAMENTE EN SUPABASE si estamos editando un plan existente
       // ============================================================================
       if (editingPlanId && user?.id) {
         console.log('📤 Guardando también en Supabase (plan existente):', editingPlanId);
-        
+
         // Determinar el user_id correcto (alumno si modo entrenador, propio si no)
         const targetUserId = isTrainerView && studentId ? studentId : user.id;
         console.log('👤 Target user_id para actualización:', targetUserId, '(isTrainerView:', isTrainerView, ')');
-        
+
         try {
           // 1. Cargar el plan actual desde Supabase
           const { data: currentPlan, error: fetchError } = await supabase
@@ -684,14 +765,14 @@ export default function CustomPlanDayDetailScreen() {
             .eq('id', editingPlanId)
             .eq('user_id', targetUserId)
             .single();
-          
+
           if (fetchError) {
             console.error('❌ Error cargando plan para actualizar:', fetchError);
             // No fallar, seguir con AsyncStorage
           } else if (currentPlan?.plan_data) {
             // 2. Actualizar los datos del día en el plan
             const planData = currentPlan.plan_data as any;
-            
+
             // Formato del día actualizado
             const updatedDayData = {
               day: dayName,
@@ -703,10 +784,15 @@ export default function CustomPlanDayDetailScreen() {
                 reps: ex.reps,
                 rest_seconds: ex.rest_seconds || 120,
                 setTypes: ex.setTypes || [],
+                // Campos para superseries
+                ...(ex.type === 'superset' && {
+                  type: 'superset',
+                  exercises: ex.exercises,
+                }),
               })),
               duration: 45,
             };
-            
+
             // Actualizar en multi_week_structure
             if (planData.multi_week_structure && Array.isArray(planData.multi_week_structure)) {
               const weekIndex = planData.multi_week_structure.findIndex((w: any) => w.week_number === weekNumber);
@@ -722,7 +808,7 @@ export default function CustomPlanDayDetailScreen() {
                 }
               }
             }
-            
+
             // También actualizar weekly_structure si es semana 1
             if (weekNumber === 1 && planData.weekly_structure && Array.isArray(planData.weekly_structure)) {
               const dayIndex = dayNumber - 1;
@@ -732,14 +818,14 @@ export default function CustomPlanDayDetailScreen() {
                 planData.weekly_structure.push(updatedDayData);
               }
             }
-            
+
             // 3. Guardar el plan actualizado en Supabase
             const { error: updateError } = await supabase
               .from('workout_plans')
               .update({ plan_data: planData })
               .eq('id', editingPlanId)
               .eq('user_id', targetUserId);
-            
+
             if (updateError) {
               console.error('❌ Error actualizando plan en Supabase:', updateError);
               showAlert(
@@ -758,11 +844,11 @@ export default function CustomPlanDayDetailScreen() {
         }
       }
       // ============================================================================
-      
+
       // Resetear flag de cambios locales después de guardar
       hasLocalChanges.current = false;
       console.log('✅ Cambios guardados, reseteando flag de cambios locales');
-      
+
       // Navegar de vuelta a la pantalla de días
       router.push({
         pathname: '/(tabs)/workout/custom-plan-days',
@@ -792,24 +878,31 @@ export default function CustomPlanDayDetailScreen() {
   useFocusEffect(
     React.useCallback(() => {
       let isMounted = true;
-      
+
       // Capturar los valores actuales de los parámetros
       const currentDayNumber = dayNumber;
       const currentWeekNumber = weekNumber;
-      
+
       console.log('🔍 useFocusEffect - día:', currentDayNumber, 'semana:', currentWeekNumber);
-      
+
       const loadDayData = async () => {
         try {
           // Si ya hay ejercicios cargados desde el useEffect de parámetros, no sobrescribir
           // a menos que haya datos más recientes en AsyncStorage
-          
+
           // Prevenir race condition: no cargar si hay guardado en proceso
           if (isSavingToStorage.current) {
             console.log('⏳ Guardado en proceso, usando datos existentes');
             return;
           }
-          
+
+          // Solo cargar desde AsyncStorage si estamos editando un plan existente
+          // Para planes nuevos (sin planId), no cargar datos de sesiones anteriores
+          if (!editingPlanId) {
+            console.log('📝 Plan nuevo detectado, no cargando datos de AsyncStorage');
+            return;
+          }
+
           const dayDataStr = await AsyncStorage.getItem(`week_${currentWeekNumber}_day_${currentDayNumber}_data`);
           if (dayDataStr && isMounted) {
             const savedDayData = parseSafeJSON(dayDataStr, {});
@@ -826,6 +919,45 @@ export default function CustomPlanDayDetailScreen() {
           }
         } catch (error) {
           console.error('Error loading day data:', error);
+        }
+      };
+
+      // Verificar si hay ejercicios de superserie seleccionados
+      const checkSupersetExercises = async () => {
+        try {
+          const supersetData = await AsyncStorage.getItem('supersetExercises');
+          if (supersetData && isMounted) {
+            const supersetExercises = parseSafeJSON(supersetData, []);
+            if (supersetExercises.length > 0) {
+              console.log('🔗 Superserie detectada con', supersetExercises.length, 'ejercicios');
+
+              // Preparar los ejercicios para el modal de configuración
+              const preparedExercises: SupersetExercise[] = supersetExercises.map((ex: { id: string; name: string }) => ({
+                id: ex.id,
+                name: ex.name,
+                reps: [10, 10, 10], // Valores por defecto para 3 series
+              }));
+
+              setSupersetExercisesSelected(preparedExercises);
+              setSupersetExerciseCount(preparedExercises.length);
+              setSupersetSets(1);
+
+              // Inicializar reps por defecto
+              const initialReps: { [exerciseId: string]: string[] } = {};
+              preparedExercises.forEach((ex) => {
+                initialReps[ex.id] = ['10', '10', '10'];
+              });
+              setSupersetReps(initialReps);
+
+              // Abrir modal de configuración
+              setShowSupersetConfigModal(true);
+
+              // Limpiar AsyncStorage
+              await AsyncStorage.removeItem('supersetExercises');
+            }
+          }
+        } catch (error) {
+          console.error('Error loading superset exercises:', error);
         }
       };
 
@@ -847,12 +979,12 @@ export default function CustomPlanDayDetailScreen() {
               setTypes: selectedExercise.setTypes || [], // Inicializar setTypes vacío
             };
             console.log('✨ Nuevo ejercicio creado con ID único:', uniqueId);
-            
+
             // Verificar que no esté ya agregado usando los ejercicios actuales
             const exerciseExists = currentExercises.find(ex => ex.id === newExercise.id && ex.name === newExercise.name);
             if (!exerciseExists) {
               const updatedExercises = [...currentExercises, newExercise];
-              
+
               // Actualizar el estado
               if (isMounted) {
                 setExercises(updatedExercises);
@@ -860,7 +992,7 @@ export default function CustomPlanDayDetailScreen() {
                 hasLocalChanges.current = true;
                 console.log('✏️ Nuevo ejercicio agregado, marcando cambios locales');
               }
-              
+
               // Guardar inmediatamente en AsyncStorage para evitar pérdida de datos
               // Prevenir race condition
               if (!isSavingToStorage.current) {
@@ -880,7 +1012,7 @@ export default function CustomPlanDayDetailScreen() {
                   isSavingToStorage.current = false;
                 }
               }
-              
+
               // Abrir modal de edición inmediatamente para configurar series y repeticiones
               // Guardar referencia del timeout para poder limpiarlo
               modalTimeoutRef.current = setTimeout(() => {
@@ -890,7 +1022,7 @@ export default function CustomPlanDayDetailScreen() {
                 }
               }, 100);
             }
-            
+
             // Limpiar el storage después de usarlo
             await AsyncStorage.removeItem('selectedExercise');
           }
@@ -898,28 +1030,29 @@ export default function CustomPlanDayDetailScreen() {
           console.error('Error loading selected exercise:', error);
         }
       };
-      
+
       // Primero cargar datos, luego verificar si hay un ejercicio seleccionado
       const initialize = async () => {
         let loadedExercises: Exercise[] = [];
-        
+
         // Si hay cambios locales sin guardar, usar el estado actual en lugar de recargar
         if (hasLocalChanges.current) {
           console.log('⚠️ Hay cambios locales sin guardar, usando estado actual');
           console.log('📊 Ejercicios en estado actual:', exercisesRef.current.length);
-          // Verificar si hay ejercicio seleccionado usando los ejercicios actuales
+          // Verificar si hay ejercicio seleccionado o superserie usando los ejercicios actuales
           await checkSelectedExercise(exercisesRef.current);
+          await checkSupersetExercises();
           return;
         }
-        
+
         // Cargar datos primero
         try {
           console.log('📥 Cargando día', currentDayNumber, 'semana', currentWeekNumber);
-          
+
           // Primero verificar si hay datos pasados por parámetros
           const paramDayData = parseSafeJSON(params.dayData as string, {});
           console.log('📦 Ejercicios recibidos:', paramDayData.exercises?.length || 0);
-          
+
           if (paramDayData.dayNumber === currentDayNumber && paramDayData.exercises) {
             // Hacer copia profunda de ejercicios para evitar referencias compartidas
             loadedExercises = (paramDayData.exercises || []).map((ex: Exercise, idx: number) => ({
@@ -938,16 +1071,16 @@ export default function CustomPlanDayDetailScreen() {
               setDayName(paramDayData.name);
             }
           }
-          
+
           // Luego cargar desde AsyncStorage (sobrescribe si existe)
           const asyncKey = `week_${currentWeekNumber}_day_${currentDayNumber}_data`;
           console.log('🔑 Buscando en AsyncStorage con key:', asyncKey);
           const dayDataStr = await AsyncStorage.getItem(asyncKey);
-          
+
           if (dayDataStr) {
             console.log('📦 Datos encontrados en AsyncStorage');
             const savedDayData = parseSafeJSON(dayDataStr, {});
-            
+
             // Verificar que los datos guardados correspondan al día correcto
             if (savedDayData.dayNumber === currentDayNumber) {
               // Hacer copia profunda de ejercicios para evitar referencias compartidas
@@ -991,32 +1124,24 @@ export default function CustomPlanDayDetailScreen() {
             loadedExercises = [];
           }
         }
-        
-        // Ahora verificar si hay un ejercicio seleccionado usando los ejercicios cargados
+
+        // Ahora verificar si hay un ejercicio seleccionado o una superserie
         await checkSelectedExercise(loadedExercises);
+        await checkSupersetExercises();
       };
-      
+
       initialize();
-      
+
       return () => {
         isMounted = false;
       };
     }, [paramsKey, dayNumber, weekNumber])
   );
 
-  // Wrapper para GestureHandler - debe estar en el nivel superior
-  const ContentWrapper = DRAG_DROP_ENABLED && GestureHandlerRootView 
-    ? GestureHandlerRootView 
-    : React.Fragment;
-  const wrapperProps = DRAG_DROP_ENABLED && GestureHandlerRootView 
-    ? { style: { flex: 1 } } 
-    : {};
-
   return (
-    <ContentWrapper {...wrapperProps}>
-      <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" />
-      
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" />
+
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -1069,8 +1194,8 @@ export default function CustomPlanDayDetailScreen() {
                 const dayDataStr = await AsyncStorage.getItem(`week_${weekNumber}_day_${dayNumber}_data`);
                 if (dayDataStr) {
                   const dayData = parseSafeJSON(dayDataStr, { dayNumber, exercises: [] });
-                  dayData.name = dayName.trim() ||  t('workout.dayName', { day: dayNumber }),
-                  await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayData));
+                  dayData.name = dayName.trim() || t('workout.dayName', { day: dayNumber }),
+                    await AsyncStorage.setItem(`week_${weekNumber}_day_${dayNumber}_data`, JSON.stringify(dayData));
                 } else {
                   // Si no hay datos guardados, crear un nuevo objeto
                   const dayDataToSave = {
@@ -1108,7 +1233,7 @@ export default function CustomPlanDayDetailScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         contentContainerStyle={styles.contentContainer}
         showsVerticalScrollIndicator={true}
@@ -1148,314 +1273,270 @@ export default function CustomPlanDayDetailScreen() {
           </View>
         ) : (
           <View style={styles.exercisesList}>
-            {DRAG_DROP_ENABLED && DraggableFlatList ? (
-              // ============================================================================
-              // VERSIÓN CON DRAG & DROP (Solo para builds de producción)
-              // GestureHandlerRootView está en el nivel superior del componente
-              // ============================================================================
-              <DraggableFlatList
-                data={exercises}
-                onDragEnd={({ data }: { data: Exercise[] }) => handleReorderExercises(data)}
-                keyExtractor={(item: Exercise) => item.id}
-                scrollEnabled={false}
-                activationDistance={10}
-                renderItem={({ item: exercise, drag, isActive, getIndex }: { item: Exercise; drag: () => void; isActive: boolean; getIndex: () => number | undefined }) => {
-                  const exerciseIdx = getIndex() ?? 0;
-                  return (
-                  <ScaleDecorator>
-                    <View 
-                      key={exercise.id} 
-                      style={[
-                        styles.exerciseCard,
-                        isActive && styles.exerciseCardDragging
-                      ]}
-                    >
-                      <View style={styles.exerciseHeader}>
-                        <TouchableOpacity
-                          onLongPress={drag}
-                          style={styles.dragHandle}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="reorder-three" size={24} color="#666" />
-                        </TouchableOpacity>
-                        <View style={styles.exerciseTitleContainer}>
-                          <View style={styles.exerciseNumberBadge}>
-                            <Text style={styles.exerciseNumberText}>{exerciseIdx + 1}</Text>
-                          </View>
-                          <Text style={styles.exerciseName}>{exercise.name}</Text>
+            {exercises.map((exercise, exerciseIdx) => {
+              // Verificar si es una superserie
+              if (isSuperset(exercise as ExerciseItem)) {
+                const superset = exercise as unknown as Superset;
+                return (
+                  <View key={superset.id} style={styles.supersetCard}>
+                    <View style={styles.supersetHeader}>
+                      <View style={styles.supersetTitleContainer}>
+                        <View style={styles.supersetNumberBadge}>
+                          <Text style={styles.supersetNumberText}>{exerciseIdx + 1}</Text>
                         </View>
-                        <View style={styles.exerciseActions}>
-                          <TouchableOpacity
-                            onPress={() => setEditingExercise(exercise)}
-                            style={styles.editButton}
-                          >
-                            <Ionicons name="create-outline" size={20} color="#ffb300" />
-                          </TouchableOpacity>
-                          <TouchableOpacity
-                            onPress={() => handleDeleteExercise(exercise.id)}
-                            style={styles.deleteButton}
-                          >
-                            <Ionicons name="trash-outline" size={20} color="#F44336" />
-                          </TouchableOpacity>
-                        </View>
+                        <Ionicons name="link" size={20} color="#9C27B0" />
+                        <Text style={styles.supersetTitle}>SUPERSERIE</Text>
                       </View>
-
-                      {/* Temporizador de Descanso */}
-                      {showRestTimers && (
-                        <TouchableOpacity
-                          style={styles.restTimerContainer}
-                          onPress={() => handleOpenRestTimerModal(exercise.id)}
-                          activeOpacity={0.7}
-                        >
-                          <Ionicons name="timer-outline" size={18} color="#ffb300" />
-                          <Text style={styles.restTimerLabel}>{t('customPlan.restTimerLabel')}</Text>
-                          <Text style={styles.restTimerValue}>
-                            {formatRestTime(exercise.rest_seconds || 120)}
-                          </Text>
-                          <Ionicons name="chevron-forward" size={16} color="#666" />
-                        </TouchableOpacity>
-                      )}
-
-                      <View style={styles.exerciseDetails}>
-                        <TouchableOpacity
-                          style={styles.setsHeader}
-                          onPress={() => toggleExerciseExpansion(exercise.id)}
-                          activeOpacity={0.7}
-                        >
-                          <View style={styles.setsHeaderLeft}>
-                            <Ionicons name="list" size={16} color="#999" />
-                            <Text style={styles.setsHeaderText}>
-                              {t('customPlan.setsCount', {
-                                count: exercise.sets,
-                                unit: exercise.sets === 1 ? t('customPlan.set_singular') : t('customPlan.set_plural'),
-                              })}
-                            </Text>
-                            <Ionicons
-                              name={expandedExercises.has(exercise.id) ? "chevron-up" : "chevron-down"}
-                              size={18}
-                              color="#ffb300"
-                            />
-                          </View>
-                        </TouchableOpacity>
-                        {expandedExercises.has(exercise.id) && (
-                          <View style={styles.setsGrid}>
-                            {(exercise.setTypes || []).map((setInfo: SetInfo, idx: number) => {
-                              const label = (() => {
-                                switch (setInfo.type) {
-                                  case 'warmup': return 'C';
-                                  case 'drop': return 'D';
-                                  case 'failure':
-                                  case 'normal':
-                                  default:
-                                    let seriesCount = 0;
-                                    for (let i = 0; i <= idx; i++) {
-                                      const type = (exercise.setTypes || [])[i]?.type || 'normal';
-                                      if (type === 'normal' || type === 'failure') {
-                                        seriesCount++;
-                                      }
-                                    }
-                                    return `${seriesCount}`;
-                                }
-                              })();
-                              
-                              const badgeStyle = (() => {
-                                switch (setInfo.type) {
-                                  case 'warmup': return styles.setBadgeWarmup;
-                                  case 'failure': return styles.setBadgeFailure;
-                                  case 'drop': return styles.setBadgeDrop;
-                                  default: return styles.setBadgeNormal;
-                                }
-                              })();
-                              
-                              return (
-                                <View key={`${exercise.id}_set_${idx}`} style={styles.setBadge}>
-                                  <View style={[styles.setBadgeNumber, badgeStyle]}>
-                                    <Text style={styles.setBadgeNumberText}>
-                                      {label}{setInfo.type === 'failure' ? ' F' : ''}
-                                    </Text>
-                                  </View>
-                                  <View style={styles.setBadgeContent}>
-                                    {setInfo.type === 'warmup' ? (
-                                      <Text style={styles.setBadgeReps}>{t('customPlan.warmupLabel')}</Text>
-                                    ) : setInfo.type === 'failure' ? (
-                                      <View style={styles.setBadgeInfo}>
-                                        <Text style={styles.setBadgeReps}>
-                                          {setInfo.reps || 0} reps
-                                        </Text>
-                                        <Text style={styles.setBadgeFailureText}>{t('customPlan.toFailure')}</Text>
-                                      </View>
-                                    ) : (
-                                      <View style={styles.setBadgeInfo}>
-                                        <Text style={styles.setBadgeReps}>
-                                          {t('customPlan.repsShort', { reps: setInfo.reps || 0 })}
-                                        </Text>
-                                        {setInfo.rir !== null && setInfo.rir !== undefined && (
-                                          <Text style={styles.setBadgeRir}>RIR {setInfo.rir}</Text>
-                                        )}
-                                      </View>
-                                    )}
-                                  </View>
-                                </View>
-                              );
-                            })}
-                          </View>
+                      <View style={styles.exerciseActions}>
+                        {exerciseIdx > 0 && (
+                          <TouchableOpacity
+                            onPress={() => handleMoveExerciseUp(exerciseIdx)}
+                            style={styles.reorderButton}
+                          >
+                            <Ionicons name="chevron-up" size={20} color="#4CAF50" />
+                          </TouchableOpacity>
                         )}
+                        {exerciseIdx < exercises.length - 1 && (
+                          <TouchableOpacity
+                            onPress={() => handleMoveExerciseDown(exerciseIdx)}
+                            style={styles.reorderButton}
+                          >
+                            <Ionicons name="chevron-down" size={20} color="#4CAF50" />
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity
+                          onPress={() => {
+                            // Cargar datos de la superserie para editar
+                            setEditingSupersetId(superset.id);
+                            setSupersetExerciseCount(superset.exercises.length);
+                            setSupersetSets(superset.sets);
+                            setSupersetRestSeconds(superset.rest_seconds.toString());
+
+                            // Cargar ejercicios seleccionados
+                            const selectedExercises: SupersetExercise[] = superset.exercises.map(ex => ({
+                              id: ex.id,
+                              name: ex.name,
+                              reps: ex.reps,
+                            }));
+                            setSupersetExercisesSelected(selectedExercises);
+
+                            // Cargar reps por ejercicio
+                            const repsData: { [exerciseId: string]: string[] } = {};
+                            superset.exercises.forEach(ex => {
+                              repsData[ex.id] = ex.reps.map(r => r.toString());
+                            });
+                            setSupersetReps(repsData);
+
+                            // Abrir modal de configuración
+                            setShowSupersetConfigModal(true);
+                          }}
+                          style={styles.editButton}
+                        >
+                          <Ionicons name="create-outline" size={20} color="#ffb300" />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => {
+                            // Eliminar superserie
+                            setExercises(exercises.filter(ex => ex.id !== superset.id));
+                            hasLocalChanges.current = true;
+                          }}
+                          style={styles.deleteButton}
+                        >
+                          <Ionicons name="trash-outline" size={20} color="#F44336" />
+                        </TouchableOpacity>
                       </View>
-                      
-                      {/* Mostrar notas del ejercicio si existen */}
-                      {exercise.notes && (
-                        <View style={styles.exerciseNotesContainer}>
-                          <Ionicons name="document-text-outline" size={14} color="#ffb300" />
-                          <Text style={styles.exerciseNotesText} numberOfLines={2}>
-                            {exercise.notes}
-                          </Text>
-                        </View>
-                      )}
                     </View>
-                  </ScaleDecorator>
-                  );
-                }}
-              />
-            ) : (
-              // ============================================================================
-              // VERSIÓN SIMPLE (Para desarrollo en Expo Go)
-              // ============================================================================
-              <>
-                {exercises.map((exercise, exerciseIdx) => {
-                  console.log(`🏋️ Renderizando ejercicio ${exerciseIdx + 1}: ${exercise.name} (ID: ${exercise.id})`);
-                  return (
-                    <View 
-                      key={exercise.id} 
-                      style={styles.exerciseCard}
-                    >
-                      <View style={styles.exerciseHeader}>
-                  <View style={styles.exerciseTitleContainer}>
-                    <View style={styles.exerciseNumberBadge}>
-                      <Text style={styles.exerciseNumberText}>{exerciseIdx + 1}</Text>
-                    </View>
-                    <Text style={styles.exerciseName}>{exercise.name}</Text>
-                  </View>
-                  <View style={styles.exerciseActions}>
-                    <TouchableOpacity
-                      onPress={() => setEditingExercise(exercise)}
-                      style={styles.editButton}
-                    >
-                      <Ionicons name="create-outline" size={20} color="#ffb300" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleDeleteExercise(exercise.id)}
-                      style={styles.deleteButton}
-                    >
-                      <Ionicons name="trash-outline" size={20} color="#F44336" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
 
-                {/* Temporizador de Descanso */}
-                {showRestTimers && (
-                  <TouchableOpacity
-                    style={styles.restTimerContainer}
-                    onPress={() => handleOpenRestTimerModal(exercise.id)}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons name="timer-outline" size={18} color="#ffb300" />
-                    <Text style={styles.restTimerLabel}>Temporizador de Descanso:</Text>
-                    <Text style={styles.restTimerValue}>
-                      {formatRestTime(exercise.rest_seconds || 120)}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={16} color="#666" />
-                  </TouchableOpacity>
-                )}
-
-                <View style={styles.exerciseDetails}>
-                  <TouchableOpacity
-                    style={styles.setsHeader}
-                    onPress={() => toggleExerciseExpansion(exercise.id)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.setsHeaderLeft}>
-                      <Ionicons name="list" size={16} color="#999" />
-                      <Text style={styles.setsHeaderText}>
-                        {exercise.sets} {exercise.sets === 1 ? 'serie' : 'series'}
-                      </Text>
-                      <Ionicons
-                        name={expandedExercises.has(exercise.id) ? "chevron-up" : "chevron-down"}
-                        size={18}
-                        color="#ffb300"
-                      />
-                    </View>
-                  </TouchableOpacity>
-                  {expandedExercises.has(exercise.id) && (
-                    <View style={styles.setsGrid}>
-                      {(exercise.setTypes || []).map((setInfo, idx) => {
-                      // Calcular label de la serie
-                      const label = (() => {
-                        switch (setInfo.type) {
-                          case 'warmup': return 'C';
-                          case 'drop': return 'D';
-                          case 'failure':
-                          case 'normal':
-                          default:
-                            let seriesCount = 0;
-                            for (let i = 0; i <= idx; i++) {
-                              const type = (exercise.setTypes || [])[i]?.type || 'normal';
-                              if (type === 'normal' || type === 'failure') {
-                                seriesCount++;
-                              }
-                            }
-                            return setInfo.type === 'failure' ? `${seriesCount}` : `${seriesCount}`;
-                        }
-                      })();
-                      
-                      // Determinar color y estilo del badge
-                      const badgeStyle = (() => {
-                        switch (setInfo.type) {
-                          case 'warmup': return styles.setBadgeWarmup;
-                          case 'failure': return styles.setBadgeFailure;
-                          case 'drop': return styles.setBadgeDrop;
-                          default: return styles.setBadgeNormal;
-                        }
-                      })();
-                      
-                        return (
-                          <View key={`${exercise.id}_set_${idx}`} style={styles.setBadge}>
-                            <View style={[styles.setBadgeNumber, badgeStyle]}>
-                              <Text style={styles.setBadgeNumberText}>
-                                {label}{setInfo.type === 'failure' ? ' F' : ''}
+                    {/* Series de la superserie */}
+                    {Array.from({ length: superset.sets }).map((_, setIdx) => (
+                      <View key={setIdx} style={styles.supersetSetBlock}>
+                        <Text style={styles.supersetSetLabel}>
+                          {t('customPlan.supersetSet', { number: setIdx + 1 })}
+                        </Text>
+                        <View style={styles.supersetExercisesBlock}>
+                          {superset.exercises.map((ex, exIdx) => (
+                            <View key={ex.id} style={styles.supersetExerciseItem}>
+                              <Text style={styles.supersetExerciseItemName} numberOfLines={1}>
+                                {ex.name}
+                              </Text>
+                              <Text style={styles.supersetExerciseItemReps}>
+                                {ex.reps[setIdx] || 10} reps
                               </Text>
                             </View>
-                            <View style={styles.setBadgeContent}>
-                              {setInfo.type === 'warmup' ? (
-                                <Text style={styles.setBadgeReps}>
-  {t('customPlan.warmup')}
-</Text>
-                              ) : setInfo.type === 'failure' ? (
-                                <View style={styles.setBadgeInfo}>
-                                  <Text style={styles.setBadgeReps}>
-                                    {setInfo.reps || 0} reps
-                                  </Text>
-                                  <Text style={styles.setBadgeFailureText}>
-  {t('customPlan.toFailure')}
-</Text>
-                                </View>
-                              ) : (
-                                <View style={styles.setBadgeInfo}>
-                                  <Text style={styles.setBadgeReps}>
-                                    {setInfo.reps || 0} reps
-                                  </Text>
-                                  {setInfo.rir !== null && setInfo.rir !== undefined && (
-                                    <Text style={styles.setBadgeRir}>RIR {setInfo.rir}</Text>
-                                  )}
-                                </View>
-                              )}
-                            </View>
-                          </View>
-                        );
-                      })}
+                          ))}
+                        </View>
+                      </View>
+                    ))}
+
+                    {/* Descanso */}
+                    <View style={styles.supersetRestInfo}>
+                      <Ionicons name="timer-outline" size={16} color="#888" />
+                      <Text style={styles.supersetRestText}>
+                        {superset.rest_seconds}s descanso entre rondas
+                      </Text>
                     </View>
+                  </View>
+                );
+              }
+
+              // Ejercicio normal
+              console.log(`🏋️ Renderizando ejercicio ${exerciseIdx + 1}: ${exercise.name} (ID: ${exercise.id})`);
+              return (
+                <View
+                  key={exercise.id}
+                  style={styles.exerciseCard}
+                >
+                  <View style={styles.exerciseHeader}>
+                    <View style={styles.exerciseTitleContainer}>
+                      <View style={styles.exerciseNumberBadge}>
+                        <Text style={styles.exerciseNumberText}>{exerciseIdx + 1}</Text>
+                      </View>
+                      <Text style={styles.exerciseName}>{exercise.name}</Text>
+                    </View>
+                    <View style={styles.exerciseActions}>
+                      {exerciseIdx > 0 && (
+                        <TouchableOpacity
+                          onPress={() => handleMoveExerciseUp(exerciseIdx)}
+                          style={styles.reorderButton}
+                        >
+                          <Ionicons name="chevron-up" size={20} color="#4CAF50" />
+                        </TouchableOpacity>
+                      )}
+                      {exerciseIdx < exercises.length - 1 && (
+                        <TouchableOpacity
+                          onPress={() => handleMoveExerciseDown(exerciseIdx)}
+                          style={styles.reorderButton}
+                        >
+                          <Ionicons name="chevron-down" size={20} color="#4CAF50" />
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        onPress={() => setEditingExercise(exercise)}
+                        style={styles.editButton}
+                      >
+                        <Ionicons name="create-outline" size={20} color="#ffb300" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteExercise(exercise.id)}
+                        style={styles.deleteButton}
+                      >
+                        <Ionicons name="trash-outline" size={20} color="#F44336" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Temporizador de Descanso */}
+                  {showRestTimers && (
+                    <TouchableOpacity
+                      style={styles.restTimerContainer}
+                      onPress={() => handleOpenRestTimerModal(exercise.id)}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="timer-outline" size={18} color="#ffb300" />
+                      <Text style={styles.restTimerLabel}>Temporizador de Descanso:</Text>
+                      <Text style={styles.restTimerValue}>
+                        {formatRestTime(exercise.rest_seconds || 120)}
+                      </Text>
+                      <Ionicons name="chevron-forward" size={16} color="#666" />
+                    </TouchableOpacity>
                   )}
-                </View>
-                  
+
+                  <View style={styles.exerciseDetails}>
+                    <TouchableOpacity
+                      style={styles.setsHeader}
+                      onPress={() => toggleExerciseExpansion(exercise.id)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.setsHeaderLeft}>
+                        <Ionicons name="list" size={16} color="#999" />
+                        <Text style={styles.setsHeaderText}>
+                          {exercise.sets} {exercise.sets === 1 ? 'serie' : 'series'}
+                        </Text>
+                        <Ionicons
+                          name={expandedExercises.has(exercise.id) ? "chevron-up" : "chevron-down"}
+                          size={18}
+                          color="#ffb300"
+                        />
+                      </View>
+                    </TouchableOpacity>
+                    {expandedExercises.has(exercise.id) && (
+                      <View style={styles.setsGrid}>
+                        {(exercise.setTypes || []).map((setInfo, idx) => {
+                          // Calcular label de la serie
+                          const label = (() => {
+                            switch (setInfo.type) {
+                              case 'warmup': return 'C';
+                              case 'drop': return 'D';
+                              case 'failure':
+                              case 'normal':
+                              default:
+                                let seriesCount = 0;
+                                for (let i = 0; i <= idx; i++) {
+                                  const type = (exercise.setTypes || [])[i]?.type || 'normal';
+                                  if (type === 'normal' || type === 'failure') {
+                                    seriesCount++;
+                                  }
+                                }
+                                return setInfo.type === 'failure' ? `${seriesCount}` : `${seriesCount}`;
+                            }
+                          })();
+
+                          // Determinar color y estilo del badge
+                          const badgeStyle = (() => {
+                            switch (setInfo.type) {
+                              case 'warmup': return styles.setBadgeWarmup;
+                              case 'failure': return styles.setBadgeFailure;
+                              case 'drop': return styles.setBadgeDrop;
+                              default: return styles.setBadgeNormal;
+                            }
+                          })();
+
+                          return (
+                            <View key={`${exercise.id}_set_${idx}`} style={styles.setBadge}>
+                              <View style={[styles.setBadgeNumber, badgeStyle]}>
+                                <Text style={styles.setBadgeNumberText}>
+                                  {label}{setInfo.type === 'failure' ? ' F' : ''}
+                                </Text>
+                              </View>
+                              <View style={styles.setBadgeContent}>
+                                {setInfo.type === 'warmup' ? (
+                                  <Text style={styles.setBadgeReps}>
+                                    {t('customPlan.warmup')}
+                                  </Text>
+                                ) : setInfo.type === 'failure' ? (
+                                  <View style={styles.setBadgeInfo}>
+                                    <Text style={styles.setBadgeReps}>
+                                      {setInfo.reps || 0} reps
+                                    </Text>
+                                    <Text style={styles.setBadgeFailureText}>
+                                      {t('customPlan.toFailure')}
+                                    </Text>
+                                  </View>
+                                ) : setInfo.type === 'drop' ? (
+                                  <View style={styles.setBadgeInfo}>
+                                    <Text style={styles.setBadgeReps}>
+                                      {setInfo.reps || 0} x {setInfo.dropCount || 1}
+                                    </Text>
+                                    <Text style={styles.setBadgeDropText}>Drop</Text>
+                                  </View>
+                                ) : (
+                                  <View style={styles.setBadgeInfo}>
+                                    <Text style={styles.setBadgeReps}>
+                                      {setInfo.reps || 0} reps
+                                    </Text>
+                                    {setInfo.rir !== null && setInfo.rir !== undefined && (
+                                      <Text style={styles.setBadgeRir}>RIR {setInfo.rir}</Text>
+                                    )}
+                                  </View>
+                                )}
+                              </View>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+
                   {/* Mostrar notas del ejercicio si existen */}
                   {exercise.notes && (
                     <View style={styles.exerciseNotesContainer}>
@@ -1465,11 +1546,9 @@ export default function CustomPlanDayDetailScreen() {
                       </Text>
                     </View>
                   )}
-                    </View>
-                  );
-                })}
-              </>
-            )}
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -1479,6 +1558,18 @@ export default function CustomPlanDayDetailScreen() {
         >
           <Ionicons name="add-circle" size={24} color="#ffb300" />
           <Text style={styles.addButtonText}>{t('customPlan.addExercise')}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.addSupersetButton}
+          onPress={() => {
+            setSupersetExerciseCount(2); // Inicializar en 2 ejercicios
+            setEditingSupersetId(null); // Asegurar que no está en modo edición
+            setShowSupersetCountModal(true);
+          }}
+        >
+          <Ionicons name="link" size={24} color="#9C27B0" />
+          <Text style={styles.addSupersetButtonText}>{t('customPlan.addSuperset')}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
@@ -1513,13 +1604,13 @@ export default function CustomPlanDayDetailScreen() {
                 nestedScrollEnabled={true}
               >
                 <Text style={styles.modalTitle}>
-                {t('customPlan.configureExercise', { name: editingExercise?.name ?? '' })}
+                  {t('customPlan.configureExercise', { name: editingExercise?.name ?? '' })}
                 </Text>
 
                 <View style={styles.inputGroup}>
-                 
-<Text style={styles.label}>{t('customPlan.setsLabel')}</Text>
-                  
+
+                  <Text style={styles.label}>{t('customPlan.setsLabel')}</Text>
+
                   {setTypes.length > 0 ? (
                     <View>
                       {/* Fila de encabezados */}
@@ -1535,13 +1626,13 @@ export default function CustomPlanDayDetailScreen() {
                         </View>
                         <View style={styles.seriesHeaderCellAction} />
                       </View>
-                      
+
                       {/* Filas de series */}
                       {setTypes.map((setType, idx) => {
                         const setLabel = getSetLabel(setType, idx);
                         const buttonColor = getSetButtonColor(setType);
                         const isWarmup = setType.type === 'warmup';
-                        
+
                         return (
                           <View key={idx} style={styles.repInputRow}>
                             <Pressable
@@ -1564,7 +1655,7 @@ export default function CustomPlanDayDetailScreen() {
                               // Para calentamiento, mostrar texto informativo en lugar de inputs
                               <View style={styles.warmupPlaceholder}>
                                 <Text style={styles.warmupPlaceholderText}>
-                                {t('customPlan.warmupHint')}
+                                  {t('customPlan.warmupHint')}
 
                                 </Text>
                               </View>
@@ -1600,11 +1691,11 @@ export default function CustomPlanDayDetailScreen() {
                     </View>
                   ) : (
                     <Text style={styles.emptySeriesText}>
-  {t('customPlan.addSetsForThisExercise')}
-</Text>
+                      {t('customPlan.addSetsForThisExercise')}
+                    </Text>
 
                   )}
-                  
+
                   {/* Botón Agregar Serie abajo */}
                   <TouchableOpacity
                     style={styles.addSetButtonBottom}
@@ -1663,6 +1754,7 @@ export default function CustomPlanDayDetailScreen() {
           onRequestClose={() => {
             console.log('⛔ Cerrando modal de tipo de serie');
             setShowSetTypeModal(false);
+            setShowDropCountSelection(false);
             setSelectedSetIndex(-1);
           }}
           onShow={() => {
@@ -1670,128 +1762,176 @@ export default function CustomPlanDayDetailScreen() {
             console.log('📊 selectedSetIndex:', selectedSetIndex);
           }}
         >
-        <Pressable
-          style={styles.setTypeModalOverlay}
-          onPress={() => {
-            console.log('🚪 Click en overlay - cerrando modal');
-            setShowSetTypeModal(false);
-            setSelectedSetIndex(-1);
-          }}
-        >
           <Pressable
-            style={styles.setTypeModalContent}
-            onPress={(e) => {
-              e.stopPropagation();
-              console.log('🛑 Click dentro del contenido - no cerrar');
+            style={styles.setTypeModalOverlay}
+            onPress={() => {
+              console.log('🚪 Click en overlay - cerrando modal');
+              setShowSetTypeModal(false);
+              setShowDropCountSelection(false);
+              setSelectedSetIndex(-1);
             }}
           >
-            <Text style={styles.setTypeModalTitle}>{t('customPlan.selectSetType')}</Text>
-            
-            <View style={styles.setTypeOptionsContainer}>
-              <TouchableOpacity
-                style={styles.setTypeOption}
-                onPress={() => {
-                  console.log('🟡 Seleccionado: Calentamiento');
-                  handleChangeSetType('warmup');
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.setTypeIconLarge, styles.setTypeIconWarmup]}>
-                <Text style={styles.setTypeIconTextLarge}>
-  {i18n.language.startsWith('en') ? 'W' : 'C'}
-</Text>
-                </View>
-                <View style={styles.setTypeInfo}>
-                <Text style={styles.setTypeOptionText}>
-  {t('customPlan.setTypeWarmup')}
-</Text>
-<Text style={styles.setTypeOptionDesc}>
-  {t('customPlan.setTypeWarmupDesc')}
-</Text>
-
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.setTypeOption}
-                onPress={() => {
-                  console.log('🟢 Seleccionado: Normal');
-                  handleChangeSetType('normal');
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.setTypeIconLarge, styles.setTypeIconNormal]}>
-                  <Text style={styles.setTypeIconTextLarge}>1</Text>
-                </View>
-                <View style={styles.setTypeInfo}>
-                <Text style={styles.setTypeOptionText}>
-  {t('customPlan.setType.normal')}
-</Text>
-<Text style={styles.setTypeOptionDesc}>
-  {t('customPlan.setType.normalDesc')}
-</Text>
-
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.setTypeOption}
-                onPress={() => {
-                  console.log('🔴 Seleccionado: Al Fallo');
-                  handleChangeSetType('failure');
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.setTypeIconLarge, styles.setTypeIconFailure]}>
-                  <Text style={styles.setTypeIconTextLarge}>F</Text>
-                </View>
-                <View style={styles.setTypeInfo}>
-                <Text style={styles.setTypeOptionText}>
-  {t('customPlan.setType.failure')}
-</Text>
-<Text style={styles.setTypeOptionDesc}>
-  {t('customPlan.setType.failureDesc')}
-</Text>
-
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.setTypeOption}
-                onPress={() => {
-                  console.log('🟣 Seleccionado: Drop');
-                  handleChangeSetType('drop');
-                }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.setTypeIconLarge, styles.setTypeIconDrop]}>
-                  <Text style={styles.setTypeIconTextLarge}>D</Text>
-                </View>
-                <View style={styles.setTypeInfo}>
-                <Text style={styles.setTypeOptionText}>
-  {t('customPlan.setType.drop')}
-</Text>
-<Text style={styles.setTypeOptionDesc}>
-  {t('customPlan.setType.dropDesc')}
-</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity
-              style={styles.setTypeModalCloseButton}
-              onPress={() => {
-                console.log('❌ Cancelar presionado');
-                setShowSetTypeModal(false);
-                setSelectedSetIndex(-1);
+            <Pressable
+              style={styles.setTypeModalContent}
+              onPress={(e) => {
+                e.stopPropagation();
+                console.log('🛑 Click dentro del contenido - no cerrar');
               }}
             >
-<Text style={styles.setTypeModalCloseText}>
-  {t('common.cancel')}
-</Text>
-            </TouchableOpacity>
+              {/* Título dinámico basado en si estamos seleccionando tipo o cantidad de drops */}
+              <Text style={styles.setTypeModalTitle}>
+                {showDropCountSelection ? t('customPlan.selectDropCount') : t('customPlan.selectSetType')}
+              </Text>
+
+              {showDropCountSelection ? (
+                // Vista de selección de cantidad de descargas
+                <>
+                  <View style={styles.setTypeOptionsContainer}>
+                    {[1, 2, 3, 4].map((count) => (
+                      <TouchableOpacity
+                        key={`drop-${count}`}
+                        style={styles.setTypeOption}
+                        onPress={() => {
+                          console.log(`🟣 Drop con ${count} descargas`);
+                          handleSelectDropCount(count);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.setTypeIconLarge, styles.setTypeIconDrop]}>
+                          <Text style={styles.setTypeIconTextLarge}>{count}</Text>
+                        </View>
+                        <View style={styles.setTypeInfo}>
+                          <Text style={styles.setTypeOptionText}>
+                            {count} {t('customPlan.drops')}
+                          </Text>
+                          <Text style={styles.setTypeOptionDesc}>
+                            {t('customPlan.dropCountDesc', { count })}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.setTypeModalCloseButton}
+                    onPress={() => {
+                      console.log('⬅️ Volver a tipos de serie');
+                      setShowDropCountSelection(false);
+                    }}
+                  >
+                    <Text style={styles.setTypeModalCloseText}>
+                      {t('common.back')}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                // Vista de selección de tipo de serie
+                <>
+                  <View style={styles.setTypeOptionsContainer}>
+                    <TouchableOpacity
+                      style={styles.setTypeOption}
+                      onPress={() => {
+                        console.log('🟡 Seleccionado: Calentamiento');
+                        handleChangeSetType('warmup');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.setTypeIconLarge, styles.setTypeIconWarmup]}>
+                        <Text style={styles.setTypeIconTextLarge}>
+                          {i18n.language.startsWith('en') ? 'W' : 'C'}
+                        </Text>
+                      </View>
+                      <View style={styles.setTypeInfo}>
+                        <Text style={styles.setTypeOptionText}>
+                          {t('customPlan.setTypeWarmup')}
+                        </Text>
+                        <Text style={styles.setTypeOptionDesc}>
+                          {t('customPlan.setTypeWarmupDesc')}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.setTypeOption}
+                      onPress={() => {
+                        console.log('🟢 Seleccionado: Normal');
+                        handleChangeSetType('normal');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.setTypeIconLarge, styles.setTypeIconNormal]}>
+                        <Text style={styles.setTypeIconTextLarge}>1</Text>
+                      </View>
+                      <View style={styles.setTypeInfo}>
+                        <Text style={styles.setTypeOptionText}>
+                          {t('customPlan.setType.normal')}
+                        </Text>
+                        <Text style={styles.setTypeOptionDesc}>
+                          {t('customPlan.setType.normalDesc')}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.setTypeOption}
+                      onPress={() => {
+                        console.log('🔴 Seleccionado: Al Fallo');
+                        handleChangeSetType('failure');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.setTypeIconLarge, styles.setTypeIconFailure]}>
+                        <Text style={styles.setTypeIconTextLarge}>F</Text>
+                      </View>
+                      <View style={styles.setTypeInfo}>
+                        <Text style={styles.setTypeOptionText}>
+                          {t('customPlan.setType.failure')}
+                        </Text>
+                        <Text style={styles.setTypeOptionDesc}>
+                          {t('customPlan.setType.failureDesc')}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.setTypeOption}
+                      onPress={() => {
+                        console.log('🟣 Seleccionado: Drop');
+                        handleChangeSetType('drop');
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.setTypeIconLarge, styles.setTypeIconDrop]}>
+                        <Text style={styles.setTypeIconTextLarge}>D</Text>
+                      </View>
+                      <View style={styles.setTypeInfo}>
+                        <Text style={styles.setTypeOptionText}>
+                          {t('customPlan.setType.drop')}
+                        </Text>
+                        <Text style={styles.setTypeOptionDesc}>
+                          {t('customPlan.setType.dropDesc')}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.setTypeModalCloseButton}
+                    onPress={() => {
+                      console.log('❌ Cancelar presionado');
+                      setShowSetTypeModal(false);
+                      setShowDropCountSelection(false);
+                      setSelectedSetIndex(-1);
+                    }}
+                  >
+                    <Text style={styles.setTypeModalCloseText}>
+                      {t('common.cancel')}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </Pressable>
           </Pressable>
-        </Pressable>
         </Modal>
       </Modal>
 
@@ -1813,8 +1953,8 @@ export default function CustomPlanDayDetailScreen() {
             <View style={styles.restTimerModalHeader}>
               <Ionicons name="settings" size={24} color="#ffb300" />
               <Text style={styles.restTimerModalTitle}>
-  {t('workout.restTimerTitle')}
-</Text>
+                {t('workout.restTimerTitle')}
+              </Text>
             </View>
 
             {/* Selector de Tiempo */}
@@ -1824,7 +1964,7 @@ export default function CustomPlanDayDetailScreen() {
                   {formatRestTime(tempRestTime)}
                 </Text>
               </View>
-              
+
               <View style={styles.timeAdjustButtons}>
                 <TouchableOpacity
                   style={styles.timeAdjustButton}
@@ -1859,9 +1999,285 @@ export default function CustomPlanDayDetailScreen() {
         </Pressable>
       </Modal>
 
+      {/* ============================================================================ */}
+      {/* MODAL: Seleccionar cantidad de ejercicios en superserie */}
+      {/* ============================================================================ */}
+      <Modal
+        visible={showSupersetCountModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowSupersetCountModal(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowSupersetCountModal(false)}
+        >
+          <Pressable style={styles.supersetCountModalContent} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.supersetCountModalTitle}>
+              {t('customPlan.supersetExerciseCount')}
+            </Text>
+
+            {/* Input numérico con botones +/- */}
+            <View style={styles.supersetCountInputContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.supersetCountButton,
+                  supersetExerciseCount <= 2 && styles.supersetCountButtonDisabled
+                ]}
+                onPress={() => {
+                  if (supersetExerciseCount > 2) {
+                    setSupersetExerciseCount(supersetExerciseCount - 1);
+                  }
+                }}
+                disabled={supersetExerciseCount <= 2}
+              >
+                <Ionicons name="remove" size={28} color={supersetExerciseCount <= 2 ? '#555' : '#fff'} />
+              </TouchableOpacity>
+
+              <View style={styles.supersetCountValueContainer}>
+                <Text style={styles.supersetCountValue}>{supersetExerciseCount}</Text>
+                <Text style={styles.supersetCountSubtext}>ejercicios</Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.supersetCountButton,
+                  supersetExerciseCount >= 9 && styles.supersetCountButtonDisabled
+                ]}
+                onPress={() => {
+                  if (supersetExerciseCount < 9) {
+                    setSupersetExerciseCount(supersetExerciseCount + 1);
+                  }
+                }}
+                disabled={supersetExerciseCount >= 9}
+              >
+                <Ionicons name="add" size={28} color={supersetExerciseCount >= 9 ? '#555' : '#fff'} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Botones de acción */}
+            <View style={styles.supersetCountButtonsRow}>
+              <TouchableOpacity
+                style={styles.supersetCancelButton}
+                onPress={() => setShowSupersetCountModal(false)}
+              >
+                <Text style={styles.supersetCancelButtonText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.supersetAcceptButton}
+                onPress={() => {
+                  setSupersetExercisesSelected([]);
+                  setSupersetReps({});
+                  setSupersetSets(1);
+                  setSupersetRestSeconds('90');
+                  setShowSupersetCountModal(false);
+                  // Navegar a selección de ejercicio con modo superserie
+                  router.push({
+                    pathname: '/(tabs)/workout/custom-plan-select-exercise',
+                    params: {
+                      equipment: JSON.stringify(equipment),
+                      dayNumber: dayNumber.toString(),
+                      supersetMode: 'true',
+                      supersetTotal: supersetExerciseCount.toString(),
+                      supersetCurrent: '1',
+                      supersetSelected: JSON.stringify([]),
+                    },
+                  });
+                }}
+              >
+                <Text style={styles.supersetAcceptButtonText}>{t('common.accept')}</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ============================================================================ */}
+      {/* MODAL: Configurar series de superserie */}
+      {/* ============================================================================ */}
+      <Modal
+        visible={showSupersetConfigModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSupersetConfigModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.supersetConfigModalContent}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <Text style={styles.supersetConfigTitle}>
+                {t('customPlan.supersetConfigure')}
+              </Text>
+
+              {/* Series */}
+              {Array.from({ length: supersetSets }).map((_, setIndex) => (
+                <View key={setIndex} style={styles.supersetSetContainer}>
+                  <View style={styles.supersetSetHeader}>
+                    <Text style={styles.supersetSetTitle}>
+                      {t('customPlan.supersetSet', { number: setIndex + 1 })}
+                    </Text>
+                    {supersetSets > 1 && (
+                      <TouchableOpacity
+                        style={styles.supersetDeleteSetButton}
+                        onPress={() => {
+                          // Eliminar la serie y actualizar los reps
+                          const newReps = { ...supersetReps };
+                          supersetExercisesSelected.forEach((ex) => {
+                            if (newReps[ex.id] && newReps[ex.id].length > setIndex) {
+                              newReps[ex.id].splice(setIndex, 1);
+                            }
+                          });
+                          setSupersetReps(newReps);
+                          setSupersetSets(supersetSets - 1);
+                        }}
+                      >
+                        <Ionicons name="trash-outline" size={18} color="#ff6b6b" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  <View style={styles.supersetExercisesInSet}>
+                    {supersetExercisesSelected.map((exercise, exIndex) => (
+                      <View key={`${setIndex}-${exercise.id}-${exIndex}`} style={styles.supersetExerciseRow}>
+                        <Text style={styles.supersetExerciseName} numberOfLines={1}>
+                          {exercise.name}
+                        </Text>
+                        <TextInput
+                          style={styles.supersetRepsInput}
+                          value={supersetReps[exercise.id]?.[setIndex] || ''}
+                          onChangeText={(text) => {
+                            const newReps = { ...supersetReps };
+                            if (!newReps[exercise.id]) {
+                              newReps[exercise.id] = Array(supersetSets).fill('10');
+                            }
+                            newReps[exercise.id][setIndex] = text.replace(/[^0-9]/g, '');
+                            setSupersetReps(newReps);
+                          }}
+                          placeholder="10"
+                          placeholderTextColor="#666"
+                          keyboardType="number-pad"
+                          maxLength={3}
+                        />
+                        <Text style={styles.supersetRepsLabel}>
+                          {t('customPlan.supersetReps')}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ))}
+
+              {/* Botón agregar serie */}
+              <TouchableOpacity
+                style={styles.supersetAddSetButton}
+                onPress={() => {
+                  setSupersetSets(supersetSets + 1);
+                  // Agregar reps vacías para la nueva serie
+                  const newReps = { ...supersetReps };
+                  supersetExercisesSelected.forEach((ex) => {
+                    if (!newReps[ex.id]) {
+                      newReps[ex.id] = [];
+                    }
+                    newReps[ex.id].push('10');
+                  });
+                  setSupersetReps(newReps);
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={20} color="#9C27B0" />
+                <Text style={styles.supersetAddSetText}>
+                  {t('customPlan.supersetAddSet')}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Descanso entre rondas */}
+              <View style={styles.supersetRestContainer}>
+                <Text style={styles.supersetRestLabel}>
+                  {t('customPlan.supersetRestBetweenRounds')}
+                </Text>
+                <View style={styles.supersetRestInputContainer}>
+                  <TextInput
+                    style={styles.supersetRestInput}
+                    value={supersetRestSeconds}
+                    onChangeText={(text) => setSupersetRestSeconds(text.replace(/[^0-9]/g, ''))}
+                    placeholder="90"
+                    placeholderTextColor="#666"
+                    keyboardType="number-pad"
+                    maxLength={3}
+                  />
+                  <Text style={styles.supersetRestUnit}>seg</Text>
+                </View>
+              </View>
+
+              {/* Botones de acción */}
+              <View style={styles.supersetConfigButtons}>
+                <TouchableOpacity
+                  style={styles.supersetConfigCancelButton}
+                  onPress={() => {
+                    setShowSupersetConfigModal(false);
+                    setSupersetExercisesSelected([]);
+                    setSupersetExerciseCount(0);
+                    setSupersetReps({});
+                    setSupersetSets(1);
+                    setSupersetRestSeconds('90');
+                    setEditingSupersetId(null);
+                  }}
+                >
+                  <Text style={styles.supersetConfigCancelText}>
+                    {t('common.cancel')}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.supersetConfigSaveButton}
+                  onPress={() => {
+                    // Crear o actualizar la superserie
+                    const supersetData: Superset = {
+                      id: editingSupersetId || `superset_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                      type: 'superset',
+                      exercises: supersetExercisesSelected.map((ex) => ({
+                        id: ex.id,
+                        name: ex.name,
+                        reps: (supersetReps[ex.id] || Array(supersetSets).fill('10')).map((r) => parseInt(r) || 10),
+                      })),
+                      sets: supersetSets,
+                      rest_seconds: parseInt(supersetRestSeconds) || 90,
+                    };
+
+                    if (editingSupersetId) {
+                      // Actualizar superserie existente
+                      setExercises(exercises.map(ex =>
+                        ex.id === editingSupersetId ? supersetData as any : ex
+                      ));
+                    } else {
+                      // Agregar nueva superserie
+                      setExercises([...exercises, supersetData as any]);
+                    }
+
+                    // Limpiar estados
+                    setShowSupersetConfigModal(false);
+                    setSupersetExercisesSelected([]);
+                    setSupersetExerciseCount(0);
+                    setSupersetReps({});
+                    setSupersetSets(1);
+                    setSupersetRestSeconds('90');
+                    setEditingSupersetId(null);
+
+                    // Marcar cambios locales
+                    hasLocalChanges.current = true;
+                  }}
+                >
+                  <Text style={styles.supersetConfigSaveText}>
+                    {t('customPlan.supersetSave')}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       <AlertComponent />
-      </SafeAreaView>
-    </ContentWrapper>
+    </SafeAreaView>
   );
 }
 
@@ -1956,9 +2372,7 @@ const styles = StyleSheet.create({
   exercisesList: {
     gap: 16,
   },
-  draggableContainer: {
-    flex: 0, // No expandir, solo ocupar el espacio necesario
-  },
+
   exerciseCard: {
     backgroundColor: '#1e1e1e',
     borderRadius: 16,
@@ -1971,27 +2385,14 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  exerciseCardDragging: {
-    backgroundColor: '#2a2a2a',
-    borderColor: '#ffb300',
-    borderWidth: 2,
-    shadowColor: '#ffb300',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    elevation: 8,
-  },
+
   exerciseHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
   },
-  dragHandle: {
-    padding: 8,
-    marginRight: 8,
-    marginLeft: -8,
-  },
+
   exerciseTitleContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2025,6 +2426,9 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   deleteButton: {
+    padding: 4,
+  },
+  reorderButton: {
     padding: 4,
   },
   exerciseDetails: {
@@ -2131,6 +2535,12 @@ const styles = StyleSheet.create({
     color: '#F44336',
     fontStyle: 'italic',
   },
+  setBadgeDropText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#9C27B0',
+    fontStyle: 'italic',
+  },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2148,6 +2558,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#ffb300',
+  },
+  addSupersetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2a2a2a',
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginTop: 12,
+    borderWidth: 2,
+    borderColor: '#9C27B0',
+    borderStyle: 'dashed',
+    gap: 8,
+  },
+  addSupersetButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#9C27B0',
   },
   modalOverlay: {
     flex: 1,
@@ -2616,6 +3044,335 @@ const styles = StyleSheet.create({
   toggleKnobActive: {
     backgroundColor: '#1a1a1a',
     transform: [{ translateX: 22 }],
+  },
+  // ============================================================================
+  // ESTILOS DE SUPERSERIES
+  // ============================================================================
+  supersetCountModalContent: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxWidth: 340,
+    alignItems: 'center',
+  },
+  supersetCountModalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ffffff',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  supersetCountInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    marginBottom: 28,
+  },
+  supersetCountButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#9C27B0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  supersetCountButtonDisabled: {
+    backgroundColor: '#333',
+  },
+  supersetCountValueContainer: {
+    alignItems: 'center',
+    minWidth: 80,
+  },
+  supersetCountValue: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  supersetCountSubtext: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: -4,
+  },
+  supersetCountButtonsRow: {
+    flexDirection: 'row',
+    gap: 16,
+    width: '100%',
+  },
+  supersetCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: '#333',
+    alignItems: 'center',
+  },
+  supersetCancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  supersetAcceptButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: '#9C27B0',
+    alignItems: 'center',
+  },
+  supersetAcceptButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  supersetConfigModalContent: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 20,
+    padding: 20,
+    width: '95%',
+    maxWidth: 400,
+    maxHeight: '85%',
+  },
+  supersetConfigTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  supersetSetContainer: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#9C27B0',
+  },
+  supersetSetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  supersetSetTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#9C27B0',
+  },
+  supersetDeleteSetButton: {
+    padding: 6,
+  },
+  supersetExercisesInSet: {
+    gap: 10,
+  },
+  supersetExerciseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  supersetExerciseName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#ffffff',
+  },
+  supersetRepsInput: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    width: 60,
+    fontSize: 16,
+    color: '#ffffff',
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  supersetRepsLabel: {
+    fontSize: 14,
+    color: '#888',
+  },
+  supersetAddSetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#9C27B0',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  supersetAddSetText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#9C27B0',
+  },
+  supersetRestContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+  },
+  supersetRestLabel: {
+    fontSize: 14,
+    color: '#ffffff',
+    flex: 1,
+  },
+  supersetRestInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  supersetRestInput: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    width: 70,
+    fontSize: 16,
+    color: '#ffffff',
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#444',
+  },
+  supersetRestUnit: {
+    fontSize: 14,
+    color: '#888',
+  },
+  supersetConfigButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  supersetConfigCancelButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#333',
+    alignItems: 'center',
+  },
+  supersetConfigCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#888',
+  },
+  supersetConfigSaveButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    backgroundColor: '#9C27B0',
+    alignItems: 'center',
+  },
+  supersetConfigSaveText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  // ============================================================================
+  // ESTILOS DE SUPERSERIE EN LISTA DE EJERCICIOS
+  // ============================================================================
+  supersetCard: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 2,
+    borderColor: '#9C27B0',
+    shadowColor: '#9C27B0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  supersetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  supersetTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  supersetNumberBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#9C27B0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  supersetNumberText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  supersetTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#9C27B0',
+    letterSpacing: 1,
+  },
+  supersetSetBlock: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+  },
+  supersetSetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  supersetSetLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#9C27B0',
+  },
+  supersetDeleteSeriesButton: {
+    padding: 4,
+  },
+  supersetExercisesBlock: {
+    gap: 8,
+  },
+  supersetExerciseItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  supersetExerciseItemName: {
+    flex: 1,
+    fontSize: 14,
+    color: '#ffffff',
+    marginRight: 10,
+  },
+  supersetExerciseItemReps: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#ffb300',
+  },
+  supersetRestInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
+  },
+  supersetRestText: {
+    fontSize: 13,
+    color: '#888',
   },
 });
 

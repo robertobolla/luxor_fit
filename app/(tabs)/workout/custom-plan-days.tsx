@@ -255,6 +255,17 @@ export default function CustomPlanDaysScreen() {
                   }));
                 }
                 
+                // Si es una superserie, mantener su estructura especial
+                if (ex.type === 'superset') {
+                  return {
+                    id: ex.id || `superset_${weekData.week_number}_${dayNumber}_${idx}_${Date.now()}`,
+                    type: 'superset',
+                    exercises: ex.exercises || [],
+                    sets: ex.sets || 1,
+                    rest_seconds: ex.rest_seconds || 90,
+                  };
+                }
+                
                 return {
                   id: ex.id || `${ex.name}_${weekData.week_number}_${dayNumber}_${idx}_${Date.now()}`,
                   name: ex.name || 'Ejercicio sin nombre',
@@ -370,6 +381,17 @@ export default function CustomPlanDaysScreen() {
                   reps: rep,
                   rir: rirValue,
                 }));
+              }
+              
+              // Si es una superserie, mantener su estructura especial
+              if (ex.type === 'superset') {
+                return {
+                  id: ex.id || `superset_${dayNumber}_${idx}_${Date.now()}`,
+                  type: 'superset',
+                  exercises: ex.exercises || [],
+                  sets: ex.sets || 1,
+                  rest_seconds: ex.rest_seconds || 90,
+                };
               }
               
               return {
@@ -553,11 +575,176 @@ export default function CustomPlanDaysScreen() {
             setIsPlanCurrentlyActive(isActive);
           }
           
-          // Cargar número de semanas guardadas
+          // Primero verificar si hay datos en AsyncStorage
           const savedWeeksCount = await AsyncStorage.getItem('custom_plan_weeks_count');
+          const hasAsyncStorageData = savedWeeksCount !== null;
+          
+          // Si no hay datos en AsyncStorage pero tenemos editingPlanId, recargar desde Supabase
+          if (!hasAsyncStorageData && editingPlanId && user) {
+            console.log('📭 No hay datos en AsyncStorage, recargando desde Supabase...');
+            
+            // Recargar el plan directamente desde Supabase
+            const targetUserId = isTrainerView && studentId ? studentId : user.id;
+            
+            const { data: plan, error } = await supabase
+              .from('workout_plans')
+              .select('*')
+              .eq('id', editingPlanId)
+              .eq('user_id', targetUserId)
+              .single();
+              
+            if (error || !plan) {
+              console.error('❌ Error recargando plan desde Supabase:', error);
+              isLoadingFromStorage.current = false;
+              return;
+            }
+            
+            console.log('✅ Plan recargado desde Supabase:', plan.plan_name);
+            
+            const planData = plan.plan_data as { multi_week_structure?: any[]; weekly_structure?: any[] } | null;
+            setPlanName(plan.plan_name);
+            
+            // Guardar planId en AsyncStorage
+            await AsyncStorage.setItem('editing_plan_id', editingPlanId);
+            await AsyncStorage.setItem('custom_plan_name', plan.plan_name);
+            
+            const multiWeekStructure = planData?.multi_week_structure;
+            const weeklyStructure = planData?.weekly_structure;
+            
+            if (multiWeekStructure && multiWeekStructure.length > 0) {
+              console.log('📅 Recargando plan multi-semana:', multiWeekStructure.length, 'semanas');
+              
+              const loadedWeeks: WeekData[] = [];
+              
+              for (const weekData of multiWeekStructure) {
+                const weekDays: DayData[] = [];
+                
+                for (const dayData of weekData.days || []) {
+                  const dayNumber = weekDays.length + 1;
+                  if (!dayData) continue;
+                  
+                  const dayName = dayData.day || dayData.focus || `Día ${dayNumber}`;
+                  
+                  // Convertir ejercicios al formato correcto
+                  const exercises = (dayData.exercises || []).map((ex: any, idx: number) => {
+                    if (ex.type === 'superset') {
+                      return {
+                        id: ex.id || `superset_${weekData.week_number}_${dayNumber}_${idx}_${Date.now()}`,
+                        type: 'superset',
+                        exercises: ex.exercises || [],
+                        sets: ex.sets || 1,
+                        rest_seconds: ex.rest_seconds || 90,
+                      };
+                    }
+                    
+                    let repsArray: number[] = [10, 10, 10];
+                    if (Array.isArray(ex.reps)) {
+                      repsArray = [...ex.reps];
+                    }
+                    
+                    return {
+                      id: ex.id || `${ex.name}_${weekData.week_number}_${dayNumber}_${idx}_${Date.now()}`,
+                      name: ex.name || 'Ejercicio sin nombre',
+                      sets: ex.sets || 3,
+                      reps: repsArray,
+                      rest_seconds: ex.rest_seconds || 120,
+                      setTypes: ex.setTypes || [],
+                    };
+                  });
+                  
+                  weekDays.push({
+                    dayNumber,
+                    name: dayName,
+                    exercises,
+                  });
+                  
+                  // Guardar en AsyncStorage
+                  const key = `week_${weekData.week_number}_day_${dayNumber}_data`;
+                  await AsyncStorage.setItem(key, JSON.stringify({
+                    dayNumber,
+                    name: dayName,
+                    exercises,
+                  }));
+                }
+                
+                loadedWeeks.push({
+                  weekNumber: weekData.week_number,
+                  days: weekDays,
+                });
+              }
+              
+              setWeeks(loadedWeeks);
+              await AsyncStorage.setItem('custom_plan_weeks_count', loadedWeeks.length.toString());
+              
+            } else if (weeklyStructure && weeklyStructure.length > 0) {
+              console.log('📅 Recargando plan de una semana:', weeklyStructure.length, 'días');
+              
+              const weekDays: DayData[] = [];
+              
+              for (let i = 0; i < weeklyStructure.length; i++) {
+                const dayData = weeklyStructure[i];
+                const dayNumber = i + 1;
+                if (!dayData) continue;
+                
+                const dayName = dayData.day || dayData.focus || `Día ${dayNumber}`;
+                
+                const exercises = (dayData.exercises || []).map((ex: any, idx: number) => {
+                  if (ex.type === 'superset') {
+                    return {
+                      id: ex.id || `superset_${dayNumber}_${idx}_${Date.now()}`,
+                      type: 'superset',
+                      exercises: ex.exercises || [],
+                      sets: ex.sets || 1,
+                      rest_seconds: ex.rest_seconds || 90,
+                    };
+                  }
+                  
+                  let repsArray: number[] = [10, 10, 10];
+                  if (Array.isArray(ex.reps)) {
+                    repsArray = [...ex.reps];
+                  }
+                  
+                  return {
+                    id: ex.id || `${ex.name}_${dayNumber}_${idx}_${Date.now()}`,
+                    name: ex.name || 'Ejercicio sin nombre',
+                    sets: ex.sets || 3,
+                    reps: repsArray,
+                    rest_seconds: ex.rest_seconds || 120,
+                    setTypes: ex.setTypes || [],
+                  };
+                });
+                
+                weekDays.push({
+                  dayNumber,
+                  name: dayName,
+                  exercises,
+                });
+                
+                const key = `week_1_day_${dayNumber}_data`;
+                await AsyncStorage.setItem(key, JSON.stringify({
+                  dayNumber,
+                  name: dayName,
+                  exercises,
+                }));
+              }
+              
+              setWeeks([{
+                weekNumber: 1,
+                days: weekDays,
+              }]);
+              await AsyncStorage.setItem('custom_plan_weeks_count', '1');
+            }
+            
+            isLoadingFromStorage.current = false;
+            console.log('✅ Recarga desde Supabase completada');
+            return;
+          }
+          
+          // Si hay datos en AsyncStorage, cargarlos normalmente
           const totalWeeks = savedWeeksCount ? parseInt(savedWeeksCount) : 1;
           
           const loadedWeeks: WeekData[] = [];
+          let foundAnyExercise = false;
           
           for (let weekNum = 1; weekNum <= totalWeeks; weekNum++) {
             const weekDays: DayData[] = [];
@@ -574,6 +761,9 @@ export default function CustomPlanDaysScreen() {
                 try {
                   const dayData = JSON.parse(dayDataStr);
                   weekDays.push(dayData);
+                  if (dayData.exercises && dayData.exercises.length > 0) {
+                    foundAnyExercise = true;
+                  }
                   dayNum++;
                 } catch (parseError) {
                   console.error('Error parsing day data:', parseError);
@@ -598,6 +788,44 @@ export default function CustomPlanDaysScreen() {
             });
           }
           
+          // Si tenemos editingPlanId pero no encontramos ejercicios, recargar desde Supabase
+          if (editingPlanId && user && !foundAnyExercise) {
+            console.log('⚠️ No se encontraron ejercicios en AsyncStorage para plan existente, recargando desde Supabase...');
+            
+            const targetUserId = isTrainerView && studentId ? studentId : user.id;
+            
+            const { data: plan, error } = await supabase
+              .from('workout_plans')
+              .select('*')
+              .eq('id', editingPlanId)
+              .eq('user_id', targetUserId)
+              .single();
+              
+            if (!error && plan) {
+              const planData = plan.plan_data as { multi_week_structure?: any[]; weekly_structure?: any[] } | null;
+              const multiWeekStructure = planData?.multi_week_structure;
+              const weeklyStructure = planData?.weekly_structure;
+              
+              // Verificar si el plan tiene ejercicios en la base de datos
+              const hasExercisesInDB = 
+                (multiWeekStructure && multiWeekStructure.some((w: any) => w.days?.some((d: any) => d.exercises?.length > 0))) ||
+                (weeklyStructure && weeklyStructure.some((d: any) => d.exercises?.length > 0));
+              
+              if (hasExercisesInDB) {
+                console.log('📥 Plan tiene ejercicios en DB, recargando...');
+                // Forzar recarga completa del componente
+                setInitialLoadComplete(false);
+                isLoadingFromStorage.current = false;
+                
+                // Re-ejecutar loadExistingPlan en el próximo ciclo
+                setTimeout(() => {
+                  setInitialLoadComplete(true);
+                }, 100);
+                return;
+              }
+            }
+          }
+          
           setWeeks(loadedWeeks);
           
           // Cargar nombre del plan desde AsyncStorage
@@ -620,7 +848,7 @@ export default function CustomPlanDaysScreen() {
       };
       
       loadWeekData();
-    }, [initialLoadComplete, editingPlanId, user])
+    }, [initialLoadComplete, editingPlanId, user, isTrainerView, studentId])
   );
 
   const handleDayPress = (dayNumber: number) => {
@@ -1158,6 +1386,11 @@ export default function CustomPlanDaysScreen() {
               reps: ex.reps,
               rest_seconds: ex.rest_seconds || 120,
               setTypes: ex.setTypes || [],
+              // Campos para superseries
+              ...(ex.type === 'superset' && {
+                type: 'superset',
+                exercises: ex.exercises,
+              }),
             })),
             duration: 45,
           })),
@@ -1702,31 +1935,90 @@ showAlert(
                   {expandedDays.has(`${weeks[currentWeekIndex].weekNumber}-${day.dayNumber}`) && (
                     <View style={styles.exercisePreview}>
                       {day.exercises.map((exercise, idx) => (
-                        <View key={idx} style={styles.exerciseItem}>
-                          <View style={styles.exerciseNumberBadge}>
-                            <Text style={styles.exerciseNumberText}>{idx + 1}</Text>
+                        exercise.type === 'superset' ? (
+                          // Superserie expandible
+                          <View key={idx} style={styles.supersetItem}>
+                            <TouchableOpacity
+                              style={styles.supersetHeader}
+                              onPress={() => {
+                                const key = `superset-${weeks[currentWeekIndex].weekNumber}-${day.dayNumber}-${idx}`;
+                                setExpandedDays(prev => {
+                                  const newSet = new Set(prev);
+                                  if (newSet.has(key)) {
+                                    newSet.delete(key);
+                                  } else {
+                                    newSet.add(key);
+                                  }
+                                  return newSet;
+                                });
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <View style={styles.exerciseNumberBadge}>
+                                <Text style={styles.exerciseNumberText}>{idx + 1}</Text>
+                              </View>
+                              <View style={styles.exerciseInfo}>
+                                <Text style={styles.supersetTitle}>SUPERSERIE</Text>
+                                <View style={styles.exerciseDetailsRow}>
+                                  <View style={styles.exerciseDetailChip}>
+                                    <Ionicons name="barbell-outline" size={12} color="#999" />
+                                    <Text style={styles.exerciseDetailText}>
+                                      {exercise.exercises?.length || 0} {(exercise.exercises?.length || 0) === 1 ? 'ejercicio' : 'ejercicios'}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.exerciseDetailChip}>
+                                    <Ionicons name="sync" size={12} color="#999" />
+                                    <Text style={styles.exerciseDetailText}>
+                                      {exercise.sets} {exercise.sets === 1 ? 'serie' : 'series'}
+                                    </Text>
+                                  </View>
+                                </View>
+                              </View>
+                              <Ionicons 
+                                name={expandedDays.has(`superset-${weeks[currentWeekIndex].weekNumber}-${day.dayNumber}-${idx}`) ? "chevron-up" : "chevron-down"} 
+                                size={18} 
+                                color="#9C27B0" 
+                              />
+                            </TouchableOpacity>
+                            {expandedDays.has(`superset-${weeks[currentWeekIndex].weekNumber}-${day.dayNumber}-${idx}`) && (
+                              <View style={styles.supersetExercisesList}>
+                                {exercise.exercises?.map((ssExercise: any, ssIdx: number) => (
+                                  <View key={ssIdx} style={styles.supersetExerciseItem}>
+                                    <Text style={styles.supersetBullet}>•</Text>
+                                    <Text style={styles.supersetExerciseName} numberOfLines={1}>
+                                      {ssExercise.name}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            )}
                           </View>
-                          <View style={styles.exerciseInfo}>
-                            <Text style={styles.exerciseName} numberOfLines={1}>
-                              {exercise.name}
-                            </Text>
-                            <View style={styles.exerciseDetailsRow}>
-                              <View style={styles.exerciseDetailChip}>
-                                <Ionicons name="sync" size={12} color="#999" />
-                                <Text style={styles.exerciseDetailText}>
-  {t('customPlan.setsCount', {
-    count: exercise.sets,
-    unit:
-      exercise.sets === 1
-        ? t('customPlan.set_singular')
-        : t('customPlan.set_plural'),
-  })}
-</Text>
-
+                        ) : (
+                          // Ejercicio normal
+                          <View key={idx} style={styles.exerciseItem}>
+                            <View style={styles.exerciseNumberBadge}>
+                              <Text style={styles.exerciseNumberText}>{idx + 1}</Text>
+                            </View>
+                            <View style={styles.exerciseInfo}>
+                              <Text style={styles.exerciseName} numberOfLines={1}>
+                                {exercise.name}
+                              </Text>
+                              <View style={styles.exerciseDetailsRow}>
+                                <View style={styles.exerciseDetailChip}>
+                                  <Ionicons name="sync" size={12} color="#999" />
+                                  <Text style={styles.exerciseDetailText}>
+                                    {t('customPlan.setsCount', {
+                                      count: exercise.sets,
+                                      unit: exercise.sets === 1
+                                        ? t('customPlan.set_singular')
+                                        : t('customPlan.set_plural'),
+                                    })}
+                                  </Text>
+                                </View>
                               </View>
                             </View>
                           </View>
-                        </View>
+                        )
                       ))}
                     </View>
                   )}
@@ -2004,6 +2296,50 @@ const styles = StyleSheet.create({
     gap: 12,
     borderWidth: 1,
     borderColor: '#2a2a2a',
+  },
+  // Estilos para superseries
+  supersetItem: {
+    backgroundColor: '#1e1e1e',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#9C27B0',
+    overflow: 'hidden',
+  },
+  supersetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 8,
+  },
+  supersetTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#9C27B0',
+  },
+  supersetSubtitle: {
+    fontSize: 12,
+    color: '#888',
+  },
+  supersetExercisesList: {
+    backgroundColor: '#151515',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  supersetExerciseItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  supersetBullet: {
+    fontSize: 14,
+    color: '#9C27B0',
+    fontWeight: 'bold',
+  },
+  supersetExerciseName: {
+    fontSize: 14,
+    color: '#ccc',
+    flex: 1,
   },
   exerciseNumberBadge: {
     width: 28,

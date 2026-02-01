@@ -72,6 +72,12 @@ export default function CustomPlanSelectExerciseScreen() {
   const daysPerWeek = params.daysPerWeek as string;
   const isTrainerView = params.isTrainerView === 'true';
   const studentId = params.studentId as string | undefined;
+  
+  // Parámetros de superserie
+  const supersetMode = params.supersetMode === 'true';
+  const supersetTotal = parseInt(params.supersetTotal as string) || 0;
+  const supersetCurrent = parseInt(params.supersetCurrent as string) || 1;
+  const supersetSelected = JSON.parse((params.supersetSelected as string) || '[]') as Array<{ id: string; name: string }>;
 
   const [selectedMuscle, setSelectedMuscle] = useState<Muscle | null>(null);
   const [exercises, setExercises] = useState<ExerciseVideo[]>([]);
@@ -90,6 +96,12 @@ export default function CustomPlanSelectExerciseScreen() {
   const filteredExercises = useMemo(() => {
     let result = exercises;
     
+    // Si estamos en modo superserie, excluir ejercicios ya seleccionados
+    if (supersetMode && supersetSelected.length > 0) {
+      const selectedIds = new Set(supersetSelected.map(ex => ex.id));
+      result = result.filter(ex => !selectedIds.has(ex.id));
+    }
+    
     // Filtrar por favoritos si está activo
     if (filterMode === 'favorites') {
       result = result.filter(ex => favoriteIds.has(ex.id));
@@ -104,7 +116,7 @@ export default function CustomPlanSelectExerciseScreen() {
     }
     
     return result;
-  }, [exercises, searchQuery, filterMode, favoriteIds]);
+  }, [exercises, searchQuery, filterMode, favoriteIds, supersetMode, supersetSelected]);
 
   // Cargar favoritos al iniciar
   const loadFavorites = useCallback(async () => {
@@ -283,6 +295,52 @@ export default function CustomPlanSelectExerciseScreen() {
   };
 
   const handleSelectExercise = async (exercise: ExerciseVideo) => {
+    // ============================================================================
+    // MODO SUPERSERIE: Agregar ejercicio a la lista y continuar o abrir config
+    // ============================================================================
+    if (supersetMode) {
+      const newSelected = [
+        ...supersetSelected,
+        { id: exercise.id, name: exercise.canonical_name }
+      ];
+      
+      if (supersetCurrent < supersetTotal) {
+        // Aún faltan ejercicios, navegar para seleccionar el siguiente
+        router.push({
+          pathname: '/(tabs)/workout/custom-plan-select-exercise',
+          params: {
+            equipment: JSON.stringify(equipment),
+            dayNumber: dayNumber,
+            weekNumber: weekNumber || '1',
+            daysPerWeek: daysPerWeek,
+            supersetMode: 'true',
+            supersetTotal: supersetTotal.toString(),
+            supersetCurrent: (supersetCurrent + 1).toString(),
+            supersetSelected: JSON.stringify(newSelected),
+          },
+        });
+      } else {
+        // Todos los ejercicios seleccionados, guardar en AsyncStorage y volver
+        await AsyncStorage.setItem('supersetExercises', JSON.stringify(newSelected));
+        
+        // Navegar de vuelta a la pantalla del día
+        router.push({
+          pathname: '/(tabs)/workout/custom-plan-day-detail',
+          params: {
+            dayNumber: dayNumber,
+            weekNumber: weekNumber || '1',
+            daysPerWeek: daysPerWeek,
+            equipment: JSON.stringify(equipment),
+            openSupersetConfig: 'true',
+          },
+        });
+      }
+      return;
+    }
+    
+    // ============================================================================
+    // MODO NORMAL: Comportamiento original
+    // ============================================================================
     // Guardar el ejercicio seleccionado en AsyncStorage temporalmente
     const exerciseData = {
       id: exercise.id,
@@ -397,6 +455,28 @@ export default function CustomPlanSelectExerciseScreen() {
           <Text style={styles.headerTitle}>{t('customPlan.selectMuscle')}</Text>
           <View style={{ width: 40 }} />
         </View>
+
+        {/* Indicador de progreso de superserie */}
+        {supersetMode && (
+          <View style={styles.supersetProgressContainer}>
+            <View style={styles.supersetProgressHeader}>
+              <Ionicons name="link" size={20} color="#9C27B0" />
+              <Text style={styles.supersetProgressText}>
+                {t('customPlan.supersetProgress', { current: supersetCurrent, total: supersetTotal })}
+              </Text>
+            </View>
+            {supersetSelected.length > 0 && (
+              <View style={styles.supersetSelectedList}>
+                <Text style={styles.supersetSelectedLabel}>{t('customPlan.supersetSelected')}:</Text>
+                {supersetSelected.map((ex, idx) => (
+                  <Text key={ex.id} style={styles.supersetSelectedItem}>
+                    {idx + 1}. {ex.name}
+                  </Text>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Tabs de filtro: Todos / Favoritos */}
         <View style={styles.filterTabs}>
@@ -639,6 +719,28 @@ export default function CustomPlanSelectExerciseScreen() {
           />
         </TouchableOpacity>
       </View>
+
+      {/* Indicador de progreso de superserie */}
+      {supersetMode && (
+        <View style={styles.supersetProgressContainer}>
+          <View style={styles.supersetProgressHeader}>
+            <Ionicons name="link" size={20} color="#9C27B0" />
+            <Text style={styles.supersetProgressText}>
+              {t('customPlan.supersetProgress', { current: supersetCurrent, total: supersetTotal })}
+            </Text>
+          </View>
+          {supersetSelected.length > 0 && (
+            <View style={styles.supersetSelectedList}>
+              <Text style={styles.supersetSelectedLabel}>{t('customPlan.supersetSelected')}:</Text>
+              {supersetSelected.map((ex, idx) => (
+                <Text key={ex.id} style={styles.supersetSelectedItem}>
+                  {idx + 1}. {ex.name}
+                </Text>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Tabs de filtro: Todos / Favoritos */}
       <View style={styles.filterTabs}>
@@ -942,6 +1044,45 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#888',
     marginBottom: 12,
+  },
+  // ============================================================================
+  // ESTILOS DE INDICADOR DE SUPERSERIE
+  // ============================================================================
+  supersetProgressContainer: {
+    backgroundColor: '#2a2a2a',
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 8,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#9C27B0',
+  },
+  supersetProgressHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  supersetProgressText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#9C27B0',
+  },
+  supersetSelectedList: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#444',
+  },
+  supersetSelectedLabel: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 6,
+  },
+  supersetSelectedItem: {
+    fontSize: 14,
+    color: '#ffffff',
+    paddingVertical: 4,
   },
 });
 

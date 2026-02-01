@@ -34,7 +34,7 @@
                 "simulator": false
             },
             "android": {
-                "buildType": "apk"
+                "buildType": "app-bundle"
             }
         },
         "production-local": {

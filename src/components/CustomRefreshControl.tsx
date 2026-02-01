@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { RefreshControl, Animated } from 'react-native';
+import { RefreshControl, Animated, Platform } from 'react-native';
 
 interface CustomRefreshControlProps {
   refreshing: boolean;
@@ -32,6 +32,19 @@ export const CustomRefreshControl: React.FC<CustomRefreshControlProps> = ({
     }
   }, [refreshing, rotateAnim]);
 
+  // En Android, usar propiedades simplificadas para evitar problemas de renderizado
+  if (Platform.OS === 'android') {
+    return (
+      <RefreshControl
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        colors={[tintColor]}
+        progressBackgroundColor="#2a2a2a"
+      />
+    );
+  }
+
+  // En iOS, usar todas las propiedades
   return (
     <RefreshControl
       refreshing={refreshing}
@@ -41,7 +54,6 @@ export const CustomRefreshControl: React.FC<CustomRefreshControlProps> = ({
       titleColor={tintColor}
       progressBackgroundColor="#2a2a2a"
       colors={[tintColor]}
-      progressViewOffset={20}
     />
   );
 };
