@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { 
-  sendGymMessage, 
-  getEmpresarioMessagesHistory, 
+import {
+  sendGymMessage,
+  getEmpresarioMessagesHistory,
   getEmpresarioUsers,
-  type GymMember 
+  type GymMember
 } from '../services/adminService';
 import './Mensajeria.css';
 
@@ -91,7 +91,7 @@ export default function Mensajeria() {
     if (!linkText.trim() || !linkUrl.trim()) {
       return;
     }
-    
+
     // Insertar en formato [texto](url)
     setMessageBody(prev => prev + ` [${linkText}](${linkUrl}) `);
     setLinkText('');
@@ -122,7 +122,7 @@ export default function Mensajeria() {
 
   const getFilteredMembers = () => {
     if (!searchQuery) return allMembers;
-    return allMembers.filter(m => 
+    return allMembers.filter(m =>
       m.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       m.email?.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -137,13 +137,13 @@ export default function Mensajeria() {
   const renderMessageWithLinks = (text: string) => {
     // Convertir [texto](url) a links clickeables
     const parts = text.split(/(\[.*?\]\(.*?\))/g);
-    
+
     return parts.map((part, index) => {
       const linkMatch = part.match(/\[(.*?)\]\((.*?)\)/);
       if (linkMatch) {
         const [, linkText, url] = linkMatch;
         return (
-          <a 
+          <a
             key={index}
             href={url}
             target="_blank"
@@ -176,22 +176,52 @@ export default function Mensajeria() {
     try {
       setSending(true);
       setShowConfirmModal(false);
-      const recipientIds = recipientType === 'all' ? null : Array.from(selectedMembers);
-      
+      const recipientIds = recipientType === 'all'
+        ? allMembers.map(m => m.user_id)
+        : Array.from(selectedMembers);
+
       await sendGymMessage(
         user.id,
         senderName,
         messageTitle,
         messageBody,
         recipientType,
-        recipientIds
+        recipientType === 'all' ? null : recipientIds
       );
-      
+
+      // Enviar push notifications via Edge Function
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+        const pushResponse = await fetch(
+          `${supabaseUrl}/functions/v1/send-push-notifications`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+            },
+            body: JSON.stringify({
+              recipientIds,
+              title: messageTitle,
+              body: messageBody,
+              data: { type: 'gym_message', sender: senderName },
+            }),
+          }
+        );
+
+        const pushResult = await pushResponse.json();
+        console.log('Push notification result:', pushResult);
+      } catch (pushError) {
+        console.error('Error sending push notifications:', pushError);
+      }
+
       // Limpiar formulario
       setMessageTitle('');
       setMessageBody('');
       setSelectedMembers(new Set());
-      
+
       // Recargar historial
       loadHistory();
     } catch (error) {
@@ -273,7 +303,7 @@ export default function Mensajeria() {
                 </div>
                 <p className="form-hint">{messageBody.length} caracteres</p>
               </div>
-              
+
               {/* Panel de Emojis */}
               {showEmojiPicker && (
                 <div className="emoji-picker">
@@ -336,8 +366,8 @@ export default function Mensajeria() {
 
               <div className="members-list">
                 {getFilteredMembers().map(member => (
-                  <div 
-                    key={member.user_id} 
+                  <div
+                    key={member.user_id}
                     className={`member-item ${selectedMembers.has(member.user_id) ? 'selected' : ''}`}
                     onClick={() => toggleMember(member.user_id)}
                   >
@@ -446,7 +476,7 @@ export default function Mensajeria() {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>🔗 Insertar Link</h3>
-              <button 
+              <button
                 className="modal-close-btn"
                 onClick={() => setShowLinkModal(false)}
               >
@@ -479,7 +509,7 @@ export default function Mensajeria() {
               </div>
             </div>
             <div className="modal-footer">
-              <button 
+              <button
                 className="btn-cancel"
                 onClick={() => {
                   setShowLinkModal(false);
@@ -489,7 +519,7 @@ export default function Mensajeria() {
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 className="btn-confirm"
                 onClick={insertLink}
                 disabled={!linkText.trim() || !linkUrl.trim()}
@@ -507,7 +537,7 @@ export default function Mensajeria() {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3>📨 Confirmar Envío</h3>
-              <button 
+              <button
                 className="modal-close-btn"
                 onClick={() => setShowConfirmModal(false)}
               >
@@ -538,13 +568,13 @@ export default function Mensajeria() {
               </div>
             </div>
             <div className="modal-footer">
-              <button 
+              <button
                 className="btn-cancel"
                 onClick={() => setShowConfirmModal(false)}
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 className="btn-confirm"
                 onClick={confirmSendMessage}
               >

@@ -8,6 +8,8 @@ import Users from './pages/Users';
 import UserDetail from './pages/UserDetail';
 import Stats from './pages/Stats';
 import AdminTools from './pages/AdminTools';
+import AdminOrganization from './pages/AdminOrganization';
+import AdminMessaging from './pages/AdminMessaging';
 import CreateUser from './pages/CreateUser';
 import Partners from './pages/Partners';
 import Exercises from './pages/Exercises';
@@ -32,7 +34,7 @@ function App() {
           <Routes>
             {/* Ruta pública para eliminar cuenta - solo requiere autenticación, no rol de admin */}
             <Route path="/delete-account" element={<DeleteAccountRoute />} />
-            
+
             {/* Rutas protegidas que requieren rol de admin/socio/empresario */}
             <Route path="/" element={<ProtectedRoute />}>
               <Route index element={<Dashboard />} />
@@ -50,6 +52,8 @@ function App() {
               <Route path="empresarios/:empresarioId/members/:userId/:userName/:userEmail" element={<GymMemberDetail />} />
               <Route path="stats" element={<Stats />} />
               <Route path="admin-tools" element={<AdminTools />} />
+              <Route path="admin-organization" element={<AdminOrganization />} />
+              <Route path="admin-messaging" element={<AdminMessaging />} />
               <Route path="create-user" element={<CreateUser />} />
               <Route path="partner-referrals" element={<PartnerReferrals />} />
               <Route path="empresario-users" element={<EmpresarioUsers />} />
@@ -67,17 +71,17 @@ function DeleteAccountRoute() {
 
   if (!isLoaded) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         height: '100vh',
         flexDirection: 'column',
         gap: '1rem'
       }}>
-        <div style={{ 
-          width: '40px', 
-          height: '40px', 
+        <div style={{
+          width: '40px',
+          height: '40px',
           border: '4px solid #333',
           borderTopColor: '#ffd54a',
           borderRadius: '50%',
@@ -91,10 +95,10 @@ function DeleteAccountRoute() {
   return (
     <>
       <SignedOut>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
           height: '100vh',
           flexDirection: 'column',
           gap: '2rem',
@@ -131,17 +135,17 @@ function ProtectedRoute() {
 
   if (!isLoaded) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         height: '100vh',
         flexDirection: 'column',
         gap: '1rem'
       }}>
-        <div style={{ 
-          width: '40px', 
-          height: '40px', 
+        <div style={{
+          width: '40px',
+          height: '40px',
           border: '4px solid #333',
           borderTopColor: '#ffd54a',
           borderRadius: '50%',
@@ -158,10 +162,10 @@ function ProtectedRoute() {
   return (
     <>
       <SignedOut>
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
           height: '100vh',
           flexDirection: 'column',
           gap: '2rem',
@@ -210,10 +214,10 @@ function AdminCheck({ user }: AdminCheckProps) {
 
   if (loading) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         height: '100vh'
       }}>
         <p>Verificando permisos...</p>
@@ -223,10 +227,10 @@ function AdminCheck({ user }: AdminCheckProps) {
 
   if (!isAdmin) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         height: '100vh',
         flexDirection: 'column',
         gap: '1rem',

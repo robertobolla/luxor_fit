@@ -18,10 +18,10 @@ import { supabase } from './supabase';
 const REVENUECAT_API_KEY_IOS = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_IOS || '';
 const REVENUECAT_API_KEY_ANDROID = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID || '';
 
-// IDs de productos (deben coincidir con App Store Connect)
+// IDs de productos (deben coincidir con App Store Connect y RevenueCat)
 export const PRODUCT_IDS = {
-  MONTHLY: 'luxor_fitness_monthly',              // $12.99/mes
-  YEARLY: 'luxor_fitness_yearly',                // $107/año (~$8.92/mes)
+  MONTHLY: 'luxor_monthly',              // $12.99/mes
+  YEARLY: 'luxor_yearly',                // $107/año (~$8.92/mes)
 };
 
 // Entitlements (lo que desbloquea la suscripción)

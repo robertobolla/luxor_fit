@@ -3323,7 +3323,7 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 10,
   },
-  supersetSetHeader: {
+  supersetSetHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
