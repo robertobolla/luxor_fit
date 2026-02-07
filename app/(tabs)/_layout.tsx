@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 export default function TabLayout() {
   const { t } = useTranslation();
-  
+
   return (
     <Tabs
       screenOptions={{
@@ -78,7 +78,7 @@ export default function TabLayout() {
           ),
         }}
       />
-      
+
       {/* Ocultar pantallas del tab bar */}
       <Tabs.Screen
         name="dashboard"
@@ -87,7 +87,7 @@ export default function TabLayout() {
           headerShown: false,
         }}
       />
-      
+
       {/* Ocultar pantallas adicionales del tab bar */}
       <Tabs.Screen
         name="steps-detail"
@@ -189,6 +189,13 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="exercise-activity-detail"
+        options={{
+          href: null,
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="share-cardio"
         options={{
           href: null,
           headerShown: false,

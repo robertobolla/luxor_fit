@@ -113,10 +113,10 @@ export default function OnboardingScreen() {
           console.log('✅ Perfil existente encontrado, pre-cargando datos...');
           setIsEditing(true);
           const allowedGenders = [Gender.MALE, Gender.FEMALE];
-          
+
           // Prioridad: email de Clerk > email del perfil guardado
           const emailToUse = clerkEmail || data.email || '';
-          
+
           // Parsear fecha de nacimiento si existe
           let birthDate: Date | null = null;
           const profileData = data as any; // Cast para acceder a birth_date
@@ -127,7 +127,7 @@ export default function OnboardingScreen() {
             const currentYear = new Date().getFullYear();
             birthDate = new Date(currentYear - data.age, 0, 1);
           }
-          
+
           setFormData({
             name: data.name || '',
             email: emailToUse,
@@ -249,17 +249,17 @@ export default function OnboardingScreen() {
       // Intentar obtener email de Clerk primero
       console.log('🔍 Intentando obtener email de Clerk...');
       const clerkEmail = await getClerkUserEmail(user);
-      
+
       // Prioridad: email ingresado manualmente > email de Clerk
       const finalEmail = formData.email || clerkEmail || null;
-      
+
       console.log('📧 Email final a guardar:', finalEmail);
       if (finalEmail) {
         console.log('  ✅ Fuente:', formData.email ? 'Usuario' : 'Clerk');
       } else {
         console.log('  ⚠️ No hay email disponible');
       }
-      
+
       await proceedWithSave(finalEmail);
     } catch (error) {
       console.error('❌ Error inesperado:', error);
@@ -300,7 +300,7 @@ export default function OnboardingScreen() {
             existing_user_id: existingProfile.user_id,
             current_user_id: userId,
           });
-          
+
           Alert.alert(
             t('onboarding.existingAccount'),
             t('onboarding.existingAccountMessage', { email: userEmail }),
@@ -354,7 +354,7 @@ export default function OnboardingScreen() {
         setCurrentStep(STEPS.indexOf('personal_info'));
         return;
       }
-      
+
       const usernameValidation = validateUsernameFormat(formData.username);
       if (!usernameValidation.isValid) {
         Alert.alert(t('common.error'), usernameValidation.error || t('onboarding.invalidUsername'));
@@ -362,7 +362,7 @@ export default function OnboardingScreen() {
         setFieldErrors(prev => ({ ...prev, username: usernameValidation.error || '' }));
         return;
       }
-      
+
       // Verificar que el username no esté en uso
       const { data: existingUsername } = await supabase
         .from('user_profiles')
@@ -370,7 +370,7 @@ export default function OnboardingScreen() {
         .eq('username', formData.username.toLowerCase().trim())
         .neq('user_id', userId)
         .maybeSingle();
-      
+
       if (existingUsername) {
         Alert.alert(t('common.error'), t('onboarding.usernameInUse'));
         setCurrentStep(STEPS.indexOf('personal_info'));
@@ -381,7 +381,7 @@ export default function OnboardingScreen() {
       // Preparar datos base
       const birthDateISO = formData.birthDate ? formData.birthDate.toISOString().split('T')[0] : null;
       const age = formData.birthDate ? calculateAge(formData.birthDate) : 0;
-      
+
       const profileData: any = {
         user_id: userId,
         email: userEmail,
@@ -397,7 +397,7 @@ export default function OnboardingScreen() {
 
 
       console.log('📊 Datos a guardar:', Object.keys(profileData));
-      
+
       // Guardar el perfil en Supabase usando el ID de Clerk
       const { error } = await supabase
         .from('user_profiles')
@@ -408,16 +408,16 @@ export default function OnboardingScreen() {
       // Si hubo error, manejar el caso de columnas faltantes
       if (error) {
         console.error('❌ Error al guardar perfil:', error);
-        
+
         // Si el error es porque faltan columnas, mostrar un mensaje específico
         if (error.message?.includes('body_fat_percentage') || error.message?.includes('muscle_percentage')) {
           console.log('⚠️ Las columnas de composición corporal no existen aún en Supabase');
           console.log('💡 Ejecuta los scripts SQL primero (ver INSTRUCCIONES_SQL.md)');
-          
+
           const { error: retryError } = await supabase
             .from('user_profiles')
             .upsert(profileData, { onConflict: 'user_id' });
-          
+
           if (retryError) {
             console.error('❌ Error al guardar:', retryError);
             Alert.alert(t('common.error'), t('onboarding.saveError'));
@@ -432,7 +432,7 @@ export default function OnboardingScreen() {
       }
 
       console.log('✅ Perfil guardado exitosamente');
-      
+
       // Verificar si este email corresponde a un empresario o socio pendiente y actualizar su user_id
       if (userEmail) {
         try {
@@ -451,7 +451,7 @@ export default function OnboardingScreen() {
               .update({ user_id: userId })
               .eq('email', userEmail)
               .eq('role_type', 'empresario');
-            
+
             console.log('✅ User ID del empresario actualizado automáticamente');
           }
 
@@ -470,7 +470,7 @@ export default function OnboardingScreen() {
               .update({ user_id: userId })
               .eq('email', userEmail)
               .eq('role_type', 'socio');
-            
+
             console.log('✅ User ID del socio actualizado automáticamente');
           }
 
@@ -531,7 +531,7 @@ export default function OnboardingScreen() {
               {isEditing ? t('onboarding.editProfile') : t('auth.welcome')}
             </Text>
             <Text style={styles.subtitle}>
-              {isEditing 
+              {isEditing
                 ? t('onboarding.updateInformation')
                 : t('onboarding.customizeExperience')
               }
@@ -634,12 +634,12 @@ export default function OnboardingScreen() {
               )}
             </View>
             <View style={styles.inputGroup}>
-            <Text style={styles.label}>
-  {t('form.username')} {t('form.required')}
-</Text>          
-<Text style={styles.inputHint}>
-  {t('form.usernameHint')}
-</Text>
+              <Text style={styles.label}>
+                {t('form.username')} {t('form.required')}
+              </Text>
+              <Text style={styles.inputHint}>
+                {t('form.usernameHint')}
+              </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Text style={{ color: '#666', fontSize: 16, marginRight: 4 }}>@</Text>
                 <TextInput
@@ -648,14 +648,14 @@ export default function OnboardingScreen() {
                   onChangeText={async (text) => {
                     const lowerText = text.toLowerCase().trim();
                     setFormData(prev => ({ ...prev, username: lowerText }));
-                    
+
                     // Limpiar error previo
                     setFieldErrors(prev => {
                       const newErrors = { ...prev };
                       delete newErrors.username;
                       return newErrors;
                     });
-                    
+
                     if (lowerText.length > 0) {
                       // Validar formato
                       const validation = validateUsernameFormat(lowerText);
@@ -663,7 +663,7 @@ export default function OnboardingScreen() {
                         setFieldErrors(prev => ({ ...prev, username: validation.error || '' }));
                         return;
                       }
-                      
+
                       // Verificar disponibilidad (solo si el formato es válido)
                       setCheckingUsername(true);
                       try {
@@ -673,7 +673,7 @@ export default function OnboardingScreen() {
                           .eq('username', lowerText)
                           .neq('user_id', user?.id || '')
                           .maybeSingle();
-                        
+
                         if (error && error.code !== 'PGRST116') {
                           console.error('Error verificando username:', error);
                         } else if (data) {
@@ -700,8 +700,8 @@ export default function OnboardingScreen() {
               )}
               {!fieldErrors.username && formData.username.length >= 3 && !checkingUsername && (
                 <Text style={{ color: '#4CAF50', fontSize: 12, marginTop: 4 }}>
-  {t('status.available')}
-</Text>              )}
+                  {t('status.available')}
+                </Text>)}
             </View>
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Fecha de nacimiento *</Text>
@@ -808,9 +808,10 @@ export default function OnboardingScreen() {
       case 'gender':
         return (
           <View style={styles.stepContainer}>
-<Text style={styles.stepTitle}>
-  {t('onboarding.genderQuestion')}
-</Text>            <Text style={styles.stepSubtitle}>{t('onboarding.helpPersonalize')}</Text>
+            <Text style={styles.stepTitle}>
+              {t('onboarding.genderQuestion')}
+            </Text>
+            <Text style={styles.stepSubtitle}>{t('onboarding.helpPersonalize')}</Text>
             {[Gender.MALE, Gender.FEMALE].map((gender) => (
               <TouchableOpacity
                 key={gender}
@@ -835,15 +836,15 @@ export default function OnboardingScreen() {
       case 'complete':
         return (
           <View style={styles.stepContainer}>
-<Text style={styles.title}>
-  {t('onboarding.successTitle')}
-</Text>          
-<Text style={styles.subtitle}>
-  {t('onboarding.successSubtitle')}
-</Text>
-<Text style={styles.description}>
-  {t('onboarding.successDescription')}
-</Text>
+            <Text style={styles.title}>
+              {t('onboarding.successTitle')}
+            </Text>
+            <Text style={styles.subtitle}>
+              {t('onboarding.successSubtitle')}
+            </Text>
+            <Text style={styles.description}>
+              {t('onboarding.successDescription')}
+            </Text>
           </View>
         );
 
@@ -866,9 +867,10 @@ export default function OnboardingScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>
-  {t('onboarding.loadingProfile')}
-</Text>        </View>
+          <Text style={styles.loadingText}>
+            {t('onboarding.loadingProfile')}
+          </Text>
+        </View>
       </SafeAreaView>
     );
   }
@@ -876,7 +878,7 @@ export default function OnboardingScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
+
       {/* Botón de cerrar solo si está editando */}
       {isEditing && (
         <TouchableOpacity style={styles.closeButton} onPress={handleCancel}>
@@ -885,11 +887,11 @@ export default function OnboardingScreen() {
       )}
 
       <View style={styles.progressBar}>
-        <View 
+        <View
           style={[
-            styles.progressFill, 
+            styles.progressFill,
             { width: `${((currentStep + 1) / STEPS.length) * 100}%` }
-          ]} 
+          ]}
         />
       </View>
 
@@ -903,9 +905,9 @@ export default function OnboardingScreen() {
             <Text style={styles.backButtonText}> {t('common.back')}</Text>
           </TouchableOpacity>
         )}
-        
+
         <View style={{ flex: 1 }} />
-        
+
         {currentStep < STEPS.length - 1 ? (
           <TouchableOpacity
             style={[styles.nextButton, !canProceed() && styles.disabledButton]}
@@ -926,7 +928,7 @@ export default function OnboardingScreen() {
           </TouchableOpacity>
         )}
       </View>
-      
+
       {/* Modal para seleccionar fecha de nacimiento */}
       <Modal
         visible={showDatePicker}
@@ -937,7 +939,7 @@ export default function OnboardingScreen() {
         <View style={styles.dateModalOverlay}>
           <View style={styles.dateModalContainer}>
             <Text style={styles.dateModalTitle}>Fecha de nacimiento</Text>
-            
+
             <View style={styles.dateInputsRow}>
               <View style={styles.dateInputGroup}>
                 <Text style={styles.dateInputLabel}>Día</Text>
@@ -951,7 +953,7 @@ export default function OnboardingScreen() {
                   maxLength={2}
                 />
               </View>
-              
+
               <View style={styles.dateInputGroup}>
                 <Text style={styles.dateInputLabel}>Mes</Text>
                 <TextInput
@@ -964,7 +966,7 @@ export default function OnboardingScreen() {
                   maxLength={2}
                 />
               </View>
-              
+
               <View style={styles.dateInputGroup}>
                 <Text style={styles.dateInputLabel}>Año</Text>
                 <TextInput
@@ -978,7 +980,7 @@ export default function OnboardingScreen() {
                 />
               </View>
             </View>
-            
+
             <View style={styles.dateModalButtons}>
               <TouchableOpacity
                 style={styles.dateModalCancelButton}
@@ -986,14 +988,14 @@ export default function OnboardingScreen() {
               >
                 <Text style={styles.dateModalCancelText}>Cancelar</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={styles.dateModalConfirmButton}
                 onPress={() => {
                   const day = parseInt(tempDate.day);
                   const month = parseInt(tempDate.month);
                   const year = parseInt(tempDate.year);
-                  
+
                   if (day >= 1 && day <= 31 && month >= 1 && month <= 12 && year >= 1900 && year <= new Date().getFullYear()) {
                     const newDate = new Date(year, month - 1, day);
                     if (newDate.getDate() === day && newDate.getMonth() === month - 1) {

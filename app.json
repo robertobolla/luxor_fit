@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.luxorfitness.app",
-      "buildNumber": "71",
+      "buildNumber": "72",
       "icon": "./assets/icon.png",
       "requireFullScreen": true,
       "infoPlist": {
@@ -43,7 +43,7 @@
         "backgroundColor": "#0a0a0a"
       },
       "package": "com.luxorfitness.app",
-      "versionCode": 72,
+      "versionCode": 73,
       "permissions": [
         "ACTIVITY_RECOGNITION",
         "android.permission.ACTIVITY_RECOGNITION",

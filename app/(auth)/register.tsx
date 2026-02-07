@@ -38,16 +38,16 @@ export default function RegisterScreen() {
           t('common.error'),
           t('auth.authenticationFailed')
         );
-              }
+      }
     } catch (err: any) {
       console.error('OAuth error:', err);
       console.error('Error details:', JSON.stringify(err, null, 2));
-      
-      const errorMessage = err.errors?.[0]?.message 
-        || err.errors?.[0]?.longMessage 
-        || err.message 
+
+      const errorMessage = err.errors?.[0]?.message
+        || err.errors?.[0]?.longMessage
+        || err.message
         || `Error al conectar con ${provider}. Verifica tu configuración.`;
-      
+
       Alert.alert(t('common.error'), errorMessage);
     } finally {
       setIsLoading(false);

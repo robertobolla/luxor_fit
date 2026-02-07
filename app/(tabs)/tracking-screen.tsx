@@ -30,20 +30,20 @@ export default function TrackingScreen() {
   const { user } = useUser();
   const { t } = useTranslation();
   const { distanceUnit } = useUnitsStore();
-  
+
   // Helpers para conversión de unidades
   const displayDistance = (km: number) => distanceUnit === 'mi' ? conversions.kmToMi(km) : km;
   const displaySpeed = (kmh: number) => distanceUnit === 'mi' ? conversions.kmToMi(kmh) : kmh;
   const distanceLabel = distanceUnit === 'mi' ? 'mi' : 'km';
   const speedLabel = distanceUnit === 'mi' ? 'mph' : 'km/h';
-  
+
   const activityName = params.activityName as string;
   const activityType = params.activityType as string;
 
   // Estado de la pantalla: 'tracking' | 'confirm' | 'saving' | 'success' | 'error'
   type ScreenState = 'tracking' | 'confirm' | 'saving' | 'success' | 'error';
   const [screenState, setScreenState] = useState<ScreenState>('tracking');
-  
+
   // Estados de tracking
   const [isPaused, setIsPaused] = useState(false);
   const [distance, setDistance] = useState(0);
@@ -72,7 +72,7 @@ export default function TrackingScreen() {
   const resetAndStartTracking = useCallback(() => {
     // Detener cualquier tracking anterior
     stopGPSTracking();
-    
+
     // Resetear todos los estados a sus valores iniciales
     setScreenState('tracking');
     setIsPaused(false);
@@ -92,7 +92,7 @@ export default function TrackingScreen() {
     elevationGain.current = 0;
     elevationLoss.current = 0;
     lastAltitude.current = null;
-    
+
     // Iniciar nuevo tracking
     startGPSTracking();
   }, []);
@@ -108,7 +108,7 @@ export default function TrackingScreen() {
       };
     }, [resetAndStartTracking])
   );
-  
+
   // Constantes para filtrado de GPS
   const MIN_ACCURACY_METERS = 20; // Precisión mínima aceptable
   const MIN_DISTANCE_METERS = 5; // Distancia mínima para contar (5 metros)
@@ -125,14 +125,14 @@ export default function TrackingScreen() {
     const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    
+
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
@@ -148,7 +148,7 @@ export default function TrackingScreen() {
       isStopped.current = false; // Resetear flag de parada
       setDistance(0);
       setRoutePoints([]);
-      
+
       // Iniciar timer
       timerInterval.current = setInterval(() => {
         if (isStopped.current) return; // No actualizar si está detenido
@@ -165,23 +165,23 @@ export default function TrackingScreen() {
         (location) => {
           // Ignorar actualizaciones si el tracking está detenido
           if (isStopped.current) return;
-          
+
           locationCount.current += 1;
           const accuracy = location.coords.accuracy || 999;
-          
+
           console.log(`📍 Ubicación #${locationCount.current}:`, {
             lat: location.coords.latitude.toFixed(6),
             lon: location.coords.longitude.toFixed(6),
             accuracy: accuracy.toFixed(1),
             speed: location.coords.speed?.toFixed(2),
           });
-          
+
           // Filtro 1: Verificar precisión del GPS
           if (accuracy > MIN_ACCURACY_METERS) {
             console.log(`⚠️ GPS impreciso (${accuracy.toFixed(1)}m > ${MIN_ACCURACY_METERS}m), ignorando ubicación`);
             return;
           }
-          
+
           // Filtro 2: Período de calentamiento del GPS (ignorar primeras ubicaciones)
           if (locationCount.current <= WARMUP_LOCATIONS) {
             console.log(`🔄 Calentando GPS (${locationCount.current}/${WARMUP_LOCATIONS})...`);
@@ -210,12 +210,12 @@ export default function TrackingScreen() {
             }
             return;
           }
-          
+
           // Verificar otra vez por si se detuvo durante el warmup
           if (isStopped.current) return;
-          
+
           setCurrentLocation(location);
-          
+
           // Calcular desnivel si tenemos altitud
           const currentAltitude = location.coords.altitude;
           if (currentAltitude !== null && currentAltitude !== undefined && lastAltitude.current !== null) {
@@ -231,7 +231,7 @@ export default function TrackingScreen() {
           } else if (currentAltitude !== null && currentAltitude !== undefined) {
             lastAltitude.current = currentAltitude;
           }
-          
+
           // Agregar punto a la ruta
           const newPoint: RoutePoint = {
             latitude: location.coords.latitude,
@@ -239,7 +239,7 @@ export default function TrackingScreen() {
             altitude: currentAltitude || undefined,
           };
           setRoutePoints((prev) => [...prev, newPoint]);
-          
+
           // Calcular distancia si tenemos una ubicación previa y GPS estabilizado
           if (lastLocation.current && !isPaused && gpsStabilized.current) {
             const dist = calculateDistance(
@@ -248,15 +248,15 @@ export default function TrackingScreen() {
               location.coords.latitude,
               location.coords.longitude
             );
-            
+
             const distMeters = dist * 1000;
-            
+
             // Filtro 3: Solo sumar distancia si es mayor al umbral mínimo
             if (distMeters >= MIN_DISTANCE_METERS) {
               // Filtro 4: Verificar que la velocidad implícita sea realista (< 50 km/h para caminata/running)
               const timeDiff = (location.timestamp - (lastLocation.current?.timestamp || location.timestamp)) / 1000; // segundos
               const impliedSpeedKmh = timeDiff > 0 ? (dist / timeDiff) * 3600 : 0;
-              
+
               if (impliedSpeedKmh < 50) { // Velocidad realista para actividad humana
                 totalDistance.current += dist;
                 setDistance(totalDistance.current);
@@ -266,17 +266,17 @@ export default function TrackingScreen() {
               }
             }
           }
-          
+
           // Actualizar velocidad
           if (location.coords.speed !== null && location.coords.speed >= 0) {
             const speedKmh = location.coords.speed * 3.6;
             // Solo mostrar velocidad si es mayor al umbral mínimo
             setCurrentSpeed(speedKmh > MIN_SPEED_KMH ? speedKmh : 0);
           }
-          
+
           // Guardar ubicación actual
           lastLocation.current = location;
-          
+
           // Centrar mapa en ubicación actual (solo si está activo el tracking)
           if (mapRef.current && location.coords && !isStopped.current) {
             mapRef.current.animateToRegion({
@@ -288,7 +288,7 @@ export default function TrackingScreen() {
           }
         }
       );
-      
+
       console.log('✅ Tracking GPS iniciado');
     } catch (error) {
       console.error('❌ Error al iniciar tracking GPS:', error);
@@ -299,24 +299,24 @@ export default function TrackingScreen() {
   const stopGPSTracking = () => {
     // Marcar como detenido primero para evitar actualizaciones
     isStopped.current = true;
-    
+
     if (timerInterval.current) {
       clearInterval(timerInterval.current);
       timerInterval.current = null;
     }
-    
+
     if (locationSubscription.current) {
       locationSubscription.current.remove();
       locationSubscription.current = null;
     }
-    
+
     console.log('🛑 Tracking GPS detenido');
   };
 
   // Pausar/Reanudar
   const handlePauseResume = () => {
     setIsPaused(!isPaused);
-    
+
     if (!isPaused) {
       // Pausar
       if (timerInterval.current) {
@@ -363,7 +363,7 @@ export default function TrackingScreen() {
     // Prevenir doble-clicks
     if (isSavingRef.current) return;
     isSavingRef.current = true;
-    
+
     // Detener tracking y cambiar a pantalla de guardando
     stopGPSTracking();
     setScreenState('saving');
@@ -415,7 +415,7 @@ export default function TrackingScreen() {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
-    
+
     if (hours > 0) {
       return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     }
@@ -447,12 +447,12 @@ export default function TrackingScreen() {
                 <View style={[styles.modalIconContainer, styles.successIconContainer]}>
                   <Ionicons name="checkmark-circle" size={60} color="#4CAF50" />
                 </View>
-                
+
                 <Text style={styles.modalTitle}>{t('workout.finishWorkout.savedTitle')}</Text>
                 <Text style={styles.modalMessage}>
                   {t('workout.finishWorkout.savedMessage', { activity: activityName.toLowerCase() })}
                 </Text>
-                
+
                 <View style={styles.successSummary}>
                   <View style={styles.successSummaryRow}>
                     <View style={styles.successSummaryItem}>
@@ -486,7 +486,7 @@ export default function TrackingScreen() {
                 <Text style={styles.modalMessage}>{t('workout.couldNotSaveWorkout')}</Text>
               </>
             )}
-            
+
             <TouchableOpacity
               style={styles.modalButtonOk}
               onPress={() => {
@@ -502,6 +502,21 @@ export default function TrackingScreen() {
             >
               <Text style={styles.modalButtonOkText}>{t('common.ok')}</Text>
             </TouchableOpacity>
+
+            {savedExerciseId && screenState === 'success' && (
+              <TouchableOpacity
+                style={styles.shareButton}
+                onPress={() => {
+                  router.push({
+                    pathname: '/(tabs)/share-cardio',
+                    params: { exerciseId: savedExerciseId, source: 'tracking' }
+                  } as any);
+                }}
+              >
+                <Ionicons name="share-outline" size={18} color="#0a0a0a" />
+                <Text style={styles.shareButtonText}>{t('common.share')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -518,10 +533,10 @@ export default function TrackingScreen() {
             <View style={styles.modalIconContainer}>
               <Ionicons name="flag" size={40} color="#ffb300" />
             </View>
-            
+
             <Text style={styles.modalTitle}>{t('workout.finishWorkout.title')}</Text>
             <Text style={styles.modalMessage}>{t('workout.finishWorkout.message')}</Text>
-            
+
             <View style={styles.modalSummary}>
               <View style={styles.modalSummaryItem}>
                 <Ionicons name="time" size={20} color="#ffb300" />
@@ -540,7 +555,7 @@ export default function TrackingScreen() {
                 </Text>
               </View>
             </View>
-            
+
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.modalButtonCancel}
@@ -548,7 +563,7 @@ export default function TrackingScreen() {
               >
                 <Text style={styles.modalButtonCancelText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={styles.modalButtonDiscard}
                 onPress={handleDiscard}
@@ -556,7 +571,7 @@ export default function TrackingScreen() {
                 <Ionicons name="trash" size={18} color="#f44336" />
                 <Text style={styles.modalButtonDiscardText}>{t('workout.finishWorkout.discard')}</Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 style={styles.modalButtonSave}
                 onPress={handleSave}
@@ -575,7 +590,7 @@ export default function TrackingScreen() {
   return (
     <View style={styles.container}>
       <StatusBar hidden />
-      
+
       {/* Header con actividad */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
@@ -613,7 +628,7 @@ export default function TrackingScreen() {
               strokeWidth={5}
             />
           )}
-          
+
           {routePoints.length > 0 && (
             <Marker
               coordinate={routePoints[0]}
@@ -989,5 +1004,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#1a1a1a',
+  },
+  shareButton: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFD54A',
+    marginTop: 12,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  shareButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0a0a0a',
   },
 });

@@ -7,9 +7,11 @@ import {
   Alert,
   Platform,
   ScrollView,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
-import { useOAuth } from '@clerk/clerk-expo';
+import { useOAuth, useSignIn } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
 import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,9 +22,37 @@ WebBrowser.maybeCompleteAuthSession();
 export default function LoginScreen() {
   const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
+  const { signIn, setActive, isLoaded } = useSignIn();
   const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
   const { startOAuthFlow: startTikTokOAuth } = useOAuth({ strategy: 'oauth_tiktok' });
   const { startOAuthFlow: startAppleOAuth } = useOAuth({ strategy: 'oauth_apple' });
+  const [showDevLogin, setShowDevLogin] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleEmailSignIn = async () => {
+    if (!isLoaded) return;
+
+    try {
+      setIsLoading(true);
+      const completeSignIn = await signIn.create({
+        identifier: email,
+        password,
+      });
+
+      if (completeSignIn.status === 'complete') {
+        await setActive({ session: completeSignIn.createdSessionId });
+        router.replace('/');
+      } else {
+        console.log(JSON.stringify(completeSignIn, null, 2));
+      }
+    } catch (err: any) {
+      console.error('Login error:', err);
+      Alert.alert('Error', err.errors?.[0]?.message || 'Error al iniciar sesión');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleOAuthSignIn = async (provider: 'google' | 'tiktok' | 'apple') => {
     try {
@@ -38,17 +68,17 @@ export default function LoginScreen() {
           t('common.error'),
           t('auth.authenticationFailed')
         );
-        
+
       }
     } catch (err: any) {
       console.error('OAuth error:', err);
       console.error('Error details:', JSON.stringify(err, null, 2));
-      
-      const errorMessage = err.errors?.[0]?.message 
-        || err.errors?.[0]?.longMessage 
-        || err.message 
+
+      const errorMessage = err.errors?.[0]?.message
+        || err.errors?.[0]?.longMessage
+        || err.message
         || `Error al conectar con ${provider}. Verifica tu configuración.`;
-      
+
       Alert.alert(t('common.error'), errorMessage);
     } finally {
       setIsLoading(false);
@@ -59,13 +89,60 @@ export default function LoginScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <View style={styles.header}>
-          <Text style={styles.title}>{t('auth.welcome')}</Text>
+          <TouchableOpacity
+            activeOpacity={1}
+            onLongPress={() => {
+              setShowDevLogin(!showDevLogin);
+              if (!showDevLogin) Alert.alert('Modo Reviewer', 'Ingreso por credenciales activado');
+            }}
+          >
+            <Text style={styles.title}>{t('auth.welcome')}</Text>
+          </TouchableOpacity>
           <Text style={styles.subtitle}>
             {t('auth.subtitle')}
           </Text>
         </View>
 
         <View style={styles.form}>
+          {showDevLogin && (
+            <View style={{ marginBottom: 20 }}>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('auth.email')}</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder={t('auth.emailPlaceholder')}
+                  placeholderTextColor="#666"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>{t('auth.password')}</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder={t('auth.passwordPlaceholder')}
+                  placeholderTextColor="#666"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.button, styles.primaryButton]}
+                onPress={handleEmailSignIn}
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#1a1a1a" />
+                ) : (
+                  <Text style={styles.buttonText}>{t('auth.login')}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Botones OAuth */}
           {Platform.OS === 'ios' && (
             <TouchableOpacity

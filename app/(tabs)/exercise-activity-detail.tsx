@@ -22,7 +22,7 @@ export default function ExerciseActivityDetailScreen() {
   const params = useLocalSearchParams();
   const { t } = useTranslation();
   const exerciseId = params.exerciseId as string;
-  
+
   const [exercise, setExercise] = useState<Exercise | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -81,12 +81,12 @@ export default function ExerciseActivityDetailScreen() {
     const points = exercise.route_points;
     const latitudes = points.map(p => p.latitude);
     const longitudes = points.map(p => p.longitude);
-    
+
     const minLat = Math.min(...latitudes);
     const maxLat = Math.max(...latitudes);
     const minLng = Math.min(...longitudes);
     const maxLng = Math.max(...longitudes);
-    
+
     const centerLat = (minLat + maxLat) / 2;
     const centerLng = (minLng + maxLng) / 2;
     const deltaLat = (maxLat - minLat) * 1.3 || 0.01;
@@ -128,9 +128,9 @@ export default function ExerciseActivityDetailScreen() {
   }
 
   const exerciseDate = new Date(exercise.date + 'T00:00:00');
-  const formattedDate = exerciseDate.toLocaleDateString('es-ES', { 
-    weekday: 'long', 
-    day: 'numeric', 
+  const formattedDate = exerciseDate.toLocaleDateString('es-ES', {
+    weekday: 'long',
+    day: 'numeric',
     month: 'long',
     year: 'numeric'
   });
@@ -140,7 +140,7 @@ export default function ExerciseActivityDetailScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/(tabs)/exercise-detail' as any)}>
@@ -174,14 +174,14 @@ export default function ExerciseActivityDetailScreen() {
                 strokeColor="#ffb300"
                 strokeWidth={5}
               />
-              
+
               {/* Punto de inicio */}
               <Marker
                 coordinate={exercise.route_points![0]}
                 title={t('common.start')}
                 pinColor="#4CAF50"
               />
-              
+
               {/* Punto final */}
               <Marker
                 coordinate={exercise.route_points![exercise.route_points!.length - 1]}
@@ -261,6 +261,20 @@ export default function ExerciseActivityDetailScreen() {
             <Text style={styles.notesText}>{exercise.notes}</Text>
           </View>
         )}
+
+        {/* Botón Compartir */}
+        <TouchableOpacity
+          style={styles.shareButton}
+          onPress={() => {
+            router.push({
+              pathname: '/(tabs)/share-cardio',
+              params: { exerciseId: exerciseId }
+            } as any);
+          }}
+        >
+          <Ionicons name="share-outline" size={20} color="#0a0a0a" />
+          <Text style={styles.shareButtonText}>{t('common.share')}</Text>
+        </TouchableOpacity>
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -411,6 +425,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#ffffff',
     lineHeight: 20,
+  },
+  shareButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#FFD54A',
+    marginHorizontal: 16,
+    marginTop: 24,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  shareButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0a0a0a',
   },
   bottomSpacer: {
     height: 40,

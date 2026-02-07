@@ -8,10 +8,14 @@
  * Body: { recipientIds: string[], title: string, body: string }
  */
 
+// @ts-ignore - Deno import
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+// @ts-ignore - Deno import
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// @ts-ignore - Deno global
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+// @ts-ignore - Deno global
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -100,7 +104,7 @@ serve(async (req: Request) => {
         }
 
         // Preparar mensajes para Expo Push API
-        const messages: PushMessage[] = tokens.map(({ push_token }) => ({
+        const messages: PushMessage[] = tokens.map(({ push_token }: { push_token: string }) => ({
             to: push_token,
             title,
             body,

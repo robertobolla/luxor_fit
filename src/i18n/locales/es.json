@@ -110,7 +110,9 @@
     "min": "Mínimo",
     "max": "Máximo",
     "noDataYet": "Sin datos aún",
-    "loadingData": "Cargando datos..."
+    "loadingData": "Cargando datos...",
+    "share": "Compartir",
+    "notes": "Notas"
   },
   "invitations": {
     "loading": "Cargando invitaciones...",
