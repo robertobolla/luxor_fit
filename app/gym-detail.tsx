@@ -20,19 +20,19 @@ import { useTranslation } from 'react-i18next';
 const { width } = Dimensions.get('window');
 
 // Componente para círculos de progreso
-function ProgressCircle({ 
-  size, 
-  strokeWidth, 
-  progress, 
-  color, 
-  icon, 
-  iconSize = 40 
-}: { 
-  size: number; 
-  strokeWidth: number; 
-  progress: number; 
-  color: string; 
-  icon: any; 
+function ProgressCircle({
+  size,
+  strokeWidth,
+  progress,
+  color,
+  icon,
+  iconSize = 40
+}: {
+  size: number;
+  strokeWidth: number;
+  progress: number;
+  color: string;
+  icon: any;
   iconSize?: number;
 }) {
   const radius = (size - strokeWidth) / 2;
@@ -100,29 +100,29 @@ export default function GymDetailScreen() {
   const loadGymData = async () => {
     try {
       if (!user?.id) return;
-      
+
       setIsLoading(true);
-      
+
       // Obtener días de gimnasio de la semana actual
       const gymData = await getGymDaysThisWeek(user.id);
       setGymDaysThisWeek(gymData.days);
       setGymDaysGoal(gymData.goal);
-      
+
       // Obtener días de gimnasio del mes actual
       const currentDate = selectedDate;
       const gymDaysMonth = await getGymDaysThisMonth(
-        user.id, 
-        currentDate.getFullYear(), 
+        user.id,
+        currentDate.getFullYear(),
         currentDate.getMonth()
       );
       setGymDaysThisMonth(gymDaysMonth);
-      
+
       console.log('🏋️ Datos de gimnasio cargados:', {
         semana: gymData.days,
         meta: gymData.goal,
         mes: gymDaysMonth
       });
-      
+
     } catch (error) {
       console.error('Error cargando datos de gimnasio:', error);
       Alert.alert(
@@ -155,13 +155,13 @@ export default function GymDetailScreen() {
     }
   };
 
-  const isCurrentMonth = selectedDate.getMonth() === new Date().getMonth() && 
-                        selectedDate.getFullYear() === new Date().getFullYear();
+  const isCurrentMonth = selectedDate.getMonth() === new Date().getMonth() &&
+    selectedDate.getFullYear() === new Date().getFullYear();
 
   const formatMonth = (date: Date) => {
-    const options: Intl.DateTimeFormatOptions = { 
-      month: 'long', 
-      year: 'numeric' 
+    const options: Intl.DateTimeFormatOptions = {
+      month: 'long',
+      year: 'numeric'
     };
     return date.toLocaleDateString('es-ES', options);
   };
@@ -172,12 +172,12 @@ export default function GymDetailScreen() {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
-    
+
     const days = [];
     for (let i = 1; i <= daysInMonth; i++) {
       days.push(i);
     }
-    
+
     return days;
   };
 
@@ -188,10 +188,10 @@ export default function GymDetailScreen() {
     const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - daysFromMonday);
-    
+
     // Obtener los días cortos traducidos
     const dayLabels = t('common.weekDaysShort', { returnObjects: true }) as string[];
-    
+
     const weekDays = [];
     for (let i = 0; i < 7; i++) {
       const day = new Date(startOfWeek);
@@ -202,7 +202,7 @@ export default function GymDetailScreen() {
         isToday: day.toDateString() === today.toDateString()
       });
     }
-    
+
     return weekDays;
   };
 
@@ -227,16 +227,16 @@ export default function GymDetailScreen() {
         <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard' as any)}>
           <Ionicons name="chevron-back" size={28} color="#ffffff" />
         </TouchableOpacity>
-        
+
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Gimnasio</Text>
           <Text style={styles.headerSubtitle}>
-  {t('headers.completedWorkouts')}
-</Text>
+            {t('headers.completedWorkouts')}
+          </Text>
         </View>
-        
+
         <View style={styles.headerRight}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.headerIcon}
             onPress={() => router.push('/(tabs)/workout')}
           >
@@ -248,8 +248,8 @@ export default function GymDetailScreen() {
       <ScrollView
         style={styles.scrollView}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor="#ffb300"
           />
@@ -266,17 +266,15 @@ export default function GymDetailScreen() {
             iconSize={60}
           />
           <Text style={styles.mainNumber}>
-            {gymDaysThisWeek} <Text style={styles.mainUnit}>de {gymDaysGoal}</Text>
+            <Text>{gymDaysThisWeek}</Text> <Text style={styles.mainUnit}>de {gymDaysGoal}</Text>
           </Text>
-          <Text style={styles.mainLabel}>  {t('time.thisWeek')}
-          </Text>
+          <Text style={styles.mainLabel}>{t('time.thisWeek')}</Text>
         </View>
 
         {/* Semana actual */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>  {t('time.thisWeek')}
-          </Text>
-          
+          <Text style={styles.sectionTitle}>{t('time.thisWeek')}</Text>
+
           <View style={styles.card}>
             <View style={styles.weekDaysContainer}>
               {weekDays.map((day, index) => (
@@ -301,17 +299,17 @@ export default function GymDetailScreen() {
               ))}
             </View>
             <View style={styles.weekSummary}>
-            <Text style={styles.weekSummaryText}>
-  {t('week.daysCompleted', {
-    current: gymDaysThisWeek,
-    total: gymDaysGoal,
-  })}
-</Text>
-<Text style={styles.weekProgressText}>
-  {t('week.percentCompleted', {
-    percent: Math.round((gymDaysThisWeek / gymDaysGoal) * 100),
-  })}
-</Text>
+              <Text style={styles.weekSummaryText}>
+                {t('week.daysCompleted', {
+                  current: gymDaysThisWeek,
+                  total: gymDaysGoal,
+                })}
+              </Text>
+              <Text style={styles.weekProgressText}>
+                {t('week.percentCompleted', {
+                  percent: Math.round((gymDaysThisWeek / gymDaysGoal) * 100),
+                })}
+              </Text>
             </View>
           </View>
         </View>
@@ -322,11 +320,11 @@ export default function GymDetailScreen() {
             <TouchableOpacity onPress={goToPreviousMonth}>
               <Ionicons name="chevron-back" size={24} color="#ffffff" />
             </TouchableOpacity>
-            
+
             <Text style={styles.sectionTitle}>
               {formatMonth(selectedDate)}
             </Text>
-            
+
             {!isCurrentMonth && (
               <TouchableOpacity onPress={goToNextMonth}>
                 <Ionicons name="chevron-forward" size={24} color="#ffffff" />
@@ -334,13 +332,13 @@ export default function GymDetailScreen() {
             )}
             {isCurrentMonth && <View style={{ width: 24 }} />}
           </View>
-          
+
           <View style={styles.card}>
             <View style={styles.monthGrid}>
               {monthDays.map((day) => {
                 const hasGym = gymDaysThisMonth.includes(day);
                 const isToday = isCurrentMonth && day === new Date().getDate();
-                
+
                 return (
                   <View key={day} style={styles.dayCell}>
                     <View style={[
@@ -360,46 +358,39 @@ export default function GymDetailScreen() {
                 );
               })}
             </View>
-            
+
             <View style={styles.monthSummary}>
-            <Text style={styles.monthSummaryText}>
-  {t('month.gymDays', {
-    count: gymDaysThisMonth.length,
-    month: formatMonth(selectedDate),
-  })}
-</Text>
+              <Text style={styles.monthSummaryText}>
+                {t('month.gymDays', {
+                  count: gymDaysThisMonth.length,
+                  month: formatMonth(selectedDate),
+                })}
+              </Text>
             </View>
           </View>
         </View>
 
         {/* Estadísticas */}
         <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-  {t('sections.statistics')}
-</Text>
-          
+          <Text style={styles.sectionTitle}>{t('sections.statistics')}</Text>
+
           <View style={styles.statsContainer}>
             <View style={styles.statCard}>
               <Text style={styles.statValue}>{gymDaysThisWeek}</Text>
-              <Text style={styles.statLabel}>
-  {t('time.thisWeek')}
-</Text>
+              <Text style={styles.statLabel}>{t('time.thisWeek')}</Text>
             </View>
-            
+
             <View style={styles.statCard}>
               <Text style={styles.statValue}>{gymDaysThisMonth.length}</Text>
-              <Text style={styles.statLabel}>
-  {t('time.thisMonth')}
-</Text>
+              <Text style={styles.statLabel}>{t('time.thisMonth')}</Text>
             </View>
-            
+
             <View style={styles.statCard}>
               <Text style={styles.statValue}>
                 {Math.round((gymDaysThisWeek / gymDaysGoal) * 100)}%
               </Text>
-              <Text style={styles.statLabel}>
-  {t('stats.progress')}
-</Text>            </View>
+              <Text style={styles.statLabel}>{t('stats.progress')}</Text>
+            </View>
           </View>
         </View>
 

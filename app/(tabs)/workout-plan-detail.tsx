@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal } from 'react-native';
 import { Stack, router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
@@ -16,13 +16,13 @@ import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 type WorkoutExercise =
   | string
   | {
-      name?: string;
-      sets?: number | string;
-      reps?: number | string;
-      rest?: number | string;
-      notes?: string;
-      [key: string]: unknown;
-    };
+    name?: string;
+    sets?: number | string;
+    reps?: number | string;
+    rest?: number | string;
+    notes?: string;
+    [key: string]: unknown;
+  };
 
 type WeeklyDay = {
   day?: string;
@@ -99,18 +99,9 @@ type NormalizedWorkoutPlan = Omit<WorkoutPlanRow, 'plan_data'> & { plan_data: Pl
 
 type FriendsResult = { success: boolean; data?: any[]; error?: string };
 
-// Fallbacks hardcodeados para cuando las traducciones no estén disponibles
-const FALLBACK_PRINCIPLES = [
-  'Progresión gradual de cargas',
-  'Técnica correcta antes de aumentar peso',
-  'Descanso adecuado entre series',
-];
-
-const FALLBACK_RECOMMENDATIONS = [
-  'Mantén una hidratación adecuada',
-  'Respeta los tiempos de descanso',
-  'Escucha a tu cuerpo',
-];
+// Fallback keys are now handled inside the component with t()
+const FALLBACK_PRINCIPLES_KEYS = ['training.principles.0', 'training.principles.1', 'training.principles.2'];
+const FALLBACK_RECOMMENDATIONS_KEYS = ['training.recommendations.0', 'training.recommendations.1', 'training.recommendations.2'];
 
 const getParamString = (v: string | string[] | undefined): string | undefined => {
   if (!v) return undefined;
@@ -202,11 +193,18 @@ export default function WorkoutPlanDetailScreen() {
   const studentId = getParamString(params.studentId);
 
   const [plan, setPlan] = useState<NormalizedWorkoutPlan | null>(null);
+
+  // Reset load status when planId changes
+  useEffect(() => {
+    isPlanLoaded.current = false;
+  }, [planId]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [completedDays, setCompletedDays] = useState<Set<string>>(new Set());
   const [showAIModal, setShowAIModal] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   const [showShareModal, setShowShareModal] = useState(false);
   const [friends, setFriends] = useState<any[]>([]);
@@ -214,6 +212,7 @@ export default function WorkoutPlanDetailScreen() {
 
   const [showShareSuccess, setShowShareSuccess] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
+  const isPlanLoaded = React.useRef(false);
 
   const [currentWeekIndex, setCurrentWeekIndex] = useState(0);
 
@@ -372,7 +371,7 @@ export default function WorkoutPlanDetailScreen() {
     try {
       const { data, error: sbError } = await supabase
         .from('workout_completions')
-        .select('day_name')
+        .select('day_name, completed_at')
         .eq('user_id', user.id)
         .eq('workout_plan_id', planId);
 
@@ -381,26 +380,38 @@ export default function WorkoutPlanDetailScreen() {
         return;
       }
 
-      const completedSet = new Set((data || []).map((c: any) => str(c.day_name)));
+      // Filtrar completados que sean posteriores a la fecha de activación del plan
+      const planActivatedAt = plan?.activated_at ? new Date(String(plan.activated_at)).getTime() : 0;
+
+      const validCompletions = (data || []).filter((c: any) => {
+        // Asegurar que completed_at es una fecha válida antes de crear el objeto Date
+        if (!c.completed_at) return false;
+        const completedAt = new Date(c.completed_at).getTime();
+        return completedAt >= planActivatedAt;
+      });
+
+      const completedSet = new Set(validCompletions.map((c: any) => str(c.day_name)));
       setCompletedDays(completedSet);
     } catch (err) {
       console.error('Error inesperado al cargar días completados:', err);
     }
-  }, [user?.id, planId]);
+  }, [user?.id, planId, plan?.activated_at]);
 
-  useEffect(() => {
-    // Primer load con posibilidad de reintento (caso app recién abierta)
-    loadPlanDetails({ allowRetry: true });
-  }, [loadPlanDetails]);
+  /* 
+   * Removed redundant useEffect that triggered double fetch on mount.
+   * useFocusEffect handles both initial load (on mount/focus) and subsequent focuses.
+   */
 
   useEffect(() => {
     if (plan && user?.id) loadCompletedDays();
-  }, [plan, user?.id, loadCompletedDays]);
+  }, [plan?.id, plan?.activated_at, user?.id, loadCompletedDays]);
 
   useFocusEffect(
     useCallback(() => {
-      // En foco recargamos sin reintento extra (ya debería estar la sesión lista)
-      loadPlanDetails({ allowRetry: false }).then(() => {
+      // En foco recargamos. Usamos ref para saber si es la carga inicial y permitir reintento.
+      const isInitialLoad = !isPlanLoaded.current;
+      loadPlanDetails({ allowRetry: isInitialLoad }).then(() => {
+        isPlanLoaded.current = true;
         if (user?.id) loadCompletedDays();
       });
     }, [loadPlanDetails, loadCompletedDays, user?.id])
@@ -446,7 +457,7 @@ export default function WorkoutPlanDetailScreen() {
     }
   };
 
-  const handleSharePlan = async () => {
+  const handleInternalShare = async () => {
     if (!plan || !user?.id) return;
 
     setIsLoadingFriends(true);
@@ -464,6 +475,34 @@ export default function WorkoutPlanDetailScreen() {
     }
 
     setIsLoadingFriends(false);
+  };
+
+  const handleSharePlan = () => {
+    Alert.alert(
+      str(t('share.optionsTitle', 'Compartir Plan'), 'Compartir Plan'),
+      str(t('share.optionsMessage', '¿Cómo deseas compartirlo?'), '¿Cómo deseas compartirlo?'),
+      [
+        {
+          text: str(t('share.withFriend', 'Con un amigo en App'), 'Con un amigo en App'),
+          onPress: handleInternalShare,
+        },
+        {
+          text: str(t('share.socialMedia', 'Redes Sociales'), 'Redes Sociales'),
+          onPress: () => {
+            if (plan?.id) {
+              router.push({
+                pathname: '/(tabs)/share-workout',
+                params: { planId: String(plan.id) }
+              });
+            }
+          },
+        },
+        {
+          text: str(t('common.cancel', 'Cancelar'), 'Cancelar'),
+          style: 'cancel',
+        },
+      ]
+    );
   };
 
   const handleSelectFriend = async (friendId: string) => {
@@ -534,9 +573,23 @@ export default function WorkoutPlanDetailScreen() {
     // Obtener traducciones o usar fallbacks
     const translatedPrinciples = t('training.principles', { returnObjects: true });
     const translatedRecommendations = t('training.recommendations', { returnObjects: true });
-    
-    const defaultPrinciples = Array.isArray(translatedPrinciples) ? translatedPrinciples : FALLBACK_PRINCIPLES;
-    const defaultRecommendations = Array.isArray(translatedRecommendations) ? translatedRecommendations : FALLBACK_RECOMMENDATIONS;
+
+    // Ensure we get arrays, otherwise use fallback keys mapped to t() -> actually better to just use t() directly if array check fails
+    const defaultPrinciples = Array.isArray(translatedPrinciples)
+      ? translatedPrinciples
+      : [
+        t('workout.training.principles.0', 'Sobrecarga progresiva'),
+        t('workout.training.principles.1', 'Volumen adecuado'),
+        t('workout.training.principles.2', 'Recuperación')
+      ];
+
+    const defaultRecommendations = Array.isArray(translatedRecommendations)
+      ? translatedRecommendations
+      : [
+        t('workout.training.recommendations.0', 'Dormir 7-9 horas'),
+        t('workout.training.recommendations.1', 'Consumir suficiente proteína'),
+        t('workout.training.recommendations.2', 'Mantener consistencia')
+      ];
 
     const defaultData = {
       duration_weeks: 4,
@@ -544,7 +597,7 @@ export default function WorkoutPlanDetailScreen() {
       weekly_structure: [] as WeeklyDay[],
       multi_week_structure: [] as MultiWeek[],
       key_principles: defaultPrinciples,
-      progression: str(t('workout.progressionDefault'), 'Progresión semanal'),
+      progression: str(t('workout.progressionDefault'), 'Aumentar peso cuando logres el límite superior...'),
       recommendations: defaultRecommendations,
     };
 
@@ -569,47 +622,78 @@ export default function WorkoutPlanDetailScreen() {
 
       const keyPrinciples = coerceStringArray(
         pd.key_principles ||
-          pd.principles ||
-          pd.core_principles ||
-          pd.keyPrinciples ||
-          plan.key_principles ||
-          plan.principles ||
-          plan.core_principles ||
-          plan.keyPrinciples ||
-          pd.principios_clave
+        pd.principles ||
+        pd.core_principles ||
+        pd.keyPrinciples ||
+        plan.key_principles ||
+        plan.principles ||
+        plan.core_principles ||
+        plan.keyPrinciples ||
+        pd.principios_clave
       );
 
       const recommendations = coerceStringArray(
         pd.recommendations ||
-          pd.tips ||
-          pd.advice ||
-          pd.suggestions ||
-          plan.recommendations ||
-          plan.tips ||
-          plan.advice ||
-          plan.suggestions ||
-          pd.recomendaciones
+        pd.tips ||
+        pd.advice ||
+        pd.suggestions ||
+        plan.recommendations ||
+        plan.tips ||
+        plan.advice ||
+        plan.suggestions ||
+        pd.recomendaciones
       );
 
       const progression = coerceString(
         pd.progression ||
-          pd.progress ||
-          pd.progression_notes ||
-          plan.progression ||
-          plan.progress ||
-          plan.progression_notes ||
-          pd.progresion,
-        str(t('workout.progressionDefault'), 'Progresión semanal')
+        pd.progress ||
+        pd.progression_notes ||
+        plan.progression ||
+        plan.progress ||
+        plan.progression_notes ||
+        pd.progresion,
+        defaultData.progression
       );
+
+      // --- LEGACY DETECTION: Check if values match Spanish hardcoded defaults and swap for t() ---
+
+      const isLegacySpanishPrinciple = (txt: string) =>
+        (txt.includes('Sobrecarga') && txt.includes('progresiva')) ||
+        (txt.includes('Volumen') && txt.includes('adecuado')) ||
+        (txt.includes('Recuperación') && txt.length < 20);
+
+      const finalPrinciples = keyPrinciples.length
+        ? keyPrinciples.map(p => isLegacySpanishPrinciple(p) ? null : p).filter(Boolean) as string[]
+        : [];
+
+      // If filtering removed all (or we had mixed), and we are left with empty or fewer, maybe just use defaultPrinciples if it looked like a "standard" plan.
+      // But simpler: if the array *looks* like the standard Spanish one, just use defaultPrinciples.
+      const looksLikeStandardSpanishPrinciples = keyPrinciples.some(p => isLegacySpanishPrinciple(p));
+      const effectivePrinciples = looksLikeStandardSpanishPrinciples ? defaultPrinciples : (finalPrinciples.length ? finalPrinciples : defaultPrinciples);
+
+
+      const isLegacySpanishRec = (txt: string) =>
+        (txt.includes('Dormir') && txt.includes('7-9')) ||
+        (txt.includes('Consumir') && txt.includes('proteína')) ||
+        (txt.includes('Mantener') && txt.includes('consistencia'));
+
+      const looksLikeStandardSpanishRecs = recommendations.some(r => isLegacySpanishRec(r));
+      const effectiveRecommendations = looksLikeStandardSpanishRecs ? defaultRecommendations : (recommendations.length ? recommendations : defaultRecommendations);
+
+
+      const isLegacySpanishProgression = (txt: string) =>
+        txt.includes('Aumentar peso') && txt.includes('límite superior');
+
+      const effectiveProgression = isLegacySpanishProgression(progression) ? defaultData.progression : progression;
 
       return {
         duration_weeks: durationWeeks,
         days_per_week: daysPerWeek,
         weekly_structure: weeklyStructure,
         multi_week_structure: multiWeekStructure,
-        key_principles: keyPrinciples.length ? keyPrinciples : defaultPrinciples,
-        progression,
-        recommendations: recommendations.length ? recommendations : defaultRecommendations,
+        key_principles: effectivePrinciples,
+        progression: effectiveProgression,
+        recommendations: effectiveRecommendations,
       };
     } catch (error) {
       console.error('Error procesando plan_data:', error);
@@ -628,11 +712,11 @@ export default function WorkoutPlanDetailScreen() {
       <>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.container}>
-        <LoadingOverlay
-  visible={true}
-  message={t('common.loading')}
-  fullScreen
-/>
+          <LoadingOverlay
+            visible={true}
+            message={t('common.loading')}
+            fullScreen
+          />
         </View>
       </>
     );
@@ -646,9 +730,9 @@ export default function WorkoutPlanDetailScreen() {
           <Ionicons name="alert-circle-outline" size={64} color="#FF5722" />
           <Text style={styles.errorText}>{error || 'Plan no encontrado'}</Text>
           <TouchableOpacity style={styles.backButton} onPress={() => router.push('/(tabs)/workout' as any)}>
-          <Text style={styles.backButtonText}>
-  {t('workout.backToWorkout')}
-</Text>
+            <Text style={styles.backButtonText}>
+              {t('workout.backToWorkout')}
+            </Text>
           </TouchableOpacity>
         </View>
       </>
@@ -665,7 +749,97 @@ export default function WorkoutPlanDetailScreen() {
           </TouchableOpacity>
 
           <Text style={styles.headerTitle}>{str(t('workout.planTitle'), 'Plan')}</Text>
-          <View style={{ width: 24 }} />
+
+          <TouchableOpacity
+            onPress={() => setShowMenu(prev => !prev)}
+            style={styles.backIconButton}
+          >
+            <Ionicons name="ellipsis-vertical" size={24} color="#ffffff" />
+          </TouchableOpacity>
+
+          <Modal
+            visible={showMenu}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setShowMenu(false)}
+          >
+            <TouchableOpacity
+              style={styles.menuOverlay}
+              activeOpacity={1}
+              onPress={() => setShowMenu(false)}
+            >
+              <View style={styles.menuContainer}>
+                <View style={styles.menuHeader}>
+                  <Text style={styles.menuTitle}>{t('planDetail.options', 'Opciones')}</Text>
+                  <TouchableOpacity onPress={() => setShowMenu(false)}>
+                    <Ionicons name="close" size={24} color="#888" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Enviar Rutina */}
+                <TouchableOpacity
+                  style={styles.menuOption}
+                  onPress={() => {
+                    setShowMenu(false);
+                    setTimeout(() => handleInternalShare(), 100);
+                  }}
+                >
+                  <Ionicons name="people-outline" size={22} color="#fff" />
+                  <Text style={styles.menuOptionText}>{t('actions.sendRoutine', 'Enviar rutina')}</Text>
+                </TouchableOpacity>
+
+                {/* Editar Plan */}
+                <TouchableOpacity
+                  style={styles.menuOption}
+                  onPress={() => {
+                    setShowMenu(false);
+                    // Agregamos un pequeño delay para que la navegación sea suave después de cerrar el modal
+                    setTimeout(() => {
+                      if (typeof handleEditPlan === 'function') {
+                        handleEditPlan();
+                      } else {
+                        // Fallback logic in case handleEditPlan is not available in scope (though it should be)
+                        router.push({
+                          pathname: '/(tabs)/workout-generator',
+                          params: { planId: plan.id, mode: 'edit' }
+                        } as any);
+                      }
+                    }, 100);
+                  }}
+                >
+                  <Ionicons name="create-outline" size={22} color="#fff" />
+                  <Text style={styles.menuOptionText}>{t('workout.editPlan', 'Editar plan')}</Text>
+                </TouchableOpacity>
+
+                {/* Adaptar con IA */}
+                {!isCustomPlan && (
+                  <TouchableOpacity
+                    style={styles.menuOption}
+                    onPress={() => {
+                      setShowMenu(false);
+                      setShowAIModal(true);
+                    }}
+                  >
+                    <Ionicons name="sparkles" size={22} color="#ffb300" />
+                    <Text style={[styles.menuOptionText, { color: '#ffb300' }]}>{t('ai.adaptButtonTitle', 'Adaptar con IA')}</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* Eliminar Plan */}
+                <TouchableOpacity
+                  style={styles.menuOption}
+                  onPress={() => {
+                    setShowMenu(false);
+                    setTimeout(() => handleDeletePlan(), 100);
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={22} color="#f44336" />
+                  <Text style={[styles.menuOptionText, { color: '#f44336' }]}>{t('common.delete', 'Eliminar')}</Text>
+                </TouchableOpacity>
+
+              </View>
+            </TouchableOpacity>
+          </Modal>
         </View>
 
         <View style={styles.planHeader}>
@@ -675,32 +849,15 @@ export default function WorkoutPlanDetailScreen() {
               <Text style={styles.planName}>{str(plan.plan_name, 'Plan')}</Text>
               {!!plan.is_active && (
                 <View style={styles.activeBadge}>
-<Text style={styles.activeBadgeText}>
-  {t('workout.activePlan')}
-</Text>
-                  </View>
+                  <Text style={styles.activeBadgeText}>
+                    {t('workout.activePlan')}
+                  </Text>
+                </View>
               )}
             </View>
           </View>
 
-          <TouchableOpacity style={styles.aiButton} onPress={handleEditPlan} activeOpacity={0.8}>
-            <View style={styles.aiButtonContent}>
-              <View style={styles.aiIconContainer}>
-                <Ionicons name="create-outline" size={18} color="#ffffff" />
-              </View>
-              <View style={styles.aiTextContainer}>
-              <Text style={styles.aiButtonTitle}>
-  {t('workout.editPlan')}
-</Text>
 
-<Text style={styles.aiButtonSubtitle}>
-  {t('workout.modifyExercises')}
-</Text>
-
-              </View>
-              <Ionicons name="chevron-forward" size={16} color="#ffb300" />
-            </View>
-          </TouchableOpacity>
 
           {!isCustomPlan && (
             <TouchableOpacity style={[styles.aiButton, { marginTop: 12 }]} onPress={() => setShowAIModal(true)} activeOpacity={0.8}>
@@ -709,13 +866,13 @@ export default function WorkoutPlanDetailScreen() {
                   <Ionicons name="sparkles" size={18} color="#ffffff" />
                 </View>
                 <View style={styles.aiTextContainer}>
-                <Text style={styles.aiButtonTitle}>
-  {t('ai.adaptButtonTitle')}
-</Text>
+                  <Text style={styles.aiButtonTitle}>
+                    {t('ai.adaptButtonTitle')}
+                  </Text>
 
-<Text style={styles.aiButtonSubtitle}>
-  {t('ai.adaptButtonSubtitle')}
-</Text>
+                  <Text style={styles.aiButtonSubtitle}>
+                    {t('ai.adaptButtonSubtitle')}
+                  </Text>
 
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#ffb300" />
@@ -723,12 +880,7 @@ export default function WorkoutPlanDetailScreen() {
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity style={styles.shareButton} onPress={handleSharePlan} activeOpacity={0.8}>
-            <View style={styles.shareButtonContent}>
-              <Ionicons name="share-social" size={18} color="#ffb300" />
-              <Text style={styles.shareButtonText}>{str(t('workout.shareWithFriend'), 'Compartir')}</Text>
-            </View>
-          </TouchableOpacity>
+
 
           {!!str(plan.description) && <Text style={styles.planDescription}>{str(plan.description)}</Text>}
         </View>
@@ -737,7 +889,7 @@ export default function WorkoutPlanDetailScreen() {
           <View style={styles.statCard}>
             <Ionicons name="calendar" size={24} color="#ffb300" />
             <Text style={styles.statValue}>{safePlanData.duration_weeks}</Text>
-            <Text style={styles.statLabel}>Semanas</Text>
+            <Text style={styles.statLabel}>{t('workout.weeksLabel')}</Text>
           </View>
 
           <View style={styles.statCard}>
@@ -756,9 +908,9 @@ export default function WorkoutPlanDetailScreen() {
         </View>
 
         <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-  {t('workout.weeklyStructure')}
-</Text>
+          <Text style={styles.sectionTitle}>
+            {t('workout.weeklyStructure')}
+          </Text>
           <Text style={styles.sectionSubtitle}>{str(t('workout.tapDayForDetails'), 'Tocá un día para ver detalles')}</Text>
 
           {safePlanData.multi_week_structure.length > 0 ? (
@@ -775,17 +927,17 @@ export default function WorkoutPlanDetailScreen() {
 
                   <View style={styles.weekIndicator}>
                     <Text style={styles.weekIndicatorText}>
-                      Semana {currentWeekIndex + 1} de {safePlanData.multi_week_structure.length}
+                      {t('workout.weekProgress', { current: currentWeekIndex + 1, total: safePlanData.multi_week_structure.length })}
                     </Text>
                     {!!plan.is_active && !!str(plan.activated_at) && (
-                     <Text style={styles.weekIndicatorSubtext}>
-                     {currentWeekIndex === calculateCurrentWeekIndex(str(plan.activated_at), safePlanData.duration_weeks)
-                       ? t('workout.weekIndicator.current')
-                       : currentWeekIndex < calculateCurrentWeekIndex(str(plan.activated_at), safePlanData.duration_weeks)
-                         ? t('workout.weekIndicator.completed')
-                         : t('workout.weekIndicator.next')}
-                   </Text>
-                   
+                      <Text style={styles.weekIndicatorSubtext}>
+                        {currentWeekIndex === calculateCurrentWeekIndex(str(plan.activated_at), safePlanData.duration_weeks)
+                          ? t('workout.weekIndicator.current')
+                          : currentWeekIndex < calculateCurrentWeekIndex(str(plan.activated_at), safePlanData.duration_weeks)
+                            ? t('workout.weekIndicator.completed')
+                            : t('workout.weekIndicator.next')}
+                      </Text>
+
                     )}
                   </View>
 
@@ -815,7 +967,7 @@ export default function WorkoutPlanDetailScreen() {
                 return (
                   <View key={currentWeekIndex} style={styles.weekContainer}>
                     {safePlanData.multi_week_structure.length === 1 && (
-                      <Text style={styles.weekTitle}>Semana {weekNumber}</Text>
+                      <Text style={styles.weekTitle}>{t('workout.weekTitle', { number: weekNumber })}</Text>
                     )}
 
                     {(week.days || []).map((day, dayIndex) => {
@@ -823,8 +975,9 @@ export default function WorkoutPlanDetailScreen() {
                       const isCompleted = completedDays.has(dayKey);
 
                       let dayTitle = str(day.day).trim();
-                      if (!dayTitle) dayTitle = `Día ${dayIndex + 1}`;
-                      if (!/^Día\s*\d+/i.test(dayTitle)) dayTitle = `Día ${dayIndex + 1}`;
+                      const dayNumMatch = dayTitle.match(/\d+/);
+                      const dayNum = dayNumMatch ? parseInt(dayNumMatch[0], 10) : (dayIndex + 1);
+                      dayTitle = t('workout.dayName', { day: dayNum });
 
                       const safeDay = {
                         day: dayTitle,
@@ -860,8 +1013,8 @@ export default function WorkoutPlanDetailScreen() {
                                 <View style={styles.completedBadge}>
                                   <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
                                   <Text style={styles.completedBadgeText}>
-  {t('workout.completed')}
-</Text>
+                                    {t('workout.completed')}
+                                  </Text>
                                 </View>
                               )}
                             </View>
@@ -882,7 +1035,7 @@ export default function WorkoutPlanDetailScreen() {
                               {safeDay.exercises.map((exercise: WorkoutExercise, idx: number) => {
                                 // Verificar si es una superserie
                                 const isSuperset = typeof exercise === 'object' && (exercise as any).type === 'superset';
-                                
+
                                 if (isSuperset) {
                                   const supersetExercises = (exercise as any).exercises || [];
                                   const exerciseNames = supersetExercises.map((ex: any) => ex.name).filter(Boolean);
@@ -903,7 +1056,7 @@ export default function WorkoutPlanDetailScreen() {
                                     </View>
                                   );
                                 }
-                                
+
                                 const name = typeof exercise === 'string' ? exercise : str(exercise.name, 'Ejercicio');
                                 return (
                                   <View key={idx} style={styles.exercisePreviewItem}>
@@ -916,9 +1069,9 @@ export default function WorkoutPlanDetailScreen() {
                           </View>
 
                           <View style={styles.viewDetailsButton}>
-                          <Text style={styles.viewDetailsText}>
-  {t('workout.viewFullDetails')}
-</Text>
+                            <Text style={styles.viewDetailsText}>
+                              {t('workout.viewFullDetails')}
+                            </Text>
                             <Ionicons name="chevron-forward" size={16} color="#ffb300" />
                           </View>
                         </TouchableOpacity>
@@ -934,8 +1087,9 @@ export default function WorkoutPlanDetailScreen() {
               const isCompleted = completedDays.has(dayKey);
 
               let dayTitle = str(day.day).trim();
-              if (!dayTitle) dayTitle = `Día ${index + 1}`;
-              if (!/^Día\s*\d+/i.test(dayTitle)) dayTitle = `Día ${index + 1}`;
+              const dayNumMatch = dayTitle.match(/\d+/);
+              const dayNum = dayNumMatch ? parseInt(dayNumMatch[0], 10) : (index + 1);
+              dayTitle = t('workout.dayName', { day: dayNum });
 
               const safeDay = {
                 day: dayTitle,
@@ -992,7 +1146,7 @@ export default function WorkoutPlanDetailScreen() {
                       {safeDay.exercises.map((exercise: WorkoutExercise, idx: number) => {
                         // Verificar si es una superserie
                         const isSuperset = typeof exercise === 'object' && (exercise as any).type === 'superset';
-                        
+
                         if (isSuperset) {
                           const supersetExercises = (exercise as any).exercises || [];
                           const exerciseNames = supersetExercises.map((ex: any) => ex.name).filter(Boolean);
@@ -1013,7 +1167,7 @@ export default function WorkoutPlanDetailScreen() {
                             </View>
                           );
                         }
-                        
+
                         const name = typeof exercise === 'string' ? exercise : str(exercise.name, 'Ejercicio');
                         return (
                           <View key={idx} style={styles.exercisePreviewItem}>
@@ -1036,14 +1190,11 @@ export default function WorkoutPlanDetailScreen() {
         </View>
 
         <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-  {t('workout.keyPrinciples')}
-</Text>
+          <Text style={styles.sectionTitle}>
+            {t('workout.keyPrinciples')}
+          </Text>
           <View style={styles.principlesContainer}>
-            {(Array.isArray(safePlanData.key_principles) && safePlanData.key_principles.length > 0 
-              ? safePlanData.key_principles 
-              : FALLBACK_PRINCIPLES
-            ).map((principle, index) => (
+            {safePlanData.key_principles.map((principle, index) => (
               <View key={index} style={styles.principleItem}>
                 <Ionicons name="bulb" size={16} color="#FFD700" />
                 <Text style={styles.principleText}>{principle}</Text>
@@ -1060,14 +1211,11 @@ export default function WorkoutPlanDetailScreen() {
         </View>
 
         <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-  {t('workout.recommendations')}
-</Text>
+          <Text style={styles.sectionTitle}>
+            {t('workout.recommendations')}
+          </Text>
           <View style={styles.recommendationsContainer}>
-            {(Array.isArray(safePlanData.recommendations) && safePlanData.recommendations.length > 0
-              ? safePlanData.recommendations
-              : FALLBACK_RECOMMENDATIONS
-            ).map((rec, index) => (
+            {safePlanData.recommendations.map((rec, index) => (
               <View key={index} style={styles.recommendationItem}>
                 <Ionicons name="star" size={16} color="#ffb300" />
                 <Text style={styles.recommendationText}>{rec}</Text>
@@ -1082,20 +1230,13 @@ export default function WorkoutPlanDetailScreen() {
             onPress={handleToggleActive}
           >
             <Ionicons name={!!plan.is_active ? 'pause-circle' : 'play-circle'} size={20} color="#ffffff" />
-            <Text style={styles.actionButtonText}>{!!plan.is_active ? 'Desactivar Plan' : 'Activar Plan'}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.deleteButton} onPress={handleDeletePlan}>
-            <Ionicons name="trash" size={20} color="#ffffff" />
-            <Text style={styles.deleteButtonText}>
-  {t('workout.deletePlan')}
-</Text>
+            <Text style={styles.actionButtonText}>{!!plan.is_active ? t('workout.deactivatePlan') : t('workout.activatePlan')}</Text>
           </TouchableOpacity>
         </View>
 
         <Text style={styles.creationDate}>
-          Creado el{' '}
-          {new Date(dateValue(plan.created_at)).toLocaleDateString('es-ES', {
+          {t('workout.createdOn')}{' '}
+          {new Date(dateValue(plan.created_at)).toLocaleDateString(t('common.locale', 'es-ES'), {
             day: 'numeric',
             month: 'long',
             year: 'numeric',
@@ -1116,7 +1257,7 @@ export default function WorkoutPlanDetailScreen() {
             t('workout.planAdaptedMessage'),
             [{ text: t('common.ok'), style: 'default' }],
           );
-          
+
         }}
         workoutPlan={plan}
         userId={user?.id || ''}
@@ -1628,7 +1769,44 @@ const styles = StyleSheet.create({
   },
   weekIndicatorSubtext: {
     fontSize: 12,
-    color: '#4CAF50',
     fontWeight: '600',
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end',
+  },
+  menuContainer: {
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+    minWidth: '100%',
+  },
+  menuHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  menuTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  menuOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 16,
+  },
+  menuOptionText: {
+    fontSize: 16,
+    color: '#fff',
   },
 });

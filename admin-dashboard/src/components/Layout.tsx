@@ -44,8 +44,7 @@ export default function Layout() {
     async function getUserRoleData() {
       if (user?.id) {
         const userEmail = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress;
-        console.log('🔍 Layout: Obteniendo rol para user_id:', user.id);
-        console.log('🔍 Layout: Email:', userEmail);
+
 
         // Obtener roles por user_id
         let { data: rolesByUserId, error } = await supabase
@@ -55,13 +54,12 @@ export default function Layout() {
           .eq('is_active', true);
 
         if (error) {
-          console.error('❌ Layout: Error obteniendo rol:', error);
+          // Silent error
         }
 
         // SIEMPRE buscar también por email para combinar roles
         let rolesByEmail: any[] = [];
         if (userEmail) {
-          console.log('🔍 Layout: Buscando también por email...');
           const emailResult = await supabase
             .from('admin_roles')
             .select('role_type, user_id')
@@ -69,13 +67,11 @@ export default function Layout() {
             .eq('is_active', true);
 
           if (emailResult.data && emailResult.data.length > 0) {
-            console.log('✅ Layout: Encontrado por email:', emailResult.data.map(r => r.role_type));
             rolesByEmail = emailResult.data;
 
             // Actualizar user_id para roles encontrados por email que tengan user_id diferente
             for (const role of emailResult.data) {
               if (role.user_id !== user.id) {
-                console.log('🔄 Layout: Actualizando user_id para rol:', role.role_type);
                 await supabase
                   .from('admin_roles')
                   .update({ user_id: user.id })
@@ -90,24 +86,17 @@ export default function Layout() {
         const allRoles = [...(rolesByUserId || []), ...rolesByEmail];
         const uniqueRoleTypes = [...new Set(allRoles.map(r => r.role_type))];
 
-        console.log('✅ Layout: TODOS los roles combinados:', uniqueRoleTypes);
-
         // Priorizar roles: admin > empresario > socio
         if (uniqueRoleTypes.length > 0) {
           if (uniqueRoleTypes.includes('admin')) {
-            console.log('✅ Layout: Rol final: admin (priorizado)');
             setUserRole('admin');
           } else if (uniqueRoleTypes.includes('empresario')) {
-            console.log('✅ Layout: Rol final: empresario');
             setUserRole('empresario');
           } else if (uniqueRoleTypes.includes('socio')) {
-            console.log('✅ Layout: Rol final: socio');
             setUserRole('socio');
           } else {
             setUserRole(uniqueRoleTypes[0] as 'admin' | 'socio' | 'empresario');
           }
-        } else {
-          console.log('⚠️ Layout: No se encontró rol para este usuario');
         }
       }
     }
@@ -115,59 +104,7 @@ export default function Layout() {
   }, [user?.id]);
 
 
-  // Log para debugging
-  React.useEffect(() => {
-    console.log('📊 Navigation State:', {
-      userRole,
-      effectiveRole,
-      isViewingAs,
-    });
-  }, [userRole, effectiveRole, isViewingAs]);
 
-  const navItems = effectiveRole === 'socio'
-    ? [
-      { path: '/', label: 'Dashboard', icon: '📊' },
-      { path: '/partner-referrals', label: 'Mis Referidos', icon: '👥' },
-      { path: '/delete-account', label: 'Eliminar Cuenta', icon: '🗑️' },
-    ]
-    : effectiveRole === 'empresario'
-      ? [
-        { path: '/empresario-dashboard', label: 'Dashboard', icon: '📊' },
-        { path: '/empresario-users', label: 'Mis Usuarios', icon: '👥' },
-        { path: '/mensajeria', label: 'Mensajería', icon: '📧' },
-        { path: '/delete-account', label: 'Eliminar Cuenta', icon: '🗑️' },
-        ...(userRole === 'admin' ? [{ path: '/admin-tools', label: 'Admin Tools', icon: '🛠️' }] : []),
-      ]
-      : (() => {
-        const items = [
-          { path: '/', label: 'Dashboard', icon: '📊' },
-          { path: '/users', label: 'Usuarios', icon: '👥' },
-          {
-            path: '/partners', label: 'Socios', icon: '🤝', subItems: [
-              { path: '/partners', label: 'Lista' },
-              { path: '/partner-payments', label: 'Pagos' },
-            ]
-          },
-          { path: '/empresarios', label: 'Empresarios', icon: '🏢' },
-          { path: '/stats', label: 'Estadísticas', icon: '📈' },
-          {
-            path: '/admin-tools', label: 'Admin Tools', icon: '🛠️', subItems: [
-              { path: '/admin-tools', label: 'Herramientas' },
-              { path: '/admin-organization', label: 'Mi Organización' },
-              { path: '/admin-messaging', label: 'Mensajería' },
-            ]
-          },
-          { path: '/delete-account', label: 'Eliminar Cuenta', icon: '🗑️' },
-        ];
-
-        // Solo admins ven Ejercicios y Alimentos
-        if (effectiveRole === 'admin') {
-          items.splice(2, 0, { path: '/exercises', label: 'Ejercicios', icon: '🏋️' });
-          items.splice(3, 0, { path: '/foods', label: 'Alimentos', icon: '🍎' });
-        }
-
-        return items;
-      })();
 
   return (
     <div className="admin-layout">
@@ -179,56 +116,152 @@ export default function Layout() {
 
 
         <nav className="sidebar-nav">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path ||
-              (item.path === '/partners' && location.pathname.startsWith('/partner')) ||
-              (item.path === '/admin-tools' && (location.pathname === '/admin-organization' || location.pathname === '/admin-messaging'));
-            const isExpanded = item.subItems && expandedSections.has(item.path);
+          {/* GRUPO PRINCIPAL */}
+          <div className="nav-group">
+            <p className="nav-group-title">GENERAL</p>
+            {(effectiveRole === 'empresario' ? [
+              { path: '/empresario-dashboard', label: 'Dashboard', icon: '📊' }
+            ] : [
+              { path: '/', label: 'Dashboard', icon: '📊' }
+            ]).map(item => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
+              >
+                <span className="nav-icon">{item.icon}</span>
+                <span className="nav-label">{item.label}</span>
+              </Link>
+            ))}
+          </div>
 
-            return (
-              <div key={item.path}>
-                {item.subItems ? (
-                  <div
-                    onClick={() => toggleSection(item.path)}
-                    className={`nav-item ${isActive ? 'active' : ''} has-subitems`}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <span className="nav-icon">{item.icon}</span>
-                    <span className="nav-label">{item.label}</span>
-                    <span className="nav-arrow" style={{ marginLeft: 'auto', fontSize: '10px' }}>
-                      {isExpanded ? '▼' : '▶'}
-                    </span>
-                  </div>
-                ) : (
-                  <Link
-                    to={item.path}
-                    className={`nav-item ${isActive ? 'active' : ''}`}
-                  >
-                    <span className="nav-icon">{item.icon}</span>
-                    <span className="nav-label">{item.label}</span>
-                  </Link>
-                )}
-                {isExpanded && item.subItems && (
-                  <div className="sub-nav">
-                    {item.subItems.map((subItem) => {
-                      const isSubActive = location.pathname === subItem.path ||
-                        (subItem.path === '/partner-payments' && location.pathname.startsWith('/partner-payments'));
+          {/* GRUPO ADMINISTRACIÓN (Solo Admins) */}
+          {(effectiveRole === 'admin' || (effectiveRole !== 'socio' && effectiveRole !== 'empresario')) && (
+            <div className="nav-group">
+              <p className="nav-group-title">ADMINISTRACIÓN</p>
+              {[
+                { path: '/users', label: 'Usuarios', icon: '👥' },
+                {
+                  path: '/partners', label: 'Socios', icon: '🤝', subItems: [
+                    { path: '/partners', label: 'Lista de Socios' },
+                    { path: '/partner-payments', label: 'Gestión de Pagos' },
+                  ]
+                },
+                { path: '/empresarios', label: 'Empresarios', icon: '🏢' },
+                { path: '/exercises', label: 'Ejercicios', icon: '🏋️' },
+                { path: '/foods', label: 'Alimentos', icon: '🍎' },
+                {
+                  path: '/admin-tools', label: 'Herramientas', icon: '🛠️', subItems: [
+                    { path: '/admin-tools', label: 'General' },
+                    { path: '/admin-organization', label: 'Mi Organización' },
+                    { path: '/admin-messaging', label: 'Mensajería' },
+                  ]
+                },
+                { path: '/stats', label: 'Estadísticas', icon: '📈' },
+              ].map((item) => {
+                const isActive = location.pathname === item.path ||
+                  (item.path === '/partners' && (location.pathname === '/partners' || (location.pathname.startsWith('/partner-payments') && !location.pathname.includes('my-earnings')))) ||
+                  (item.path === '/admin-tools' && (location.pathname === '/admin-organization' || location.pathname === '/admin-messaging'));
+                const isExpanded = item.subItems && expandedSections.has(item.path);
 
-                      return (
-                        <Link
-                          key={subItem.path}
-                          to={subItem.path}
-                          className={`sub-nav-item ${isSubActive ? 'active' : ''}`}
-                        >
-                          {subItem.label}
-                        </Link>
-                      );
-                    })}
+                return (
+                  <div key={item.path}>
+                    {item.subItems ? (
+                      <div
+                        onClick={() => toggleSection(item.path)}
+                        className={`nav-item ${isActive ? 'active' : ''} has-subitems`}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <span className="nav-icon">{item.icon}</span>
+                        <span className="nav-label">{item.label}</span>
+                        <span className="nav-arrow" style={{ marginLeft: 'auto', fontSize: '10px' }}>
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
+                      </div>
+                    ) : (
+                      <Link
+                        to={item.path}
+                        className={`nav-item ${isActive ? 'active' : ''}`}
+                      >
+                        <span className="nav-icon">{item.icon}</span>
+                        <span className="nav-label">{item.label}</span>
+                      </Link>
+                    )}
+                    {isExpanded && item.subItems && (
+                      <div className="sub-nav">
+                        {item.subItems.map((subItem) => {
+                          const isSubActive = location.pathname === subItem.path ||
+                            (subItem.path === '/partner-payments' && location.pathname.startsWith('/partner-payments') && !location.pathname.includes('my-earnings'));
+
+                          return (
+                            <Link
+                              key={subItem.path}
+                              to={subItem.path}
+                              className={`sub-nav-item ${isSubActive ? 'active' : ''}`}
+                            >
+                              {subItem.label}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
+
+          {/* GRUPO MI NEGOCIO (Socios y Admins) */}
+          {(effectiveRole === 'socio' || effectiveRole === 'admin') && (
+            <div className="nav-group">
+              <p className="nav-group-title">MI NEGOCIO</p>
+              {[
+                { path: '/partner-referrals', label: 'Mis Ventas', icon: '📈' },
+                { path: '/my-earnings', label: 'Mis Finanzas', icon: '💰' },
+              ].map(item => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-label">{item.label}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+
+          {/* GRUPO EMPRESARIO (Solo Empresarios) */}
+          {effectiveRole === 'empresario' && (
+            <div className="nav-group">
+              <p className="nav-group-title">MI GIMNASIO</p>
+              {[
+                { path: '/empresario-users', label: 'Mis Usuarios', icon: '👥' },
+                { path: '/mensajeria', label: 'Mensajería', icon: '📧' },
+              ].map(item => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-label">{item.label}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+
+          {/* GRUPO CUENTA */}
+          <div className="nav-group" style={{ marginTop: 'auto' }}>
+            <p className="nav-group-title">CUENTA</p>
+            <Link
+              to="/delete-account"
+              className={`nav-item ${location.pathname === '/delete-account' ? 'active' : ''}`}
+            >
+              <span className="nav-icon">🗑️</span>
+              <span className="nav-label">Eliminar Cuenta</span>
+            </Link>
+          </div>
         </nav>
 
         <div className="sidebar-footer">
@@ -254,7 +287,7 @@ export default function Layout() {
       <main className="main-content">
         <Outlet />
       </main>
-    </div>
+    </div >
   );
 }
 

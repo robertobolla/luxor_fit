@@ -20,9 +20,9 @@ import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
 import { SkeletonWorkout } from '@/components/SkeletonLoaders';
 import { PlanExpirationModal } from '@/components/PlanExpirationModal';
-import { 
-  getPendingTrainerInvitations, 
-  respondToTrainerInvitation 
+import {
+  getPendingTrainerInvitations,
+  respondToTrainerInvitation
 } from '../../src/services/trainerService';
 import { useTutorial } from '@/contexts/TutorialContext';
 import { HelpModal } from '@/components/HelpModal';
@@ -31,12 +31,12 @@ import { TutorialTooltip } from '@/components/TutorialTooltip';
 export default function WorkoutScreen() {
   const { t } = useTranslation();
   const { user } = useUser();
-  const { 
-    workouts, 
-    sessions, 
-    loadWorkouts, 
-    loadSessions, 
-    isLoading: isLoadingStore 
+  const {
+    workouts,
+    sessions,
+    loadWorkouts,
+    loadSessions,
+    isLoading: isLoadingStore
   } = useWorkoutStore();
   const { isLoading: isLoadingPlans, setLoading: setLoadingPlans } = useLoadingState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,13 +49,13 @@ export default function WorkoutScreen() {
   const [expiredPlan, setExpiredPlan] = useState<any | null>(null);
 
   // Tutorial states
-  const { 
-    showHelpModal, 
-    setShowHelpModal, 
+  const {
+    showHelpModal,
+    setShowHelpModal,
     hasCompletedTutorial,
     shouldShowTooltip,
     completeTutorial,
-    markTooltipShown 
+    markTooltipShown
   } = useTutorial();
   const [showWorkoutTooltips, setShowWorkoutTooltips] = useState(false);
 
@@ -71,13 +71,13 @@ export default function WorkoutScreen() {
   const tutorialShownRef = React.useRef(false);
   useEffect(() => {
     const shouldShow = shouldShowTooltip('WORKOUT');
-    
+
     // Si el tutorial debe mostrarse y el ref dice que ya se mostró,
     // significa que el usuario lo reseteó, así que reseteamos el ref
     if (shouldShow && tutorialShownRef.current) {
       tutorialShownRef.current = false;
     }
-    
+
     if (!tutorialShownRef.current && shouldShow && user?.id && !isLoadingPlans) {
       tutorialShownRef.current = true;
       const timer = setTimeout(() => {
@@ -95,7 +95,7 @@ export default function WorkoutScreen() {
       loadWorkouts();
       loadSessions();
       loadTrainerInvitations();
-      
+
       // Al salir de la pantalla, cerrar el tutorial si está abierto
       return () => {
         if (showWorkoutTooltips) {
@@ -124,7 +124,7 @@ export default function WorkoutScreen() {
       }
 
       setWorkoutPlans(data || []);
-      
+
       // Verificar si el plan activo ha expirado
       checkForExpiredPlan(data || []);
     } catch (err) {
@@ -145,7 +145,7 @@ export default function WorkoutScreen() {
     // Obtener duration_weeks (puede haber sido editado)
     // Si el plan se editó y se cambió la duración, este valor reflejará el cambio
     const durationWeeks = activePlan.duration_weeks || activePlan.plan_data?.duration_weeks || 1;
-    
+
     console.log(`📅 Verificando expiración de plan "${activePlan.plan_name}"`);
     console.log(`   - Duración del plan: ${durationWeeks} ${durationWeeks === 1 ? 'semana' : 'semanas'}`);
     console.log(`   - Activado: ${new Date(activePlan.activated_at).toLocaleDateString('es-ES')}`);
@@ -154,19 +154,19 @@ export default function WorkoutScreen() {
     // Las semanas vencen los domingos a la noche (a partir del lunes 00:00)
     const activatedDate = new Date(activePlan.activated_at);
     const now = new Date();
-    
+
     // Obtener el lunes de la semana cuando se activó
     const activatedMonday = getMondayOfWeek(activatedDate);
-    
+
     // Obtener el lunes de la semana actual
     const currentMonday = getMondayOfWeek(now);
-    
+
     // Calcular cuántas semanas han pasado desde la activación
     const weeksPassed = Math.floor((currentMonday.getTime() - activatedMonday.getTime()) / (7 * 24 * 60 * 60 * 1000));
-    
+
     console.log(`   - Semanas transcurridas: ${weeksPassed}`);
     console.log(`   - Estado: ${weeksPassed >= durationWeeks ? '❌ EXPIRADO' : '✅ ACTIVO'}`);
-    
+
     // Si han pasado duration_weeks o más, el plan ha expirado
     // Ejemplo: Plan de 3 semanas → se muestra modal al inicio de la semana 4 (weeksPassed >= 3)
     // Ejemplo: Plan de 1 semana → se muestra modal al inicio de la semana 2 (weeksPassed >= 1)
@@ -206,12 +206,12 @@ export default function WorkoutScreen() {
         Alert.alert(t('common.error'), t('workout.errorReactivatingPlan'));
         return;
       }
-      
+
       // Cerrar modal y recargar planes
       setShowExpirationModal(false);
       setExpiredPlan(null);
       await loadWorkoutPlans();
-      
+
       Alert.alert(
         '✅ Plan Reactivado',
         `El plan "${expiredPlan.plan_name}" ha sido reactivado. ¡Comienza una nueva semana!`
@@ -226,7 +226,7 @@ export default function WorkoutScreen() {
     // Cerrar el modal
     setShowExpirationModal(false);
     setExpiredPlan(null);
-    
+
     // La pantalla actual ya muestra todos los planes disponibles
     // El usuario puede seleccionar otro plan directamente
   };
@@ -241,7 +241,7 @@ export default function WorkoutScreen() {
     try {
       const result = await getPendingTrainerInvitations(user.id);
       console.log('📊 Resultado de getPendingTrainerInvitations:', result);
-      
+
       if (result.success && result.data) {
         console.log('📬 Invitaciones encontradas:', result.data.length);
         if (result.data.length > 0) {
@@ -266,7 +266,7 @@ export default function WorkoutScreen() {
     setIsRespondingInvitation(true);
     try {
       const result = await respondToTrainerInvitation(user.id, invitationId, accept);
-      
+
       if (result.success) {
         Alert.alert(
           accept ? '✅ Invitación Aceptada' : '❌ Invitación Rechazada',
@@ -275,10 +275,10 @@ export default function WorkoutScreen() {
             : `Has rechazado la invitación de ${trainerName}.`,
           [{ text: 'OK' }]
         );
-        
+
         // Remover la invitación de la lista
         setTrainerInvitations(prev => prev.filter(inv => inv.id !== invitationId));
-        
+
         // Si no quedan más invitaciones, cerrar el modal
         if (trainerInvitations.length <= 1) {
           setShowInvitationsModal(false);
@@ -298,7 +298,7 @@ export default function WorkoutScreen() {
 
     try {
       console.log('🔄 Activando plan:', { userId: user.id, planId });
-      
+
       // Activación atómica vía RPC (desactiva otros y activa este)
       const { data, error: rpcError } = await supabase.rpc('activate_workout_plan', {
         p_user_id: user.id,
@@ -320,12 +320,12 @@ export default function WorkoutScreen() {
         );
         return;
       }
-      
+
       console.log('✅ Plan activado correctamente');
-      
+
       // Recargar la lista de planes para mostrar el estado actualizado
       await loadWorkoutPlans();
-      
+
     } catch (err: any) {
       console.error('❌ Error inesperado activating workout plan:', err);
       Alert.alert(t('common.error'), `${t('workout.couldNotActivatePlan')}: ${err?.message || t('errors.unknownError')}`);
@@ -359,283 +359,285 @@ export default function WorkoutScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-      <View style={styles.headerContainer}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>{t('tabs.train')}</Text>
-        </View>
-        {/* Botón de ayuda */}
-        <TouchableOpacity
-          onPress={() => {
-            // Si el tutorial está trabado, cerrarlo primero
-            if (showWorkoutTooltips) {
-              setShowWorkoutTooltips(false);
-            } else {
-              setShowHelpModal(true);
-            }
-          }}
-          style={styles.helpButtonAbsolute}
-        >
-          <Ionicons name="help-circle-outline" size={28} color="#ffb300" />
-        </TouchableOpacity>
-        <View style={styles.buttonsRow}>
+        <View style={styles.headerContainer}>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>{t('tabs.train')}</Text>
+          </View>
+          {/* Botón de ayuda */}
           <TouchableOpacity
-            style={styles.generateButton}
-            onPress={() => setShowSelectionModal(true)}
+            onPress={() => {
+              // Si el tutorial está trabado, cerrarlo primero
+              if (showWorkoutTooltips) {
+                setShowWorkoutTooltips(false);
+              } else {
+                setShowHelpModal(true);
+              }
+            }}
+            style={styles.helpButtonAbsolute}
           >
-            <Ionicons name="add" size={20} color="#1a1a1a" />
-            <Text style={styles.generateButtonText}>{t('workout.createWorkout')}</Text>
+            <Ionicons name="help-circle-outline" size={28} color="#ffb300" />
           </TouchableOpacity>
+          <View style={styles.buttonsRow}>
+            <TouchableOpacity
+              style={styles.generateButton}
+              onPress={() => setShowSelectionModal(true)}
+            >
+              <Ionicons name="add" size={20} color="#1a1a1a" />
+              <Text style={styles.generateButtonText}>{t('workout.createWorkout')}</Text>
+            </TouchableOpacity>
 
-          {/* Botón Modo Entrenador */}
-          <TouchableOpacity
-            style={styles.trainerModeButton}
-            onPress={() => router.push('/trainer-mode' as any)}
-          >
-            <Ionicons name="people" size={20} color="#ffffff" />
-            <Text style={styles.trainerModeButtonText}>{t('workout.trainerMode')}</Text>
-          </TouchableOpacity>
+            {/* Botón Modo Entrenador */}
+            <TouchableOpacity
+              style={styles.trainerModeButton}
+              onPress={() => router.push('/trainer-mode' as any)}
+            >
+              <Ionicons name="people" size={20} color="#ffffff" />
+              <Text style={styles.trainerModeButtonText}>{t('workout.trainerMode')}</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
 
-      {/* Planes de Entrenamiento Generados */}
-      {isLoadingPlans ? (
-        <SkeletonWorkout />
-      ) : workoutPlans.length > 0 ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('workout.myWorkoutPlans')}</Text>
-          {workoutPlans.map((plan) => {
-            const planData = plan.plan_data;
-            
-            // Verificar si es un plan personalizado (no de IA)
-            const isCustomPlan = plan.description?.toLowerCase().includes('plan personalizado') || false;
-            
-            // Verificar si el plan está completo (todos los días tienen ejercicios)
-            const totalDays = planData.days_per_week;
-            const weeklyStructure = planData.weekly_structure || [];
-            const completedDays = weeklyStructure.filter((day: any) => 
-              day.exercises && day.exercises.length > 0
-            ).length;
-            // Solo considerar parcial si es un plan personalizado Y está incompleto
-            const isPartialPlan = isCustomPlan && completedDays < totalDays && completedDays > 0;
-            
-            return (
-              <View key={plan.id} style={styles.planCard}>
-                <View style={styles.planHeader}>
-                  <View style={styles.planTitleContainer}>
-                    <Ionicons name="fitness" size={24} color="#ffb300" />
-                    <Text style={styles.planName}>{plan.plan_name}</Text>
-                  </View>
-                  <View style={styles.badgesContainer}>
-                    {plan.is_active && (
-                      <View style={styles.activeBadge}>
-                        <Text style={styles.activeBadgeText}>{t('workout.activePlan')}</Text>
-                      </View>
-                    )}
-                    {isPartialPlan && (
-                      <View style={styles.draftBadge}>
-                        <Ionicons name="create-outline" size={10} color="#1a1a1a" />
-                        <Text style={styles.draftBadgeText}>{t('common.draft')}</Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-                
-                <Text style={styles.planDescription}>{plan.description}</Text>
-                
-                {isPartialPlan && (
-                  <View style={styles.progressInfo}>
-                    <Ionicons name="information-circle-outline" size={14} color="#ff9800" />
-                    <Text style={styles.progressText}>
-                      {t('workout.daysCompleted', { completed: completedDays, total: totalDays })}
-                    </Text>
-                  </View>
-                )}
-                
-                <View style={styles.planStats}>
-                  <View style={styles.stat}>
-                    <Ionicons name="calendar" size={16} color="#ffb300" />
-                    <Text style={styles.statText}>{planData.duration_weeks} {t('common.weeks')}</Text>
-                  </View>
-                  <View style={styles.stat}>
-                    <Ionicons name="fitness-outline" size={16} color="#ffb300" />
-                    <Text style={styles.statText}>{planData.days_per_week} {t('common.daysPerWeek')}</Text>
-                  </View>
-                  {!plan.description?.toLowerCase().includes('plan personalizado') && (
-                    <View style={styles.stat}>
-                      <Ionicons name="time-outline" size={16} color="#ffb300" />
-                      <Text style={styles.statText}>{planData.weekly_structure?.[0]?.duration || 45} min</Text>
+        {/* Planes de Entrenamiento Generados */}
+        {isLoadingPlans ? (
+          <SkeletonWorkout />
+        ) : workoutPlans.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('workout.myWorkoutPlans')}</Text>
+            {workoutPlans.map((plan) => {
+              const planData = plan.plan_data;
+
+              // Verificar si es un plan personalizado (no de IA)
+              const isCustomPlan = plan.description?.toLowerCase().includes('plan personalizado') || false;
+
+              // Verificar si el plan está completo (todos los días tienen ejercicios)
+              const totalDays = planData.days_per_week;
+              const weeklyStructure = planData.weekly_structure || [];
+              const completedDays = weeklyStructure.filter((day: any) =>
+                day.exercises && day.exercises.length > 0
+              ).length;
+              // Solo considerar parcial si es un plan personalizado Y está incompleto
+              const isPartialPlan = isCustomPlan && completedDays < totalDays && completedDays > 0;
+
+              return (
+                <View key={plan.id} style={styles.planCard}>
+                  <View style={styles.planHeader}>
+                    <View style={styles.planTitleContainer}>
+                      <Ionicons name="fitness" size={24} color="#ffb300" />
+                      <Text style={styles.planName}>{plan.plan_name}</Text>
                     </View>
-                  )}
-                  {plan.times_repeated > 0 && (
-                    <View style={styles.stat}>
-                      <Ionicons name="refresh" size={16} color="#4CAF50" />
-                      <Text style={[styles.statText, { color: '#4CAF50' }]}>
-                        {plan.times_repeated} {plan.times_repeated === 1 ? 'repetición' : 'repeticiones'}
+                    <View style={styles.badgesContainer}>
+                      {plan.is_active && (
+                        <View style={styles.activeBadge}>
+                          <Text style={styles.activeBadgeText}>{t('workout.activePlan')}</Text>
+                        </View>
+                      )}
+                      {isPartialPlan && (
+                        <View style={styles.draftBadge}>
+                          <Ionicons name="create-outline" size={10} color="#1a1a1a" />
+                          <Text style={styles.draftBadgeText}>{t('common.draft')}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+
+                  <Text style={styles.planDescription}>{plan.description}</Text>
+
+                  {isPartialPlan && (
+                    <View style={styles.progressInfo}>
+                      <Ionicons name="information-circle-outline" size={14} color="#ff9800" />
+                      <Text style={styles.progressText}>
+                        {t('workout.daysCompleted', { completed: completedDays, total: totalDays })}
                       </Text>
                     </View>
                   )}
-                </View>
 
-                <View style={styles.planActions}>
-                  {isPartialPlan && (
+                  <View style={styles.planStats}>
+                    <View style={styles.stat}>
+                      <Ionicons name="calendar" size={16} color="#ffb300" />
+                      <Text style={styles.statText}>{planData.duration_weeks} {t('common.weeks')}</Text>
+                    </View>
+                    <View style={styles.stat}>
+                      <Ionicons name="fitness-outline" size={16} color="#ffb300" />
+                      <Text style={styles.statText}>{planData.days_per_week} {t('common.daysPerWeek')}</Text>
+                    </View>
+                    {!plan.description?.toLowerCase().includes('plan personalizado') && (
+                      <View style={styles.stat}>
+                        <Ionicons name="time-outline" size={16} color="#ffb300" />
+                        <Text style={styles.statText}>{planData.weekly_structure?.[0]?.duration || 45} min</Text>
+                      </View>
+                    )}
+                    {plan.times_repeated > 0 && (
+                      <View style={styles.stat}>
+                        <Ionicons name="refresh" size={16} color="#4CAF50" />
+                        <Text style={[styles.statText, { color: '#4CAF50' }]}>
+                          {plan.times_repeated} {plan.times_repeated === 1 ? 'repetición' : 'repeticiones'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.planActions}>
+                    {isPartialPlan && (
+                      <TouchableOpacity
+                        style={styles.continueEditButton}
+                        onPress={() => router.push({
+                          pathname: '/(tabs)/workout/custom-plan-days',
+                          params: {
+                            planId: plan.id,
+                            daysPerWeek: totalDays,
+                            equipment: JSON.stringify(planData.equipment || []),
+                          }
+                        } as any)}
+                      >
+                        <Ionicons name="create-outline" size={16} color="#1a1a1a" />
+                        <Text style={styles.continueEditButtonText}>{t('workout.continueEditing')}</Text>
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity
-                      style={styles.continueEditButton}
-                      onPress={() => router.push({
-                        pathname: '/(tabs)/workout/custom-plan-days',
-                        params: {
-                          planId: plan.id,
-                          daysPerWeek: totalDays,
-                          equipment: JSON.stringify(planData.equipment || []),
-                        }
-                      } as any)}
+                      style={[styles.viewPlanButton, isPartialPlan && styles.viewPlanButtonSecondary]}
+                      onPress={() => router.push(`/(tabs)/workout-plan-detail?planId=${plan.id}` as any)}
                     >
-                      <Ionicons name="create-outline" size={16} color="#1a1a1a" />
-                      <Text style={styles.continueEditButtonText}>{t('workout.continueEditing')}</Text>
+                      <Ionicons name="eye" size={16} color={isPartialPlan ? "#ffb300" : "#ffffff"} />
+                      <Text style={[styles.viewPlanButtonText, isPartialPlan && styles.viewPlanButtonTextSecondary]}>
+                        {t('workout.viewPlan')}
+                      </Text>
                     </TouchableOpacity>
+
+
+                  </View>
+
+                  <Text style={styles.planDate}>
+                    {t('workout.created')} {new Date(plan.created_at).toLocaleDateString('es-ES')}
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {/* Entrenamientos del Store */}
+        {workouts.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>🏋️ {t('workout.workoutTitle')}</Text>
+            {workouts.map((workout) => {
+              const difficulty = getWorkoutDifficulty(workout.difficulty);
+              const type = getWorkoutType(workout);
+
+              return (
+                <TouchableOpacity
+                  key={workout.id}
+                  style={styles.workoutCard}
+                  onPress={() => router.push(`/workout-details/${workout.id}`)}
+                >
+                  <View style={styles.workoutHeader}>
+                    <Text style={styles.workoutName}>{workout.name}</Text>
+                    <View style={[styles.difficultyBadge, { backgroundColor: difficulty.color }]}>
+                      <Text style={styles.difficultyText}>{difficulty.text}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.workoutDescription}>{workout.description}</Text>
+
+                  <View style={styles.workoutStats}>
+                    <View style={styles.stat}>
+                      <Ionicons name="time-outline" size={16} color="#ffb300" />
+                      <Text style={styles.statText}>{workout.duration_minutes} min</Text>
+                    </View>
+                    <View style={styles.stat}>
+                      <Ionicons name="fitness-outline" size={16} color="#ffb300" />
+                      <Text style={styles.statText}>{workout.workout_exercises?.length || 0} {t('workout.exercises')}</Text>
+                    </View>
+                    <View style={styles.stat}>
+                      <Ionicons name="trending-up-outline" size={16} color="#ffb300" />
+                      <Text style={styles.statText}>{type}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.workoutActions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.startButton,
+                        workout.is_active && styles.activePlanButton
+                      ]}
+                      onPress={() => {
+                        if (workout.is_active) {
+                          router.push(`/workout-active/${workout.id}`);
+                        } else {
+                          activateWorkoutPlan(workout.id);
+                        }
+                      }}
+                    >
+                      <Ionicons
+                        name={workout.is_active ? "checkmark" : "play"}
+                        size={16}
+                        color={workout.is_active ? "#ffffff" : "#1a1a1a"}
+                      />
+                      <Text style={[
+                        styles.startButtonText,
+                        workout.is_active && styles.activePlanButtonText
+                      ]}>
+                        {workout.is_active ? t('workout.active') : t('workout.activate')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.detailsButton}
+                      onPress={() => router.push(`/workout-details/${workout.id}`)}
+                    >
+                      <Ionicons name="eye" size={16} color="#ffb300" />
+                      <Text style={styles.detailsButtonText}>{t('workout.details')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {/* Empty State - Solo si no hay planes ni entrenamientos */}
+        {workoutPlans.length === 0 && workouts.length === 0 && !isLoadingPlans && (
+          <View style={styles.emptyState}>
+            <Ionicons name="fitness-outline" size={64} color="#666" />
+            <Text style={styles.emptyTitle}>{t('workout.noWorkouts')}</Text>
+            <Text style={styles.emptyDescription}>
+              {t('workout.noWorkoutsDesc')}
+            </Text>
+            <TouchableOpacity
+              style={styles.createButton}
+              onPress={() => setShowSelectionModal(true)}
+            >
+              <Text style={styles.createButtonText}>{t('workout.createWorkoutPlan')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {sessions.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('workout.recentSessions')}</Text>
+            {sessions.slice(0, 3).map((session) => (
+              <View key={session.id} style={styles.sessionCard}>
+                <View style={styles.sessionInfo}>
+                  <Text style={styles.sessionName}>{session.workout.name}</Text>
+                  <Text style={styles.sessionDate}>
+                    {new Date(session.started_at).toLocaleDateString('es-ES', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </Text>
+                </View>
+                <View style={styles.sessionStatus}>
+                  {session.completed_at ? (
+                    <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
+                  ) : (
+                    <Ionicons name="time" size={24} color="#FF9800" />
                   )}
-                  <TouchableOpacity
-                    style={[styles.viewPlanButton, isPartialPlan && styles.viewPlanButtonSecondary]}
-                    onPress={() => router.push(`/(tabs)/workout-plan-detail?planId=${plan.id}` as any)}
-                  >
-                    <Ionicons name="eye" size={16} color={isPartialPlan ? "#ffb300" : "#ffffff"} />
-                    <Text style={[styles.viewPlanButtonText, isPartialPlan && styles.viewPlanButtonTextSecondary]}>
-                      {t('workout.viewPlan')}
-                    </Text>
-                  </TouchableOpacity>
                 </View>
-
-                <Text style={styles.planDate}>
-                  {t('workout.created')} {new Date(plan.created_at).toLocaleDateString('es-ES')}
-                </Text>
               </View>
-            );
-          })}
-        </View>
-      ) : null}
-
-      {/* Entrenamientos del Store */}
-      {workouts.length > 0 ? (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🏋️ {t('workout.workoutTitle')}</Text>
-          {workouts.map((workout) => {
-            const difficulty = getWorkoutDifficulty(workout.difficulty);
-            const type = getWorkoutType(workout);
-            
-            return (
-              <TouchableOpacity
-                key={workout.id}
-                style={styles.workoutCard}
-                onPress={() => router.push(`/workout-details/${workout.id}`)}
-              >
-                <View style={styles.workoutHeader}>
-                  <Text style={styles.workoutName}>{workout.name}</Text>
-                  <View style={[styles.difficultyBadge, { backgroundColor: difficulty.color }]}>
-                    <Text style={styles.difficultyText}>{difficulty.text}</Text>
-                  </View>
-                </View>
-                
-                <Text style={styles.workoutDescription}>{workout.description}</Text>
-                
-                <View style={styles.workoutStats}>
-                  <View style={styles.stat}>
-                    <Ionicons name="time-outline" size={16} color="#ffb300" />
-                    <Text style={styles.statText}>{workout.duration_minutes} min</Text>
-                  </View>
-                  <View style={styles.stat}>
-                    <Ionicons name="fitness-outline" size={16} color="#ffb300" />
-                    <Text style={styles.statText}>{workout.workout_exercises?.length || 0} {t('workout.exercises')}</Text>
-                  </View>
-                  <View style={styles.stat}>
-                    <Ionicons name="trending-up-outline" size={16} color="#ffb300" />
-                    <Text style={styles.statText}>{type}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.workoutActions}>
-                  <TouchableOpacity
-                    style={[
-                      styles.startButton,
-                      workout.is_active && styles.activePlanButton
-                    ]}
-                    onPress={() => {
-                      if (workout.is_active) {
-                        router.push(`/workout-active/${workout.id}`);
-                      } else {
-                        activateWorkoutPlan(workout.id);
-                      }
-                    }}
-                  >
-                    <Ionicons 
-                      name={workout.is_active ? "checkmark" : "play"} 
-                      size={16} 
-                      color={workout.is_active ? "#ffffff" : "#1a1a1a"} 
-                    />
-                    <Text style={[
-                      styles.startButtonText,
-                      workout.is_active && styles.activePlanButtonText
-                    ]}>
-                      {workout.is_active ? t('workout.active') : t('workout.activate')}
-                    </Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={styles.detailsButton}
-                    onPress={() => router.push(`/workout-details/${workout.id}`)}
-                  >
-                    <Ionicons name="eye" size={16} color="#ffb300" />
-                    <Text style={styles.detailsButtonText}>{t('workout.details')}</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      ) : null}
-
-      {/* Empty State - Solo si no hay planes ni entrenamientos */}
-      {workoutPlans.length === 0 && workouts.length === 0 && !isLoadingPlans && (
-        <View style={styles.emptyState}>
-          <Ionicons name="fitness-outline" size={64} color="#666" />
-          <Text style={styles.emptyTitle}>{t('workout.noWorkouts')}</Text>
-          <Text style={styles.emptyDescription}>
-            {t('workout.noWorkoutsDesc')}
-          </Text>
-          <TouchableOpacity
-            style={styles.createButton}
-            onPress={() => setShowSelectionModal(true)}
-          >
-            <Text style={styles.createButtonText}>{t('workout.createWorkoutPlan')}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {sessions.length > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('workout.recentSessions')}</Text>
-          {sessions.slice(0, 3).map((session) => (
-            <View key={session.id} style={styles.sessionCard}>
-              <View style={styles.sessionInfo}>
-                <Text style={styles.sessionName}>{session.workout.name}</Text>
-                <Text style={styles.sessionDate}>
-                  {new Date(session.started_at).toLocaleDateString('es-ES', {
-                    day: 'numeric',
-                    month: 'short',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                </Text>
-              </View>
-              <View style={styles.sessionStatus}>
-                {session.completed_at ? (
-                  <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
-                ) : (
-                  <Ionicons name="time" size={24} color="#FF9800" />
-                )}
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {/* Modal de selección de tipo de plan */}
@@ -655,7 +657,7 @@ export default function WorkoutScreen() {
               <Text style={styles.modalSubtitle}>
                 {t('workout.selectPlanDesc')}
               </Text>
-              
+
               <TouchableOpacity
                 style={[styles.selectionOption, styles.selectionOptionPrimary]}
                 onPress={() => {
@@ -720,7 +722,7 @@ export default function WorkoutScreen() {
         onRequestClose={() => setShowInvitationsModal(false)}
       >
         <View style={styles.invitationsModalOverlay}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.invitationsModalBackdrop}
             activeOpacity={1}
             onPress={() => setShowInvitationsModal(false)}
@@ -734,20 +736,20 @@ export default function WorkoutScreen() {
                 </View>
               </View>
               <Text style={styles.invitationsMainTitle}>
-                {trainerInvitations.length === 1 
-                  ? t('workout.newInvitation') 
+                {trainerInvitations.length === 1
+                  ? t('workout.newInvitation')
                   : t('workout.newInvitations', { count: trainerInvitations.length })}
               </Text>
               <Text style={styles.invitationsSubtitle}>
-                {trainerInvitations.length === 1 
-                  ? t('workout.pendingInvitationSingular') 
+                {trainerInvitations.length === 1
+                  ? t('workout.pendingInvitationSingular')
                   : t('workout.pendingInvitationPlural')}
               </Text>
             </View>
 
             {/* Lista de Invitaciones */}
-            <ScrollView 
-              style={styles.invitationsList} 
+            <ScrollView
+              style={styles.invitationsList}
               contentContainerStyle={styles.invitationsListContent}
               showsVerticalScrollIndicator={false}
             >
@@ -832,9 +834,9 @@ export default function WorkoutScreen() {
               onPress={() => setShowInvitationsModal(false)}
               activeOpacity={0.8}
             >
-<Text style={styles.invitationsCloseButtonText}>
-  {t('common.reviewLater')}
-</Text>
+              <Text style={styles.invitationsCloseButtonText}>
+                {t('common.reviewLater')}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -861,64 +863,64 @@ export default function WorkoutScreen() {
       <TutorialTooltip
         visible={showWorkoutTooltips}
         steps={[
-            {
-              element: <View />,
-              title: t('tutorial.workout.title1'),
-              content: t('tutorial.workout.content1'),
-              placement: 'center',
+          {
+            element: <View />,
+            title: t('tutorial.workout.title1'),
+            content: t('tutorial.workout.content1'),
+            placement: 'center',
+          },
+          {
+            element: <View />,
+            title: t('tutorial.workout.title2'),
+            content: t('tutorial.workout.content2'),
+            placement: 'center',
+            // Spotlight sobre el botón "Crear Entrenamiento"
+            spotlightPosition: {
+              x: 15,
+              y: 110,
+              width: 180,
+              height: 51,
+              borderRadius: 8,
             },
-            {
-              element: <View />,
-              title: t('tutorial.workout.title2'),
-              content: t('tutorial.workout.content2'),
-              placement: 'center',
-              // Spotlight sobre el botón "Crear Entrenamiento"
-              spotlightPosition: {
-                x: 15,
-                y: 110,
-                width: 180,
-                height: 51,
-                borderRadius: 8,
-              },
+          },
+          {
+            element: <View />,
+            title: t('tutorial.workout.title3'),
+            content: t('tutorial.workout.content3'),
+            placement: 'center',
+            // Spotlight sobre el botón "Modo Entrenador"
+            spotlightPosition: {
+              x: 198,
+              y: 110,
+              width: 180,
+              height: 51,
+              borderRadius: 8,
             },
-            {
-              element: <View />,
-              title: t('tutorial.workout.title3'),
-              content: t('tutorial.workout.content3'),
-              placement: 'center',
-              // Spotlight sobre el botón "Modo Entrenador"
-              spotlightPosition: {
-                x: 198,
-                y: 110,
-                width: 180,
-                height: 51,
-                borderRadius: 8,
-              },
-            },
-            {
-              element: <View />,
-              title: t('tutorial.workout.title4'),
-              content: t('tutorial.workout.content4'),
-              placement: 'center',
-            },
-          ]}
-          onComplete={() => {
-            // Primero cerrar el modal, luego actualizar el contexto
-            setShowWorkoutTooltips(false);
-            setTimeout(() => {
-              completeTutorial('WORKOUT');
-              markTooltipShown('WORKOUT');
-            }, 100);
-          }}
-          onSkip={() => {
-            // Primero cerrar el modal, luego actualizar el contexto
-            setShowWorkoutTooltips(false);
-            setTimeout(() => {
-              completeTutorial('WORKOUT');
-              markTooltipShown('WORKOUT');
-            }, 100);
-          }}
-        />
+          },
+          {
+            element: <View />,
+            title: t('tutorial.workout.title4'),
+            content: t('tutorial.workout.content4'),
+            placement: 'center',
+          },
+        ]}
+        onComplete={() => {
+          // Primero cerrar el modal, luego actualizar el contexto
+          setShowWorkoutTooltips(false);
+          setTimeout(() => {
+            completeTutorial('WORKOUT');
+            markTooltipShown('WORKOUT');
+          }, 100);
+        }}
+        onSkip={() => {
+          // Primero cerrar el modal, luego actualizar el contexto
+          setShowWorkoutTooltips(false);
+          setTimeout(() => {
+            completeTutorial('WORKOUT');
+            markTooltipShown('WORKOUT');
+          }, 100);
+        }}
+      />
     </>
   );
 }
@@ -1538,6 +1540,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 14,
   },
+
   invitationsCloseButtonText: {
     color: '#999',
     fontSize: 16,

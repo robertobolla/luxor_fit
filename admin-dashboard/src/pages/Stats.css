@@ -37,6 +37,75 @@
   border-color: #4a4a4a;
 }
 
+/* Filters */
+.filters-container {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.custom-date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #1a1a1a;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid #333;
+}
+
+.custom-date-inputs input[type="date"] {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.875rem;
+  outline: none;
+}
+
+.custom-date-inputs input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  cursor: pointer;
+}
+
+.custom-date-inputs span {
+  color: #888;
+}
+
+.time-range-selector {
+  display: flex;
+  background: #1a1a1a;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #333;
+}
+
+.time-range-selector button {
+  background: transparent;
+  border: none;
+  color: #888;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s;
+  border-right: 1px solid #333;
+}
+
+.time-range-selector button:last-child {
+  border-right: none;
+}
+
+.time-range-selector button:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.time-range-selector button.active {
+  background: #333;
+  color: #fff;
+  font-weight: bold;
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -272,4 +341,3 @@
   color: #888;
   font-size: 1rem;
 }
-

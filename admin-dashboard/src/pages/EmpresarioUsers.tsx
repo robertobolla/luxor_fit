@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useUser, useAuth } from '@clerk/clerk-react';
-import { getEmpresarioUsers, removeUserFromEmpresario, getEmpresarios, createGymUser, deactivateUserSubscription, getAllPaymentHistory, type GymMember, type Empresario } from '../services/adminService';
+import { getEmpresarioUsers, removeUserFromEmpresario, getEmpresarios, createGymUser, deactivateUserSubscription, extendUserSubscription, getAllPaymentHistory, type GymMember, type Empresario } from '../services/adminService';
 import './EmpresarioUsers.css';
 
 export default function EmpresarioUsers() {
@@ -9,20 +9,41 @@ export default function EmpresarioUsers() {
   const { user } = useUser();
   const { getToken } = useAuth();
   const navigate = useNavigate();
+
+  // Data states
   const [users, setUsers] = useState<GymMember[]>([]);
   const [empresario, setEmpresario] = useState<Empresario | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Search & Filter states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'expired'>('all');
+
+  // Add User states
   const [showAddModal, setShowAddModal] = useState(false);
   const [emailToAdd, setEmailToAdd] = useState('');
   const [nameToAdd, setNameToAdd] = useState('');
+  const [lastNameToAdd, setLastNameToAdd] = useState('');
   const [creatingNewUser, setCreatingNewUser] = useState(false);
-  const [selectedExpiryOption, setSelectedExpiryOption] = useState<'1month' | '1year' | null>(null);
+  const [selectedExpiryOption, setSelectedExpiryOption] = useState<'1month' | '1year' | 'custom' | null>(null);
+  const [customExpiryDate, setCustomExpiryDate] = useState('');
+
+  // Extend Subscription states
+  const [showExtendModal, setShowExtendModal] = useState(false);
+  const [userToExtend, setUserToExtend] = useState<{ id: string; name: string | null; currentExpiry: string | null } | null>(null);
+  const [extending, setExtending] = useState(false);
+
+  // Delete User states
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [userToDelete, setUserToDelete] = useState<{ id: string; email: string; name: string | null } | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Deactivate Subscription states
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [userToDeactivate, setUserToDeactivate] = useState<{ id: string; email: string; name: string | null } | null>(null);
   const [deactivating, setDeactivating] = useState(false);
+
+  // Payment History states
   const [showPaymentHistoryModal, setShowPaymentHistoryModal] = useState(false);
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
@@ -36,16 +57,17 @@ export default function EmpresarioUsers() {
   }, [empresarioId, user?.id]);
 
   async function loadData() {
-    // Si hay empresarioId en la URL, usarlo; si no, usar el user_id actual (para empresarios viendo sus propios usuarios)
     const targetEmpresarioId = empresarioId || user?.id;
     if (!targetEmpresarioId) return;
     try {
       setLoading(true);
+      console.log('Loading data for empresario:', targetEmpresarioId);
       const [usersData, empresariosData] = await Promise.all([
         getEmpresarioUsers(targetEmpresarioId),
         getEmpresarios(),
       ]);
-      
+      console.log('Users found:', usersData?.length, usersData);
+
       setUsers(usersData);
       const emp = empresariosData.find(e => e.user_id === targetEmpresarioId);
       setEmpresario(emp || null);
@@ -62,29 +84,24 @@ export default function EmpresarioUsers() {
     return date.toISOString();
   }
 
-  function calculateMonthlyCost(): number {
-    return empresario?.monthly_fee || 0;
-  }
-
-  function calculateYearlyCost(): number {
-    // Si hay tarifa anual configurada, usarla; si no, calcular de la mensual
-    if (empresario?.annual_fee) {
-      return empresario.annual_fee;
-    }
-    if (empresario?.monthly_fee) {
-      return empresario.monthly_fee * 12;
-    }
-    return 0;
-  }
-
   async function handleCreateNewUser() {
     if (!emailToAdd.trim()) {
       alert('Por favor ingresa un email');
       return;
     }
 
+    if (!nameToAdd.trim()) {
+      alert('Por favor ingresa el nombre');
+      return;
+    }
+
+    if (!lastNameToAdd.trim()) {
+      alert('Por favor ingresa el apellido');
+      return;
+    }
+
     if (!selectedExpiryOption) {
-      alert('Por favor selecciona una opción de expiración (1 mes o 1 año)');
+      alert('Por favor selecciona una opción de expiración');
       return;
     }
 
@@ -93,30 +110,41 @@ export default function EmpresarioUsers() {
 
     try {
       setCreatingNewUser(true);
-      
-      // Calcular fecha de expiración
-      const expiryMonths = selectedExpiryOption === '1month' ? 1 : 12;
-      const expiryDate = calculateExpiryDate(expiryMonths);
 
-      // Obtener token de autenticación de Clerk
+      let expiryDate: string;
+      if (selectedExpiryOption === 'custom') {
+        if (!customExpiryDate) {
+          alert('Por favor selecciona una fecha de expiración');
+          setCreatingNewUser(false);
+          return;
+        }
+        expiryDate = new Date(customExpiryDate).toISOString();
+      } else {
+        const expiryMonths = selectedExpiryOption === '1month' ? 1 : 12;
+        expiryDate = calculateExpiryDate(expiryMonths);
+      }
+
       const authToken = await getToken();
-
-      // Crear usuario en Clerk y asociarlo al gimnasio
       await createGymUser(
         emailToAdd.trim(),
-        nameToAdd.trim() || undefined,
+        `${nameToAdd.trim()} ${lastNameToAdd.trim()}`,
         targetEmpresarioId,
         expiryDate,
         authToken
       );
 
-      const expiryText = expiryMonths === 1 ? '1 mes' : '1 año';
+      const expiryText = selectedExpiryOption === 'custom'
+        ? `hasta ${new Date(expiryDate).toLocaleDateString()}`
+        : (selectedExpiryOption === '1month' ? '1 mes' : '1 año');
+
       alert(`Usuario creado exitosamente. El usuario podrá iniciar sesión con Google OAuth directamente, o si elige email/contraseña, recibirá automáticamente un email para establecer su contraseña. Suscripción: ${expiryText}`);
-      
+
       setShowAddModal(false);
       setEmailToAdd('');
       setNameToAdd('');
+      setLastNameToAdd('');
       setSelectedExpiryOption(null);
+      setCustomExpiryDate('');
       loadData();
     } catch (error: any) {
       console.error('Error creando usuario:', error);
@@ -129,7 +157,7 @@ export default function EmpresarioUsers() {
   function handleRemoveUser(userId: string) {
     const user = users.find(u => u.user_id === userId);
     if (!user) return;
-    
+
     setUserToDelete({
       id: user.user_id,
       email: user.email || 'Sin email',
@@ -140,7 +168,7 @@ export default function EmpresarioUsers() {
 
   async function confirmDelete() {
     if (!userToDelete) return;
-    
+
     try {
       setDeleting(true);
       await removeUserFromEmpresario(userToDelete.id);
@@ -159,7 +187,7 @@ export default function EmpresarioUsers() {
   function handleDeactivateSubscription(userId: string) {
     const user = users.find(u => u.user_id === userId);
     if (!user) return;
-    
+
     setUserToDeactivate({
       id: user.user_id,
       email: user.email || 'Sin email',
@@ -170,7 +198,7 @@ export default function EmpresarioUsers() {
 
   async function confirmDeactivate() {
     if (!userToDeactivate || !user?.id) return;
-    
+
     try {
       setDeactivating(true);
       await deactivateUserSubscription(userToDeactivate.id, user.id, 'Desactivado por empresario desde dashboard');
@@ -190,14 +218,14 @@ export default function EmpresarioUsers() {
     try {
       setPaymentHistoryLoading(true);
       const offset = reset ? 0 : paymentHistoryOffset;
-      
+
       const result = await getAllPaymentHistory(
         20,
         offset,
         paymentHistoryStartDate || undefined,
         paymentHistoryEndDate || undefined
       );
-      
+
       if (reset) {
         setPaymentHistory(result.payments);
         setPaymentHistoryOffset(20);
@@ -205,7 +233,7 @@ export default function EmpresarioUsers() {
         setPaymentHistory([...paymentHistory, ...result.payments]);
         setPaymentHistoryOffset(offset + 20);
       }
-      
+
       setPaymentHistoryTotal(result.total);
     } catch (error: any) {
       console.error('Error cargando historial:', error);
@@ -233,13 +261,94 @@ export default function EmpresarioUsers() {
   function handleViewUserStats(userId: string) {
     const targetUser = users.find(u => u.user_id === userId);
     if (!targetUser) return;
-    
+
     const targetEmpresarioId = empresarioId || user?.id;
     const userName = encodeURIComponent(targetUser.name || targetUser.email || 'Usuario');
     const userEmail = encodeURIComponent(targetUser.email || 'sin-email');
-    
+
     navigate(`/empresarios/${targetEmpresarioId}/members/${userId}/${userName}/${userEmail}`);
   }
+
+  function handleExtendSubscription(userId: string) {
+    const user = users.find(u => u.user_id === userId);
+    if (!user) return;
+
+    setUserToExtend({
+      id: user.user_id,
+      name: user.name || user.email || 'Usuario',
+      currentExpiry: user.subscription_expires_at
+    });
+    setSelectedExpiryOption(null);
+    setCustomExpiryDate('');
+    setShowExtendModal(true);
+  }
+
+  async function confirmExtend() {
+    if (!userToExtend || !selectedExpiryOption) return;
+
+    const targetEmpresarioId = empresarioId || user?.id;
+    if (!targetEmpresarioId) return;
+
+    try {
+      setExtending(true);
+
+      let newExpiryDate: Date;
+      let baseDate = new Date();
+      if (userToExtend.currentExpiry && new Date(userToExtend.currentExpiry) > new Date()) {
+        baseDate = new Date(userToExtend.currentExpiry);
+      }
+
+      if (selectedExpiryOption === 'custom') {
+        if (!customExpiryDate) {
+          alert('Por favor selecciona una fecha');
+          return;
+        }
+        newExpiryDate = new Date(customExpiryDate);
+      } else {
+        const monthsToAdd = selectedExpiryOption === '1month' ? 1 : 12;
+        newExpiryDate = new Date(baseDate);
+        newExpiryDate.setMonth(newExpiryDate.getMonth() + monthsToAdd);
+      }
+
+      await extendUserSubscription(
+        userToExtend.id,
+        targetEmpresarioId,
+        newExpiryDate.toISOString()
+      );
+
+      alert(`Suscripción extendida exitosamente hasta ${newExpiryDate.toLocaleDateString()}`);
+      setShowExtendModal(false);
+      setUserToExtend(null);
+      setSelectedExpiryOption(null);
+      setCustomExpiryDate('');
+      loadData();
+    } catch (error: any) {
+      console.error('Error extendiendo suscripción:', error);
+      alert(error.message || 'Error al extender suscripción');
+    } finally {
+      setExtending(false);
+    }
+  }
+
+  const filteredUsers = users.filter(user => {
+    // Search Filter
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch =
+      (user.name?.toLowerCase() || '').includes(searchLower) ||
+      (user.username?.toLowerCase() || '').includes(searchLower) ||
+      (user.email?.toLowerCase() || '').includes(searchLower);
+
+    if (!matchesSearch) return false;
+
+    // Status Filter
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'active') return user.is_active;
+    if (statusFilter === 'inactive') return !user.is_active;
+    if (statusFilter === 'expired') {
+      return user.subscription_expires_at && new Date(user.subscription_expires_at) < new Date();
+    }
+    return true;
+  });
 
   if (loading) {
     return <div className="page-loading">Cargando usuarios...</div>;
@@ -282,11 +391,92 @@ export default function EmpresarioUsers() {
         </div>
       )}
 
+      {/* Search and Filters */}
+      <div className="filters-container" style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ flex: 1, minWidth: '300px' }}>
+          <input
+            type="text"
+            placeholder="Buscar por nombre, usuario o email..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '12px',
+              background: '#0a0a0a',
+              border: '1px solid #2a2a2a',
+              borderRadius: '6px',
+              color: '#fff',
+              fontSize: '14px'
+            }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            className={`btn-filter ${statusFilter === 'all' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('all')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              background: statusFilter === 'all' ? '#F7931E' : '#1a1a1a',
+              color: statusFilter === 'all' ? '#000' : '#ccc',
+              border: '1px solid #2a2a2a',
+              cursor: 'pointer'
+            }}
+          >
+            Todos
+          </button>
+          <button
+            className={`btn-filter ${statusFilter === 'active' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('active')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              background: statusFilter === 'active' ? '#4caf50' : '#1a1a1a',
+              color: statusFilter === 'active' ? '#fff' : '#ccc',
+              border: '1px solid #2a2a2a',
+              cursor: 'pointer'
+            }}
+          >
+            Activos
+          </button>
+          <button
+            className={`btn-filter ${statusFilter === 'inactive' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('inactive')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              background: statusFilter === 'inactive' ? '#f44336' : '#1a1a1a',
+              color: statusFilter === 'inactive' ? '#fff' : '#ccc',
+              border: '1px solid #2a2a2a',
+              cursor: 'pointer'
+            }}
+          >
+            Inactivos
+          </button>
+          <button
+            className={`btn-filter ${statusFilter === 'expired' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('expired')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              background: statusFilter === 'expired' ? '#FF9800' : '#1a1a1a',
+              color: statusFilter === 'expired' ? '#fff' : '#ccc',
+              border: '1px solid #2a2a2a',
+              cursor: 'pointer'
+            }}
+          >
+            Expirados
+          </button>
+        </div>
+      </div>
+
       <div className="users-table-container">
         <table className="users-table">
           <thead>
             <tr>
               <th>Nombre</th>
+              <th>Usuario</th>
               <th>Email</th>
               <th>Edad</th>
               <th>Nivel</th>
@@ -299,9 +489,10 @@ export default function EmpresarioUsers() {
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
+            {filteredUsers.map((user) => (
               <tr key={user.user_id}>
                 <td>{user.name || '-'}</td>
+                <td><span style={{ color: '#F7931E', fontWeight: '500' }}>@{user.username || '-'}</span></td>
                 <td>{user.email || '-'}</td>
                 <td>{user.age || '-'}</td>
                 <td>{user.fitness_level || '-'}</td>
@@ -338,7 +529,7 @@ export default function EmpresarioUsers() {
                 </td>
                 <td>
                   {user.is_active ? (
-                    <span 
+                    <span
                       className="badge badge-success"
                       style={{ cursor: user.has_subscription ? 'pointer' : 'default' }}
                       onClick={() => user.has_subscription && handleDeactivateSubscription(user.user_id)}
@@ -365,6 +556,13 @@ export default function EmpresarioUsers() {
                     >
                       Remover
                     </button>
+                    <button
+                      className="btn-link"
+                      onClick={() => handleExtendSubscription(user.user_id)}
+                      style={{ color: '#4caf50', fontWeight: '500' }}
+                    >
+                      Extender
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -372,19 +570,20 @@ export default function EmpresarioUsers() {
           </tbody>
         </table>
 
-        {users.length === 0 && (
+        {filteredUsers.length === 0 && (
           <div className="empty-state">
-            <p>No hay usuarios en este gimnasio</p>
+            <p>No se encontraron usuarios {searchTerm ? 'con esa búsqueda' : ''}</p>
           </div>
         )}
       </div>
 
-      {/* Modal para agregar usuario */}
+      {/* Add User Modal */}
       {showAddModal && (
         <div className="modal-overlay" onClick={() => {
           setShowAddModal(false);
           setEmailToAdd('');
           setNameToAdd('');
+          setLastNameToAdd('');
           setSelectedExpiryOption(null);
         }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -402,12 +601,23 @@ export default function EmpresarioUsers() {
             </div>
 
             <div className="form-group">
-              <label>Nombre (Opcional)</label>
+              <label>Nombre</label>
               <input
                 type="text"
                 value={nameToAdd}
                 onChange={(e) => setNameToAdd(e.target.value)}
-                placeholder="Nombre del usuario"
+                placeholder="Nombre"
+                style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginBottom: '12px' }}
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Apellido</label>
+              <input
+                type="text"
+                value={lastNameToAdd}
+                onChange={(e) => setLastNameToAdd(e.target.value)}
+                placeholder="Apellido"
                 style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginBottom: '12px' }}
               />
               <p style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
@@ -416,7 +626,7 @@ export default function EmpresarioUsers() {
               </p>
             </div>
 
-            {/* Opciones de expiración */}
+            {/* Expiry Options */}
             <div className="form-group" style={{ marginTop: '20px' }}>
               <label>Período de Suscripción</label>
               <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
@@ -425,7 +635,7 @@ export default function EmpresarioUsers() {
                   onClick={() => setSelectedExpiryOption('1month')}
                   style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
                 >
-                  Agregar un Mes
+                  1 Mes
                   <div style={{ fontSize: '12px', fontWeight: '400', marginTop: '4px', opacity: 0.9 }}>
                     {(() => {
                       const date = new Date();
@@ -433,19 +643,14 @@ export default function EmpresarioUsers() {
                       return `Hasta ${date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`;
                     })()}
                   </div>
-                  {empresario?.monthly_fee && (
-                    <div style={{ fontSize: '14px', fontWeight: '600', marginTop: '8px', color: '#F7931E' }}>
-                      ${calculateMonthlyCost().toFixed(2)}
-                    </div>
-                  )}
                 </button>
-                
+
                 <button
                   className={selectedExpiryOption === '1year' ? 'btn-primary' : 'btn-secondary'}
                   onClick={() => setSelectedExpiryOption('1year')}
                   style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
                 >
-                  Agregar un Año
+                  1 Año
                   <div style={{ fontSize: '12px', fontWeight: '400', marginTop: '4px', opacity: 0.9 }}>
                     {(() => {
                       const date = new Date();
@@ -453,13 +658,32 @@ export default function EmpresarioUsers() {
                       return `Hasta ${date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`;
                     })()}
                   </div>
-                  {empresario?.monthly_fee && (
-                    <div style={{ fontSize: '14px', fontWeight: '600', marginTop: '8px', color: '#F7931E' }}>
-                      ${calculateYearlyCost().toFixed(2)}
-                    </div>
-                  )}
+                </button>
+
+                <button
+                  className={selectedExpiryOption === 'custom' ? 'btn-primary' : 'btn-secondary'}
+                  onClick={() => setSelectedExpiryOption('custom')}
+                  style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                >
+                  Personalizado
+                  <div style={{ fontSize: '12px', fontWeight: '400', marginTop: '4px', opacity: 0.9 }}>
+                    Elige fecha
+                  </div>
                 </button>
               </div>
+
+              {selectedExpiryOption === 'custom' && (
+                <div style={{ marginTop: '16px' }}>
+                  <label>Fecha de Expiración</label>
+                  <input
+                    type="date"
+                    value={customExpiryDate}
+                    onChange={(e) => setCustomExpiryDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginTop: '8px' }}
+                  />
+                </div>
+              )}
             </div>
 
             <div className="modal-actions" style={{ marginTop: '24px' }}>
@@ -467,14 +691,15 @@ export default function EmpresarioUsers() {
                 setShowAddModal(false);
                 setEmailToAdd('');
                 setNameToAdd('');
+                setLastNameToAdd('');
                 setSelectedExpiryOption(null);
               }}>
                 Cancelar
               </button>
-              <button 
-                className="btn-primary" 
+              <button
+                className="btn-primary"
                 onClick={handleCreateNewUser}
-                disabled={creatingNewUser || !emailToAdd.trim() || !selectedExpiryOption}
+                disabled={creatingNewUser || !emailToAdd.trim() || !nameToAdd.trim() || !lastNameToAdd.trim() || !selectedExpiryOption}
               >
                 {creatingNewUser ? 'Creando...' : 'Crear Usuario'}
               </button>
@@ -483,7 +708,7 @@ export default function EmpresarioUsers() {
         </div>
       )}
 
-      {/* Modal de confirmación para eliminar usuario */}
+      {/* Delete User Modal */}
       {showDeleteModal && userToDelete && (
         <div className="modal-overlay" onClick={() => {
           setShowDeleteModal(false);
@@ -491,7 +716,7 @@ export default function EmpresarioUsers() {
         }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
             <h2>¿Estás seguro que deseas eliminar el usuario?</h2>
-            
+
             <div style={{ marginBottom: '24px' }}>
               <p style={{ color: '#ccc', marginBottom: '12px' }}>Esta acción eliminará permanentemente al usuario del gimnasio:</p>
               <div style={{ background: '#0a0a0a', padding: '16px', borderRadius: '6px', border: '1px solid #2a2a2a' }}>
@@ -510,8 +735,8 @@ export default function EmpresarioUsers() {
             </div>
 
             <div className="modal-actions">
-              <button 
-                className="btn-secondary" 
+              <button
+                className="btn-secondary"
                 onClick={() => {
                   setShowDeleteModal(false);
                   setUserToDelete(null);
@@ -520,8 +745,8 @@ export default function EmpresarioUsers() {
               >
                 Cancelar
               </button>
-              <button 
-                className="btn-primary" 
+              <button
+                className="btn-primary"
                 onClick={confirmDelete}
                 disabled={deleting}
                 style={{ background: '#f44336' }}
@@ -533,7 +758,7 @@ export default function EmpresarioUsers() {
         </div>
       )}
 
-      {/* Modal de confirmación para desactivar suscripción */}
+      {/* Deactivate Subscription Modal */}
       {showDeactivateModal && userToDeactivate && (
         <div className="modal-overlay" onClick={() => {
           setShowDeactivateModal(false);
@@ -541,7 +766,7 @@ export default function EmpresarioUsers() {
         }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
             <h2>¿Estás seguro que deseas desactivar el plan?</h2>
-            
+
             <div style={{ marginBottom: '24px' }}>
               <p style={{ color: '#ccc', marginBottom: '12px' }}>Esta acción desactivará la suscripción del usuario:</p>
               <div style={{ background: '#0a0a0a', padding: '16px', borderRadius: '6px', border: '1px solid #2a2a2a' }}>
@@ -560,8 +785,8 @@ export default function EmpresarioUsers() {
             </div>
 
             <div className="modal-actions">
-              <button 
-                className="btn-secondary" 
+              <button
+                className="btn-secondary"
                 onClick={() => {
                   setShowDeactivateModal(false);
                   setUserToDeactivate(null);
@@ -570,8 +795,8 @@ export default function EmpresarioUsers() {
               >
                 Cancelar
               </button>
-              <button 
-                className="btn-primary" 
+              <button
+                className="btn-primary"
                 onClick={confirmDeactivate}
                 disabled={deactivating}
                 style={{ background: '#FF9800' }}
@@ -583,7 +808,7 @@ export default function EmpresarioUsers() {
         </div>
       )}
 
-      {/* Modal de historial de pagos general */}
+      {/* Payment History Modal */}
       {showPaymentHistoryModal && (
         <div className="modal-overlay" onClick={() => {
           setShowPaymentHistoryModal(false);
@@ -591,8 +816,8 @@ export default function EmpresarioUsers() {
         }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '900px', maxHeight: '90vh' }}>
             <h2>Historial de Pagos - Todos los Usuarios</h2>
-            
-            {/* Filtros de fecha */}
+
+            {/* Date Filters */}
             <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: '200px' }}>
                 <label style={{ display: 'block', color: '#ccc', marginBottom: '8px', fontSize: '14px' }}>
@@ -627,7 +852,7 @@ export default function EmpresarioUsers() {
               </div>
             </div>
 
-            {/* Tabla de historial */}
+            {/* History Table */}
             <div style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '20px' }}>
               {paymentHistoryLoading && paymentHistory.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>Cargando...</div>
@@ -679,7 +904,7 @@ export default function EmpresarioUsers() {
               )}
             </div>
 
-            {/* Botón Ver Más */}
+            {/* Load More Button */}
             {paymentHistory.length < paymentHistoryTotal && (
               <div style={{ textAlign: 'center', marginBottom: '20px' }}>
                 <button
@@ -694,14 +919,14 @@ export default function EmpresarioUsers() {
 
             <div style={{ marginTop: '16px', padding: '12px', background: '#0a0a0a', borderRadius: '6px', border: '1px solid #2a2a2a' }}>
               <p style={{ color: '#ccc', margin: 0, fontSize: '14px' }}>
-                <strong style={{ color: '#4caf50' }}>Total de registros:</strong> {paymentHistoryTotal} | 
+                <strong style={{ color: '#4caf50' }}>Total de registros:</strong> {paymentHistoryTotal} |
                 <strong style={{ color: '#4caf50', marginLeft: '12px' }}> Mostrados:</strong> {paymentHistory.length}
               </p>
             </div>
 
             <div className="modal-actions">
-              <button 
-                className="btn-secondary" 
+              <button
+                className="btn-secondary"
                 onClick={() => {
                   setShowPaymentHistoryModal(false);
                   setPaymentHistory([]);
@@ -713,7 +938,87 @@ export default function EmpresarioUsers() {
           </div>
         </div>
       )}
+
+      {/* Extend Subscription Modal */}
+      {showExtendModal && userToExtend && (
+        <div className="modal-overlay" onClick={() => {
+          setShowExtendModal(false);
+          setUserToExtend(null);
+          setSelectedExpiryOption(null);
+        }}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h2>Extender Suscripción</h2>
+
+            <div style={{ background: '#0a0a0a', padding: '12px', borderRadius: '6px', border: '1px solid #2a2a2a', marginBottom: '20px' }}>
+              <p style={{ margin: '0 0 4px 0', color: '#fff', fontWeight: '600' }}>{userToExtend.name}</p>
+              <p style={{ margin: 0, color: '#888', fontSize: '14px' }}>
+                Vence: {userToExtend.currentExpiry
+                  ? new Date(userToExtend.currentExpiry).toLocaleDateString()
+                  : 'Sin suscripción activa'}
+              </p>
+            </div>
+
+            <div className="form-group">
+              <label>Agregar Tiempo</label>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                <button
+                  className={selectedExpiryOption === '1month' ? 'btn-primary' : 'btn-secondary'}
+                  onClick={() => setSelectedExpiryOption('1month')}
+                  style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                >
+                  +1 Mes
+                </button>
+
+                <button
+                  className={selectedExpiryOption === '1year' ? 'btn-primary' : 'btn-secondary'}
+                  onClick={() => setSelectedExpiryOption('1year')}
+                  style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                >
+                  +1 Año
+                </button>
+
+                <button
+                  className={selectedExpiryOption === 'custom' ? 'btn-primary' : 'btn-secondary'}
+                  onClick={() => setSelectedExpiryOption('custom')}
+                  style={{ flex: 1, padding: '16px', fontSize: '16px', fontWeight: '600', display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                >
+                  Personalizado
+                </button>
+              </div>
+
+              {selectedExpiryOption === 'custom' && (
+                <div style={{ marginTop: '16px' }}>
+                  <label>Nueva Fecha de Vencimiento</label>
+                  <input
+                    type="date"
+                    value={customExpiryDate}
+                    onChange={(e) => setCustomExpiryDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginTop: '8px' }}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: '24px' }}>
+              <button className="btn-secondary" onClick={() => {
+                setShowExtendModal(false);
+                setUserToExtend(null);
+                setSelectedExpiryOption(null);
+              }}>
+                Cancelar
+              </button>
+              <button
+                className="btn-primary"
+                onClick={confirmExtend}
+                disabled={extending || !selectedExpiryOption}
+              >
+                {extending ? 'Guardando...' : 'Confirmar Extensión'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

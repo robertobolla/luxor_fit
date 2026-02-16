@@ -2,7 +2,7 @@
 // NUTRITION SERVICE
 // ============================================================================
 
-import { supabase } from './supabase';
+import { supabase, callRpcWithRetry } from './supabase';
 import OpenAI from 'openai';
 import {
   Activity,
@@ -30,7 +30,7 @@ export const FOOD_DATABASE: FoodItem[] = [
   // ============================================================================
   // PROTEÍNAS (IDs 1-50)
   // ============================================================================
-  
+
   // Carnes
   { id: 1, name: 'Pechuga de pollo', calories_per_100g: 165, protein_per_100g: 31, carbs_per_100g: 0, fats_per_100g: 3.6, category: 'protein', tags: ['budget', 'rapido', 'carne'] },
   { id: 2, name: 'Muslo de pollo', calories_per_100g: 209, protein_per_100g: 26, carbs_per_100g: 0, fats_per_100g: 12, category: 'protein', tags: ['carne'] },
@@ -94,7 +94,7 @@ export const FOOD_DATABASE: FoodItem[] = [
   // ============================================================================
   // CARBOHIDRATOS (IDs 51-100)
   // ============================================================================
-  
+
   // Cereales y granos
   { id: 51, name: 'Arroz blanco cocido', calories_per_100g: 130, protein_per_100g: 2.7, carbs_per_100g: 28, fats_per_100g: 0.3, category: 'carb', tags: ['budget'] },
   { id: 52, name: 'Arroz integral cocido', calories_per_100g: 111, protein_per_100g: 2.6, carbs_per_100g: 23, fats_per_100g: 0.9, category: 'carb', tags: ['budget'] },
@@ -164,7 +164,7 @@ export const FOOD_DATABASE: FoodItem[] = [
   // ============================================================================
   // GRASAS (IDs 101-130)
   // ============================================================================
-  
+
   // Aceites
   { id: 101, name: 'Aceite de oliva', calories_per_100g: 884, protein_per_100g: 0, carbs_per_100g: 0, fats_per_100g: 100, category: 'fat', tags: ['cocina'] },
   { id: 102, name: 'Aceite de coco', calories_per_100g: 862, protein_per_100g: 0, carbs_per_100g: 0, fats_per_100g: 100, category: 'fat', tags: ['cocina'] },
@@ -212,7 +212,7 @@ export const FOOD_DATABASE: FoodItem[] = [
   // ============================================================================
   // VEGETALES (IDs 131-170)
   // ============================================================================
-  
+
   // Verduras de hoja verde
   { id: 131, name: 'Espinaca', calories_per_100g: 23, protein_per_100g: 2.9, carbs_per_100g: 3.6, fats_per_100g: 0.4, category: 'vegetable', tags: ['rapido', 'verde'] },
   { id: 132, name: 'Lechuga', calories_per_100g: 15, protein_per_100g: 1.4, carbs_per_100g: 2.9, fats_per_100g: 0.2, category: 'vegetable', tags: ['rapido', 'verde'] },
@@ -272,7 +272,7 @@ export const FOOD_DATABASE: FoodItem[] = [
   // ============================================================================
   // FRUTAS (IDs 171-200)
   // ============================================================================
-  
+
   // Frutas tropicales
   { id: 171, name: 'Plátano', calories_per_100g: 89, protein_per_100g: 1.1, carbs_per_100g: 23, fats_per_100g: 0.3, category: 'fruit', tags: ['rapido', 'budget', 'tropical'] },
   { id: 172, name: 'Mango', calories_per_100g: 60, protein_per_100g: 0.8, carbs_per_100g: 15, fats_per_100g: 0.4, category: 'fruit', tags: ['rapido', 'budget', 'tropical'] },
@@ -573,9 +573,9 @@ export async function getOnboardingProfileLite(
 
     // Usar nivel de actividad 'moderate' por defecto
     const activityLevel: Activity = 'moderate';
-    
+
     console.log('🏃 Activity level:', activityLevel);
-    
+
     const weight_kg = data.weight || 70;
     console.log('⚖️ Peso utilizado:', weight_kg, 'kg');
 
@@ -620,11 +620,11 @@ function calculateMealMacros(items: { food_id: number; grams: number }[]): {
   let fats_g = 0;
 
   items.forEach((item) => {
-           // Validar que el item tenga food_id válido
-           if (!item.food_id || typeof item.food_id !== 'number' || item.food_id < 1 || item.food_id > 200) {
-             console.warn(`⚠️ Food ID inválido: ${item.food_id}, saltando item`);
-             return;
-           }
+    // Validar que el item tenga food_id válido
+    if (!item.food_id || typeof item.food_id !== 'number' || item.food_id < 1 || item.food_id > 200) {
+      console.warn(`⚠️ Food ID inválido: ${item.food_id}, saltando item`);
+      return;
+    }
 
     // Validar que tenga grams válido
     if (!item.grams || typeof item.grams !== 'number' || item.grams <= 0) {
@@ -665,38 +665,38 @@ function generateMealTemplates(
   const prefersBudget = customPrompts.some((p) => p.toLowerCase().includes('budget') || p.toLowerCase().includes('económico') || p.toLowerCase().includes('economico'));
 
   // Analizar prompts para exclusiones
-  const excludePescado = customPrompts.some((p) => 
-    (p.toLowerCase().includes('sin pescado') || 
-     p.toLowerCase().includes('no pescado') || 
-     p.toLowerCase().includes('sin mariscos') ||
-     p.toLowerCase().includes('no mariscos') ||
-     (p.toLowerCase().includes('evitar') && p.toLowerCase().includes('pescado')))
+  const excludePescado = customPrompts.some((p) =>
+  (p.toLowerCase().includes('sin pescado') ||
+    p.toLowerCase().includes('no pescado') ||
+    p.toLowerCase().includes('sin mariscos') ||
+    p.toLowerCase().includes('no mariscos') ||
+    (p.toLowerCase().includes('evitar') && p.toLowerCase().includes('pescado')))
   );
-  const excludeLacteos = customPrompts.some((p) => 
-    (p.toLowerCase().includes('sin lácteos') || 
-     p.toLowerCase().includes('sin lacteos') ||
-     p.toLowerCase().includes('no lácteos') ||
-     p.toLowerCase().includes('no lacteos') ||
-     p.toLowerCase().includes('sin leche') ||
-     (p.toLowerCase().includes('evitar') && (p.toLowerCase().includes('lácteo') || p.toLowerCase().includes('lacteo'))))
+  const excludeLacteos = customPrompts.some((p) =>
+  (p.toLowerCase().includes('sin lácteos') ||
+    p.toLowerCase().includes('sin lacteos') ||
+    p.toLowerCase().includes('no lácteos') ||
+    p.toLowerCase().includes('no lacteos') ||
+    p.toLowerCase().includes('sin leche') ||
+    (p.toLowerCase().includes('evitar') && (p.toLowerCase().includes('lácteo') || p.toLowerCase().includes('lacteo'))))
   );
-  const excludeGluten = customPrompts.some((p) => 
-    (p.toLowerCase().includes('sin gluten') ||
-     p.toLowerCase().includes('no gluten') ||
-     p.toLowerCase().includes('celíaco') ||
-     p.toLowerCase().includes('celiaco') ||
-     (p.toLowerCase().includes('evitar') && p.toLowerCase().includes('gluten')))
+  const excludeGluten = customPrompts.some((p) =>
+  (p.toLowerCase().includes('sin gluten') ||
+    p.toLowerCase().includes('no gluten') ||
+    p.toLowerCase().includes('celíaco') ||
+    p.toLowerCase().includes('celiaco') ||
+    (p.toLowerCase().includes('evitar') && p.toLowerCase().includes('gluten')))
   );
-  const excludeCarne = customPrompts.some((p) => 
-    (p.toLowerCase().includes('vegetariano') ||
-     p.toLowerCase().includes('sin carne') ||
-     p.toLowerCase().includes('no carne') ||
-     (p.toLowerCase().includes('evitar') && p.toLowerCase().includes('carne')))
+  const excludeCarne = customPrompts.some((p) =>
+  (p.toLowerCase().includes('vegetariano') ||
+    p.toLowerCase().includes('sin carne') ||
+    p.toLowerCase().includes('no carne') ||
+    (p.toLowerCase().includes('evitar') && p.toLowerCase().includes('carne')))
   );
 
   // Filtrar alimentos según exclusiones
   let foods = [...FOOD_DATABASE];
-  
+
   if (excludePescado) {
     foods = foods.filter((f) => !f.tags?.includes('pescado'));
   }
@@ -978,13 +978,13 @@ async function generateAIMealPlan(
 ): Promise<WeekPlan> {
   try {
     // Construir el contexto del usuario con composición corporal
-    const bodyComposition = userProfile 
+    const bodyComposition = userProfile
       ? [
-          userProfile.body_fat_percentage ? `grasa corporal: ${userProfile.body_fat_percentage}%` : null,
-          userProfile.muscle_percentage ? `masa muscular: ${userProfile.muscle_percentage}%` : null
-        ].filter(Boolean).join(', ')
+        userProfile.body_fat_percentage ? `grasa corporal: ${userProfile.body_fat_percentage}%` : null,
+        userProfile.muscle_percentage ? `masa muscular: ${userProfile.muscle_percentage}%` : null
+      ].filter(Boolean).join(', ')
       : '';
-    
+
     // Construir contexto del plan de entrenamiento si está disponible
     let workoutContext = '';
     if (workoutPlanData) {
@@ -1001,16 +1001,16 @@ async function generateAIMealPlan(
         flexibility: 'Flexibilidad',
         general_fitness: 'Forma general',
       };
-      
-      const fitnessLevel = workoutPlanData.fitness_level 
-        ? fitnessLevelMap[workoutPlanData.fitness_level] || workoutPlanData.fitness_level 
+
+      const fitnessLevel = workoutPlanData.fitness_level
+        ? fitnessLevelMap[workoutPlanData.fitness_level] || workoutPlanData.fitness_level
         : '';
-      const goals = workoutPlanData.goals 
-        ? workoutPlanData.goals.map(g => goalMap[g] || g).join(', ') 
+      const goals = workoutPlanData.goals
+        ? workoutPlanData.goals.map(g => goalMap[g] || g).join(', ')
         : '';
       const days = workoutPlanData.available_days || 0;
       const duration = workoutPlanData.session_duration || 0;
-      
+
       workoutContext = `\n\nPLAN DE ENTRENAMIENTO ACTIVO:\n` +
         `- Nivel de fitness: ${fitnessLevel}\n` +
         `- Objetivos: ${goals}\n` +
@@ -1019,7 +1019,7 @@ async function generateAIMealPlan(
         `IMPORTANTE: La dieta debe estar alineada con este plan de entrenamiento. ` +
         `Ajusta las calorías y macros según la intensidad y frecuencia del entrenamiento.`;
     }
-    
+
     const userContext = userProfile
       ? `Usuario: ${userProfile.sex === 'male' ? 'Hombre' : 'Mujer'}, ${calculateAge(userProfile.birthdate)} años, ${userProfile.height_cm}cm, ${userProfile.weight_kg}kg${bodyComposition ? `, ${bodyComposition}` : ''}, objetivo: ${userProfile.goal}, nivel de actividad: ${userProfile.activity_level}${workoutContext}`
       : `Usuario sin perfil completo${workoutContext}`;
@@ -1031,7 +1031,7 @@ async function generateAIMealPlan(
 
     // Calcular calorías por comida
     const caloriesPerMeal = Math.round(targets.calories / mealsPerDay);
-    
+
     const systemPrompt = `Eres un nutricionista experto. Tu tarea es crear un plan de comidas semanal SOLO usando los alimentos de la base de datos proporcionada.
 
 BASE DE DATOS DE ALIMENTOS DISPONIBLES (200 alimentos totales, mostrando los primeros 50):
@@ -1148,7 +1148,7 @@ IMPORTANTE: Responde SOLO con JSON válido. Cada item debe tener food_id (númer
     // Validar que tenga al menos un día
     const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const validDays = days.filter(day => aiPlan[day]);
-    
+
     if (validDays.length === 0) {
       console.error('❌ La respuesta de IA no contiene días válidos');
       throw new Error('La respuesta de la IA está incompleta');
@@ -1159,26 +1159,26 @@ IMPORTANTE: Responde SOLO con JSON válido. Cada item debe tener food_id (númer
     // Función para limpiar y corregir items de comida
     const cleanMealItems = (items: any[]): any[] => {
       if (!Array.isArray(items)) return [];
-      
+
       return items.map(item => {
         if (!item || typeof item !== 'object') {
           return { food_id: 1, grams: 100 }; // Fallback
         }
-        
+
         // Corregir food_id
         let food_id = item.food_id;
         if (typeof food_id !== 'number' || food_id < 1 || food_id > 200) {
           console.warn(`⚠️ Food ID inválido: ${food_id}, usando fallback`);
           food_id = 1;
         }
-        
+
         // Corregir grams
         let grams = item.grams;
         if (typeof grams !== 'number' || grams <= 0) {
           console.warn(`⚠️ Grams inválido: ${grams}, usando fallback`);
           grams = 100;
         }
-        
+
         return { food_id, grams };
       });
     };
@@ -1202,10 +1202,10 @@ IMPORTANTE: Responde SOLO con JSON válido. Cada item debe tener food_id (númer
               console.warn(`⚠️ Comida inválida en ${day}/${mealType}`);
               return null;
             }
-            
+
             // Limpiar y corregir items
             const cleanedItems = cleanMealItems(meal.items || []);
-            
+
             if (cleanedItems.length === 0) {
               console.warn(`⚠️ Comida sin items válidos en ${day}/${mealType}, creando fallback`);
               return {
@@ -1217,7 +1217,7 @@ IMPORTANTE: Responde SOLO con JSON válido. Cada item debe tener food_id (númer
                 fats_g: 5,
               };
             }
-            
+
             const macros = calculateMealMacros(cleanedItems);
             return {
               name: meal.name || 'Comida sin nombre',
@@ -1248,7 +1248,7 @@ IMPORTANTE: Responde SOLO con JSON válido. Cada item debe tener food_id (númer
     }
 
     // Asegurar SIEMPRE 7 días: si la IA omitió fines de semana, completamos copiando patrones
-    const orderedDays = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+    const orderedDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
     const presentDays = orderedDays.filter(d => !!weekPlan[d]);
     if (presentDays.length < 7 && presentDays.length > 0) {
       console.warn(`⚠️ IA devolvió ${presentDays.length}/7 días. Completando los faltantes...`);
@@ -1266,18 +1266,18 @@ IMPORTANTE: Responde SOLO con JSON válido. Cada item debe tener food_id (númer
   } catch (error: any) {
     // Manejar errores específicos de quota/rate limit de manera más elegante
     const errorMessage = error?.message || error?.toString() || '';
-    const isQuotaError = errorMessage.includes('429') || 
-                         errorMessage.includes('quota') || 
-                         errorMessage.includes('exceeded') ||
-                         error?.status === 429;
-    
+    const isQuotaError = errorMessage.includes('429') ||
+      errorMessage.includes('quota') ||
+      errorMessage.includes('exceeded') ||
+      error?.status === 429;
+
     if (isQuotaError) {
       console.log('⚠️ Cuota de OpenAI agotada, usando generador de respaldo...');
     } else {
       console.error('❌ Error generando plan con IA:', errorMessage.substring(0, 200));
       console.log('🔄 Usando generador de respaldo...');
     }
-    
+
     // Si falla, usar el generador por defecto
     return generateWeekPlanFallback(targets, mealsPerDay, customPrompts, fastingWindow);
   }
@@ -1385,7 +1385,7 @@ function generateWeekPlanFallback(
       // Dividir: 30% desayuno/almuerzo, 20% snack, 50% cena/almuerzo
       const mainMealCals = Math.round(caloriesPerMeal * 1.2);
       const snackCals = Math.round(caloriesPerMeal * 0.6);
-      
+
       if (skipBreakfast) {
         const lunchOptions = [
           templates.lunch[index % templates.lunch.length],
@@ -1447,13 +1447,13 @@ function generateWeekPlanFallback(
         templates.snacks[(index + 1) % templates.snacks.length],
         templates.snacks[(index + 2) % templates.snacks.length],
       ];
-      
+
       if (!skipBreakfast) {
         dayPlan.breakfast = scaleMealPortions(breakfastOptions, caloriesPerMeal);
       }
       dayPlan.lunch = scaleMealPortions(lunchOptions, caloriesPerMeal);
       dayPlan.dinner = scaleMealPortions(dinnerOptions, caloriesPerMeal);
-      
+
       if (mealsPerDay >= 4) {
         const snackCals = Math.round(caloriesPerMeal * 0.8);
         dayPlan.snacks = scaleMealPortions(snackOptions, snackCals);
@@ -1481,7 +1481,7 @@ export function buildGroceryList(weekPlan: WeekPlan): GroceryItem[] {
             // Buscar el alimento en la base de datos
             const food = FOOD_DATABASE.find((f) => f.id === item.food_id);
             const foodName = food ? food.name : `Alimento ${item.food_id}`;
-            
+
             const current = foodMap.get(foodName) || 0;
             foodMap.set(foodName, current + item.grams);
           });
@@ -1492,12 +1492,12 @@ export function buildGroceryList(weekPlan: WeekPlan): GroceryItem[] {
 
   const groceryList: GroceryItem[] = [];
   let idCounter = 1;
-  
+
   foodMap.forEach((grams, food_name) => {
     // Buscar food_id en la base de datos, si no existe usar un ID temporal
     const food = FOOD_DATABASE.find((f) => f.name === food_name);
     const food_id = food ? food.id : idCounter++;
-    
+
     groceryList.push({
       food_id,
       food_name,
@@ -1513,23 +1513,35 @@ export function buildGroceryList(weekPlan: WeekPlan): GroceryItem[] {
 // SUPABASE OPERATIONS
 // ============================================================================
 
+
+
 export async function upsertNutritionProfile(
   userId: string,
   profile: Partial<NutritionProfile>
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { error } = await supabase.from('nutrition_profiles').upsert(
-      {
-        user_id: userId,
-        ...profile,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'user_id' }
-    );
+    // Usar RPC para evitar problemas de RLS y permitir actualizaciones parciales seguras
+    const { error } = await callRpcWithRetry('save_nutrition_profile', {
+      p_meals_per_day: profile.meals_per_day,
+      p_fasting_window: profile.fasting_window,
+      p_custom_prompts: profile.custom_prompts
+    });
 
     if (error) {
-      console.error('Error upserting nutrition profile:', error);
-      return { success: false, error: error.message };
+      console.error('Error upserting nutrition profile (RPC):', error);
+      // Fallback intentando upsert directo (probablemente fallará si RPC falló por permisos, pero útil si RPC no existe)
+      const { error: upsertError } = await supabase.from('nutrition_profiles').upsert(
+        {
+          user_id: userId,
+          ...profile,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+      if (upsertError) {
+        return { success: false, error: error.message }; // Retornar error original del RPC que es más probable sea el correcto
+      }
     }
 
     return { success: true };
@@ -1601,9 +1613,9 @@ export async function computeAndSaveTargets(
     if (!profile) {
       console.log('📋 Obteniendo perfil de onboarding...');
       profile = await getOnboardingProfileLite(userId);
-    if (!profile) {
-      console.error('❌ No se encontró perfil de onboarding');
-      return { success: false, error: 'No se encontró perfil de onboarding' };
+      if (!profile) {
+        console.error('❌ No se encontró perfil de onboarding');
+        return { success: false, error: 'No se encontró perfil de onboarding' };
       }
       profileCache.set(userId, profile);
     }
@@ -1614,7 +1626,7 @@ export async function computeAndSaveTargets(
 
     if (workoutPlanData) {
       console.log('📋 Usando datos del plan de entrenamiento activo para calcular targets');
-      
+
       // Calcular nivel de actividad basándose en días disponibles
       if (workoutPlanData.available_days) {
         if (workoutPlanData.available_days >= 5) {
@@ -1635,10 +1647,10 @@ export async function computeAndSaveTargets(
         flexibility: 'maintain',
         general_fitness: 'maintain',
       };
-      
+
       const planGoal = workoutPlanData.goals?.[0] || 'general_fitness';
       goal = goalMap[planGoal] || 'maintain';
-      
+
       console.log('📋 Datos del plan aplicados:', {
         activity_level: activityLevel,
         goal,
@@ -1703,7 +1715,7 @@ export async function createOrUpdateMealPlan(
 ): Promise<{ success: boolean; weekPlan?: WeekPlan; error?: string }> {
   try {
     console.log('🤖 Generando plan de comidas con IA...');
-    
+
     // Obtener perfil nutricional
     const nutritionProfile = await getNutritionProfile(userId);
     if (!nutritionProfile) {
@@ -1736,7 +1748,7 @@ export async function createOrUpdateMealPlan(
     // Si hay datos del plan de entrenamiento, actualizar el perfil temporalmente para el contexto de IA
     if (workoutPlanData && userProfile) {
       console.log('📋 Aplicando datos del plan de entrenamiento al contexto de IA');
-      
+
       // Calcular nivel de actividad basándose en días disponibles
       let activityLevel: Activity = 'moderate';
       if (workoutPlanData.available_days) {
@@ -1749,7 +1761,7 @@ export async function createOrUpdateMealPlan(
         }
       }
       userProfile.activity_level = activityLevel;
-      
+
       // Mapear goals del plan a Goal
       const goalMap: Record<string, Goal> = {
         weight_loss: 'cut',
@@ -1759,9 +1771,9 @@ export async function createOrUpdateMealPlan(
         flexibility: 'maintain',
         general_fitness: 'maintain',
       };
-      
+
       const planGoal = workoutPlanData.goals?.[0] || 'general_fitness';
-      
+
       // Crear perfil temporal con datos del plan
       userProfile = {
         ...userProfile,
@@ -1911,7 +1923,7 @@ Responde SOLO el JSON.`;
     // Validación de valores realistas
     const maxProteinPercentage = 0.5; // Máximo 50% del peso puede ser proteína
     const maxCaloriesPerGram = 9; // Grasa pura tiene 9 kcal/g, máximo teórico
-    
+
     if (macros.protein_g > weightGrams * maxProteinPercentage) {
       console.warn(`⚠️ Proteína muy alta (${macros.protein_g}g para ${weightGrams}g), ajustando...`);
       macros.protein_g = Math.round(weightGrams * 0.31); // Asumiendo pollo (31% proteína)
@@ -1925,7 +1937,7 @@ Responde SOLO el JSON.`;
     // Validar que las calorías calculadas desde macros sean coherentes
     const calculatedCalories = (macros.protein_g * 4) + (macros.carbs_g * 4) + (macros.fats_g * 9);
     const diff = Math.abs(macros.calories - calculatedCalories);
-    
+
     if (diff > macros.calories * 0.15) { // Si la diferencia es mayor al 15%
       console.warn(`⚠️ Incoherencia en calorías (declaradas: ${macros.calories}, calculadas: ${calculatedCalories}), ajustando...`);
       macros.calories = Math.round(calculatedCalories);
@@ -1949,7 +1961,7 @@ export async function logMeal(
   try {
     // Determinar meal_type automáticamente si no se proporciona
     let finalMealType: 'breakfast' | 'lunch' | 'dinner' | 'snack' = mealType || 'snack';
-    
+
     if (!mealType) {
       const hour = new Date().getHours();
       if (hour >= 5 && hour < 11) {
@@ -2013,9 +2025,9 @@ export async function logWater(
 
 export async function applyWeeklyAdjustment(
   userId: string
-): Promise<{ 
-  success: boolean; 
-  error?: string; 
+): Promise<{
+  success: boolean;
+  error?: string;
   adjustment?: {
     calories: number;
     caloriesChange: number;
@@ -2060,37 +2072,37 @@ export async function applyWeeklyAdjustment(
     // Calcular cambios en composición corporal si hay datos
     const avgBodyFatLastWeek = lastWeekWeights.filter(w => w.body_fat_percentage).length > 0
       ? lastWeekWeights
-          .filter(w => w.body_fat_percentage)
-          .reduce((sum, w) => sum + parseFloat(w.body_fat_percentage!.toString()), 0) / 
-          lastWeekWeights.filter(w => w.body_fat_percentage).length
+        .filter(w => w.body_fat_percentage)
+        .reduce((sum, w) => sum + parseFloat(w.body_fat_percentage!.toString()), 0) /
+      lastWeekWeights.filter(w => w.body_fat_percentage).length
       : null;
-    
+
     const avgBodyFatPrevWeek = prevWeekWeights.filter(w => w.body_fat_percentage).length > 0
       ? prevWeekWeights
-          .filter(w => w.body_fat_percentage)
-          .reduce((sum, w) => sum + parseFloat(w.body_fat_percentage!.toString()), 0) / 
-          prevWeekWeights.filter(w => w.body_fat_percentage).length
+        .filter(w => w.body_fat_percentage)
+        .reduce((sum, w) => sum + parseFloat(w.body_fat_percentage!.toString()), 0) /
+      prevWeekWeights.filter(w => w.body_fat_percentage).length
       : null;
 
     const avgMuscleLastWeek = lastWeekWeights.filter(w => w.muscle_percentage).length > 0
       ? lastWeekWeights
-          .filter(w => w.muscle_percentage)
-          .reduce((sum, w) => sum + parseFloat(w.muscle_percentage!.toString()), 0) / 
-          lastWeekWeights.filter(w => w.muscle_percentage).length
+        .filter(w => w.muscle_percentage)
+        .reduce((sum, w) => sum + parseFloat(w.muscle_percentage!.toString()), 0) /
+      lastWeekWeights.filter(w => w.muscle_percentage).length
       : null;
 
     const avgMusclePrevWeek = prevWeekWeights.filter(w => w.muscle_percentage).length > 0
       ? prevWeekWeights
-          .filter(w => w.muscle_percentage)
-          .reduce((sum, w) => sum + parseFloat(w.muscle_percentage!.toString()), 0) / 
-          prevWeekWeights.filter(w => w.muscle_percentage).length
+        .filter(w => w.muscle_percentage)
+        .reduce((sum, w) => sum + parseFloat(w.muscle_percentage!.toString()), 0) /
+      prevWeekWeights.filter(w => w.muscle_percentage).length
       : null;
 
-    const bodyFatChange = avgBodyFatLastWeek && avgBodyFatPrevWeek 
-      ? avgBodyFatLastWeek - avgBodyFatPrevWeek 
+    const bodyFatChange = avgBodyFatLastWeek && avgBodyFatPrevWeek
+      ? avgBodyFatLastWeek - avgBodyFatPrevWeek
       : null;
-    const muscleChange = avgMuscleLastWeek && avgMusclePrevWeek 
-      ? avgMuscleLastWeek - avgMusclePrevWeek 
+    const muscleChange = avgMuscleLastWeek && avgMusclePrevWeek
+      ? avgMuscleLastWeek - avgMusclePrevWeek
       : null;
 
     // Calcular adherencia (% de comidas logueadas vs esperadas)
@@ -2165,7 +2177,7 @@ export async function applyWeeklyAdjustment(
       }
 
       // Retornar información del ajuste
-      return { 
+      return {
         success: true,
         adjustment: {
           calories: newCalories,
@@ -2177,7 +2189,7 @@ export async function applyWeeklyAdjustment(
     }
 
     // Si no hay cambio, también retornar información
-    return { 
+    return {
       success: true,
       adjustment: {
         calories: currentCalories,
@@ -2247,7 +2259,7 @@ export async function getWeekSummary(
     // Usar formato YYYY-MM-DD y agregar hora para evitar problemas de UTC
     const [year, month, day] = weekStart.split('-').map(Number);
     const startDate = new Date(year, month - 1, day);
-    
+
     // Calcular el domingo directamente sumando 6 días al lunes
     const endDate = new Date(startDate);
     endDate.setDate(startDate.getDate() + 6);

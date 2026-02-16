@@ -9,8 +9,13 @@
  * Documentación: https://www.revenuecat.com/docs/integrations/webhooks
  */
 
+// @ts-ignore
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+// @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+// Declarar Deno para evitar error en editores que no lo detectan
+declare const Deno: any;
 
 // Tipos de eventos de RevenueCat que nos interesan
 const RELEVANT_EVENTS = [
@@ -45,7 +50,7 @@ serve(async (req: Request) => {
     console.log('📥 Webhook received:', JSON.stringify(payload, null, 2));
 
     const { event } = payload;
-    
+
     if (!event) {
       return new Response('No event in payload', { status: 400 });
     }
@@ -56,11 +61,11 @@ serve(async (req: Request) => {
     const transactionId = event.transaction_id || event.original_transaction_id;
     const price = event.price || 0;
     const currency = event.currency || 'USD';
-    
+
     // Detectar si viene de un Offer Code
     const offerCode = event.offer_code || null;
     const offerCodeReferenceName = event.presented_offering_identifier || null;
-    
+
     console.log('📊 Event details:', {
       eventType,
       appUserId,
@@ -80,9 +85,9 @@ serve(async (req: Request) => {
     // Si hay un Offer Code, registrar la redención
     if (offerCode || offerCodeReferenceName) {
       console.log('🎟️ Offer code detected, registering redemption...');
-      
+
       const referenceNameToUse = offerCodeReferenceName || offerCode;
-      
+
       // Buscar campaña asociada
       const { data: campaign } = await supabase
         .from('partner_offer_campaigns')
@@ -100,24 +105,39 @@ serve(async (req: Request) => {
         console.log('✅ Found campaign:', { partnerId, campaignId });
       } else {
         console.log('⚠️ No campaign found for offer code:', referenceNameToUse);
-        
-        // Intentar extraer partner del nombre de referencia
-        // Formato esperado: "Socio_REFERENCE_CODE" o similar
-        if (referenceNameToUse && referenceNameToUse.includes('_')) {
-          const parts = referenceNameToUse.split('_');
-          if (parts.length >= 2) {
-            const possibleCode = parts.slice(1).join('_');
-            
-            const { data: partner } = await supabase
-              .from('partners')
-              .select('id')
-              .ilike('reference_code', `%${possibleCode}%`)
-              .eq('is_active', true)
-              .single();
-            
-            if (partner) {
-              partnerId = partner.id;
-              console.log('✅ Found partner from reference code:', partnerId);
+
+        // 1. Intentar buscar en admin_roles (socios creados en el dashboard)
+        // Buscamos tanto en el código principal como en el secundario
+        const { data: adminRole } = await supabase
+          .from('admin_roles')
+          .select('id')
+          .eq('role_type', 'socio')
+          .eq('is_active', true)
+          .or(`discount_code.ilike.${referenceNameToUse},discount_code_secondary.ilike.${referenceNameToUse}`)
+          .maybeSingle();
+
+        if (adminRole) {
+          partnerId = adminRole.id;
+          console.log('✅ Found partner in admin_roles:', partnerId);
+        } else {
+          // 2. Intentar extraer partner del nombre de referencia (legacy logic)
+          // Formato esperado: "Socio_REFERENCE_CODE" o similar
+          if (referenceNameToUse && referenceNameToUse.includes('_')) {
+            const parts = referenceNameToUse.split('_');
+            if (parts.length >= 2) {
+              const possibleCode = parts.slice(1).join('_');
+
+              const { data: partner } = await supabase
+                .from('partners')
+                .select('id')
+                .ilike('reference_code', `%${possibleCode}%`)
+                .eq('is_active', true)
+                .maybeSingle();
+
+              if (partner) {
+                partnerId = partner.id;
+                console.log('✅ Found partner from reference code:', partnerId);
+              }
             }
           }
         }
@@ -142,14 +162,14 @@ serve(async (req: Request) => {
         console.error('❌ Error inserting redemption:', insertError);
       } else {
         console.log('✅ Redemption recorded successfully');
-        
+
         // Incrementar contadores si tenemos campaña/partner
         if (campaignId && partnerId) {
           const { error: rpcError } = await supabase.rpc('increment_redemption_count', {
             p_campaign_id: campaignId,
             p_partner_id: partnerId,
           });
-          
+
           if (rpcError) {
             console.error('❌ Error incrementing counters:', rpcError);
           } else {
@@ -168,7 +188,7 @@ serve(async (req: Request) => {
         payload: payload,
         processed_at: new Date().toISOString(),
       })
-      .then(({ error }) => {
+      .then(({ error }: { error: any }) => { // FIX: Type implicit any
         if (error) {
           // La tabla puede no existir, no es crítico
           console.log('ℹ️ Could not save webhook event (table may not exist)');

@@ -17,7 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
-import { supabase } from '@/services/supabase';
+import { supabase, callRpcWithRetry } from '@/services/supabase';
 
 interface DayConfig {
   id: string;
@@ -51,7 +51,7 @@ const DAY_NAMES = [
 export default function CustomPlanSetupScreen() {
   const { t } = useTranslation();
   const { user } = useUser();
-  
+
   const [planName, setPlanName] = useState('');
   const [planDescription, setPlanDescription] = useState('');
   const [weeks, setWeeks] = useState<WeekConfig[]>([
@@ -89,7 +89,7 @@ export default function CustomPlanSetupScreen() {
       Alert.alert(t('common.error'), t('customPlanSetup.atLeastOneWeek'));
       return;
     }
-    
+
     Alert.alert(
       t('customPlanSetup.removeWeek'),
       t('customPlanSetup.removeWeekConfirm'),
@@ -177,13 +177,13 @@ export default function CustomPlanSetupScreen() {
             days: week.days.map(d =>
               d.id === editingDay.id
                 ? {
-                    ...d,
-                    dayName: dayForm.dayName || d.dayName,
-                    targetCalories: calories,
-                    targetProtein: protein,
-                    targetCarbs: carbs,
-                    targetFat: fat,
-                  }
+                  ...d,
+                  dayName: dayForm.dayName || d.dayName,
+                  targetCalories: calories,
+                  targetProtein: protein,
+                  targetCarbs: carbs,
+                  targetFat: fat,
+                }
                 : d
             ),
           };
@@ -287,64 +287,23 @@ export default function CustomPlanSetupScreen() {
 
     setSaving(true);
     try {
-      // Si activamos, desactivar otros planes primero
-      if (activate) {
-        await (supabase as any)
-          .from('nutrition_plans')
-          .update({ is_active: false })
-          .eq('user_id', user.id);
-      }
+      // Usar RPC para creación atómica y segura con retry logic
+      const { data, error } = await callRpcWithRetry('create_complete_nutrition_plan', {
+        p_plan_name: planName.trim(),
+        p_description: planDescription.trim() || null,
+        p_is_active: activate,
+        p_weeks: weeks as any
+      });
 
-      // Crear el plan
-      const { data: planData, error: planError } = await (supabase as any)
-        .from('nutrition_plans')
-        .insert({
-          user_id: user.id,
-          plan_name: planName.trim(),
-          description: planDescription.trim() || null,
-          is_active: activate,
-          is_ai_generated: false,
-          total_weeks: weeks.length,
-        })
-        .select()
-        .single();
+      if (error) throw error;
 
-      if (planError) throw planError;
-
-      // Crear semanas y días
-      for (const week of weeks) {
-        const { data: weekData, error: weekError } = await (supabase as any)
-          .from('nutrition_plan_weeks')
-          .insert({
-            plan_id: planData.id,
-            week_number: week.weekNumber,
-          })
-          .select()
-          .single();
-
-        if (weekError) throw weekError;
-
-        for (const day of week.days) {
-          const { error: dayError } = await (supabase as any)
-            .from('nutrition_plan_days')
-            .insert({
-              week_id: weekData.id,
-              day_number: day.dayNumber,
-              day_name: day.dayName,
-              target_calories: day.targetCalories,
-              target_protein: day.targetProtein,
-              target_carbs: day.targetCarbs,
-              target_fat: day.targetFat,
-            });
-
-          if (dayError) throw dayError;
-        }
-      }
+      // La respuesta del RPC devuelve un objeto con success y plan_id si todo va bien
+      // pero supabase-js a veces envuelve la respuesta.
 
       setShowActivateModal(false);
       Alert.alert(
         t('common.success'),
-        activate 
+        activate
           ? t('customPlanSetup.planCreatedActive')
           : t('customPlanSetup.planCreatedLibrary'),
         [
@@ -354,10 +313,10 @@ export default function CustomPlanSetupScreen() {
           },
         ]
       );
+      setSaving(false);
     } catch (err) {
       console.error('Error saving plan:', err);
       Alert.alert(t('common.error'), t('customPlanSetup.saveError'));
-    } finally {
       setSaving(false);
     }
   };
@@ -477,218 +436,218 @@ export default function CustomPlanSetupScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
           <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{t('customPlanSetup.title')}</Text>
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={handleSavePlan}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#000" />
+            ) : (
+              <Text style={styles.saveButtonText}>{t('common.save')}</Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={{ flex: 1 }}
         >
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{t('customPlanSetup.title')}</Text>
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={handleSavePlan}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator size="small" color="#000" />
-          ) : (
-            <Text style={styles.saveButtonText}>{t('common.save')}</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={{ flex: 1 }}
-      >
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Información del plan */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('customPlanSetup.planInfo')}</Text>
-            <TextInput
-              style={styles.input}
-              value={planName}
-              onChangeText={setPlanName}
-              placeholder={t('customPlanSetup.planNamePlaceholder')}
-              placeholderTextColor="#666"
-            />
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={planDescription}
-              onChangeText={setPlanDescription}
-              placeholder={t('customPlanSetup.planDescriptionPlaceholder')}
-              placeholderTextColor="#666"
-              multiline
-              numberOfLines={3}
-            />
-          </View>
-
-          {/* Semanas */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{t('customPlanSetup.weeks')}</Text>
-              <TouchableOpacity style={styles.addWeekButton} onPress={addWeek}>
-                <Ionicons name="add-circle" size={24} color="#ffb300" />
-              </TouchableOpacity>
-            </View>
-
-            {weeks.map(renderWeekCard)}
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      {/* Modal para configurar día */}
-      <Modal
-        visible={showDayModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowDayModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>
-                {editingDay ? t('customPlanSetup.editDay') : t('customPlanSetup.newDay')}
-              </Text>
-              <TouchableOpacity onPress={() => setShowDayModal(false)}>
-                <Ionicons name="close" size={24} color="#888" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalScroll}>
-              <Text style={styles.inputLabel}>{t('customPlanSetup.dayName')}</Text>
+          <ScrollView
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Información del plan */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{t('customPlanSetup.planInfo')}</Text>
               <TextInput
-                style={styles.modalInput}
-                value={dayForm.dayName}
-                onChangeText={(v) => setDayForm({ ...dayForm, dayName: v })}
-                placeholder={t('customPlanSetup.dayNamePlaceholder')}
+                style={styles.input}
+                value={planName}
+                onChangeText={setPlanName}
+                placeholder={t('customPlanSetup.planNamePlaceholder')}
                 placeholderTextColor="#666"
               />
-
-              <Text style={styles.inputLabel}>{t('customPlanSetup.dailyTargets')}</Text>
-              
-              <View style={styles.macroInputRow}>
-                <View style={styles.macroInputItem}>
-                  <Text style={styles.macroInputLabel}>🔥 Kcal</Text>
-                  <TextInput
-                    style={styles.macroInput}
-                    value={dayForm.targetCalories}
-                    onChangeText={(v) => setDayForm({ ...dayForm, targetCalories: v })}
-                    keyboardType="numeric"
-                    placeholder="2000"
-                    placeholderTextColor="#444"
-                  />
-                </View>
-                <View style={styles.macroInputItem}>
-                  <Text style={[styles.macroInputLabel, { color: '#4CAF50' }]}>
-                    {t('nutrition.protein')} (g)
-                  </Text>
-                  <TextInput
-                    style={[styles.macroInput, { borderColor: '#4CAF50' }]}
-                    value={dayForm.targetProtein}
-                    onChangeText={(v) => setDayForm({ ...dayForm, targetProtein: v })}
-                    keyboardType="numeric"
-                    placeholder="150"
-                    placeholderTextColor="#444"
-                  />
-                </View>
-              </View>
-
-              <View style={styles.macroInputRow}>
-                <View style={styles.macroInputItem}>
-                  <Text style={[styles.macroInputLabel, { color: '#2196F3' }]}>
-                    {t('nutrition.carbs')} (g)
-                  </Text>
-                  <TextInput
-                    style={[styles.macroInput, { borderColor: '#2196F3' }]}
-                    value={dayForm.targetCarbs}
-                    onChangeText={(v) => setDayForm({ ...dayForm, targetCarbs: v })}
-                    keyboardType="numeric"
-                    placeholder="200"
-                    placeholderTextColor="#444"
-                  />
-                </View>
-                <View style={styles.macroInputItem}>
-                  <Text style={[styles.macroInputLabel, { color: '#FF9800' }]}>
-                    {t('nutrition.fats')} (g)
-                  </Text>
-                  <TextInput
-                    style={[styles.macroInput, { borderColor: '#FF9800' }]}
-                    value={dayForm.targetFat}
-                    onChangeText={(v) => setDayForm({ ...dayForm, targetFat: v })}
-                    keyboardType="numeric"
-                    placeholder="70"
-                    placeholderTextColor="#444"
-                  />
-                </View>
-              </View>
-            </ScrollView>
-
-            <TouchableOpacity
-              style={styles.modalSaveButton}
-              onPress={saveDayConfig}
-            >
-              <Text style={styles.modalSaveButtonText}>
-                {editingDay ? t('common.save') : t('customPlanSetup.addDay')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal para activar plan */}
-      <Modal
-        visible={showActivateModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowActivateModal(false)}
-      >
-        <View style={styles.activateModalOverlay}>
-          <View style={styles.activateModalContent}>
-            <View style={styles.activateModalIcon}>
-              <Ionicons name="checkmark-circle" size={60} color="#ffb300" />
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={planDescription}
+                onChangeText={setPlanDescription}
+                placeholder={t('customPlanSetup.planDescriptionPlaceholder')}
+                placeholderTextColor="#666"
+                multiline
+                numberOfLines={3}
+              />
             </View>
-            <Text style={styles.activateModalTitle}>{t('customPlanSetup.planReady')}</Text>
-            <Text style={styles.activateModalSubtitle}>
-              {t('customPlanSetup.activateQuestion')}
-            </Text>
 
-            <TouchableOpacity
-              style={styles.activateButton}
-              onPress={() => savePlan(true)}
-              disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color="#000" />
-              ) : (
-                <>
-                  <Ionicons name="flash" size={20} color="#000" />
-                  <Text style={styles.activateButtonText}>{t('customPlanSetup.activateNow')}</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {/* Semanas */}
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{t('customPlanSetup.weeks')}</Text>
+                <TouchableOpacity style={styles.addWeekButton} onPress={addWeek}>
+                  <Ionicons name="add-circle" size={24} color="#ffb300" />
+                </TouchableOpacity>
+              </View>
 
-            <TouchableOpacity
-              style={styles.saveToLibraryButton}
-              onPress={() => savePlan(false)}
-              disabled={saving}
-            >
-              <Ionicons name="library-outline" size={20} color="#ffb300" />
-              <Text style={styles.saveToLibraryButtonText}>{t('customPlanSetup.saveToLibrary')}</Text>
-            </TouchableOpacity>
+              {weeks.map(renderWeekCard)}
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
 
-            <TouchableOpacity
-              style={styles.cancelModalButton}
-              onPress={() => setShowActivateModal(false)}
-            >
-              <Text style={styles.cancelModalButtonText}>{t('common.cancel')}</Text>
-            </TouchableOpacity>
+        {/* Modal para configurar día */}
+        <Modal
+          visible={showDayModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowDayModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>
+                  {editingDay ? t('customPlanSetup.editDay') : t('customPlanSetup.newDay')}
+                </Text>
+                <TouchableOpacity onPress={() => setShowDayModal(false)}>
+                  <Ionicons name="close" size={24} color="#888" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalScroll}>
+                <Text style={styles.inputLabel}>{t('customPlanSetup.dayName')}</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={dayForm.dayName}
+                  onChangeText={(v) => setDayForm({ ...dayForm, dayName: v })}
+                  placeholder={t('customPlanSetup.dayNamePlaceholder')}
+                  placeholderTextColor="#666"
+                />
+
+                <Text style={styles.inputLabel}>{t('customPlanSetup.dailyTargets')}</Text>
+
+                <View style={styles.macroInputRow}>
+                  <View style={styles.macroInputItem}>
+                    <Text style={styles.macroInputLabel}>🔥 Kcal</Text>
+                    <TextInput
+                      style={styles.macroInput}
+                      value={dayForm.targetCalories}
+                      onChangeText={(v) => setDayForm({ ...dayForm, targetCalories: v })}
+                      keyboardType="numeric"
+                      placeholder="2000"
+                      placeholderTextColor="#444"
+                    />
+                  </View>
+                  <View style={styles.macroInputItem}>
+                    <Text style={[styles.macroInputLabel, { color: '#4CAF50' }]}>
+                      {t('nutrition.protein')} (g)
+                    </Text>
+                    <TextInput
+                      style={[styles.macroInput, { borderColor: '#4CAF50' }]}
+                      value={dayForm.targetProtein}
+                      onChangeText={(v) => setDayForm({ ...dayForm, targetProtein: v })}
+                      keyboardType="numeric"
+                      placeholder="150"
+                      placeholderTextColor="#444"
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.macroInputRow}>
+                  <View style={styles.macroInputItem}>
+                    <Text style={[styles.macroInputLabel, { color: '#2196F3' }]}>
+                      {t('nutrition.carbs')} (g)
+                    </Text>
+                    <TextInput
+                      style={[styles.macroInput, { borderColor: '#2196F3' }]}
+                      value={dayForm.targetCarbs}
+                      onChangeText={(v) => setDayForm({ ...dayForm, targetCarbs: v })}
+                      keyboardType="numeric"
+                      placeholder="200"
+                      placeholderTextColor="#444"
+                    />
+                  </View>
+                  <View style={styles.macroInputItem}>
+                    <Text style={[styles.macroInputLabel, { color: '#FF9800' }]}>
+                      {t('nutrition.fats')} (g)
+                    </Text>
+                    <TextInput
+                      style={[styles.macroInput, { borderColor: '#FF9800' }]}
+                      value={dayForm.targetFat}
+                      onChangeText={(v) => setDayForm({ ...dayForm, targetFat: v })}
+                      keyboardType="numeric"
+                      placeholder="70"
+                      placeholderTextColor="#444"
+                    />
+                  </View>
+                </View>
+              </ScrollView>
+
+              <TouchableOpacity
+                style={styles.modalSaveButton}
+                onPress={saveDayConfig}
+              >
+                <Text style={styles.modalSaveButtonText}>
+                  {editingDay ? t('common.save') : t('customPlanSetup.addDay')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+
+        {/* Modal para activar plan */}
+        <Modal
+          visible={showActivateModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowActivateModal(false)}
+        >
+          <View style={styles.activateModalOverlay}>
+            <View style={styles.activateModalContent}>
+              <View style={styles.activateModalIcon}>
+                <Ionicons name="checkmark-circle" size={60} color="#ffb300" />
+              </View>
+              <Text style={styles.activateModalTitle}>{t('customPlanSetup.planReady')}</Text>
+              <Text style={styles.activateModalSubtitle}>
+                {t('customPlanSetup.activateQuestion')}
+              </Text>
+
+              <TouchableOpacity
+                style={styles.activateButton}
+                onPress={() => savePlan(true)}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator color="#000" />
+                ) : (
+                  <>
+                    <Ionicons name="flash" size={20} color="#000" />
+                    <Text style={styles.activateButtonText}>{t('customPlanSetup.activateNow')}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.saveToLibraryButton}
+                onPress={() => savePlan(false)}
+                disabled={saving}
+              >
+                <Ionicons name="library-outline" size={20} color="#ffb300" />
+                <Text style={styles.saveToLibraryButtonText}>{t('customPlanSetup.saveToLibrary')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.cancelModalButton}
+                onPress={() => setShowActivateModal(false)}
+              >
+                <Text style={styles.cancelModalButtonText}>{t('common.cancel')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </>
   );

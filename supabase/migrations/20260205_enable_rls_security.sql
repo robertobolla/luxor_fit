@@ -45,3 +45,5 @@ USING (auth.uid() IS NOT NULL);
 CREATE POLICY "Authenticated access permissions"
 ON public.trainer_permissions FOR ALL
 USING (auth.uid() IS NOT NULL);
+
+

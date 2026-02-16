@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
-import { getUserStats, supabase } from '../services/adminService';
+import { getUserStats, supabase, getAdminDashboardStats } from '../services/adminService';
 import type { UserStats } from '../services/adminService';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
 import './Stats.css';
+
+type TimeRange = '7d' | '30d' | '90d' | '1y' | 'all' | 'custom';
 
 interface ExtendedStats {
   userStats: UserStats | null;
@@ -31,6 +34,12 @@ interface ExtendedStats {
 export default function Stats() {
   const [stats, setStats] = useState<ExtendedStats | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Time Range State
+  const [timeRange, setTimeRange] = useState<TimeRange>('30d');
+  const [customStart, setCustomStart] = useState<string>(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [customEnd, setCustomEnd] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [adminStats, setAdminStats] = useState<any | null>(null);
 
   useEffect(() => {
     async function loadStats() {
@@ -78,7 +87,7 @@ export default function Stats() {
           .select('user_id, is_active');
 
         const activeGymMembers = gymMembersData?.filter(gm => gm.is_active) || [];
-        
+
         const gymStats = {
           total_gyms: empresariosData?.length || 0,
           total_gym_members: gymMembersData?.length || 0,
@@ -128,7 +137,58 @@ export default function Stats() {
       }
     }
     loadStats();
+    loadAdminStats('30d'); // Initial load for filtered stats
   }, []);
+
+  // Effect to reload admin stats when time range changes
+  useEffect(() => {
+    if (timeRange === 'custom') {
+      if (customStart && customEnd) {
+        loadAdminStats('custom');
+      }
+    } else {
+      loadAdminStats(timeRange);
+    }
+  }, [timeRange, customStart, customEnd]);
+
+  const loadAdminStats = async (range: TimeRange) => {
+    let startDate = new Date();
+    const endDate = new Date();
+
+    endDate.setHours(23, 59, 59, 999);
+
+    switch (range) {
+      case '7d':
+        startDate.setDate(endDate.getDate() - 7);
+        break;
+      case '30d':
+        startDate.setDate(endDate.getDate() - 30);
+        break;
+      case '90d':
+        startDate.setDate(endDate.getDate() - 90);
+        break;
+      case '1y':
+        startDate.setFullYear(endDate.getFullYear() - 1);
+        break;
+      case 'all':
+        startDate = new Date(0);
+        break;
+      case 'custom':
+        if (customStart) {
+          startDate = new Date(customStart);
+          startDate.setHours(0, 0, 0, 0);
+        }
+        if (customEnd) {
+          const end = new Date(customEnd);
+          end.setHours(23, 59, 59, 999);
+          endDate.setTime(end.getTime());
+        }
+        break;
+    }
+
+    const data = await getAdminDashboardStats(startDate, endDate);
+    setAdminStats(data);
+  };
 
   if (loading) {
     return (
@@ -149,18 +209,126 @@ export default function Stats() {
   }
 
   const { userStats } = stats;
-  const conversionRate = (userStats.total_users || 0) > 0 
-    ? ((stats.subscriptionStats.active / (userStats.total_users || 1)) * 100).toFixed(1) 
+  const conversionRate = (userStats.total_users || 0) > 0
+    ? ((stats.subscriptionStats.active / (userStats.total_users || 1)) * 100).toFixed(1)
     : '0';
 
   return (
     <div className="stats-page">
       <header className="page-header">
-        <h1>Estadísticas Generales</h1>
-        <button className="btn-refresh" onClick={() => window.location.reload()} title="Actualizar">
-          🔄 Actualizar
-        </button>
+        <div>
+          <h1>Estadísticas Generales</h1>
+          <p className="subtitle" style={{ color: '#888' }}>Vista detallada del rendimiento</p>
+        </div>
+
+        <div className="header-actions" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <div className="filters-container">
+            <div className="time-range-selector">
+              <button className={timeRange === '7d' ? 'active' : ''} onClick={() => setTimeRange('7d')}>7D</button>
+              <button className={timeRange === '30d' ? 'active' : ''} onClick={() => setTimeRange('30d')}>30D</button>
+              <button className={timeRange === '90d' ? 'active' : ''} onClick={() => setTimeRange('90d')}>3M</button>
+              <button className={timeRange === '1y' ? 'active' : ''} onClick={() => setTimeRange('1y')}>1A</button>
+              <button className={timeRange === 'all' ? 'active' : ''} onClick={() => setTimeRange('all')}>Todo</button>
+              <button className={timeRange === 'custom' ? 'active' : ''} onClick={() => setTimeRange('custom')}>📅</button>
+            </div>
+
+            {timeRange === 'custom' && (
+              <div className="custom-date-inputs">
+                <input
+                  type="date"
+                  value={customStart}
+                  onChange={(e) => setCustomStart(e.target.value)}
+                  max={customEnd}
+                />
+                <span>-</span>
+                <input
+                  type="date"
+                  value={customEnd}
+                  onChange={(e) => setCustomEnd(e.target.value)}
+                  min={customStart}
+                  max={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+            )}
+          </div>
+
+          <button className="btn-refresh" onClick={() => window.location.reload()} title="Actualizar">
+            🔄
+          </button>
+        </div>
       </header>
+
+      {/* Dynamic Statistics Section (Filtered) */}
+      {adminStats && (
+        <div className="stats-grid" style={{ marginBottom: '2rem' }}>
+          <div className="stat-card stat-card-revenue">
+            <div className="stat-card-header">
+              <div className="stat-card-icon">💰</div>
+              <h3>Ingresos ({timeRange === 'all' ? 'Histórico' : timeRange})</h3>
+            </div>
+            <div className="stat-card-value">${adminStats.revenue_period?.toFixed(2) || '0.00'}</div>
+            <div className="stat-card-details">
+              <span>Recaudado en este periodo</span>
+            </div>
+          </div>
+
+          <div className="stat-card stat-card-info">
+            <div className="stat-card-header">
+              <div className="stat-card-icon">🆕</div>
+              <h3>Nuevos Usuarios</h3>
+            </div>
+            <div className="stat-card-value">{adminStats.new_users_period || 0}</div>
+            <div className="stat-card-details">
+              <span>Registrados en este periodo</span>
+            </div>
+          </div>
+
+          <div className="stat-card stat-card-info" style={{ borderTopColor: '#FF5722' }}>
+            <div className="stat-card-header">
+              <div className="stat-card-icon">📉</div>
+              <h3>Tasa de Cancelación</h3>
+            </div>
+            <div className="stat-card-value">{adminStats.churn_rate?.toFixed(1) || '0.0'}%</div>
+            <div className="stat-card-details">
+              <span>{adminStats.users_cancelled_period || 0} cancelaciones en periodo</span>
+            </div>
+          </div>
+
+          {/* Revenue Split Chart */}
+          <div className="stat-card" style={{ gridColumn: 'span 1' }}>
+            <h3 style={{ marginBottom: '1rem', fontSize: '0.8125rem', color: '#aaa', textTransform: 'uppercase' }}>Origen de Ingresos</h3>
+            <div style={{ height: '140px', width: '100%' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Directo', value: Number(adminStats.revenue_split?.direct || 0), color: '#00D4AA' },
+                      { name: 'Referidos', value: Number(adminStats.revenue_split?.partner || 0), color: '#FFD54A' }
+                    ].filter(i => i.value > 0)}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={40}
+                    outerRadius={60}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {[
+                      { name: 'Directo', value: Number(adminStats.revenue_split?.direct || 0), color: '#00D4AA' },
+                      { name: 'Referidos', value: Number(adminStats.revenue_split?.partner || 0), color: '#FFD54A' }
+                    ].filter(i => i.value > 0).map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', fontSize: '12px' }} />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Static/Global Stats Grid */}
 
       <div className="stats-grid">
         {/* Tarjetas principales */}
@@ -271,14 +439,14 @@ function StatItem({ label, value, color }: { label: string; value: number | stri
   );
 }
 
-function LevelBar({ level, count, total, color }: { 
-  level: string; 
-  count: number; 
+function LevelBar({ level, count, total, color }: {
+  level: string;
+  count: number;
   total: number;
   color: string;
 }) {
   const percentage = total > 0 ? (count / total) * 100 : 0;
-  
+
   return (
     <div className="level-bar-container">
       <div className="level-bar-header">
@@ -286,8 +454,8 @@ function LevelBar({ level, count, total, color }: {
         <span className="level-bar-count">{count} ({percentage.toFixed(1)}%)</span>
       </div>
       <div className="level-bar">
-        <div 
-          className="level-bar-fill" 
+        <div
+          className="level-bar-fill"
           style={{ width: `${percentage}%`, backgroundColor: color }}
         />
       </div>

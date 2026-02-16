@@ -129,7 +129,7 @@ export default function TrainerModeScreen() {
     try {
       const result = await getFriends(user.id);
       console.log('Resultado de getFriends:', result);
-      
+
       if (result.success && result.data) {
         console.log('Amigos obtenidos:', result.data.length);
         // Filtrar amigos que ya son alumnos
@@ -163,7 +163,7 @@ export default function TrainerModeScreen() {
     console.log('🔵 handleSendInvitation - INICIO');
     console.log('🔵 User:', user?.id);
     console.log('🔵 Username:', searchUsername);
-    
+
     if (!user || !searchUsername.trim()) {
       console.log('⚠️ Validación fallida - falta user o username');
       setCustomAlertMessage(t('trainer.enterUsername'));
@@ -176,7 +176,7 @@ export default function TrainerModeScreen() {
     try {
       const result = await sendTrainerInvitation(user.id, searchUsername.trim());
       console.log('📊 Resultado de sendTrainerInvitation:', result);
-      
+
       if (result.success) {
         console.log('✅ Invitación enviada exitosamente');
         setCustomAlertMessage(t('trainer.invitationSentMessage'));
@@ -371,7 +371,7 @@ export default function TrainerModeScreen() {
                 )}
 
                 {/* Contenido principal de la tarjeta */}
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.studentCardContent}
                   onPress={() => handleViewStudentStats(student)}
                   activeOpacity={0.7}
@@ -388,16 +388,35 @@ export default function TrainerModeScreen() {
 
                   {/* Información del estudiante */}
                   <View style={styles.studentTextInfo}>
-                    <Text style={styles.studentName} numberOfLines={1}>
+                    <Text style={[
+                      styles.studentName,
+                      student.status !== 'accepted' && { color: '#999' }
+                    ]} numberOfLines={1}>
                       {student.student_name || t('trainer.noName')}
                     </Text>
                     <Text style={styles.studentUsername}>
                       @{student.student_username || t('trainer.noUsername')}
                     </Text>
+
+                    {student.status === 'pending' && (
+                      <View style={{ backgroundColor: '#333', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start', marginTop: 4 }}>
+                        <Text style={{ color: '#FFD54A', fontSize: 10, fontWeight: 'bold' }}>PENDIENTE</Text>
+                      </View>
+                    )}
+
+                    {student.status === 'rejected' && (
+                      <View style={{ backgroundColor: '#331111', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start', marginTop: 4 }}>
+                        <Text style={{ color: '#ff4444', fontSize: 10, fontWeight: 'bold' }}>RECHAZADO</Text>
+                      </View>
+                    )}
+
                     <View style={styles.studentMeta}>
                       <Ionicons name="calendar-outline" size={12} color="#666" />
                       <Text style={styles.studentDate}>
-                        {new Date(student.accepted_at || student.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {student.accepted_at
+                          ? new Date(student.accepted_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
+                          : `Invitado: ${new Date(student.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                        }
                       </Text>
                     </View>
                   </View>
@@ -433,11 +452,11 @@ export default function TrainerModeScreen() {
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={64} color="#666" />
             <Text style={styles.emptyTitle}>
-  {t('students.emptyTitle')}
-</Text>       
- <Text style={styles.emptyDescription}>
-  {t('students.emptyDescription')}
-</Text>
+              {t('students.emptyTitle')}
+            </Text>
+            <Text style={styles.emptyDescription}>
+              {t('students.emptyDescription')}
+            </Text>
           </View>
         )}
       </ScrollView>
@@ -467,8 +486,8 @@ export default function TrainerModeScreen() {
                     <Ionicons name="arrow-back" size={24} color="#ffffff" />
                   </TouchableOpacity>
                   <Text style={styles.modalTitle}>
-  {t('friends.selectTitle')}
-</Text>
+                    {t('friends.selectTitle')}
+                  </Text>
                   <View style={{ width: 24 }} />
                 </View>
 
@@ -476,8 +495,8 @@ export default function TrainerModeScreen() {
                   <View style={styles.friendsLoadingView}>
                     <ActivityIndicator size="large" color="#ffb300" />
                     <Text style={styles.loadingText}>
-  {t('friends.loading')}
-</Text>
+                      {t('friends.loading')}
+                    </Text>
                   </View>
                 ) : friends.length > 0 ? (
                   <ScrollView style={styles.friendsListScroll} showsVerticalScrollIndicator={false}>
@@ -485,7 +504,7 @@ export default function TrainerModeScreen() {
                       const profile = friend.friend_profile || friend.user_profile || {};
                       const name = profile.name || 'Sin nombre';
                       const username = profile.username || 'usuario';
-                      
+
                       return (
                         <TouchableOpacity
                           key={friend.id}
@@ -511,71 +530,71 @@ export default function TrainerModeScreen() {
                   <View style={styles.emptyFriendsView}>
                     <Ionicons name="people-outline" size={64} color="#666" />
                     <Text style={styles.emptyFriendsTitle}>
-  {t('friends.emptyTitle')}
-</Text>                  
-<Text style={styles.emptyFriendsSubtext}>
-  {t('friends.emptySubtext')}
-</Text>
+                      {t('friends.emptyTitle')}
+                    </Text>
+                    <Text style={styles.emptyFriendsSubtext}>
+                      {t('friends.emptySubtext')}
+                    </Text>
                   </View>
                 )}
               </>
             ) : (
               /* Vista de Búsqueda Normal */
               <>
-<Text style={styles.modalTitle}>
-  {t('modals.addStudentTitle')}
-</Text>             
- <Text style={styles.modalSubtitle}>
-  {t('modals.addStudentSubtitle')}
-</Text>
+                <Text style={styles.modalTitle}>
+                  {t('modals.addStudentTitle')}
+                </Text>
+                <Text style={styles.modalSubtitle}>
+                  {t('modals.addStudentSubtitle')}
+                </Text>
 
                 {/* Input con búsqueda */}
-            <View style={styles.inputContainer}>
-              <TextInput
-                style={styles.input}
-                placeholder="Nombre de usuario"
-                placeholderTextColor="#666"
-                value={searchUsername}
-                onChangeText={setSearchUsername}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {isSearching && (
-                <ActivityIndicator
-                  size="small"
-                  color="#ffb300"
-                  style={styles.searchingIndicator}
-                />
-              )}
-            </View>
+                <View style={styles.inputContainer}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Nombre de usuario"
+                    placeholderTextColor="#666"
+                    value={searchUsername}
+                    onChangeText={setSearchUsername}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  {isSearching && (
+                    <ActivityIndicator
+                      size="small"
+                      color="#ffb300"
+                      style={styles.searchingIndicator}
+                    />
+                  )}
+                </View>
 
-            {/* Sugerencias de usuarios */}
-            {usernameSuggestions.length > 0 && (
-              <View style={styles.suggestionsContainer}>
-                {usernameSuggestions.map((suggestion) => (
-                  <TouchableOpacity
-                    key={suggestion.user_id}
-                    style={styles.suggestionItem}
-                    onPress={() => handleSelectSuggestion(suggestion.username)}
-                  >
-                    <View style={styles.suggestionAvatar}>
-                      <Text style={styles.suggestionAvatarText}>
-                        {(suggestion.name || suggestion.username)[0].toUpperCase()}
-                      </Text>
-                    </View>
-                    <View style={styles.suggestionInfo}>
-                      <Text style={styles.suggestionName}>
-                        {suggestion.name || 'Sin nombre'}
-                      </Text>
-                      <Text style={styles.suggestionUsername}>
-                        @{suggestion.username}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#666" />
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+                {/* Sugerencias de usuarios */}
+                {usernameSuggestions.length > 0 && (
+                  <View style={styles.suggestionsContainer}>
+                    {usernameSuggestions.map((suggestion) => (
+                      <TouchableOpacity
+                        key={suggestion.user_id}
+                        style={styles.suggestionItem}
+                        onPress={() => handleSelectSuggestion(suggestion.username)}
+                      >
+                        <View style={styles.suggestionAvatar}>
+                          <Text style={styles.suggestionAvatarText}>
+                            {(suggestion.name || suggestion.username)[0].toUpperCase()}
+                          </Text>
+                        </View>
+                        <View style={styles.suggestionInfo}>
+                          <Text style={styles.suggestionName}>
+                            {suggestion.name || 'Sin nombre'}
+                          </Text>
+                          <Text style={styles.suggestionUsername}>
+                            @{suggestion.username}
+                          </Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color="#666" />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
 
                 {/* Botón para buscar en amigos */}
                 <TouchableOpacity
@@ -636,7 +655,7 @@ export default function TrainerModeScreen() {
         animationType="fade"
         onRequestClose={() => setShowCustomAlert(false)}
       >
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.customAlertOverlay}
           activeOpacity={1}
           onPress={() => setShowCustomAlert(false)}

@@ -15,7 +15,7 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
-import { supabase } from '@/services/supabase';
+import { supabase, callRpcWithRetry } from '@/services/supabase';
 import { useUnitsStore, conversions, formatHeight } from '@/store/unitsStore';
 import { getNutritionProfile, upsertNutritionProfile } from '@/services/nutrition';
 
@@ -37,7 +37,7 @@ export default function GenerateAIPlanScreen() {
   const [mealsPerDay, setMealsPerDay] = useState(3);
   const [customPrompts, setCustomPrompts] = useState<string[]>([]);
   const [newPrompt, setNewPrompt] = useState('');
-  
+
   // Modals
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showActivateModal, setShowActivateModal] = useState(false);
@@ -66,11 +66,11 @@ export default function GenerateAIPlanScreen() {
       if (profile) {
         const weightKg = profile.weight || 0;
         const heightCm = profile.height || 0;
-        
+
         setUserWeightKg(weightKg);
         setUserHeight(heightCm.toString());
         setUserSex(profile.gender === 'female' ? 'female' : 'male');
-        
+
         // Mostrar peso en la unidad del usuario
         if (weightUnit === 'lb') {
           const weightLb = conversions.kgToLb(weightKg);
@@ -96,8 +96,8 @@ export default function GenerateAIPlanScreen() {
     const inputValue = parseFloat(displayWeight);
     if (isNaN(inputValue) || inputValue <= 0) return;
 
-    const weightInKg = weightUnit === 'lb' 
-      ? conversions.lbToKg(inputValue) 
+    const weightInKg = weightUnit === 'lb'
+      ? conversions.lbToKg(inputValue)
       : inputValue;
 
     setUserWeightKg(weightInKg);
@@ -152,11 +152,11 @@ export default function GenerateAIPlanScreen() {
     try {
       // Guardar configuración
       const currentProfile = await getNutritionProfile(user.id);
-      const existingHash = currentProfile?.custom_prompts?.find((p: string) => 
+      const existingHash = currentProfile?.custom_prompts?.find((p: string) =>
         p.startsWith('__PROFILE_HASH__:')
       );
-      
-      const promptsToSave = existingHash 
+
+      const promptsToSave = existingHash
         ? [...customPrompts, existingHash]
         : customPrompts;
 
@@ -168,7 +168,7 @@ export default function GenerateAIPlanScreen() {
 
       // Generar el plan
       const planId = await generatePlan();
-      
+
       if (planId) {
         setGeneratedPlanId(planId);
         setShowActivateModal(true);
@@ -270,32 +270,6 @@ export default function GenerateAIPlanScreen() {
     });
 
     const planName = t('nutrition.aiGeneratedPlan') + ' - ' + new Date().toLocaleDateString();
-    
-    const { data: newPlan, error: planError } = await supabase
-      .from('nutrition_plans')
-      .insert({
-        user_id: user.id,
-        plan_name: planName,
-        description: t('nutrition.aiPlanDescription'),
-        is_ai_generated: true,
-        is_active: false,
-        total_weeks: 1,
-      })
-      .select('id')
-      .single();
-
-    if (planError) throw planError;
-
-    const { data: weekData, error: weekError } = await supabase
-      .from('nutrition_plan_weeks')
-      .insert({
-        plan_id: newPlan.id,
-        week_number: 1,
-      })
-      .select('id')
-      .single();
-
-    if (weekError) throw weekError;
 
     const dayNames = [
       t('weekDays.monday'), t('weekDays.tuesday'), t('weekDays.wednesday'),
@@ -305,19 +279,16 @@ export default function GenerateAIPlanScreen() {
     // Función para calcular cantidad y macros de un alimento
     const calculateFoodQuantity = (food: any, targetMacro: number, macroType: 'calories' | 'protein' | 'carbs' | 'fat') => {
       const macroPerUnit = macroType === 'calories' ? food.calories :
-                          macroType === 'protein' ? food.protein_g :
-                          macroType === 'carbs' ? food.carbs_g : food.fat_g;
-      
+        macroType === 'protein' ? food.protein_g :
+          macroType === 'carbs' ? food.carbs_g : food.fat_g;
+
       if (macroPerUnit <= 0) return { quantity: 0, unit: food.quantity_type };
-      
+
       if (food.quantity_type === 'units') {
-        // Para alimentos por unidad: calcular unidades enteras
         const units = Math.max(1, Math.round(targetMacro / macroPerUnit));
         return { quantity: units, unit: 'units' };
       } else {
-        // Para alimentos por gramos: calcular gramos (basado en 100g)
         const grams = Math.round((targetMacro / macroPerUnit) * 100);
-        // Limitar entre 30g y 300g para cantidades razonables
         return { quantity: Math.max(30, Math.min(grams, 300)), unit: 'grams' };
       }
     };
@@ -325,7 +296,6 @@ export default function GenerateAIPlanScreen() {
     // Función para calcular macros según cantidad
     const calculateMacros = (food: any, quantity: number) => {
       if (food.quantity_type === 'units') {
-        // Por unidad: multiplicar directamente
         return {
           calories: Math.round(food.calories * quantity),
           protein: Math.round(food.protein_g * quantity * 10) / 10,
@@ -333,7 +303,6 @@ export default function GenerateAIPlanScreen() {
           fat: Math.round(food.fat_g * quantity * 10) / 10,
         };
       } else {
-        // Por gramos: factor = cantidad / 100
         const factor = quantity / 100;
         return {
           calories: Math.round(food.calories * factor),
@@ -345,56 +314,50 @@ export default function GenerateAIPlanScreen() {
     };
 
     // Función para seleccionar alimentos para una comida con macros precisos
-    // PRIORIDAD: 1) Proteína, 2) Grasas (esenciales), 3) Carbohidratos (resto)
     const selectFoodsForMeal = (mealIndex: number, totalMeals: number) => {
       const mealFoods: any[] = [];
-      
-      // Distribuir macros por comida (comidas principales tienen más)
-      const isMainMeal = mealIndex < 3; // Desayuno, almuerzo, cena
+
+      const isMainMeal = mealIndex < 3;
       const mealFactor = isMainMeal ? 0.3 : 0.1 / Math.max(1, totalMeals - 3);
       const adjustedFactor = totalMeals <= 3 ? 1 / totalMeals : mealFactor;
-      
+
       const targetCaloriesMeal = Math.round(targetCalories * adjustedFactor);
       const targetProteinMeal = Math.round(proteinGrams * adjustedFactor);
       const targetFatMeal = Math.round(fatGrams * adjustedFactor);
       const targetCarbsMeal = Math.round(carbsGrams * adjustedFactor);
-      
+
       let currentCalories = 0;
       let currentProtein = 0;
       let currentFat = 0;
       let currentCarbs = 0;
-      
-      // ========================================
-      // 1. PROTEÍNA PRIMERO (esencial para músculo)
-      // ========================================
+
+      // 1. PROTEÍNA
       const proteins = foodsByType['proteins'] || [];
       if (proteins.length > 0) {
         const protein = proteins[Math.floor(Math.random() * proteins.length)];
         const { quantity, unit } = calculateFoodQuantity(protein, targetProteinMeal, 'protein');
         const macros = calculateMacros(protein, quantity);
-        
+
         mealFoods.push({ food: protein, quantity, unit });
         currentCalories += macros.calories;
         currentProtein += macros.protein;
         currentCarbs += macros.carbs;
         currentFat += macros.fat;
       }
-      
-      // ========================================
-      // 2. GRASAS SEGUNDO (esenciales para hormonas)
-      // ========================================
+
+      // 2. GRASAS
       const remainingFat = Math.max(0, targetFatMeal - currentFat);
       if (remainingFat > 5) {
         const fats = foodsByType['fats'] || [];
         const nuts = foodsByType['nuts'] || [];
         const dairy = foodsByType['dairy'] || [];
         const fatSources = [...fats, ...nuts, ...dairy.filter((d: any) => d.fat_g > 5)];
-        
+
         if (fatSources.length > 0) {
           const fatFood = fatSources[Math.floor(Math.random() * fatSources.length)];
           const { quantity, unit } = calculateFoodQuantity(fatFood, remainingFat, 'fat');
           const macros = calculateMacros(fatFood, quantity);
-          
+
           mealFoods.push({ food: fatFood, quantity, unit });
           currentCalories += macros.calories;
           currentProtein += macros.protein;
@@ -402,10 +365,8 @@ export default function GenerateAIPlanScreen() {
           currentFat += macros.fat;
         }
       }
-      
-      // ========================================
-      // 3. CARBOHIDRATOS AL FINAL (calorías restantes)
-      // ========================================
+
+      // 3. CARBOHIDRATOS
       const remainingCarbs = Math.max(0, targetCarbsMeal - currentCarbs);
       if (remainingCarbs > 10) {
         const carbs = [...(foodsByType['carbohydrates'] || []), ...(foodsByType['cereals'] || []), ...(foodsByType['legumes'] || [])];
@@ -413,40 +374,34 @@ export default function GenerateAIPlanScreen() {
           const carb = carbs[Math.floor(Math.random() * carbs.length)];
           const { quantity, unit } = calculateFoodQuantity(carb, remainingCarbs, 'carbs');
           const macros = calculateMacros(carb, quantity);
-          
+
           mealFoods.push({ food: carb, quantity, unit });
           currentCalories += macros.calories;
           currentCarbs += macros.carbs;
         }
       }
-      
-      // ========================================
-      // 4. VERDURAS (fibra, vitaminas, bajo en calorías)
-      // ========================================
+
+      // 4. VERDURAS
       const veggies = foodsByType['vegetables'] || [];
       if (veggies.length > 0 && isMainMeal) {
         const veggie = veggies[Math.floor(Math.random() * veggies.length)];
         const quantity = veggie.quantity_type === 'units' ? 1 : 150;
         const macros = calculateMacros(veggie, quantity);
-        
+
         mealFoods.push({ food: veggie, quantity, unit: veggie.quantity_type });
         currentCalories += macros.calories;
         currentCarbs += macros.carbs;
       }
-      
-      // ========================================
-      // 5. EXTRAS según tipo de comida
-      // ========================================
+
+      // 5. EXTRAS
       const fruits = foodsByType['fruits'] || [];
-      
-      // Desayuno: agregar fruta
+
       if (mealIndex === 0 && fruits.length > 0) {
         const fruit = fruits[Math.floor(Math.random() * fruits.length)];
         const quantity = fruit.quantity_type === 'units' ? 1 : 100;
         mealFoods.push({ food: fruit, quantity, unit: fruit.quantity_type });
       }
-      
-      // Snacks: fruta o frutos secos
+
       if (mealIndex >= 3) {
         if (fruits.length > 0) {
           const fruit = fruits[Math.floor(Math.random() * fruits.length)];
@@ -454,35 +409,26 @@ export default function GenerateAIPlanScreen() {
           mealFoods.push({ food: fruit, quantity, unit: fruit.quantity_type });
         }
       }
-      
+
       return mealFoods;
     };
 
+    // Estructura para el RPC
+    const weeks: any[] = [];
+    const days: any[] = [];
+
+    // Generar días
     for (let i = 0; i < 7; i++) {
-      const { data: dayData, error: dayError } = await supabase
-        .from('nutrition_plan_days')
-        .insert({
-          week_id: weekData.id,
-          day_number: i + 1,
-          day_name: dayNames[i],
-          target_calories: targetCalories,
-          target_protein: proteinGrams,
-          target_carbs: carbsGrams,
-          target_fat: fatGrams,
-        })
-        .select('id')
-        .single();
-
-      if (dayError) throw dayError;
-
       const mealNames = [
         t('nutrition.breakfast'), t('nutrition.lunch'), t('nutrition.dinner'),
         t('nutrition.snack') + ' 1', t('nutrition.snack') + ' 2', t('nutrition.snack') + ' 3',
       ];
 
-      // PASO 1: Generar todos los alimentos del día SIN insertar aún
+      const dayMeals: any[] = [];
+
+      // PASO 1: Generar todos los alimentos del día
       const allDayFoods: { mealIndex: number; food: any; quantity: number; unit: string }[] = [];
-      
+
       for (let j = 0; j < mealsPerDay; j++) {
         if (foods.length > 0) {
           const mealFoods = selectFoodsForMeal(j, mealsPerDay);
@@ -499,62 +445,84 @@ export default function GenerateAIPlanScreen() {
         currentTotalCalories += macros.calories;
       }
 
-      // PASO 3: Calcular factor de ajuste para alcanzar calorías objetivo
-      // El factor ajusta las cantidades para que los totales coincidan con los targets
+      // PASO 3: Calcular factor de ajuste
       const adjustmentFactor = currentTotalCalories > 0 ? targetCalories / currentTotalCalories : 1;
-      
-      // Limitar el factor para evitar cantidades extremas (entre 0.5 y 2.0)
       const limitedFactor = Math.max(0.5, Math.min(adjustmentFactor, 2.0));
 
-      // PASO 4: Ajustar cantidades y crear comidas en la base de datos
+      // PASO 4: Construir estructura de comidas
       for (let j = 0; j < mealsPerDay; j++) {
-        const { data: mealData, error: mealError } = await supabase
-          .from('nutrition_plan_meals')
-          .insert({
-            day_id: dayData.id,
-            meal_order: j + 1,
-            meal_name: mealNames[j] || `${t('nutrition.meal')} ${j + 1}`,
-          })
-          .select('id')
-          .single();
-
-        if (mealError) continue;
-
-        // Filtrar alimentos de esta comida
         const mealFoodsForThisMeal = allDayFoods.filter(f => f.mealIndex === j);
-        
+        const foodsForMealJson: any[] = [];
+
         for (const { food, quantity, unit } of mealFoodsForThisMeal) {
-          // Aplicar factor de ajuste a la cantidad
           let adjustedQuantity = quantity * limitedFactor;
-          
-          // Redondear según el tipo de unidad
+
           if (unit === 'units') {
             adjustedQuantity = Math.max(1, Math.round(adjustedQuantity));
           } else {
-            // Para gramos, redondear a múltiplos de 5 para cantidades más prácticas
             adjustedQuantity = Math.max(20, Math.round(adjustedQuantity / 5) * 5);
           }
-          
-          // Calcular macros con la cantidad ajustada
+
           const macros = calculateMacros(food, adjustedQuantity);
-          
-          await supabase
-            .from('nutrition_plan_meal_foods')
-            .insert({
-              meal_id: mealData.id,
-              food_id: food.id,
-              quantity: adjustedQuantity,
-              quantity_unit: unit,
-              calculated_calories: macros.calories,
-              calculated_protein: macros.protein,
-              calculated_carbs: macros.carbs,
-              calculated_fat: macros.fat,
-            });
+
+          foodsForMealJson.push({
+            foodId: food.id,
+            quantity: adjustedQuantity,
+            quantityUnit: unit,
+            calculatedCalories: macros.calories,
+            calculatedProtein: macros.protein,
+            calculatedCarbs: macros.carbs,
+            calculatedFat: macros.fat
+          });
         }
+
+        dayMeals.push({
+          mealOrder: j + 1,
+          mealName: mealNames[j] || `${t('nutrition.meal')} ${j + 1}`,
+          foods: foodsForMealJson
+        });
       }
+
+      days.push({
+        dayNumber: i + 1,
+        dayName: dayNames[i],
+        targetCalories: targetCalories,
+        targetProtein: proteinGrams,
+        targetCarbs: carbsGrams,
+        targetFat: fatGrams,
+        meals: dayMeals
+      });
     }
 
-    return newPlan.id;
+    weeks.push({
+      weekNumber: 1,
+      days: days
+    });
+
+    console.log('Sending plan to RPC:', { planName, weeksCount: weeks.length });
+
+    // Llamar al RPC con retry logic
+    const { data: rpcResult, error: rpcError } = await callRpcWithRetry('create_complete_nutrition_plan', {
+      p_plan_name: planName,
+      p_description: t('nutrition.aiPlanDescription'),
+      p_is_active: false,
+      p_is_ai_generated: true,
+      p_weeks: weeks as any as any
+    });
+
+    if (rpcError) {
+      console.error('RPC Error:', rpcError);
+      throw rpcError;
+    }
+
+    // El RPC retorna jsonb { success: true, plan_id: '...' }
+    // supabase-js lo devuelve como data.
+    const result = rpcResult as any;
+    if (result && result.plan_id) {
+      return result.plan_id;
+    } else {
+      throw new Error('RPC did not return plan_id');
+    }
   };
 
   const handleActivate = async (activate: boolean) => {
@@ -602,7 +570,7 @@ export default function GenerateAIPlanScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -612,7 +580,7 @@ export default function GenerateAIPlanScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -634,7 +602,7 @@ export default function GenerateAIPlanScreen() {
                 <Text style={styles.profileDataLabel}>{t('nutrition.height')}</Text>
                 <View style={styles.profileDataValueBox}>
                   <Text style={styles.profileDataValue}>
-                    {heightUnit === 'ft' 
+                    {heightUnit === 'ft'
                       ? formatHeight(parseFloat(userHeight) || 0, 'ft')
                       : `${userHeight || 0} cm`
                     }
@@ -670,10 +638,10 @@ export default function GenerateAIPlanScreen() {
                 style={[styles.goalOption, nutritionGoal === goal && styles.goalOptionActive]}
                 onPress={() => setNutritionGoal(goal)}
               >
-                <Ionicons 
-                  name={goal === 'lose_fat' ? 'flame' : goal === 'maintain' ? 'sync' : 'barbell'} 
-                  size={24} 
-                  color={nutritionGoal === goal ? '#000' : goal === 'lose_fat' ? '#f44336' : goal === 'maintain' ? '#2196F3' : '#4CAF50'} 
+                <Ionicons
+                  name={goal === 'lose_fat' ? 'flame' : goal === 'maintain' ? 'sync' : 'barbell'}
+                  size={24}
+                  color={nutritionGoal === goal ? '#000' : goal === 'lose_fat' ? '#f44336' : goal === 'maintain' ? '#2196F3' : '#4CAF50'}
                 />
                 <Text style={[styles.goalOptionText, nutritionGoal === goal && styles.goalOptionTextActive]}>
                   {t(`nutrition.${goal === 'lose_fat' ? 'loseFat' : goal === 'maintain' ? 'maintain' : 'gainMuscle'}`)}
@@ -855,15 +823,15 @@ export default function GenerateAIPlanScreen() {
       <Modal visible={showMessageModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Ionicons 
-              name={messageModalData?.type === 'success' ? 'checkmark-circle' : 'alert-circle'} 
-              size={48} 
-              color={messageModalData?.type === 'success' ? '#4CAF50' : '#f44336'} 
+            <Ionicons
+              name={messageModalData?.type === 'success' ? 'checkmark-circle' : 'alert-circle'}
+              size={48}
+              color={messageModalData?.type === 'success' ? '#4CAF50' : '#f44336'}
             />
             <Text style={styles.modalTitle}>{messageModalData?.title}</Text>
             <Text style={styles.modalText}>{messageModalData?.message}</Text>
-            <TouchableOpacity 
-              style={styles.modalConfirmButton} 
+            <TouchableOpacity
+              style={styles.modalConfirmButton}
               onPress={() => setShowMessageModal(false)}
             >
               <Text style={styles.modalConfirmText}>{t('common.ok')}</Text>

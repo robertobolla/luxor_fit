@@ -1,5 +1,6 @@
 import React from 'react';
-import { useUser, SignedIn, SignedOut, SignIn } from '@clerk/clerk-react';
+import { useUser, useAuth, SignedIn, SignedOut, SignIn } from '@clerk/clerk-react';
+import { supabase, setSupabaseAuthToken } from './services/supabase';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import EmpresarioDashboard from './pages/EmpresarioDashboard';
@@ -47,6 +48,7 @@ function App() {
               <Route path="foods" element={<Foods />} />
               <Route path="partner-payments" element={<PartnerPayments />} />
               <Route path="partner-payments/:partnerId" element={<PartnerPayments />} />
+              <Route path="my-earnings" element={<PartnerPayments viewMode="personal" />} />
               <Route path="empresarios" element={<Empresarios />} />
               <Route path="empresarios/:empresarioId" element={<EmpresarioUsers />} />
               <Route path="empresarios/:empresarioId/members/:userId/:userName/:userEmail" element={<GymMemberDetail />} />
@@ -198,19 +200,51 @@ interface AdminCheckProps {
 function AdminCheck({ user }: AdminCheckProps) {
   const [isAdmin, setIsAdmin] = React.useState<boolean | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const { getToken } = useAuth(); // Move hook to top level
 
   React.useEffect(() => {
     async function checkRole() {
       if (user?.id) {
+        // INJECTAR TOKEN DE CLERK EN SUPABASE
+        // Esto es CRÍTICO para que RLS funcione (auth.uid() no sea null)
+        // INJECTAR TOKEN DE CLERK EN SUPABASE (Header Bypass)
+        try {
+          const token = await getToken({ template: 'supabase' });
+          // Usar nuestro helper personalizado que evita el error de UUID
+          await setSupabaseAuthToken(token);
+        } catch (err) {
+          logger.error('Error inyectando token:', err);
+        }
+
         // Pasar también el email como fallback para buscar en la base de datos
+        // Asegurar que adminService use la instancia de supabase YA autenticada
         const userEmail = user.primaryEmailAddress?.emailAddress || user.emailAddresses?.[0]?.emailAddress;
+
+        // INTENTAR MIGRACIÓN PEREZOSA (Lazy Migration)
+        // Si el usuario tiene datos viejos (UUID) y entra con Clerk (TEXT), esto los mueve.
+        if (userEmail) {
+          try {
+            const { data: migrationResult } = await supabase.rpc('migrate_user_data', {
+              p_email: userEmail
+            });
+
+            if (migrationResult?.success && migrationResult.old_id) {
+              // Silently reload if migration happened
+              window.location.reload();
+              return;
+            }
+          } catch (err) {
+            // Be silent about migration errors unless critical
+          }
+        }
+
         const adminStatus = await checkAdminRole(user.id, userEmail);
         setIsAdmin(adminStatus);
       }
       setLoading(false);
     }
     checkRole();
-  }, [user?.id]);
+  }, [user?.id, getToken]);
 
   if (loading) {
     return (
@@ -241,9 +275,20 @@ function AdminCheck({ user }: AdminCheckProps) {
         <p style={{ color: '#888', marginBottom: '1rem' }}>
           Tu cuenta no tiene permisos de administrador, socio o empresario.
         </p>
+        <div style={{ background: '#f5f5f5', padding: '1rem', borderRadius: '8px', textAlign: 'left', fontSize: '0.8rem', color: '#333' }}>
+          <p><strong>Debug Info:</strong></p>
+          <p>User ID: {user?.id}</p>
+          <p>Email: {user?.primaryEmailAddress?.emailAddress}</p>
+        </div>
         <p style={{ color: '#666', fontSize: '0.9rem' }}>
           Contacta al administrador para solicitar acceso.
         </p>
+        <button
+          onClick={() => window.location.reload()}
+          style={{ padding: '0.5rem 1rem', background: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        >
+          Reintentar
+        </button>
       </div>
     );
   }

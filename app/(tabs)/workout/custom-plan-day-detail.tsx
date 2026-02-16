@@ -15,7 +15,7 @@ import {
   LogBox,
   Alert,
 } from 'react-native';
-import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -144,6 +144,8 @@ export default function CustomPlanDayDetailScreen() {
   const [setTypes, setSetTypes] = useState<SetInfo[]>([]);
   const [expandedExercises, setExpandedExercises] = useState<Set<string>>(new Set());
   const [exerciseNotes, setExerciseNotes] = useState<string>(''); // Notas del ejercicio
+
+
 
   // ============================================================================
   // ESTADOS PARA SUPERSERIES
@@ -1140,6 +1142,33 @@ export default function CustomPlanDayDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={() => {
+                // Serializar datos del día actual
+                const dayDataToShare = JSON.stringify({
+                  dayNumber,
+                  name: dayName,
+                  exercises,
+                });
+
+                router.push({
+                  pathname: '/(tabs)/share-workout',
+                  params: {
+                    planId: editingPlanId || 'custom',
+                    dayDataSource: dayDataToShare
+                  }
+                } as any);
+              }}
+              style={{ marginRight: 10 }}
+            >
+              <Ionicons name="share-social-outline" size={24} color="#fff" />
+            </TouchableOpacity>
+          ),
+        }}
+      />
       <StatusBar barStyle="light-content" />
 
       <View style={styles.header}>

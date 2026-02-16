@@ -1,0 +1,84 @@
+{
+  "navbar": {
+    "services": "Services",
+    "professionals": "Professionals",
+    "about": "About Us",
+    "download": "Download App"
+  },
+  "hero": {
+    "badge": "⚡ FOR TRAINERS & NUTRITIONISTS",
+    "title_line1": "STRUCTURE, CONTROL",
+    "title_line2": "AND RESULTS",
+    "description": "Built for fitness professionals and athletes. Centralize your training plans, nutrition, and community in one place. Power your results and scale your business.",
+    "cta_primary": "Start Now",
+    "cta_secondary": "View Demo"
+  },
+  "stats": {
+    "active_users": "Active Users",
+    "workouts": "Workouts",
+    "rating": "App Store Rating",
+    "countries": "Countries"
+  },
+  "services": {
+    "label": "What is Luxor?",
+    "title": "Technology at the Service of Your Performance",
+    "description": "Luxor is a digital training platform designed to organize, simplify, and improve the fitness experience. We bring together smart routines, real-time tracking, nutrition plans, and constant motivation in a single app, so that training is clear, measurable, and sustainable over time.",
+    "cards": {
+      "training": {
+        "title": "Routine Editor",
+        "desc": "Create, organize, modify, and send workout routines. Supports supersets, dropsets, and exercise notes."
+      },
+      "exercises": {
+        "title": "Exercise Database",
+        "desc": "+500 exercises with technique videos. Filter by muscle group and available equipment."
+      },
+      "staff": {
+        "title": "Staff Management",
+        "desc": "Do you own a gym? Add trainers to your account and oversee their clients and performance."
+      },
+      "meal_planner": {
+        "title": "Meal Planner",
+        "desc": "Generate weekly menus based on calories and macros. Automatic shopping list."
+      },
+      "marketplace": {
+        "title": "Marketplace",
+        "desc": "Exclusive access to premium supplements and equipment."
+      },
+      "certifications": {
+        "title": "Certifications",
+        "desc": "Validate your knowledge and become a fitness leader."
+      }
+    },
+    "gyms": {
+      "badge": "LUXOR FOR BUSINESS",
+      "title": "Power Your Gym",
+      "subtitle": "The ultimate tool for gym owners and sports centers.",
+      "description": "Digitize your business, manage member access, automate payments, and offer a world-class training experience with your own white-label app.",
+      "features": [
+        "Membership & Access Management",
+        "Standardized Routines for Your Staff",
+        "Retention & Attendance Analytics",
+        "Direct Member Communication"
+      ],
+      "cta": "Schedule Demo"
+    }
+  },
+  "cta": {
+    "title": "Ready for the Next Level?",
+    "description": "Join the elite community that is already transforming their body and mind with Luxor Fitness.",
+    "button": "Download on App Store"
+  },
+  "footer": {
+    "description": "The ultimate platform for intelligent training and nutrition.",
+    "product": "Product",
+    "legal": "Legal",
+    "links": {
+      "features": "Features",
+      "pricing": "Pricing",
+      "testimonials": "Testimonials",
+      "privacy": "Privacy",
+      "terms": "Terms"
+    },
+    "rights": "© 2026 Luxor Fitness. All rights reserved."
+  }
+}

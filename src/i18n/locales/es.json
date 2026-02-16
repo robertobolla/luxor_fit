@@ -270,13 +270,6 @@
     "offlineMessage": "Sin conexión a internet. Algunas funciones pueden no estar disponibles.",
     "updatingData": "Actualizando datos..."
   },
-  "workouts": {
-    "statsTitle": "📊 Estadísticas de entrenamientos",
-    "completed": "Completados ({{period}})",
-    "avgMinutes": "Min. promedio",
-    "recent": "Entrenamientos recientes",
-    "duration": "{{minutes}} minutos"
-  },
   "bodyMetrics": {
     "title": "📏 Métricas corporales",
     "viewEvolution": "Ver evolución",
@@ -293,6 +286,9 @@
   },
   "workout": {
     "title": "Entrenar",
+    "weeksLabel": "Semanas",
+    "weekProgress": "Semana {{current}} de {{total}}",
+    "weekTitle": "Semana {{number}}",
     "activePlan": "Plan Activo",
     "continueEditing": "Continuar Editando",
     "viewPlan": "Ver Plan",
@@ -415,13 +411,16 @@
     "planDeletedSuccessfully": "Plan eliminado correctamente",
     "couldNotSaveWorkout": "No se pudo guardar el entrenamiento",
     "planTitle": "Plan de Entrenamiento",
+    "createdOn": "Creado el",
     "shareWithFriend": "Compartir con un amigo",
-    "progressionDefault": "Progresión gradual basada en tu nivel actual",
+    "progressionDefault": "Aumentar peso cuando logres el límite superior de repeticiones con buena técnica",
     "dayPlaceholder": "Día {{day}}",
     "dayName": "Día {{day}}",
     "goalsLabel": "Objetivos:",
     "activityTypes": "Tipos de Actividad:",
     "fitnessLevel": "Nivel de fitness",
+    "activatePlan": "Activar Plan",
+    "deactivatePlan": "Desactivar Plan",
     "activeWorkoutPlanTitle": "Plan de entrenamiento activo",
     "activeWorkoutPlanHelper": "Estos son los parámetros que se usarán para generar tu nuevo plan de nutrición:",
     "restTimerTitle": "Temporizador de descanso",
@@ -434,6 +433,55 @@
     },
     "status": {
       "paused": "Pausado"
+    },
+    "training": {
+      "principles": [
+        "Sobrecarga progresiva",
+        "Volumen adecuado",
+        "Recuperación"
+      ],
+      "recommendations": [
+        "Dormir 7-9 horas",
+        "Consumir suficiente proteína",
+        "Mantener consistencia"
+      ]
+    },
+    "tips": {
+      "general": [
+        "🔥 Calienta bien antes de empezar (5-10 min)",
+        "💪 Prioriza la técnica sobre el peso",
+        "⏱️ Respeta los tiempos de descanso",
+        "🎯 Mantén el core activado durante todos los ejercicios",
+        "📈 Escucha a tu cuerpo y ajusta la intensidad según sea necesario"
+      ],
+      "strength": [
+        "🔥 Calienta bien antes de empezar (5-10 min)",
+        "💪 Prioriza la técnica sobre el peso",
+        "⏱️ Respeta los tiempos de descanso para recuperación óptima",
+        "🎯 Mantén el core activado durante todos los ejercicios",
+        "📈 Aumenta el peso solo cuando puedas completar todas las series con buena forma"
+      ],
+      "cardio": [
+        "🔥 Calienta con 5 min de cardio ligero",
+        "💧 Mantén una botella de agua cerca",
+        "⏱️ Usa un cronómetro para controlar intervalos",
+        "🎯 Enfócate en mantener la intensidad alta",
+        "😮‍💨 Controla tu respiración durante los ejercicios"
+      ],
+      "legs": [
+        "🔥 Calienta con movilidad de cadera y rodillas",
+        "💪 Mantén la espalda recta en todos los ejercicios",
+        "⏱️ Descansos más largos para ejercicios pesados",
+        "🎯 Empuja desde los talones en sentadillas",
+        "📈 Progresa gradualmente para evitar lesiones"
+      ],
+      "core": [
+        "🔥 Activa el core antes de cada ejercicio",
+        "💪 Calidad sobre cantidad en cada repetición",
+        "⏱️ Mantén la tensión constante",
+        "🎯 Respira correctamente (exhala en el esfuerzo)",
+        "📈 Aumenta tiempo bajo tensión antes que peso"
+      ]
     },
     "stats": {
       "time": "Tiempo"
@@ -463,7 +511,10 @@
     "keyPrinciples": "🎯 Principios clave",
     "recommendations": "💡 Recomendaciones",
     "planAdaptedTitle": "¡Plan adaptado!",
-    "planAdaptedMessage": "Tu entrenamiento ha sido personalizado según tus especificaciones."
+    "planAdaptedMessage": "Tu entrenamiento ha sido personalizado según tus especificaciones.",
+    "statsTitle": "📊 Estadísticas de entrenamientos",
+    "avgMinutes": "Min. promedio",
+    "recent": "Entrenamientos recientes"
   },
   "timer": {
     "restTimerTitle": "Temporizador de descanso",
@@ -1007,7 +1058,6 @@
     "havePartnerCode": "¿Tienes código de descuento?",
     "enterPartnerCode": "Ingresa tu código",
     "applyCode": "Aplicar",
-    "discountApplied": "¡Descuento aplicado!",
     "partnerDiscount": "Precio especial de socio"
   },
   "tutorial": {
@@ -2643,5 +2693,61 @@
     "searchFavorites": "Buscar en favoritos...",
     "addedToFavorites": "Agregado a favoritos",
     "removedFromFavorites": "Eliminado de favoritos"
+  },
+  "share": {
+    "action": "Compartir",
+    "selectPhoto": "Selecciona una foto",
+    "dragHint": "Arrastra y pellizca para ajustar",
+    "gallery": "Galería",
+    "camera": "Cámara",
+    "errorDevice": "Tu dispositivo no soporta compartir",
+    "errorSharing": "Error al compartir la imagen",
+    "maxStats": "Máximo 4 estadísticas",
+    "modalTitle": "Estadísticas",
+    "optionsTitle": "Compartir Plan",
+    "optionsMessage": "¿Cómo deseas compartirlo?",
+    "withFriend": "Con un amigo en App",
+    "socialMedia": "Redes Sociales",
+    "styles": {
+      "routine": "Luxor",
+      "glass": "Glass",
+      "bar": "Barra",
+      "card": "Card",
+      "min": "Minimal",
+      "summary": "Resumen Diario",
+      "weekly": "Semanal",
+      "simple": "Simple"
+    },
+    "settings": {
+      "showPlanName": "Mostrar Nombre del Plan",
+      "showDayName": "Mostrar Nombre del Día",
+      "showSets": "Mostrar Series",
+      "showReps": "Mostrar Repeticiones",
+      "showRir": "Mostrar Intensidad (RIR)",
+      "showRest": "Mostrar Descanso",
+      "title": "Ajustes",
+      "showTargets": "Mostrar Objetivos"
+    },
+    "stats": {
+      "distance": "Distancia",
+      "time": "Tiempo",
+      "pace": "Ritmo",
+      "elevation": "Desnivel",
+      "calories": "Calorías",
+      "avgSpeed": "Vel. Promedio",
+      "maxSpeed": "Vel. Máxima",
+      "startTime": "Hora Inicio",
+      "steps": "Pasos",
+      "cadence": "Cadencia",
+      "date": "Fecha"
+    },
+    "title": "Compartir",
+    "options": {
+      "daily": "Resumen Diario",
+      "weekly": "Resumen Semanal"
+    },
+    "changeBackground": "Fondo",
+    "success": "¡Éxito!",
+    "successMessage": "Imagen compartida correctamente"
   }
 }

@@ -4,16 +4,15 @@
 
 import { supabase } from './supabase';
 import { getClerkUserEmailSync } from '../utils/clerkHelpers';
-import { User } from '@clerk/clerk-expo';
 
 /**
  * Verifica si un usuario tiene un rol especial con acceso automático (admin, empresario, socio)
  * También busca por email como fallback
  */
-export async function checkAdminAccess(userId: string, user?: User | null): Promise<boolean> {
+export async function checkAdminAccess(userId: string, user?: any | null): Promise<boolean> {
   try {
     const userEmail = user ? getClerkUserEmailSync(user) : null;
-    
+
     // Buscar rol activo por user_id
     let { data, error } = await supabase
       .from('admin_roles')
@@ -43,20 +42,29 @@ export async function checkAdminAccess(userId: string, user?: User | null): Prom
 
       if (emailData) {
         // Actualizar user_id si es diferente
-        if (emailData.user_id !== userId) {
+
+        // Usar la función RPC segura para actualizar el ID (bypass RLS)
+        // @ts-ignore - La funcion existe en la DB pero no en los tipos locales
+        const { error: rpcError } = await (supabase.rpc as any)('sync_admin_role_id', {
+          p_email: userEmail
+        });
+
+        if (rpcError) {
+          console.warn('Error en RPC sync_admin_role_id mobile:', rpcError);
+          // Fallback: intentar update directo
           const { error: updateError } = await supabase
             .from('admin_roles')
             .update({ user_id: userId, updated_at: new Date().toISOString() })
             .eq('id', emailData.id);
 
           if (updateError) {
-            console.error('Error actualizando user_id:', updateError);
+            console.error('Error actualizando user_id (fallback):', updateError);
           }
         }
         data = emailData;
       }
     }
-    
+
     return !!data;
   } catch (error) {
     console.error('Error inesperado verificando roles especiales:', error);

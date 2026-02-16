@@ -35,16 +35,35 @@
 }
 
 .sidebar-nav {
-  flex: 1;
   padding: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+}
+
+.nav-group-title {
+  padding: 0 1.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #666;
+  margin-bottom: 0.5rem;
+  margin-top: 0.5rem;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.875rem 1.5rem;
-  color: #ccc;
+  padding: 0.75rem 1.5rem;
+  color: #a0a0a0;
   text-decoration: none;
   transition: all 0.2s;
   border-left: 3px solid transparent;
@@ -160,10 +179,9 @@
   .sidebar {
     width: 200px;
   }
-  
+
   .main-content {
     margin-left: 200px;
     padding: 1rem;
   }
 }
-

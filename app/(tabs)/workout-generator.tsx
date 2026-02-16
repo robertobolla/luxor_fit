@@ -80,8 +80,8 @@ interface UserProfile {
 export default function WorkoutGeneratorScreen() {
   const { user } = useUser();
   const router = useRouter();
-  const { t } = useTranslation();
-  
+  const { t, i18n } = useTranslation();
+
   // Helper functions for translations
   const getEquipmentLabel = (eq: Equipment) => t(`equipment.${EQUIPMENT_KEYS[eq]}`);
   const getGoalLabel = (goal: string) => t(`fitnessGoals.${goal}`);
@@ -90,7 +90,7 @@ export default function WorkoutGeneratorScreen() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [generatedPlan, setGeneratedPlan] = useState<any>(null);
   const [error, setError] = useState('');
-  
+
   // Estados para el formulario de generación
   const [showForm, setShowForm] = useState(false);
   const [formStep, setFormStep] = useState(0);
@@ -104,7 +104,7 @@ export default function WorkoutGeneratorScreen() {
   const [showActivateModal, setShowActivateModal] = useState(false);
   const [newPlanId, setNewPlanId] = useState<string | null>(null);
   const [previousEquipmentSelection, setPreviousEquipmentSelection] = useState<Equipment[]>([]);
-  
+
   // Ref para cleanup de timeout de navegación
   const navigationTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -296,8 +296,10 @@ export default function WorkoutGeneratorScreen() {
       };
 
       // Generar plan con retry automático (pasar userId para análisis de feedback)
-      const result = await generateWorkoutPlan(workoutData, user?.id);
-      
+      // Asegurar que el idioma sea 'es' o 'en'
+      const currentLanguage = i18n.language.startsWith('en') ? 'en' : 'es';
+      const result = await generateWorkoutPlan(workoutData, user?.id, currentLanguage);
+
       if (!result.success || !result.plan) {
         throw new Error(result.error || 'No se pudo generar el plan');
       }
@@ -306,7 +308,7 @@ export default function WorkoutGeneratorScreen() {
 
       if (plan) {
         setGeneratedPlan(plan);
-        
+
         // Guardar el plan en Supabase (con retry manual)
         let saved = false;
         let planId: string | null = null;
@@ -447,7 +449,7 @@ export default function WorkoutGeneratorScreen() {
         },
       ]
     );
-    
+
   };
 
   const getFitnessLevelText = (level: string) => {
@@ -625,9 +627,9 @@ export default function WorkoutGeneratorScreen() {
           <View style={styles.formFooter}>
             {formStep > 0 && (
               <TouchableOpacity style={styles.formBackButton} onPress={prevFormStep}>
-<Text style={styles.formBackButtonText}>
-  {t('common.back')}
-</Text>
+                <Text style={styles.formBackButtonText}>
+                  {t('common.back')}
+                </Text>
               </TouchableOpacity>
             )}
             <View style={{ flex: 1 }} />
@@ -639,11 +641,11 @@ export default function WorkoutGeneratorScreen() {
               onPress={nextFormStep}
               disabled={!canProceedForm()}
             >
-           <Text style={styles.formNextButtonText}>
-  {formStep === formSteps.length - 1
-    ? t('workoutGenerator.generatePlan')
-    : t('common.next')}
-</Text>
+              <Text style={styles.formNextButtonText}>
+                {formStep === formSteps.length - 1
+                  ? t('workoutGenerator.generatePlan')
+                  : t('common.next')}
+              </Text>
 
             </TouchableOpacity>
           </View>
@@ -659,8 +661,8 @@ export default function WorkoutGeneratorScreen() {
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#ffb300" />
           <Text style={styles.loadingText}>
-  {t('workoutGenerator.loadingProfile')}
-</Text>
+            {t('workoutGenerator.loadingProfile')}
+          </Text>
         </View>
       </SafeAreaView>
     );
@@ -678,9 +680,9 @@ export default function WorkoutGeneratorScreen() {
             style={styles.backButton}
             onPress={() => router.push('/(tabs)/workout' as any)}
           >
-<Text style={styles.backButtonText}>
-  {t('common.back')}
-</Text>
+            <Text style={styles.backButtonText}>
+              {t('common.back')}
+            </Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -701,8 +703,8 @@ export default function WorkoutGeneratorScreen() {
             {t('workoutGenerator.analyzingYourGoals')}
           </Text>
           <Text style={styles.generatingSubtext}>
-  {t('workoutGenerator.mayTakeSeconds')}
-</Text>
+            {t('workoutGenerator.mayTakeSeconds')}
+          </Text>
 
         </View>
       </SafeAreaView>
@@ -716,7 +718,7 @@ export default function WorkoutGeneratorScreen() {
         <ScrollView style={styles.scrollView}>
           {/* Header */}
           <View style={styles.header}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 // Navegar directamente a workout
                 router.push('/(tabs)/workout' as any);
@@ -725,8 +727,8 @@ export default function WorkoutGeneratorScreen() {
               <Ionicons name="close" size={28} color="#ffffff" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>
-  {t('workoutGenerator.generatedPlanTitle')}
-</Text>
+              {t('workoutGenerator.generatedPlanTitle')}
+            </Text>
 
             <View style={{ width: 28 }} />
           </View>
@@ -740,30 +742,30 @@ export default function WorkoutGeneratorScreen() {
               <View style={styles.planStat}>
                 <Ionicons name="calendar" size={24} color="#ffb300" />
                 <Text style={styles.planStatText}>
-  {generatedPlan.duration_weeks}{' '}
-  {generatedPlan.duration_weeks === 1
-    ? t('workoutGenerator.week')
-    : t('workoutGenerator.weeks')}
-</Text>
+                  {generatedPlan.duration_weeks}{' '}
+                  {generatedPlan.duration_weeks === 1
+                    ? t('workoutGenerator.week')
+                    : t('workoutGenerator.weeks')}
+                </Text>
 
               </View>
               <View style={styles.planStat}>
                 <Ionicons name="fitness" size={24} color="#ffb300" />
                 <Text style={styles.planStatText}>
-  {generatedPlan.days_per_week}{' '}
-  {generatedPlan.days_per_week === 1
-    ? t('workoutGenerator.dayPerWeek')
-    : t('workoutGenerator.daysPerWeek')}
-</Text>
+                  {generatedPlan.days_per_week}{' '}
+                  {generatedPlan.days_per_week === 1
+                    ? t('workoutGenerator.dayPerWeek')
+                    : t('workoutGenerator.daysPerWeek')}
+                </Text>
               </View>
             </View>
           </View>
 
           {/* Weekly Schedule */}
           <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-  📅 {t('workoutGenerator.weeklyStructure')}
-</Text>
+            <Text style={styles.sectionTitle}>
+              📅 {t('workoutGenerator.weeklyStructure')}
+            </Text>
             {generatedPlan.weekly_structure?.map((day: any, index: number) => (
               <View key={index} style={styles.dayCard}>
                 <View style={styles.dayHeader}>
@@ -776,13 +778,13 @@ export default function WorkoutGeneratorScreen() {
                     {day.exercises.map((exercise: any, idx: number) => {
                       // Soporte para formato antiguo (string) y nuevo (objeto)
                       const exerciseName = typeof exercise === 'string' ? exercise : exercise.name;
-                      
+
                       // Intentar obtener información de series/reps del nuevo formato
                       let sets = null;
                       let reps = null;
                       let rest = null;
                       let rir = null;
-                      
+
                       if (typeof exercise === 'object') {
                         // Formato nuevo con working_sets
                         if (exercise.working_sets && exercise.working_sets.length > 0) {
@@ -798,7 +800,7 @@ export default function WorkoutGeneratorScreen() {
                           rest = exercise.rest;
                         }
                       }
-                      
+
                       return (
                         <View key={idx} style={styles.exerciseItemContainer}>
                           <View style={styles.exerciseInfoContainer}>
@@ -842,9 +844,9 @@ export default function WorkoutGeneratorScreen() {
           {/* Key Principles */}
           {generatedPlan.key_principles && (
             <View style={styles.section}>
-<Text style={styles.sectionTitle}>
-  🎯 {t('workoutGenerator.keyPrinciplesTitle')}
-</Text>
+              <Text style={styles.sectionTitle}>
+                🎯 {t('workoutGenerator.keyPrinciplesTitle')}
+              </Text>
               <View style={styles.principlesCard}>
                 {generatedPlan.key_principles.map((principle: string, index: number) => (
                   <Text key={index} style={styles.principleText}>
@@ -859,8 +861,8 @@ export default function WorkoutGeneratorScreen() {
           {generatedPlan.progression && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>
-  📈 {t('workoutGenerator.progressionTitle')}
-</Text>
+                📈 {t('workoutGenerator.progressionTitle')}
+              </Text>
 
               <View style={styles.progressionCard}>
                 <Text style={styles.progressionText}>{generatedPlan.progression}</Text>
@@ -871,9 +873,9 @@ export default function WorkoutGeneratorScreen() {
           {/* Recommendations */}
           {generatedPlan.recommendations && (
             <View style={styles.section}>
-<Text style={styles.sectionTitle}>
-  💡 {t('workoutGenerator.recommendationsTitle')}
-</Text>
+              <Text style={styles.sectionTitle}>
+                💡 {t('workoutGenerator.recommendationsTitle')}
+              </Text>
               <View style={styles.recommendationsCard}>
                 {generatedPlan.recommendations.map((rec: string, index: number) => (
                   <Text key={index} style={styles.recommendationText}>
@@ -886,9 +888,9 @@ export default function WorkoutGeneratorScreen() {
 
           {/* Use Plan Button */}
           <TouchableOpacity style={styles.usePlanButton} onPress={handleUsePlan}>
-          <Text style={styles.usePlanButtonText}>
-  {t('workoutGenerator.usePlan')}
-</Text>
+            <Text style={styles.usePlanButtonText}>
+              {t('workoutGenerator.usePlan')}
+            </Text>
             <Ionicons name="arrow-forward" size={24} color="#1a1a1a" />
           </TouchableOpacity>
 
@@ -904,7 +906,7 @@ export default function WorkoutGeneratorScreen() {
       <ScrollView style={styles.scrollView}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => {
               // Navegar directamente a workout
               router.push('/(tabs)/workout' as any);
@@ -913,8 +915,8 @@ export default function WorkoutGeneratorScreen() {
             <Ionicons name="arrow-back" size={28} color="#ffffff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-  {t('workoutGenerator.generatePlan')}
-</Text>
+            {t('workoutGenerator.generatePlan')}
+          </Text>
 
           <View style={{ width: 28 }} />
         </View>
@@ -923,46 +925,46 @@ export default function WorkoutGeneratorScreen() {
         <View style={styles.intro}>
           <Ionicons name="sparkles" size={48} color="#ffb300" />
           <Text style={styles.introTitle}>
-  {t('workoutGenerator.introTitle')}
-</Text>
+            {t('workoutGenerator.introTitle')}
+          </Text>
 
-<Text style={styles.introDescription}>
-  {t('workoutGenerator.introDescription')}
-</Text>
+          <Text style={styles.introDescription}>
+            {t('workoutGenerator.introDescription')}
+          </Text>
 
         </View>
 
         {/* What to Expect */}
         <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-  ✨ {t('workoutGenerator.whatIsIncluded')}
-</Text>
+          <Text style={styles.sectionTitle}>
+            ✨ {t('workoutGenerator.whatIsIncluded')}
+          </Text>
 
           <View style={styles.featuresCard}>
             <View style={styles.featureItem}>
               <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
-  {t('workoutGenerator.featureWeeklyPlan')}
-</Text>
+                {t('workoutGenerator.featureWeeklyPlan')}
+              </Text>
 
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
-  {t('workoutGenerator.featureEquipmentBasedExercises')}
-</Text>
+                {t('workoutGenerator.featureEquipmentBasedExercises')}
+              </Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
-  {t('workoutGenerator.featureProgression')}
-</Text>
+                {t('workoutGenerator.featureProgression')}
+              </Text>
             </View>
             <View style={styles.featureItem}>
               <Ionicons name="checkmark-circle" size={24} color="#ffb300" />
               <Text style={styles.featureText}>
-  {t('workoutGenerator.featureEvidenceBased')}
-</Text>
+                {t('workoutGenerator.featureEvidenceBased')}
+              </Text>
 
             </View>
           </View>
@@ -976,8 +978,8 @@ export default function WorkoutGeneratorScreen() {
           >
             <Ionicons name="flash" size={24} color="#1a1a1a" />
             <Text style={styles.generateButtonText}>
-  {t('workoutGenerator.generateMyPlan')}
-</Text>
+              {t('workoutGenerator.generateMyPlan')}
+            </Text>
 
           </TouchableOpacity>
         )}

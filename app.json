@@ -2,8 +2,8 @@
   "expo": {
     "name": "Luxor Fitness",
     "slug": "fitmind",
-    "version": "1.0.9",
-    "runtimeVersion": "1.0.9",
+    "version": "1.1.1",
+    "runtimeVersion": "1.1.1",
     "updates": {
       "url": "https://u.expo.dev/39f4fe90-c5cc-4c8a-baeb-7424da1c4f10"
     },
@@ -18,10 +18,15 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.luxorfitness.app",
-      "buildNumber": "72",
+      "buildNumber": "83",
       "icon": "./assets/icon.png",
       "requireFullScreen": true,
       "infoPlist": {
+        "UIBackgroundModes": [
+          "location",
+          "fetch",
+          "remote-notification"
+        ],
         "NSHealthShareUsageDescription": "Luxor Fitness necesita acceso a tus datos de salud para mostrarte estadísticas personalizadas de pasos, calorías, distancia y sueño.",
         "NSHealthUpdateUsageDescription": "Luxor Fitness puede actualizar tus datos de salud cuando registres entrenamientos.",
         "NSHealthClinicalHealthRecordsShareUsageDescription": "Luxor Fitness necesita acceso a tus registros clínicos para un mejor seguimiento de tu salud.",
@@ -43,12 +48,15 @@
         "backgroundColor": "#0a0a0a"
       },
       "package": "com.luxorfitness.app",
-      "versionCode": 73,
+      "versionCode": 83,
       "permissions": [
         "ACTIVITY_RECOGNITION",
         "android.permission.ACTIVITY_RECOGNITION",
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.POST_NOTIFICATIONS",
         "com.android.vending.BILLING"
       ]
@@ -77,6 +85,16 @@
         "expo-sensors",
         {
           "motionPermission": "Luxor Fitness necesita acceso a los sensores de movimiento para contar tus pasos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Luxor Fitness necesita acceso a tu ubicación para rastrear tus actividades físicas en segundo plano.",
+          "locationAlwaysPermission": "Luxor Fitness necesita acceso a tu ubicación para rastrear tus actividades físicas en segundo plano.",
+          "locationWhenInUsePermission": "Luxor Fitness necesita acceso a tu ubicación para rastrear tus actividades físicas con GPS.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ]
     ],

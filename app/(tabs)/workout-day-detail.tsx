@@ -37,20 +37,20 @@ function isAbsOrBodyweightExercise(name: string): boolean {
   ];
   const bodyweightKeywords = [
     'flexiones', 'push-up', 'pushup', 'push up',
-    'dominadas', 'pull-up', 'pullup', 'pull up', 
+    'dominadas', 'pull-up', 'pullup', 'pull up',
     'fondos', 'dips', 'burpees', 'jumping jack',
     'mountain climber', 'escalador'
   ];
-  
+
   const lowerName = (name || '').toLowerCase();
-  return absKeywords.some(k => lowerName.includes(k)) || 
-         bodyweightKeywords.some(k => lowerName.includes(k));
+  return absKeywords.some(k => lowerName.includes(k)) ||
+    bodyweightKeywords.some(k => lowerName.includes(k));
 }
 
 // Función para enriquecer ejercicios de un día con progresión
 function enrichDayExercises(dayData: any): any {
   if (!dayData || !dayData.exercises) return dayData;
-  
+
   return {
     ...dayData,
     exercises: dayData.exercises.map((exercise: any, index: number) => {
@@ -58,14 +58,14 @@ function enrichDayExercises(dayData: any): any {
       if (exercise.setTypes && exercise.setTypes.length > 0 && exercise.setTypes[0]?.type) {
         return exercise;
       }
-      
+
       const exerciseName = exercise.name || '';
       const isAbsOrBodyweight = isAbsOrBodyweightExercise(exerciseName);
-      
+
       // Parsear el formato de reps: "8-10 @ RIR 2" o "10" o "8-10"
       const repsString = String(exercise.reps || '10');
       let { minReps, maxReps } = parseRepsString(repsString);
-      
+
       // Aplicar límites de repeticiones para ejercicios normales (no abs/bodyweight)
       if (!isAbsOrBodyweight) {
         // Máximo 12 reps para empezar
@@ -77,28 +77,28 @@ function enrichDayExercises(dayData: any): any {
           maxReps = minReps + 2;
         }
       }
-      
+
       const numWorkingSets = exercise.sets || 4;
       const restSeconds = parseRestToSeconds(exercise.rest);
-      
+
       // Agregar calentamiento SOLO al primer ejercicio del día (no para abs/bodyweight)
       const isFirstExercise = index === 0;
       const warmupCount = (isFirstExercise && !isAbsOrBodyweight) ? 2 : 0;
-      
+
       const setTypes: any[] = [];
       const repsArray: number[] = [];
-      
+
       // Series de calentamiento
       for (let i = 0; i < warmupCount; i++) {
         setTypes.push({ type: 'warmup', reps: null, rir: null });
         repsArray.push(0);
       }
-      
+
       // Series de trabajo con progresión
       for (let i = 0; i < numWorkingSets; i++) {
         const progress = i / Math.max(numWorkingSets - 1, 1);
         const currentReps = Math.round(maxReps - ((maxReps - minReps) * progress));
-        
+
         // Para ejercicios de abs/bodyweight: sin RIR
         if (isAbsOrBodyweight) {
           setTypes.push({
@@ -110,7 +110,7 @@ function enrichDayExercises(dayData: any): any {
           const currentRir = Math.round(4 - (3 * progress)); // RIR 4 -> 1
           const isLastSet = i === numWorkingSets - 1;
           const isFailure = isLastSet && currentRir <= 1;
-          
+
           setTypes.push({
             type: isFailure ? 'failure' : 'normal',
             reps: currentReps,
@@ -119,7 +119,7 @@ function enrichDayExercises(dayData: any): any {
         }
         repsArray.push(currentReps);
       }
-      
+
       return {
         ...exercise,
         sets: warmupCount + numWorkingSets,
@@ -135,14 +135,14 @@ function enrichDayExercises(dayData: any): any {
 function parseRepsString(repsString: string): { minReps: number; maxReps: number; baseRir: number | null } {
   const rirMatch = repsString.match(/@\s*RIR\s*(\d+)/i);
   const baseRir = rirMatch ? parseInt(rirMatch[1]) : null;
-  
+
   const repsOnlyString = repsString.replace(/@.*$/, '').trim();
   const rangeMatch = repsOnlyString.match(/(\d+)\s*[-–]\s*(\d+)/);
-  
+
   if (rangeMatch) {
     return { minReps: parseInt(rangeMatch[1]), maxReps: parseInt(rangeMatch[2]), baseRir };
   }
-  
+
   const singleMatch = repsOnlyString.match(/(\d+)/);
   const reps = singleMatch ? parseInt(singleMatch[1]) : 10;
   return { minReps: Math.max(reps - 2, 4), maxReps: reps, baseRir };
@@ -171,7 +171,7 @@ export default function WorkoutDayDetailScreen() {
   const params = useLocalSearchParams();
   const { showAlert } = useAlert();
   const { user } = useUser();
-  
+
   // Parsear los datos del día con validación y enriquecimiento
   const parseDayData = (dataString: string | undefined) => {
     try {
@@ -185,12 +185,12 @@ export default function WorkoutDayDetailScreen() {
     }
     return null;
   };
-  
+
   const planName = params.planName as string || 'Plan de Entrenamiento';
   const planId = params.planId as string;
   const dayName = params.dayName as string; // ej: 'day_1'
   const isCustomPlan = params.isCustomPlan === 'true'; // Si es plan personalizado
-  
+
   const [dayData, setDayData] = useState(parseDayData(params.dayData as string));
   const [isCompleted, setIsCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -198,23 +198,23 @@ export default function WorkoutDayDetailScreen() {
   const [duration, setDuration] = useState('');
   const [difficulty, setDifficulty] = useState(3);
   const [notes, setNotes] = useState('');
-  
+
   // Estados para las series de ejercicios
   const [exerciseSets, setExerciseSets] = useState<{ [exerciseName: string]: any[] }>({});
   const [expandedExercises, setExpandedExercises] = useState<{ [exerciseName: string]: boolean }>({});
-  
+
   // Estados para el modal de video
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoExerciseName, setVideoExerciseName] = useState('');
-  
+
   // Estados para el temporizador de descanso
   const [showRestTimerModal, setShowRestTimerModal] = useState(false);
   const [selectedRestTime, setSelectedRestTime] = useState(120);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  
+
   useEffect(() => {
     checkIfCompleted();
   }, [user, planId, dayName]);
@@ -245,7 +245,7 @@ export default function WorkoutDayDetailScreen() {
 
     try {
       console.log('📥 Cargando plan desde Supabase...', { planId, dayName });
-      
+
       const { data: planData, error } = await supabase
         .from('workout_plans')
         .select('plan_data')
@@ -269,19 +269,19 @@ export default function WorkoutDayDetailScreen() {
           dayDataFromDB = fullPlan[dayName];
           console.log('✅ Día encontrado en estructura plana');
         }
-        
+
         // Método 2: Buscar en multi_week_structure
         if (!dayDataFromDB && fullPlan.multi_week_structure && Array.isArray(fullPlan.multi_week_structure)) {
           // dayName puede ser "week_X_day_Y" o "Día X"
           const weekMatch = dayName.match(/week_(\d+)_day_(\d+)/i);
-          
+
           for (const week of fullPlan.multi_week_structure) {
             if (week.days && Array.isArray(week.days)) {
               for (let i = 0; i < week.days.length; i++) {
                 const day = week.days[i];
                 // Buscar por coincidencia de dayKey o por índice
-                if (day.day === dayName || 
-                    (weekMatch && week.week_number === parseInt(weekMatch[1]) && i === parseInt(weekMatch[2]) - 1)) {
+                if (day.day === dayName ||
+                  (weekMatch && week.week_number === parseInt(weekMatch[1]) && i === parseInt(weekMatch[2]) - 1)) {
                   dayDataFromDB = day;
                   console.log('✅ Día encontrado en multi_week_structure');
                   break;
@@ -291,12 +291,12 @@ export default function WorkoutDayDetailScreen() {
             if (dayDataFromDB) break;
           }
         }
-        
+
         // Método 3: Buscar en weekly_structure
         if (!dayDataFromDB && fullPlan.weekly_structure && Array.isArray(fullPlan.weekly_structure)) {
           const dayMatch = dayName.match(/day_(\d+)/i);
           const dayIndex = dayMatch ? parseInt(dayMatch[1]) - 1 : -1;
-          
+
           for (let i = 0; i < fullPlan.weekly_structure.length; i++) {
             const day = fullPlan.weekly_structure[i];
             if (day.day === dayName || i === dayIndex) {
@@ -306,14 +306,14 @@ export default function WorkoutDayDetailScreen() {
             }
           }
         }
-        
+
         if (dayDataFromDB) {
           console.log('✅ Datos del día encontrados:', JSON.stringify(dayDataFromDB, null, 2).substring(0, 500));
-          
+
           // Enriquecer ejercicios con progresión si no tienen setTypes
           const enrichedDayData = enrichDayExercises(dayDataFromDB);
           console.log('🔧 Ejercicios enriquecidos con progresión');
-          
+
           setDayData(enrichedDayData);
         } else {
           console.warn('⚠️ No se encontraron datos para', dayName, '- Manteniendo datos originales del parámetro');
@@ -325,14 +325,14 @@ export default function WorkoutDayDetailScreen() {
       console.error('❌ Error recargando datos del plan:', error);
     }
   };
-  
+
   const checkIfCompleted = async () => {
     if (!user?.id || !planId || !dayName) return;
-    
+
     setIsLoading(true);
     try {
       console.log('🔍 Verificando completado para:', { planId, dayName, user_id: user.id });
-      
+
       // Verificar si fue completado hoy
       const today = new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
@@ -345,15 +345,15 @@ export default function WorkoutDayDetailScreen() {
         .lte('completed_at', `${today}T23:59:59`)
         .order('completed_at', { ascending: false })
         .limit(1);
-      
+
       console.log('📊 Resultado verificación:', { data, error, isCompleted: data && data.length > 0 });
-      
+
       if (error) {
         console.error('Error checking completion:', error);
         setIsCompleted(false);
         return;
       }
-      
+
       if (data && data.length > 0) {
         setIsCompleted(true);
       } else {
@@ -366,15 +366,15 @@ export default function WorkoutDayDetailScreen() {
       setIsLoading(false);
     }
   };
-  
+
   const handleMarkAsCompleted = async () => {
     if (!user?.id || !planId || !dayName) return;
-    
+
     if (isCompleted) {
       Alert.alert(t('workoutDay.completed'), t('workoutDay.alreadyCompleted'));
       return;
     }
-    
+
     // Abrir modal para ingresar datos adicionales
     setShowCompletionModal(true);
   };
@@ -396,20 +396,20 @@ export default function WorkoutDayDetailScreen() {
         difficulty_rating: difficulty,
         notes: notes || null,
       };
-      
+
       console.log('💾 Guardando entrenamiento completado:', { planId, dayName, user_id: user.id });
-      
+
       const { error, data } = await supabase
         .from('workout_completions')
         .insert(completion)
         .select();
-      
+
       if (error) {
         throw error;
       }
-      
+
       console.log('✅ Entrenamiento guardado correctamente:', data);
-      
+
       // Guardar entrenamiento en Apple Health / Google Fit
       if (duration) {
         const durationMinutes = parseInt(duration);
@@ -418,17 +418,17 @@ export default function WorkoutDayDetailScreen() {
         const baseCaloriesPerMin = 6;
         const difficultyMultiplier = difficulty ? (difficulty / 3) : 1;
         const estimatedCalories = Math.round(durationMinutes * baseCaloriesPerMin * difficultyMultiplier);
-        
+
         // Determinar tipo de entrenamiento basado en el plan
         const workoutType = dayData.focus?.toLowerCase().includes('cardio') ? 'Cardio' :
-                          dayData.focus?.toLowerCase().includes('hiit') ? 'HIIT' :
-                          dayData.focus?.toLowerCase().includes('yoga') ? 'Yoga' :
-                          'Traditional Strength Training';
-        
+          dayData.focus?.toLowerCase().includes('hiit') ? 'HIIT' :
+            dayData.focus?.toLowerCase().includes('yoga') ? 'Yoga' :
+              'Traditional Strength Training';
+
         try {
           const { saveWorkoutToAppleHealth, saveWorkoutToGoogleFit } = await import('../../src/services/healthService');
           const Platform = require('react-native').Platform;
-          
+
           if (Platform.OS === 'ios') {
             await saveWorkoutToAppleHealth(
               durationMinutes,
@@ -449,13 +449,13 @@ export default function WorkoutDayDetailScreen() {
           // No fallar el guardado si hay error con la app de salud
         }
       }
-      
+
       // Enviar notificación inmediata de entrenamiento completado
       await smartNotificationService.sendImmediateNotification(
         user.id,
         'workout_completed'
       );
-      
+
       return data;
     },
     {
@@ -467,9 +467,9 @@ export default function WorkoutDayDetailScreen() {
 
   const handleSaveCompletion = async () => {
     if (!user?.id || !planId || !dayName || !dayData) return;
-    
+
     const result = await saveCompletionWithRetry.executeWithRetry();
-    
+
     if (result) {
       setIsCompleted(true);
       setShowCompletionModal(false);
@@ -525,17 +525,17 @@ export default function WorkoutDayDetailScreen() {
   // Función para reproducir sonido de finalización
   const playTimerSound = async () => {
     if (!soundEnabled) return;
-    
+
     try {
       // Vibración de triple pulso
       Vibration.vibrate([0, 200, 100, 200, 100, 200]);
-      
+
       // Reproducir sonido de notificación
       const { sound } = await Audio.Sound.createAsync(
         { uri: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3' },
         { shouldPlay: true, volume: 1.0 }
       );
-      
+
       // Liberar el sonido después de reproducirlo
       sound.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded && status.didJustFinish) {
@@ -613,55 +613,55 @@ export default function WorkoutDayDetailScreen() {
   const getTipsForFocus = (focus: string | undefined): string[] => {
     if (!focus) {
       return [
-        '🔥 Calienta bien antes de empezar (5-10 min)',
-        '💪 Prioriza la técnica sobre el peso',
-        '⏱️ Respeta los tiempos de descanso',
-        '🎯 Mantén el core activado durante todos los ejercicios',
-        '📈 Escucha a tu cuerpo y ajusta la intensidad según sea necesario',
+        t('workout.tips.general.0'),
+        t('workout.tips.general.1'),
+        t('workout.tips.general.2'),
+        t('workout.tips.general.3'),
+        t('workout.tips.general.4'),
       ];
     }
-    
+
     const lowerFocus = focus.toLowerCase();
-    
-    if (lowerFocus.includes('fuerza') || lowerFocus.includes('push') || lowerFocus.includes('pull')) {
+
+    if (lowerFocus.includes('fuerza') || lowerFocus.includes('push') || lowerFocus.includes('pull') || lowerFocus.includes('strength')) {
       return [
-        '🔥 Calienta bien antes de empezar (5-10 min)',
-        '💪 Prioriza la técnica sobre el peso',
-        '⏱️ Respeta los tiempos de descanso para recuperación óptima',
-        '🎯 Mantén el core activado durante todos los ejercicios',
-        '📈 Aumenta el peso solo cuando puedas completar todas las series con buena forma',
+        t('workout.tips.strength.0'),
+        t('workout.tips.strength.1'),
+        t('workout.tips.strength.2'),
+        t('workout.tips.strength.3'),
+        t('workout.tips.strength.4'),
       ];
     } else if (lowerFocus.includes('cardio') || lowerFocus.includes('hiit')) {
       return [
-        '🔥 Calienta con 5 min de cardio ligero',
-        '💧 Mantén una botella de agua cerca',
-        '⏱️ Usa un cronómetro para controlar intervalos',
-        '🎯 Enfócate en mantener la intensidad alta',
-        '😮‍💨 Controla tu respiración durante los ejercicios',
+        t('workout.tips.cardio.0'),
+        t('workout.tips.cardio.1'),
+        t('workout.tips.cardio.2'),
+        t('workout.tips.cardio.3'),
+        t('workout.tips.cardio.4'),
       ];
-    } else if (lowerFocus.includes('inferior')) {
+    } else if (lowerFocus.includes('inferior') || lowerFocus.includes('legs') || lowerFocus.includes('pierna')) {
       return [
-        '🔥 Calienta con movilidad de cadera y rodillas',
-        '💪 Mantén la espalda recta en todos los ejercicios',
-        '⏱️ Descansos más largos para ejercicios pesados',
-        '🎯 Empuja desde los talones en sentadillas',
-        '📈 Progresa gradualmente para evitar lesiones',
+        t('workout.tips.legs.0'),
+        t('workout.tips.legs.1'),
+        t('workout.tips.legs.2'),
+        t('workout.tips.legs.3'),
+        t('workout.tips.legs.4'),
       ];
-    } else if (lowerFocus.includes('core') || lowerFocus.includes('accesorios')) {
+    } else if (lowerFocus.includes('core') || lowerFocus.includes('accesorios') || lowerFocus.includes('abs')) {
       return [
-        '🔥 Activa el core antes de cada ejercicio',
-        '💪 Calidad sobre cantidad en cada repetición',
-        '⏱️ Mantén la tensión constante',
-        '🎯 Respira correctamente (exhala en el esfuerzo)',
-        '📈 Aumenta tiempo bajo tensión antes que peso',
+        t('workout.tips.core.0'),
+        t('workout.tips.core.1'),
+        t('workout.tips.core.2'),
+        t('workout.tips.core.3'),
+        t('workout.tips.core.4'),
       ];
     } else {
       return [
-        '🔥 Calienta adecuadamente antes de empezar',
-        '💪 Mantén buena técnica en todos los ejercicios',
-        '⏱️ Respeta los tiempos de descanso',
-        '🎯 Escucha a tu cuerpo y ajusta si es necesario',
-        '📈 Progresa gradualmente semana a semana',
+        t('workout.tips.general.0'),
+        t('workout.tips.general.1'),
+        t('workout.tips.general.2'),
+        t('workout.tips.general.3'),
+        t('workout.tips.general.4'),
       ];
     }
   };
@@ -675,7 +675,7 @@ export default function WorkoutDayDetailScreen() {
       <ScrollView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => {
               // Volver al plan o a la pestaña de entrenar
               const planId = params.planId;
@@ -684,16 +684,44 @@ export default function WorkoutDayDetailScreen() {
               } else {
                 router.push('/(tabs)/workout' as any);
               }
-            }} 
+            }}
             style={styles.backIconButton}
           >
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerSubtitle}>{planName}</Text>
-            <Text style={styles.headerTitle}>{dayData.day}</Text>
+            <Text style={styles.headerTitle}>
+              {(() => {
+                const dayMatch = dayData.day.match(/(?:Day|Día)\s*(\d+)/i);
+                if (dayMatch) {
+                  return t('workout.dayName', { day: dayMatch[1] });
+                }
+                return dayData.day;
+              })()}
+            </Text>
           </View>
-          <View style={{ width: 24 }} />
+          <TouchableOpacity
+            onPress={() => {
+              // Serializar datos para compartir
+              const dayDataToShare = JSON.stringify({
+                name: dayData.day,
+                exercises: dayData.exercises,
+                planName: planName
+              });
+
+              router.push({
+                pathname: '/(tabs)/share-workout',
+                params: {
+                  planId: planId,
+                  dayDataSource: dayDataToShare
+                }
+              } as any);
+            }}
+            style={styles.backIconButton}
+          >
+            <Ionicons name="share-social-outline" size={24} color="#ffffff" />
+          </TouchableOpacity>
         </View>
 
         {/* Day Info */}
@@ -707,8 +735,8 @@ export default function WorkoutDayDetailScreen() {
             <View style={styles.durationBadge}>
               <Ionicons name="time-outline" size={18} color="#ffb300" />
               <Text style={styles.durationText}>
-  {t('time.minutes', { count: dayData.duration })}
-</Text>
+                {t('time.minutes', { count: dayData.duration })}
+              </Text>
             </View>
           )}
         </View>
@@ -740,38 +768,38 @@ export default function WorkoutDayDetailScreen() {
               <Text style={styles.completionButtonText}>{t('workoutDay.saving')}</Text>
             ) : (
               <>
-                <Ionicons 
-                  name={isCompleted ? "checkmark-circle" : "checkmark-circle-outline"} 
-                  size={24} 
-                  color={isCompleted ? "#4CAF50" : "#1a1a1a"} 
+                <Ionicons
+                  name={isCompleted ? "checkmark-circle" : "checkmark-circle-outline"}
+                  size={24}
+                  color={isCompleted ? "#4CAF50" : "#1a1a1a"}
                 />
-              <Text style={[
-  styles.completionButtonText,
-  isCompleted && styles.completionButtonTextCompleted
-]}>
-  {isCompleted
-    ? t('workout.markCompleted.done')
-    : t('workout.markCompleted.pending')}
-</Text>
+                <Text style={[
+                  styles.completionButtonText,
+                  isCompleted && styles.completionButtonTextCompleted
+                ]}>
+                  {isCompleted
+                    ? t('workout.markCompleted.done')
+                    : t('workout.markCompleted.pending')}
+                </Text>
 
               </>
             )}
           </TouchableOpacity>
           {isCompleted && (
-         <Text style={styles.completionNote}>
-         {t('workout.completionNote')}
-       </Text>
-       
+            <Text style={styles.completionNote}>
+              {t('workout.completionNote')}
+            </Text>
+
           )}
         </View>
 
         {/* Ejercicios */}
         <View style={styles.section}>
-        <Text style={styles.sectionTitle}>
-  {t('workout.exercisesTitle', {
-    count: dayData.exercises?.length || 0,
-  })}
-</Text>
+          <Text style={styles.sectionTitle}>
+            {t('workout.exercisesTitle', {
+              count: dayData.exercises?.length || 0,
+            })}
+          </Text>
           {dayData.exercises?.map((exercise: any, index: number) => {
             const isOldFormat = typeof exercise === 'string';
             const isSuperset = !isOldFormat && exercise.type === 'superset';
@@ -783,13 +811,13 @@ export default function WorkoutDayDetailScreen() {
             const supersetExercises = isSuperset ? (exercise.exercises || []) : [];
 
             // Debug log
-            console.log('Exercise:', { 
-              isOldFormat, 
+            console.log('Exercise:', {
+              isOldFormat,
               isSuperset,
-              exercise, 
-              sets, 
-              reps, 
-              rest, 
+              exercise,
+              sets,
+              reps,
+              rest,
               setTypes
             });
 
@@ -798,7 +826,7 @@ export default function WorkoutDayDetailScreen() {
             // Renderizado especial para superseries
             if (isSuperset) {
               const supersetSets = sets || 1;
-              
+
               return (
                 <View key={index} style={[styles.exerciseCard, styles.supersetCard]}>
                   <View style={styles.exerciseHeader}>
@@ -838,14 +866,14 @@ export default function WorkoutDayDetailScreen() {
                         if (Array.isArray(ssEx.reps)) {
                           // Tomar solo las reps correspondientes al número de series
                           const repsToShow = ssEx.reps.slice(0, supersetSets);
-                          repsDisplay = repsToShow.length === 1 
-                            ? `${repsToShow[0]} reps` 
+                          repsDisplay = repsToShow.length === 1
+                            ? `${repsToShow[0]} reps`
                             : `${repsToShow.join('/')} reps`;
                         } else {
                           repsDisplay = `${ssEx.reps} reps`;
                         }
                       }
-                      
+
                       return (
                         <View key={ssIdx} style={styles.supersetExerciseItem}>
                           <View style={styles.supersetExerciseBullet}>
@@ -855,7 +883,7 @@ export default function WorkoutDayDetailScreen() {
                           {repsDisplay && (
                             <Text style={styles.supersetExerciseReps}>{repsDisplay}</Text>
                           )}
-                          <TouchableOpacity 
+                          <TouchableOpacity
                             style={styles.supersetVideoButton}
                             onPress={async () => {
                               try {
@@ -897,17 +925,17 @@ export default function WorkoutDayDetailScreen() {
                     <Text style={styles.exerciseName}>{exerciseName}</Text>
                   </View>
                   <View style={styles.exerciseActions}>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.registerButton}
                       onPress={() => toggleExercise(exerciseName + '_' + index)}
                     >
-                      <Ionicons 
-                        name={isExpanded ? "chevron-up-circle" : "add-circle"} 
-                        size={24} 
-                        color="#ffb300" 
+                      <Ionicons
+                        name={isExpanded ? "chevron-up-circle" : "add-circle"}
+                        size={24}
+                        color="#ffb300"
                       />
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.statsButton}
                       onPress={() => {
                         router.push({
@@ -921,13 +949,13 @@ export default function WorkoutDayDetailScreen() {
                     >
                       <Ionicons name="stats-chart" size={20} color="#ffb300" />
                     </TouchableOpacity>
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       style={styles.videoButton}
                       onPress={async () => {
                         try {
                           console.log(`🎯 [workout-day-detail] Botón de video presionado para: "${exerciseName}"`);
                           const url = await getExerciseVideoUrl(exerciseName);
-                          
+
                           if (url) {
                             console.log(`📹 [workout-day-detail] Video URL obtenida: ${url}`);
                             setVideoUrl(url);
@@ -988,19 +1016,19 @@ export default function WorkoutDayDetailScreen() {
                     {(() => {
                       // Convertir reps a array si no lo es
                       const repsArray = Array.isArray(reps) ? reps : Array(sets).fill(reps);
-                      
+
                       // Generar array de series con sus tipos
                       const seriesData = [];
                       let seriesCount = 0; // Contador para series normales y al fallo
-                      
+
                       for (let i = 0; i < sets; i++) {
                         const setType = setTypes?.[i]?.type || 'normal';
                         const setReps = repsArray[i] || reps;
                         const setRir = setTypes?.[i]?.rir;
-                        
+
                         let label = '';
                         let badgeStyle = 'normal';
-                        
+
                         switch (setType) {
                           case 'warmup':
                             label = 'C';
@@ -1021,7 +1049,7 @@ export default function WorkoutDayDetailScreen() {
                             label = seriesCount.toString();
                             badgeStyle = 'normal';
                         }
-                        
+
                         seriesData.push({
                           label,
                           reps: setReps,
@@ -1030,7 +1058,7 @@ export default function WorkoutDayDetailScreen() {
                           badgeStyle,
                         });
                       }
-                      
+
                       return seriesData.map((serie, idx) => (
                         <View key={idx} style={styles.setBadge}>
                           <View style={[
@@ -1080,8 +1108,8 @@ export default function WorkoutDayDetailScreen() {
             <View style={styles.finalNotesContent}>
               <Text style={styles.finalNotesTitle}>{t('workoutDay.remember')}</Text>
               <Text style={styles.finalNotesText}>
-  {t('workout.finalNotes')}
-</Text>
+                {t('workout.finalNotes')}
+              </Text>
 
             </View>
           </View>
@@ -1098,109 +1126,109 @@ export default function WorkoutDayDetailScreen() {
         onRequestClose={() => setShowCompletionModal(false)}
       >
         <View style={styles.modalContainer}>
-          <KeyboardAvoidingView 
+          <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.keyboardView}
           >
-            <ScrollView 
+            <ScrollView
               style={styles.modalContent}
               showsVerticalScrollIndicator={true}
               keyboardShouldPersistTaps="handled"
             >
-            <Text style={styles.modalTitle}>{t('workoutDay.completeWorkout')}</Text>
-            <Text style={styles.modalSubtitle}>{t('workoutDay.registerDetails')}</Text>
+              <Text style={styles.modalTitle}>{t('workoutDay.completeWorkout')}</Text>
+              <Text style={styles.modalSubtitle}>{t('workoutDay.registerDetails')}</Text>
 
-            {/* Duración */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>{t('workoutDay.durationLabel')}</Text>
-              <TextInput
-                style={styles.input}
-                value={duration}
-                onChangeText={setDuration}
-                placeholder="45"
-                placeholderTextColor="#666"
-                keyboardType="numeric"
-              />
-<Text style={styles.inputHint}>
-  {t('workout.inputHint')}
-</Text>
-              </View>
-
-            {/* Dificultad */}
-            <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>
-  {t('workout.perceivedDifficulty')}
-</Text>
-              <View style={styles.difficultyContainer}>
-                {[1, 2, 3, 4, 5].map((level) => (
-                  <TouchableOpacity
-                    key={level}
-                    style={[
-                      styles.difficultyButton,
-                      difficulty === level && styles.difficultyButtonActive
-                    ]}
-                    onPress={() => setDifficulty(level)}
-                  >
-                    <Text style={[
-                      styles.difficultyText,
-                      difficulty === level && styles.difficultyTextActive
-                    ]}>
-                      {level}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={styles.inputHint}>
-  {t('workout.difficultyScaleHint')}
-</Text>
-
-            </View>
-
-            {/* Notas */}
-            <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>
-  {t('workout.notesOptional')}
-</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={notes}
-                onChangeText={setNotes}
-                placeholder={t('workout.notesPlaceholder')}
-                placeholderTextColor="#666"
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-            </View>
-
-            {/* Botones */}
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonCancel]}
-                onPress={() => {
-                  setShowCompletionModal(false);
-                  setDuration('');
-                  setDifficulty(3);
-                  setNotes('');
-                }}
-              >
-                <Text style={styles.modalButtonTextCancel}>  {t('common.cancel')}
+              {/* Duración */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>{t('workoutDay.durationLabel')}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={duration}
+                  onChangeText={setDuration}
+                  placeholder="45"
+                  placeholderTextColor="#666"
+                  keyboardType="numeric"
+                />
+                <Text style={styles.inputHint}>
+                  {t('workout.inputHint')}
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalButtonConfirm]}
-                onPress={handleSaveCompletion}
-                disabled={saveCompletionWithRetry.isRetrying}
-              >
-                {saveCompletionWithRetry.isRetrying ? (
-                  <Text style={styles.modalButtonTextConfirm}>  {t('common.saving')}
-</Text>
-                ) : (
-                  <Text style={styles.modalButtonTextConfirm}>  {t('common.save')}
-</Text>
-                )}
-              </TouchableOpacity>
-            </View>
+              </View>
+
+              {/* Dificultad */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>
+                  {t('workout.perceivedDifficulty')}
+                </Text>
+                <View style={styles.difficultyContainer}>
+                  {[1, 2, 3, 4, 5].map((level) => (
+                    <TouchableOpacity
+                      key={level}
+                      style={[
+                        styles.difficultyButton,
+                        difficulty === level && styles.difficultyButtonActive
+                      ]}
+                      onPress={() => setDifficulty(level)}
+                    >
+                      <Text style={[
+                        styles.difficultyText,
+                        difficulty === level && styles.difficultyTextActive
+                      ]}>
+                        {level}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={styles.inputHint}>
+                  {t('workout.difficultyScaleHint')}
+                </Text>
+
+              </View>
+
+              {/* Notas */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>
+                  {t('workout.notesOptional')}
+                </Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder={t('workout.notesPlaceholder')}
+                  placeholderTextColor="#666"
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
+                />
+              </View>
+
+              {/* Botones */}
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonCancel]}
+                  onPress={() => {
+                    setShowCompletionModal(false);
+                    setDuration('');
+                    setDifficulty(3);
+                    setNotes('');
+                  }}
+                >
+                  <Text style={styles.modalButtonTextCancel}>  {t('common.cancel')}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.modalButtonConfirm]}
+                  onPress={handleSaveCompletion}
+                  disabled={saveCompletionWithRetry.isRetrying}
+                >
+                  {saveCompletionWithRetry.isRetrying ? (
+                    <Text style={styles.modalButtonTextConfirm}>  {t('common.saving')}
+                    </Text>
+                  ) : (
+                    <Text style={styles.modalButtonTextConfirm}>  {t('common.save')}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </KeyboardAvoidingView>
         </View>
@@ -1261,12 +1289,12 @@ export default function WorkoutDayDetailScreen() {
                     origin="100, 100"
                   />
                 </Svg>
-                
+
                 <Text style={styles.timeDisplayText}>
                   {isTimerRunning ? formatRestTime(timerSeconds) : formatRestTime(selectedRestTime)}
                 </Text>
               </View>
-              
+
               {!isTimerRunning && (
                 <View style={styles.timeAdjustButtons}>
                   <TouchableOpacity
@@ -1290,10 +1318,10 @@ export default function WorkoutDayDetailScreen() {
               onPress={() => setSoundEnabled(!soundEnabled)}
               style={styles.soundButton}
             >
-              <Ionicons 
-                name={soundEnabled ? "volume-high" : "volume-mute"} 
-                size={26} 
-                color={soundEnabled ? "#ffb300" : "#666"} 
+              <Ionicons
+                name={soundEnabled ? "volume-high" : "volume-mute"}
+                size={26}
+                color={soundEnabled ? "#ffb300" : "#666"}
               />
             </TouchableOpacity>
 
@@ -1318,9 +1346,9 @@ export default function WorkoutDayDetailScreen() {
               >
                 <Ionicons name={isTimerRunning ? "refresh" : "play"} size={20} color="#1a1a1a" />
                 <Text style={styles.timerStartButtonText}>
-                {isTimerRunning
-    ? t('timer.restart')
-    : t('timer.start')}
+                  {isTimerRunning
+                    ? t('timer.restart')
+                    : t('timer.start')}
                 </Text>
               </TouchableOpacity>
             </View>

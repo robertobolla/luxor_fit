@@ -125,8 +125,8 @@ export async function logoutRevenueCat(): Promise<void> {
 export async function getOfferings(): Promise<PurchasesOffering | null> {
   // Si RevenueCat no está configurado, retornar null con error descriptivo
   if (!isConfigured) {
-    console.warn('⚠️ RevenueCat no está configurado, no se pueden obtener ofertas');
-    throw new Error('Servicio de suscripciones no disponible');
+    console.warn('⚠️ RevenueCat no está configurado (Browser/Expo Go), retornando ofertas vacías');
+    return null; // Don't throw, just return null to avoid crashing UI
   }
 
   try {

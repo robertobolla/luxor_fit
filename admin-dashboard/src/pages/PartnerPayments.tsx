@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
 import { supabase } from '../services/adminService';
 import './PartnerPayments.css';
 
@@ -30,9 +31,30 @@ interface Partner {
   total_earnings: number;
   total_paid: number;
   pending_payments: number;
+  // Stats detallados
+  detailed_stats?: {
+    direct_referrals: number;
+    direct_active_monthly: number;
+    direct_active_annual: number;
+    indirect_referrals: number;
+    indirect_active_monthly: number;
+    indirect_active_annual: number;
+    comm_direct_monthly: number;
+    comm_direct_annual: number;
+    comm_indirect_monthly: number;
+    comm_indirect_annual: number;
+    earnings_direct: number;
+    earnings_indirect: number;
+    total_earnings: number;
+  };
 }
 
-export default function PartnerPayments() {
+interface PartnerPaymentsProps {
+  viewMode?: 'admin' | 'personal';
+}
+
+export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
+  const { user } = useUser();
   const { partnerId } = useParams<{ partnerId?: string }>();
   const navigate = useNavigate();
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -48,28 +70,65 @@ export default function PartnerPayments() {
     payment_reference: '',
     notes: '',
   });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isSocioView, setIsSocioView] = useState(false);
 
   useEffect(() => {
-    loadPartners();
-  }, []);
+    checkSocioRole();
+  }, [user, viewMode]);
+
+  async function checkSocioRole() {
+    if (!user) return;
+
+    // 1. Si se fuerza la vista personal (ej: desde "Mis Ganancias" en admin), actuar como socio
+    if (viewMode === 'personal') {
+      setIsSocioView(true);
+      loadPartners(user.id);
+      return;
+    }
+
+    // 2. Si no es forzado, chequear rol real
+    const { data } = await supabase
+      .from('admin_roles')
+      .select('role_type, id, user_id')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (data && data.role_type === 'socio') {
+      setIsSocioView(true);
+      loadPartners(data.user_id);
+    } else {
+      // Es admin/empresario y no está en modo personal -> Cargar todo
+      loadPartners();
+    }
+  }
 
   useEffect(() => {
     if (partnerId || selectedPartner) {
       loadPayments(partnerId || selectedPartner?.user_id || '');
-      loadEarnings(partnerId || selectedPartner?.user_id || '');
+      // Cargar stats detallados solo si hay partner seleccionado
+      loadDetailedStats(partnerId || selectedPartner?.user_id || '');
     }
-  }, [partnerId, selectedPartner]);
+  }, [partnerId, selectedPartner?.user_id]);
 
-  async function loadPartners() {
+  async function loadPartners(specificUserId?: string) {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+
+      let query = supabase
         .from('partner_payments_summary')
         .select('*')
         .order('total_earnings', { ascending: false });
 
+      if (specificUserId) {
+        query = query.eq('partner_user_id', specificUserId);
+      }
+
+      const { data, error } = await query;
+
       if (error) throw error;
-      
+
       const partnersData = data?.map((p: any) => ({
         user_id: p.partner_user_id,
         name: p.partner_name,
@@ -82,11 +141,14 @@ export default function PartnerPayments() {
         total_paid: p.total_paid || 0,
         pending_payments: p.pending_payments || 0,
       })) || [];
-      
+
       setPartners(partnersData);
-      
-      // Si hay partnerId en URL, seleccionarlo
-      if (partnerId) {
+
+      // Si hay partnerId en URL, seleccionarlo. 
+      // Si es vista de socio, seleccionar automáticamente al único partner.
+      if (specificUserId && partnersData.length > 0) {
+        handleSelectPartner(partnersData[0]);
+      } else if (partnerId && !selectedPartner) {
         const partner = partnersData.find((p: Partner) => p.user_id === partnerId);
         if (partner) setSelectedPartner(partner);
       }
@@ -100,9 +162,9 @@ export default function PartnerPayments() {
   async function loadPayments(partnerUserId: string) {
     try {
       const { data, error } = await supabase
-        .rpc('get_partner_payment_history', { 
+        .rpc('get_partner_payment_history', {
           partner_user_id: partnerUserId,
-          limit_count: 100 
+          limit_count: 100
         });
 
       if (error) throw error;
@@ -112,17 +174,21 @@ export default function PartnerPayments() {
     }
   }
 
-  async function loadEarnings(partnerUserId: string) {
+  async function loadDetailedStats(partnerUserId: string) {
     try {
-      const { error } = await supabase
-        .rpc('calculate_partner_earnings', { 
-          partner_user_id: partnerUserId 
+      const { data, error } = await supabase
+        .rpc('get_partner_network_stats', {
+          target_user_id: partnerUserId
         });
 
       if (error) throw error;
-      // Earnings data loaded but using selectedPartner data instead
+
+      // Actualizar el partner seleccionado con los stats detallados
+      if (selectedPartner && selectedPartner.user_id === partnerUserId) {
+        setSelectedPartner(prev => prev ? { ...prev, detailed_stats: data } : null);
+      }
     } catch (error) {
-      console.error('Error cargando ganancias:', error);
+      console.error('Error cargando ganancias detalladas:', error);
     }
   }
 
@@ -141,7 +207,9 @@ export default function PartnerPayments() {
           amount: paymentForm.amount,
           commission_per_subscription: selectedPartner.commission_per_subscription,
           commission_type: selectedPartner.commission_type,
-          active_subscriptions_count: selectedPartner.active_subscriptions,
+          active_subscriptions_count: selectedPartner.detailed_stats
+            ? selectedPartner.detailed_stats.direct_active_monthly + selectedPartner.detailed_stats.direct_active_annual
+            : selectedPartner.active_subscriptions,
           payment_method: paymentForm.payment_method,
           payment_reference: paymentForm.payment_reference,
           notes: paymentForm.notes,
@@ -159,9 +227,9 @@ export default function PartnerPayments() {
         payment_reference: '',
         notes: '',
       });
-      
+
       loadPayments(selectedPartner.user_id);
-      loadPartners();
+      loadPartners(); // Recargar lista para actualizar totales
       alert('Pago registrado correctamente');
     } catch (error: any) {
       alert('Error creando pago: ' + (error.message || 'Error desconocido'));
@@ -188,8 +256,40 @@ export default function PartnerPayments() {
 
   function handleSelectPartner(partner: Partner) {
     setSelectedPartner(partner);
-    navigate(`/partner-payments/${partner.user_id}`);
+    // Solo navegar si NO estamos en vista personal
+    if (viewMode !== 'personal') {
+      navigate(`/partner-payments/${partner.user_id}`);
+    }
+    // loadDetailedStats se activa por el useEffect al cambiar partnerId/selectedPartner
   }
+
+  // Helper para calcular pendiente usando los nuevos stats si existen
+  const calculatePending = (partner: Partner) => {
+    if (partner.detailed_stats) {
+      // Ganancia total acumulada (histórica estimada) - Lo que ya se ha pagado
+      // IMPORTANTE: get_partner_network_stats devuelve una estimación basada en ACTIVOS actuales.
+      // Para un sistema contable real, deberíamos tener una tabla de 'ledger' de comisiones.
+      // Por ahora, usamos la lógica: (Activos * Comisión) - Pagados.
+
+      // La función get_partner_network_stats devuelve 'earnings_direct' + 'earnings_indirect' basado en snapshots actuales.
+      // Si usamos eso como "Deuda Total Acumulada del mes actual", le restamos lo pagado...
+      // OJO: 'total_paid' es histórico. 'total_earnings' del RPC es mensual recurrente instantáneo.
+      // La lógica anterior era: (Activos * Comisión) - Pagados. Esto asume que 'Pagados' cubre meses anteriores.
+      // Si el socio acumuló $100 en enero y se le pagó $100, deuda es 0.
+      // Si en febrero genera $100, deuda es $100.
+
+      // MANTENEMOS LA LÓGICA SIMPLE:
+      // Deuda Pendiente = (Ganancia Mensual Recurrente Instantánea)
+      // Para simplificar, mostraremos lo que generan ACTUALMENTE sus suscripciones activas (Mensual + Anual/12).
+      return partner.detailed_stats.total_earnings; // Esto es lo que generan sus activos AHORA.
+    }
+
+    // Fallback lógica antigua
+    if (partner.commission_type === 'fixed') {
+      return (partner.active_subscriptions * partner.commission_per_subscription);
+    }
+    return (partner.active_subscriptions * (partner.commission_per_subscription / 100) * 12.99);
+  };
 
   if (loading) {
     return (
@@ -206,12 +306,12 @@ export default function PartnerPayments() {
           <h1>Control de Pagos y Comisiones</h1>
           <p className="subtitle">Gestiona pagos y comisiones de socios</p>
         </div>
-        {selectedPartner && (
+        {selectedPartner && !isSocioView && (
           <button className="btn-primary" onClick={() => {
-            const calculatedAmount = selectedPartner.commission_type === 'fixed'
-              ? selectedPartner.active_subscriptions * selectedPartner.commission_per_subscription
-              : selectedPartner.active_subscriptions * (selectedPartner.commission_per_subscription / 100) * 12.99;
-            
+            const calculatedAmount = selectedPartner.detailed_stats
+              ? selectedPartner.detailed_stats.total_earnings
+              : 0;
+
             setPaymentForm({
               period_start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
               period_end: new Date().toISOString().split('T')[0],
@@ -227,89 +327,131 @@ export default function PartnerPayments() {
         )}
       </header>
 
-      <div className="payments-layout">
-        <div className="partners-sidebar">
-          <h3>Socios</h3>
-          <div className="partners-list">
-            {partners.map((partner) => (
-              <div
-                key={partner.user_id}
-                className={`partner-card ${selectedPartner?.user_id === partner.user_id ? 'active' : ''}`}
-                onClick={() => handleSelectPartner(partner)}
-              >
-                <div className="partner-card-header">
-                  <strong>{partner.name || partner.email}</strong>
+      <div className="payments-layout" style={isSocioView ? { display: 'block' } : {}}>
+        {!isSocioView && (
+          <div className="partners-sidebar">
+            <h3>Socios</h3>
+            <div className="search-box">
+              <input
+                type="text"
+                placeholder="Buscar socio (nombre o email)..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="partners-list">
+              {partners.filter(p =>
+                (p.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+                (p.email?.toLowerCase() || '').includes(searchTerm.toLowerCase())
+              ).map((partner) => (
+                <div
+                  key={partner.user_id}
+                  className={`partner-card ${selectedPartner?.user_id === partner.user_id ? 'active' : ''}`}
+                  onClick={() => handleSelectPartner(partner)}
+                >
+                  <div className="partner-card-header">
+                    <strong>{partner.name || partner.email}</strong>
                     <span className={`badge ${partner.commission_per_subscription > 0 ? 'badge-paid' : 'badge-inactive'}`} style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>
-                      {partner.commission_per_subscription > 0 
-                        ? (partner.commission_type === 'fixed' 
-                            ? `$${partner.commission_per_subscription.toFixed(2)}/sub`
-                            : `${partner.commission_per_subscription}%`)
-                        : 'Sin comisión'}
-                    </span>
-                </div>
-                <div className="partner-card-stats">
-                  <div>
-                    <span className="stat-label">Activos:</span>
-                    <span className="stat-value">{partner.active_subscriptions}</span>
-                  </div>
-                  <div>
-                    <span className="stat-label">Total Pagado:</span>
-                    <span className="stat-value">${partner.total_paid.toFixed(2)}</span>
-                  </div>
-                  <div>
-                    <span className="stat-label">Pendiente:</span>
-                    <span className="stat-value" style={{ color: '#ffd54a' }}>
-                      ${(
-                        partner.commission_type === 'fixed'
-                          ? (partner.active_subscriptions * partner.commission_per_subscription) - partner.total_paid
-                          : (partner.active_subscriptions * (partner.commission_per_subscription / 100) * 12.99) - partner.total_paid
-                      ).toFixed(2)}
+                      Activo
                     </span>
                   </div>
+                  <div className="partner-card-stats">
+                    <div>
+                      <span className="stat-label">Activos:</span>
+                      <span className="stat-value">{partner.active_subscriptions}</span>
+                    </div>
+                    <div>
+                      <span className="stat-label">Pagado:</span>
+                      <span className="stat-value">${partner.total_paid.toFixed(2)}</span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        <div className="payments-content">
+        <div className="payments-content" style={isSocioView ? { maxWidth: '100%' } : {}}>
           {selectedPartner ? (
             <>
               <div className="earnings-summary">
                 <h2>Resumen de {selectedPartner.name || selectedPartner.email}</h2>
+
+                {/* DETALLE DE GANANCIAS NIVEL 1 y 2 */}
+                {selectedPartner.detailed_stats ? (
+                  <div className="stats-grid">
+
+                    {/* NIVEL 1: DIRECTOS */}
+                    <div className="stats-box">
+                      <h3 className="stats-title-direct">
+                        <span>Nivel 1 (Directos)</span>
+                        <span>${selectedPartner.detailed_stats.earnings_direct.toFixed(2)}</span>
+                      </h3>
+                      <div className="stats-row" style={{ marginTop: '12px' }}>
+                        <span className="stats-label">Mensuales ({selectedPartner.detailed_stats.direct_active_monthly})</span>
+                        <span className="stats-value">x ${selectedPartner.detailed_stats.comm_direct_monthly.toFixed(2)} = ${(selectedPartner.detailed_stats.direct_active_monthly * selectedPartner.detailed_stats.comm_direct_monthly).toFixed(2)}</span>
+                      </div>
+                      <div className="stats-row">
+                        <span className="stats-label">Anuales ({selectedPartner.detailed_stats.direct_active_annual})</span>
+                        <span className="stats-value">x ${selectedPartner.detailed_stats.comm_direct_annual.toFixed(2)} = ${(selectedPartner.detailed_stats.direct_active_annual * selectedPartner.detailed_stats.comm_direct_annual).toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    {/* NIVEL 2: INDIRECTOS */}
+                    <div className="stats-box">
+                      <h3 className="stats-title-indirect">
+                        <span>Nivel 2 (Referidos)</span>
+                        <span>${selectedPartner.detailed_stats.earnings_indirect.toFixed(2)}</span>
+                      </h3>
+                      <div className="stats-row" style={{ marginTop: '12px' }}>
+                        <span className="stats-label">Mensuales ({selectedPartner.detailed_stats.indirect_active_monthly})</span>
+                        <span className="stats-value">x ${selectedPartner.detailed_stats.comm_indirect_monthly.toFixed(2)} = ${(selectedPartner.detailed_stats.indirect_active_monthly * selectedPartner.detailed_stats.comm_indirect_monthly).toFixed(2)}</span>
+                      </div>
+                      <div className="stats-row">
+                        <span className="stats-label">Anuales ({selectedPartner.detailed_stats.indirect_active_annual})</span>
+                        <span className="stats-value">x ${selectedPartner.detailed_stats.comm_indirect_annual.toFixed(2)} = ${(selectedPartner.detailed_stats.indirect_active_annual * selectedPartner.detailed_stats.comm_indirect_annual).toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                  </div>
+                ) : (
+                  <div className="loading" style={{ padding: '20px' }}>Calculando desglose...</div>
+                )}
+
+                {/* TOTALES */}
                 <div className="summary-cards">
                   <div className="summary-card">
-                    <div className="summary-label">Comisión por Suscripción</div>
-                    <div className="summary-value" style={{ fontSize: '20px' }}>
-                      {selectedPartner.commission_type === 'fixed' 
-                        ? `$${selectedPartner.commission_per_subscription.toFixed(2)}/sub`
-                        : `${selectedPartner.commission_per_subscription}%`}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
-                      {selectedPartner.commission_type === 'fixed' 
-                        ? 'Monto fijo por cada usuario activo'
-                        : 'Porcentaje del precio mensual'}
+                    <div className="summary-label">Total Suscripciones</div>
+                    <div className="summary-value">
+                      {selectedPartner.detailed_stats
+                        ? (selectedPartner.detailed_stats.direct_active_monthly + selectedPartner.detailed_stats.direct_active_annual + selectedPartner.detailed_stats.indirect_active_monthly + selectedPartner.detailed_stats.indirect_active_annual)
+                        : selectedPartner.active_subscriptions}
                     </div>
                   </div>
                   <div className="summary-card">
-                    <div className="summary-label">Suscripciones Activas</div>
-                    <div className="summary-value">{selectedPartner.active_subscriptions}</div>
-                  </div>
-                  <div className="summary-card">
-                    <div className="summary-label">Total Pagado</div>
+                    <div className="summary-label">Total Pagado Histórico</div>
                     <div className="summary-value">${selectedPartner.total_paid.toFixed(2)}</div>
                   </div>
                   <div className="summary-card highlight">
-                    <div className="summary-label">Ganancias Pendientes</div>
+                    <div className="summary-label">Generación Mensual Actual</div>
                     <div className="summary-value">
-                      ${((selectedPartner.active_subscriptions * selectedPartner.commission_per_subscription) - selectedPartner.total_paid).toFixed(2)}
+                      ${calculatePending(selectedPartner).toFixed(2)}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
+                      Total nivel 1 + nivel 2
                     </div>
                   </div>
                 </div>
               </div>
 
+              {/* HISTORIAL DE COMISIONES (NUEVO) */}
               <div className="payments-table-container">
-                <h3>Historial de Pagos</h3>
+                <h3>Historial de Transacciones (Comisiones)</h3>
+                <CommissionHistoryTable partnerUserId={selectedPartner.user_id} />
+              </div>
+
+              <div className="payments-table-container">
+                <h3>Historial de Pagos Recibidos</h3>
                 {payments.length === 0 ? (
                   <div className="empty-state">
                     <p>No hay pagos registrados para este socio.</p>
@@ -343,7 +485,7 @@ export default function PartnerPayments() {
                             </span>
                           </td>
                           <td>
-                            {payment.status === 'pending' && (
+                            {payment.status === 'pending' && !isSocioView && (
                               <button
                                 className="btn-link"
                                 onClick={() => handleUpdatePaymentStatus(payment.id, 'paid')}
@@ -402,11 +544,7 @@ export default function PartnerPayments() {
                 required
               />
               <p style={{ color: '#888', fontSize: '12px', marginTop: '4px' }}>
-                {selectedPartner.commission_type === 'fixed' ? (
-                  <>Calculado: <strong>{selectedPartner.active_subscriptions}</strong> activos × <strong>${selectedPartner.commission_per_subscription.toFixed(2)}</strong> = <strong style={{ color: '#ffd54a' }}>${(selectedPartner.active_subscriptions * selectedPartner.commission_per_subscription).toFixed(2)}</strong></>
-                ) : (
-                  <>Calculado: <strong>{selectedPartner.active_subscriptions}</strong> activos × <strong>{selectedPartner.commission_per_subscription}%</strong> de $12.99 = <strong style={{ color: '#ffd54a' }}>${(selectedPartner.active_subscriptions * (selectedPartner.commission_per_subscription / 100) * 12.99).toFixed(2)}</strong></>
-                )}
+                Monto sugerido basado en la generación actual. Puedes ajustarlo manualmente si pagas un período parcial o diferente.
               </p>
             </div>
             <div className="form-group">
@@ -456,3 +594,66 @@ export default function PartnerPayments() {
   );
 }
 
+function CommissionHistoryTable({ partnerUserId }: { partnerUserId: string }) {
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadHistory();
+  }, [partnerUserId]);
+
+  async function loadHistory() {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.rpc('get_partner_commission_history', {
+        target_user_id: partnerUserId
+      });
+
+      if (error) console.error('Error fetching commission history:', error);
+      setHistory(data || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading) return <div className="loading" style={{ padding: '10px' }}>Cargando historial...</div>;
+  if (history.length === 0) return <div className="empty-state" style={{ padding: '20px' }}>No hay transacciones registradas.</div>;
+
+  return (
+    <table className="payments-table">
+      <thead>
+        <tr>
+          <th>Fecha</th>
+          <th>Usuario Origen</th>
+          <th>Nivel</th>
+          <th>Detalle</th>
+          <th>Comisión</th>
+        </tr>
+      </thead>
+      <tbody>
+        {history.map((item, index) => (
+          <tr key={index}>
+            <td>{new Date(item.transaction_date).toLocaleDateString()} <span style={{ fontSize: '11px', color: '#666' }}>{new Date(item.transaction_date).toLocaleTimeString()}</span></td>
+            <td>
+              <div style={{ fontWeight: '500' }}>{item.source_user_name || 'Usuario'}</div>
+              <div style={{ fontSize: '11px', color: '#666' }}>{item.source_user_email}</div>
+            </td>
+            <td>
+              <span className={`badge ${item.level.includes('Nivel 1') ? 'badge-pending' : 'badge-inactive'}`}
+                style={{
+                  backgroundColor: item.level.includes('Nivel 1') ? 'rgba(0, 212, 170, 0.2)' : 'rgba(79, 172, 254, 0.2)',
+                  color: item.level.includes('Nivel 1') ? '#00d4aa' : '#4facfe'
+                }}>
+                {item.level}
+              </span>
+            </td>
+            <td>{item.description}</td>
+            <td style={{ fontWeight: 'bold', color: '#ffd54a' }}>+${item.commission_amount.toFixed(2)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}

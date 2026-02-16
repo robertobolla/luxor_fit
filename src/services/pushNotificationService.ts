@@ -14,6 +14,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -74,39 +76,45 @@ export async function registerForPushNotificationsAsync(userId: string): Promise
 /**
  * Guardar el push token en Supabase
  */
-async function savePushToken(userId: string, pushToken: string) {
+async function savePushToken(userId: string, pushToken: string, retryCount = 0) {
   try {
-    const { error } = await supabase
-      .from('user_push_tokens')
-      .upsert({
-        user_id: userId,
-        push_token: pushToken,
-        platform: Platform.OS,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id',
-      });
+    // Usamos RPC para evitar problemas de RLS con inserción directa
+    const { error } = await supabase.rpc('save_user_push_token', {
+      p_push_token: pushToken,
+      p_platform: Platform.OS || 'unknown'
+    });
 
     if (error) {
-      // Si el error es porque el perfil del usuario no existe aún (foreign key constraint),
-      // no mostrar error ya que el token se guardará más tarde cuando el perfil se cree
-      // El código 23503 indica violación de clave foránea
-      if (error.code === '23503') {
-        // El perfil aún no existe, el token se guardará más tarde cuando el perfil se cree
-        return;
+      console.error('Error saving push token via RPC:', error);
+
+      // Retry on auth error (race condition with Clerk sync)
+      if ((error.code === 'P0001' || error.message?.includes('Not authenticated')) && retryCount < 3) {
+        console.log(`⏳ Retrying savePushToken in 2s (Attempt ${retryCount + 1}/3)...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return savePushToken(userId, pushToken, retryCount + 1);
       }
-      console.error('Error saving push token:', error);
+
+      // Fallback a inserción directa si RPC no existe
+      if (error.code === 'PGRST202') {
+        const { error: directError } = await supabase
+          .from('user_push_tokens')
+          .upsert({
+            user_id: userId,
+            push_token: pushToken,
+            platform: Platform.OS,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' });
+
+        if (directError) console.error('Error saving push token fallback:', directError);
+      }
     } else {
-      console.log('Push token saved successfully');
+      console.log('✅ Push token saved successfully (RPC)');
     }
   } catch (error) {
-    // Silenciar errores relacionados con perfiles que no existen aún
-    if (error && typeof error === 'object' && 'code' in error && error.code === '23503') {
-      return;
-    }
     console.error('Error in savePushToken:', error);
   }
 }
+
 
 /**
  * Eliminar el push token al cerrar sesión

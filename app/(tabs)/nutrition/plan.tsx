@@ -125,31 +125,31 @@ export default function MealPlanScreen() {
       let mondayStr: string;
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
-      
+
       // Calcular lunes de la semana actual
       const dayOfWeek = today.getDay();
       const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
       const currentWeekMonday = new Date(today);
       currentWeekMonday.setDate(today.getDate() + diff);
       const currentWeekMondayStr = currentWeekMonday.toISOString().split('T')[0];
-      
+
       if (params.weekStart) {
         mondayStr = params.weekStart;
         setWeekStartDate(mondayStr);
-        
+
         // Verificar si la semana ya pasó
         const weekEnd = new Date(mondayStr);
         weekEnd.setDate(weekEnd.getDate() + 6);
         const weekEndStr = weekEnd.toISOString().split('T')[0];
         const isPast = todayStr > weekEndStr;
         setIsWeekPast(isPast);
-        
+
         // Verificar si la semana es futura (después del domingo de la semana actual)
         const currentWeekEnd = new Date(currentWeekMonday);
         currentWeekEnd.setDate(currentWeekMonday.getDate() + 6);
         const currentWeekEndStr = currentWeekEnd.toISOString().split('T')[0];
         const isFuture = mondayStr > currentWeekEndStr;
-        
+
         if (isFuture) {
           // Semana futura - mostrar modal y no cargar nada
           setWeekPlan(null);
@@ -212,12 +212,12 @@ export default function MealPlanScreen() {
       // Obtener perfil actual
       const { getNutritionProfile, upsertNutritionProfile, computeAndSaveTargets, createOrUpdateMealPlan, clearNutritionCache } = await import('../../../src/services/nutrition');
       const { supabase } = await import('../../../src/services/supabase');
-      
+
       // Limpiar caché para forzar recálculo
       clearNutritionCache(user.id);
-      
+
       const currentProfile = await getNutritionProfile(user.id);
-      
+
       if (!currentProfile) {
         throw new Error('No se pudo cargar tu perfil de nutrición.');
       }
@@ -257,7 +257,7 @@ export default function MealPlanScreen() {
         const date = new Date(monday);
         date.setDate(monday.getDate() + i);
         const dateStr = date.toISOString().split('T')[0];
-        
+
         await supabase
           .from('nutrition_targets')
           .delete()
@@ -274,7 +274,7 @@ export default function MealPlanScreen() {
         const dateStr = date.toISOString().split('T')[0];
         targetPromises.push(computeAndSaveTargets(user.id, dateStr));
       }
-      
+
       // Ejecutar todos los targets en paralelo
       await Promise.all(targetPromises);
       console.log('✅ Targets regenerados exitosamente');
@@ -284,7 +284,7 @@ export default function MealPlanScreen() {
 
       // Recargar el plan
       const plan = await import('../../../src/services/nutrition').then(m => m.getMealPlan(user.id, mondayStr));
-      
+
       return { plan, mondayStr };
     },
     {
@@ -296,7 +296,7 @@ export default function MealPlanScreen() {
 
   const handleAIAdjustment = async () => {
     if (!user?.id) return;
-    
+
     if (!aiPrompt.trim()) {
       Alert.alert(t('common.error'), t('nutrition.writeInstructionForAI'));
       return;
@@ -311,7 +311,7 @@ export default function MealPlanScreen() {
       if (result) {
         setWeekPlan(result.plan);
         Alert.alert(
-          t('nutrition.planUpdated'), 
+          t('nutrition.planUpdated'),
           t('nutrition.planUpdatedMessage')
         );
         setAiPrompt('');
@@ -368,7 +368,7 @@ export default function MealPlanScreen() {
         <Text style={styles.mealName}>
           {meals.length > 1 ? `Opción ${selectedIndex + 1}: ` : ''}{meal.name}
         </Text>
-        
+
         {/* Ingredientes detallados */}
         <View style={styles.ingredientsSection}>
           <Text style={styles.ingredientsTitle}>{t('nutritionPlan.ingredients')}</Text>
@@ -475,16 +475,16 @@ export default function MealPlanScreen() {
                   const currentWeekEnd = new Date(currentWeekMonday);
                   currentWeekEnd.setDate(currentWeekMonday.getDate() + 6);
                   const currentWeekEndStr = currentWeekEnd.toISOString().split('T')[0];
-                  
+
                   if (weekStartDate && weekStartDate > currentWeekEndStr) {
                     return t('nutritionPlan.noPlanMessage');
                   }
-                  
+
                   // Verificar si es semana pasada o actual
                   if (isWeekPast) {
                     return t('nutritionPlan.noPlanMessage');
                   }
-                  
+
                   // Es la semana actual
                   return t('nutritionPlan.noPlanMessage');
                 })()}
@@ -500,11 +500,11 @@ export default function MealPlanScreen() {
                 const currentWeekEnd = new Date(currentWeekMonday);
                 currentWeekEnd.setDate(currentWeekMonday.getDate() + 6);
                 const currentWeekEndStr = currentWeekEnd.toISOString().split('T')[0];
-                
+
                 if (weekStartDate && weekStartDate > currentWeekEndStr) {
                   return null; // No mostrar razones para semanas futuras
                 }
-                
+
                 // Si es semana pasada, mostrar razones
                 if (isWeekPast) {
                   return (
@@ -515,7 +515,7 @@ export default function MealPlanScreen() {
                     </View>
                   );
                 }
-                
+
                 // Si es semana actual, mostrar mensaje de acción
                 return (
                   <View style={styles.modalReasons}>
@@ -527,7 +527,7 @@ export default function MealPlanScreen() {
                 style={styles.modalButton}
                 onPress={() => {
                   setShowNoPlanModal(false);
-                  router.push('/(tabs)/nutrition' as any);
+                  router.navigate('/(tabs)/nutrition');
                 }}
               >
                 <Text style={styles.modalButtonText}>{t('nutritionPlan.understood')}</Text>
@@ -547,8 +547,8 @@ export default function MealPlanScreen() {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
         <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => router.push('/(tabs)/nutrition' as any)} 
+          <TouchableOpacity
+            onPress={() => router.push('/(tabs)/nutrition' as any)}
             style={styles.backIconButton}
           >
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
@@ -566,7 +566,7 @@ export default function MealPlanScreen() {
           </Text>
           <TouchableOpacity
             style={{ marginTop: 24, backgroundColor: '#ffb300', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
-            onPress={() => router.push('/(tabs)/nutrition' as any)}
+            onPress={() => router.navigate('/(tabs)/nutrition')}
           >
             <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#1a1a1a' }}>{t('nutritionPlan.backToNutrition')}</Text>
           </TouchableOpacity>
@@ -578,21 +578,21 @@ export default function MealPlanScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
+
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => {
             // Navegar directamente a nutrition
-            router.push('/(tabs)/nutrition' as any);
-          }} 
+            router.navigate('/(tabs)/nutrition');
+          }}
           style={styles.backIconButton}
         >
           <Ionicons name="arrow-back" size={24} color="#ffffff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('nutritionPlan.weeklyPlan')}</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => setShowAIModal(true)}
             style={[styles.aiButton, isWeekPast && styles.aiButtonDisabled]}
             disabled={isWeekPast}
@@ -619,16 +619,16 @@ export default function MealPlanScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <Text style={styles.selectedDayTitle}>{DAY_NAMES[selectedDay]}</Text>
-        
+
         {/* Objetivo diario: eliminado el cuadro visual duplicado. El Resumen usa este valor internamente. */}
 
         {/* Resumen del día = mismo dato que Objetivo del día (fuente: nutrition_targets). */}
         {(() => {
           const dayKey = DAYS[selectedDay] as keyof WeekPlan;
           const currentDayPlan = weekPlan ? weekPlan[dayKey] : null;
-          
+
           if (!currentDayPlan) return null;
-          
+
           // Calcular totales del día
           const totals = {
             calories: 0,
@@ -636,7 +636,7 @@ export default function MealPlanScreen() {
             carbs_g: 0,
             fats_g: 0
           };
-          
+
           const mealTypes = ['breakfast', 'lunch', 'dinner', 'snacks'] as const;
           mealTypes.forEach(mealType => {
             const meals = currentDayPlan[mealType];
@@ -652,7 +652,7 @@ export default function MealPlanScreen() {
               }
             }
           });
-          
+
           // Si existe dailyTarget, usarlo para el resumen (misma fuente que "Hoy").
           const summary = dailyTarget || totals;
 
@@ -680,7 +680,7 @@ export default function MealPlanScreen() {
             </View>
           );
         })()}
-        
+
         {renderMeal('breakfast', dayPlan.breakfast)}
         {renderMeal('lunch', dayPlan.lunch)}
         {renderMeal('dinner', dayPlan.dinner)}
@@ -696,17 +696,17 @@ export default function MealPlanScreen() {
         animationType="slide"
         onRequestClose={() => setShowAIModal(false)}
       >
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.modalOverlay}
         >
-          <TouchableOpacity 
-            style={styles.modalOverlayTouchable} 
+          <TouchableOpacity
+            style={styles.modalOverlayTouchable}
             activeOpacity={1}
             onPress={() => setShowAIModal(false)}
           >
-            <TouchableOpacity 
-              activeOpacity={1} 
+            <TouchableOpacity
+              activeOpacity={1}
               onPress={(e) => e.stopPropagation()}
               style={styles.modalContent}
             >
@@ -719,8 +719,8 @@ export default function MealPlanScreen() {
               </View>
 
               <Text style={styles.modalDescription}>
-  {t('nutrition.customInstructionDescription')}
-</Text>
+                {t('nutrition.customInstructionDescription')}
+              </Text>
 
               <TextInput
                 style={styles.promptInput}
@@ -740,9 +740,9 @@ export default function MealPlanScreen() {
                     setAiPrompt('');
                   }}
                 >
-<Text style={styles.cancelButtonText}>
-  {t('common.cancel')}
-</Text>
+                  <Text style={styles.cancelButtonText}>
+                    {t('common.cancel')}
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -751,8 +751,8 @@ export default function MealPlanScreen() {
                 >
                   <Ionicons name="sparkles" size={20} color="#1a1a1a" />
                   <Text style={styles.confirmButtonText}>
-  {t('common.apply')}
-</Text>
+                    {t('common.apply')}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </TouchableOpacity>
@@ -776,21 +776,21 @@ export default function MealPlanScreen() {
               <Ionicons name="calendar-outline" size={48} color="#FFD93D" />
             </View>
             <Text style={styles.modalTitle}>
-  {t('nutrition.noPlanTitle')}
-</Text>           <Text style={styles.modalMessage}>
-  {t('nutrition.noPlanMessage')}
-</Text>
-<View style={styles.modalReasons}>
-  <Text style={styles.modalReason}>
-    • {t('nutrition.noPlanReason1')}
-  </Text>
-  <Text style={styles.modalReason}>
-    • {t('nutrition.noPlanReason2')}
-  </Text>
-  <Text style={styles.modalReason}>
-    • {t('nutrition.noPlanReason3')}
-  </Text>
-</View>
+              {t('nutrition.noPlanTitle')}
+            </Text>           <Text style={styles.modalMessage}>
+              {t('nutrition.noPlanMessage')}
+            </Text>
+            <View style={styles.modalReasons}>
+              <Text style={styles.modalReason}>
+                • {t('nutrition.noPlanReason1')}
+              </Text>
+              <Text style={styles.modalReason}>
+                • {t('nutrition.noPlanReason2')}
+              </Text>
+              <Text style={styles.modalReason}>
+                • {t('nutrition.noPlanReason3')}
+              </Text>
+            </View>
             <TouchableOpacity
               style={styles.modalButton}
               onPress={() => {
@@ -798,9 +798,9 @@ export default function MealPlanScreen() {
                 router.push('/(tabs)/nutrition' as any);
               }}
             >
-  <Text style={styles.modalButtonText}>
-    {t('common.understood')}
-  </Text>            </TouchableOpacity>
+              <Text style={styles.modalButtonText}>
+                {t('common.understood')}
+              </Text>            </TouchableOpacity>
           </View>
         </View>
       </Modal>

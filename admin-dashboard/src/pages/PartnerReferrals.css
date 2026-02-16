@@ -138,9 +138,93 @@
   color: #999;
 }
 
+
 .loading {
   text-align: center;
   padding: 48px;
   color: #999;
 }
 
+/* Tabs */
+.tabs-container {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid #2a2a2a;
+  padding-bottom: 1px;
+}
+
+.tab-button {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #888;
+  padding: 12px 24px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 16px;
+  transition: all 0.2s;
+  margin-bottom: -1px;
+  /* Overlap border */
+}
+
+.tab-button:hover {
+  color: #ccc;
+}
+
+.tab-button.active {
+  color: #ffd54a;
+  border-bottom-color: #ffd54a;
+  font-weight: 600;
+}
+
+.badge-level {
+  background: #333;
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+}
+
+/* Stats Breakdown */
+.stats-breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #333;
+  padding-top: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.stats-breakdown-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.breakdown-label {
+  color: #888;
+  font-size: 11px;
+}
+
+.breakdown-val {
+  color: #fff;
+  font-weight: 500;
+}
+
+.level-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.level-1 {
+  background-color: #00d4aa;
+}
+
+.level-2 {
+  background-color: #4facfe;
+}

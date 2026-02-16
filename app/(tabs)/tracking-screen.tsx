@@ -12,6 +12,8 @@ import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
+import { DeviceEventEmitter, Platform } from 'react-native';
 import { useUser } from '@clerk/clerk-expo';
 import { saveExercise } from '@/services/exerciseService';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +26,23 @@ interface RoutePoint {
   longitude: number;
   altitude?: number;
 }
+
+const LOCATION_TASK_NAME = 'background-location-task';
+
+// Definir la tarea en segundo plano fuera del componente
+TaskManager.defineTask(LOCATION_TASK_NAME, async ({ data, error }) => {
+  if (error) {
+    console.error('❌ Error en background task:', error);
+    return;
+  }
+  if (data) {
+    const { locations } = data as { locations: Location.LocationObject[] };
+    // Emitir evento para que el componente lo reciba si está montado
+    // Nota: En producción idealmente se guardaría en SQLite/AsyncStorage
+    // pero para este fix rápido usamos eventos.
+    DeviceEventEmitter.emit('onLocationUpdate', locations);
+  }
+});
 
 export default function TrackingScreen() {
   const params = useLocalSearchParams();
@@ -68,6 +87,11 @@ export default function TrackingScreen() {
   const elevationLoss = useRef(0); // Desnivel negativo acumulado
   const lastAltitude = useRef<number | null>(null); // Última altitud registrada
 
+  // Referencias para el cálculo robusto del tiempo
+  const startTimeRef = useRef<number | null>(null);
+  const pausedTimeRef = useRef<number>(0); // Tiempo acumulado antes de la última pausa
+  const lastPauseTimeRef = useRef<number | null>(null);
+
   // Función para resetear y comenzar tracking
   const resetAndStartTracking = useCallback(() => {
     // Detener cualquier tracking anterior
@@ -92,6 +116,11 @@ export default function TrackingScreen() {
     elevationGain.current = 0;
     elevationLoss.current = 0;
     lastAltitude.current = null;
+
+    // Resetear referencias de tiempo
+    startTimeRef.current = Date.now();
+    pausedTimeRef.current = 0;
+    lastPauseTimeRef.current = null;
 
     // Iniciar nuevo tracking
     startGPSTracking();
@@ -137,167 +166,205 @@ export default function TrackingScreen() {
     return R * c;
   };
 
+  // Efecto para escuchar actualizaciones de ubicación desde la tarea en segundo plano
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener('onLocationUpdate', (locations: Location.LocationObject[]) => {
+      // Procesar ubicaciones recibidas del background task
+      // Esto funciona similar al callback de watchPositionAsync pero desacoplado
+      locations.forEach(location => {
+        handleNewLocation(location);
+      });
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []); // Se ejecuta una vez al montar
+
+  // Lógica extractada para procesar una nueva ubicación
+  const handleNewLocation = (location: Location.LocationObject) => {
+    // Ignorar actualizaciones si el tracking está detenido o pausado
+    // Nota: En background real, isStopped es false, pero isPaused podría ser true.
+    // Si isPaused es true, ignoramos la data (o la guardamos pero no sumamos distancia)
+    if (isStopped.current) return;
+
+    // Si está pausado, no procesamos (ahorro batería logic handled by stopUpdates?)
+    // Si queremos "hot resume", seguimos recibiendo pero no sumamos.
+    if (isPaused) return;
+
+    locationCount.current += 1;
+    const accuracy = location.coords.accuracy || 999;
+
+    // Filtro 1: Verificar precisión del GPS
+    if (accuracy > MIN_ACCURACY_METERS) {
+      return;
+    }
+
+    // Filtro 2: Período de calentamiento del GPS
+    if (locationCount.current <= WARMUP_LOCATIONS) {
+      setCurrentLocation(location);
+      if (locationCount.current === WARMUP_LOCATIONS) {
+        lastLocation.current = location;
+        gpsStabilized.current = true;
+        lastAltitude.current = location.coords.altitude || null;
+        setRoutePoints([{
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          altitude: location.coords.altitude || undefined,
+        }]);
+      }
+      if (mapRef.current && !isStopped.current) {
+        // Animar mapa solo si la app está activa (el ref existe)
+        // En background esto simplemente no hará nada o lanzará warning safe
+        try {
+          mapRef.current.animateToRegion({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          }, 1000);
+        } catch (e) { /* ignore */ }
+      }
+      return;
+    }
+
+    setCurrentLocation(location);
+
+    // Calcular desnivel
+    const currentAltitude = location.coords.altitude;
+    if (currentAltitude !== null && currentAltitude !== undefined && lastAltitude.current !== null) {
+      const altitudeDiff = currentAltitude - lastAltitude.current;
+      if (Math.abs(altitudeDiff) > 1) {
+        if (altitudeDiff > 0) {
+          elevationGain.current += altitudeDiff;
+        } else {
+          elevationLoss.current += Math.abs(altitudeDiff);
+        }
+      }
+      lastAltitude.current = currentAltitude;
+    } else if (currentAltitude !== null && currentAltitude !== undefined) {
+      lastAltitude.current = currentAltitude;
+    }
+
+    // Agregar punto a la ruta
+    const newPoint: RoutePoint = {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+      altitude: currentAltitude || undefined,
+    };
+    setRoutePoints((prev) => [...prev, newPoint]);
+
+    // Calcular distancia
+    if (lastLocation.current && gpsStabilized.current) {
+      const dist = calculateDistance(
+        lastLocation.current.coords.latitude,
+        lastLocation.current.coords.longitude,
+        location.coords.latitude,
+        location.coords.longitude
+      );
+
+      const distMeters = dist * 1000;
+
+      if (distMeters >= MIN_DISTANCE_METERS) {
+        const timeDiff = (location.timestamp - (lastLocation.current?.timestamp || location.timestamp)) / 1000;
+        // Evitar saltos irreales de velocidad (ej: > 50km/h corriendo)
+        const impliedSpeedKmh = timeDiff > 0 ? (dist / timeDiff) * 3600 : 0;
+
+        if (impliedSpeedKmh < 50) {
+          totalDistance.current += dist;
+          setDistance(totalDistance.current);
+        }
+      }
+    }
+
+    // Actualizar velocidad
+    if (location.coords.speed !== null && location.coords.speed >= 0) {
+      const speedKmh = location.coords.speed * 3.6;
+      setCurrentSpeed(speedKmh > MIN_SPEED_KMH ? speedKmh : 0);
+    }
+
+    lastLocation.current = location;
+
+    if (mapRef.current && location.coords && !isStopped.current) {
+      try {
+        mapRef.current.animateToRegion({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        }, 1000);
+      } catch (e) { /* ignore */ }
+    }
+  };
+
   // Iniciar tracking GPS
   const startGPSTracking = async () => {
     try {
       // Resetear contadores y flags
-      locationCount.current = 0;
-      gpsStabilized.current = false;
-      totalDistance.current = 0;
-      lastLocation.current = null;
-      isStopped.current = false; // Resetear flag de parada
-      setDistance(0);
-      setRoutePoints([]);
+      if (isStopped.current) {
+        isStopped.current = false;
+      }
 
-      // Iniciar timer
-      timerInterval.current = setInterval(() => {
-        if (isStopped.current) return; // No actualizar si está detenido
-        setTrackingTime((prev) => prev + 1);
-      }, 1000);
+      // Iniciar timer visual
+      if (!timerInterval.current) {
+        timerInterval.current = setInterval(() => {
+          if (isStopped.current || isPaused) return;
 
-      // Iniciar tracking de ubicación
-      locationSubscription.current = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.BestForNavigation,
-          timeInterval: 1000,
-          distanceInterval: 5,
+          if (startTimeRef.current) {
+            const now = Date.now();
+            const elapsedSeconds = Math.floor((now - startTimeRef.current - pausedTimeRef.current) / 1000);
+            setTrackingTime(elapsedSeconds);
+          }
+        }, 1000);
+      }
+
+      // 1. Pedir permisos de Background Location si no se tienen
+      // Nota: En Android primero se pide Foreground, luego Background.
+      // expo-location maneja esto si se configuró en app.json, pero requestBackgroundPermissionsAsync ayuda.
+      const { status: foreStatus } = await Location.requestForegroundPermissionsAsync();
+      if (foreStatus !== 'granted') {
+        console.error('❌ Permiso de ubicación foreground denegado');
+        return;
+      }
+
+      const { status: backStatus } = await Location.requestBackgroundPermissionsAsync();
+      if (backStatus !== 'granted') {
+        console.warn('⚠️ Permiso de ubicación background denegado. El tracking podría detenerse al bloquear el teléfono.');
+      } else {
+        console.log('✅ Permiso background concedido');
+      }
+
+      // 2. Verificar si la tarea ya está corriendo y detenerla para reiniciar limpio
+      const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+      if (hasStarted) {
+        await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+      }
+
+      // 3. Iniciar actualizaciones en Segundo Plano
+      await Location.startLocationUpdatesAsync(LOCATION_TASK_NAME, {
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 1000,
+        distanceInterval: 5,
+        // Configuración Android Foreground Service
+        foregroundService: {
+          notificationTitle: "Entrenamiento en curso",
+          notificationBody: "Rastreando tu ubicación en segundo plano...",
+          notificationColor: "#ffb300",
         },
-        (location) => {
-          // Ignorar actualizaciones si el tracking está detenido
-          if (isStopped.current) return;
+        // Configuración iOS
+        activityType: Location.ActivityType.Fitness,
+        showsBackgroundLocationIndicator: true,
+        pausesUpdatesAutomatically: false,
+      });
 
-          locationCount.current += 1;
-          const accuracy = location.coords.accuracy || 999;
-
-          console.log(`📍 Ubicación #${locationCount.current}:`, {
-            lat: location.coords.latitude.toFixed(6),
-            lon: location.coords.longitude.toFixed(6),
-            accuracy: accuracy.toFixed(1),
-            speed: location.coords.speed?.toFixed(2),
-          });
-
-          // Filtro 1: Verificar precisión del GPS
-          if (accuracy > MIN_ACCURACY_METERS) {
-            console.log(`⚠️ GPS impreciso (${accuracy.toFixed(1)}m > ${MIN_ACCURACY_METERS}m), ignorando ubicación`);
-            return;
-          }
-
-          // Filtro 2: Período de calentamiento del GPS (ignorar primeras ubicaciones)
-          if (locationCount.current <= WARMUP_LOCATIONS) {
-            console.log(`🔄 Calentando GPS (${locationCount.current}/${WARMUP_LOCATIONS})...`);
-            setCurrentLocation(location);
-            // Solo guardar la ubicación pero no calcular distancia aún
-            if (locationCount.current === WARMUP_LOCATIONS) {
-              lastLocation.current = location;
-              gpsStabilized.current = true;
-              lastAltitude.current = location.coords.altitude || null;
-              // Agregar primer punto a la ruta
-              setRoutePoints([{
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-                altitude: location.coords.altitude || undefined,
-              }]);
-              console.log('✅ GPS estabilizado, comenzando tracking');
-            }
-            // Centrar mapa (solo si no está detenido)
-            if (mapRef.current && !isStopped.current) {
-              mapRef.current.animateToRegion({
-                latitude: location.coords.latitude,
-                longitude: location.coords.longitude,
-                latitudeDelta: 0.005,
-                longitudeDelta: 0.005,
-              }, 1000);
-            }
-            return;
-          }
-
-          // Verificar otra vez por si se detuvo durante el warmup
-          if (isStopped.current) return;
-
-          setCurrentLocation(location);
-
-          // Calcular desnivel si tenemos altitud
-          const currentAltitude = location.coords.altitude;
-          if (currentAltitude !== null && currentAltitude !== undefined && lastAltitude.current !== null) {
-            const altitudeDiff = currentAltitude - lastAltitude.current;
-            if (Math.abs(altitudeDiff) > 1) { // Solo contar diferencias mayores a 1 metro para evitar ruido
-              if (altitudeDiff > 0) {
-                elevationGain.current += altitudeDiff;
-              } else {
-                elevationLoss.current += Math.abs(altitudeDiff);
-              }
-            }
-            lastAltitude.current = currentAltitude;
-          } else if (currentAltitude !== null && currentAltitude !== undefined) {
-            lastAltitude.current = currentAltitude;
-          }
-
-          // Agregar punto a la ruta
-          const newPoint: RoutePoint = {
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            altitude: currentAltitude || undefined,
-          };
-          setRoutePoints((prev) => [...prev, newPoint]);
-
-          // Calcular distancia si tenemos una ubicación previa y GPS estabilizado
-          if (lastLocation.current && !isPaused && gpsStabilized.current) {
-            const dist = calculateDistance(
-              lastLocation.current.coords.latitude,
-              lastLocation.current.coords.longitude,
-              location.coords.latitude,
-              location.coords.longitude
-            );
-
-            const distMeters = dist * 1000;
-
-            // Filtro 3: Solo sumar distancia si es mayor al umbral mínimo
-            if (distMeters >= MIN_DISTANCE_METERS) {
-              // Filtro 4: Verificar que la velocidad implícita sea realista (< 50 km/h para caminata/running)
-              const timeDiff = (location.timestamp - (lastLocation.current?.timestamp || location.timestamp)) / 1000; // segundos
-              const impliedSpeedKmh = timeDiff > 0 ? (dist / timeDiff) * 3600 : 0;
-
-              if (impliedSpeedKmh < 50) { // Velocidad realista para actividad humana
-                totalDistance.current += dist;
-                setDistance(totalDistance.current);
-                console.log(`📏 Distancia: +${distMeters.toFixed(1)}m, Total: ${(totalDistance.current * 1000).toFixed(0)}m`);
-              } else {
-                console.log(`⚠️ Velocidad implícita irreal (${impliedSpeedKmh.toFixed(1)} km/h), ignorando`);
-              }
-            }
-          }
-
-          // Actualizar velocidad
-          if (location.coords.speed !== null && location.coords.speed >= 0) {
-            const speedKmh = location.coords.speed * 3.6;
-            // Solo mostrar velocidad si es mayor al umbral mínimo
-            setCurrentSpeed(speedKmh > MIN_SPEED_KMH ? speedKmh : 0);
-          }
-
-          // Guardar ubicación actual
-          lastLocation.current = location;
-
-          // Centrar mapa en ubicación actual (solo si está activo el tracking)
-          if (mapRef.current && location.coords && !isStopped.current) {
-            mapRef.current.animateToRegion({
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-              latitudeDelta: 0.005,
-              longitudeDelta: 0.005,
-            }, 1000);
-          }
-        }
-      );
-
-      console.log('✅ Tracking GPS iniciado');
+      console.log('✅ Tracking GPS iniciado (Background Mode)');
     } catch (error) {
       console.error('❌ Error al iniciar tracking GPS:', error);
     }
   };
 
   // Detener tracking GPS
-  const stopGPSTracking = () => {
-    // Marcar como detenido primero para evitar actualizaciones
+  const stopGPSTracking = async () => {
     isStopped.current = true;
 
     if (timerInterval.current) {
@@ -305,6 +372,17 @@ export default function TrackingScreen() {
       timerInterval.current = null;
     }
 
+    try {
+      const hasStarted = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
+      if (hasStarted) {
+        await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+      }
+    } catch (error) {
+      console.error('Error deteniendo actualizaciones de ubicación:', error);
+    }
+
+    // Ya no usamos locationSubscription con startLocationUpdatesAsync
+    // pero por si acaso limpiamos si quedó algo
     if (locationSubscription.current) {
       locationSubscription.current.remove();
       locationSubscription.current = null;
@@ -315,43 +393,64 @@ export default function TrackingScreen() {
 
   // Pausar/Reanudar
   const handlePauseResume = () => {
-    setIsPaused(!isPaused);
-
     if (!isPaused) {
-      // Pausar
-      if (timerInterval.current) {
-        clearInterval(timerInterval.current);
-        timerInterval.current = null;
-      }
+      // PAUSAR
+      setIsPaused(true);
+      lastPauseTimeRef.current = Date.now();
+
+      // Detener actualizaciones de ubicación para ahorrar batería
+      // aunque si se quiere "hot resume" rápido, se podría dejar corriendo
+      // pero para evitar que el task siga emitiendo y gastando, lo paramos.
+      Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).then(started => {
+        if (started) Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
+      });
+
       console.log('⏸️ Tracking pausado');
     } else {
-      // Reanudar
-      timerInterval.current = setInterval(() => {
-        setTrackingTime((prev) => prev + 1);
-      }, 1000);
+      // REANUDAR
+      setIsPaused(false);
+      if (lastPauseTimeRef.current) {
+        const pauseDuration = Date.now() - lastPauseTimeRef.current;
+        pausedTimeRef.current += pauseDuration;
+        lastPauseTimeRef.current = null;
+      }
+
+      // Reiniciar actualizaciones
+      startGPSTracking();
+
       console.log('▶️ Tracking reanudado');
     }
   };
 
   // Terminar entrenamiento
   const handleFinish = () => {
-    // Pausar el timer mientras se muestra la confirmación
+    // Detener timer visual
     if (timerInterval.current) {
       clearInterval(timerInterval.current);
       timerInterval.current = null;
     }
+    // No detenemos GPS aún por si cancela, pero isStopped visualmente 'freezes'
+    // Actually, we should allow resume. 
+    // Let's just switch state. The background timer/gps logic checks screenState?
+    // Current implement checks isStopped. 
+    // We'll set isStopped to true to freeze data collection while confirming.
+    isStopped.current = true;
     setScreenState('confirm');
   };
 
   // Cancelar y volver a tracking
   const handleCancelFinish = () => {
+    isStopped.current = false; // Re-enable tracking
     setScreenState('tracking');
-    // Reanudar el timer si no está pausado
-    if (!isPaused) {
-      timerInterval.current = setInterval(() => {
-        setTrackingTime((prev) => prev + 1);
-      }, 1000);
-    }
+    // Restart timer loop
+    timerInterval.current = setInterval(() => {
+      if (isStopped.current || isPaused) return;
+      if (startTimeRef.current) {
+        const now = Date.now();
+        const elapsedSeconds = Math.floor((now - startTimeRef.current - pausedTimeRef.current) / 1000);
+        setTrackingTime(elapsedSeconds);
+      }
+    }, 1000);
   };
 
   const handleDiscard = () => {

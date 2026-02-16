@@ -273,6 +273,9 @@
   },
   "workout": {
     "title": "Workouts",
+    "weeksLabel": "Weeks",
+    "weekProgress": "Week {{current}} of {{total}}",
+    "weekTitle": "Week {{number}}",
     "train": "Train",
     "createWorkout": "Create Workout",
     "createWithAI": "Create with AI",
@@ -395,13 +398,16 @@
     "trainerInvitationsDesc": "You have new invitations from trainers",
     "reviewLater": "Review Later",
     "planTitle": "Workout Plan",
+    "createdOn": "Created on",
     "shareWithFriend": "Share with a friend",
-    "progressionDefault": "Gradual progression based on your current level",
+    "progressionDefault": "Increase weight when you hit the upper repetition limit with good technique",
     "dayPlaceholder": "Day {{day}}",
     "dayName": "Day {{day}}",
     "goalsLabel": "Goals:",
     "activityTypes": "Activity Types:",
     "fitnessLevel": "Fitness level",
+    "activatePlan": "Activate Plan",
+    "deactivatePlan": "Deactivate Plan",
     "activeWorkoutPlanTitle": "Active training plan",
     "activeWorkoutPlanHelper": "These are the parameters that will be used to generate your new nutrition plan:",
     "restTimerTitle": "Rest timer",
@@ -414,6 +420,55 @@
     },
     "status": {
       "paused": "Paused"
+    },
+    "training": {
+      "principles": [
+        "Progressive overload",
+        "Adequate volume",
+        "Recovery"
+      ],
+      "recommendations": [
+        "Sleep 7-9 hours",
+        "Consume enough protein",
+        "Maintain consistency"
+      ]
+    },
+    "tips": {
+      "general": [
+        "🔥 Warm up well before starting (5-10 min)",
+        "💪 Prioritize technique over weight",
+        "⏱️ Respect rest times",
+        "🎯 Keep core engaged during all exercises",
+        "📈 Listen to your body and adjust intensity as needed"
+      ],
+      "strength": [
+        "🔥 Warm up well before starting (5-10 min)",
+        "💪 Prioritize technique over weight",
+        "⏱️ Respect rest times for optimal recovery",
+        "🎯 Keep core engaged during all exercises",
+        "📈 Increase weight only when you can complete all sets with good form"
+      ],
+      "cardio": [
+        "🔥 Warm up with 5 min of light cardio",
+        "💧 Keep a water bottle nearby",
+        "⏱️ Use a timer to track intervals",
+        "🎯 Focus on maintaining high intensity",
+        "😮‍💨 Control your breathing during exercises"
+      ],
+      "legs": [
+        "🔥 Warm up with hip and knee mobility",
+        "💪 Keep your back straight in all exercises",
+        "⏱️ Longer rest times for heavy exercises",
+        "🎯 Push through your heels in squats",
+        "📈 Progress gradually to avoid injury"
+      ],
+      "core": [
+        "🔥 Engage your core before every exercise",
+        "💪 Quality over quantity in every rep",
+        "⏱️ Maintain constant tension",
+        "🎯 Breathe correctly (exhale on effort)",
+        "📈 Increase time under tension rather than weight"
+      ]
     },
     "stats": {
       "time": "Time",
@@ -997,7 +1052,6 @@
     "invalidCode": "Invalid or expired code",
     "codeValidationError": "Error validating code",
     "codeApplied": "Code applied!",
-    "discountApplied": "Discount applied",
     "codeApplyError": "Error applying code",
     "codeFrom": "Code from {{partner}}",
     "activateFreeAccess": "Activate free access",

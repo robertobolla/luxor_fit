@@ -297,7 +297,14 @@ export default function ShareCardioScreen() {
         <GestureHandlerRootView style={styles.container}>
             <StatusBar hidden />
 
-
+            <View style={styles.editHeader}>
+                <TouchableOpacity onPress={() => setSelectedImage(null)} style={styles.iconButton}>
+                    <Ionicons name="arrow-back" size={24} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowStatsModal(true)} style={styles.configButton}>
+                    <Ionicons name="options" size={24} color="#fff" />
+                </TouchableOpacity>
+            </View>
 
             <View
                 ref={captureViewRef}
@@ -328,45 +335,53 @@ export default function ShareCardioScreen() {
             </View>
 
             <View style={styles.controls}>
-                <TouchableOpacity
-                    style={styles.changePhotoButton}
-                    onPress={() => setSelectedImage(null)}
-                >
-                    <Ionicons name="images-outline" size={20} color="#fff" />
-                </TouchableOpacity>
-
-                <View style={styles.styleSelector}>
-                    {STICKER_STYLES.map((style) => (
-                        <TouchableOpacity
-                            key={style.id}
-                            style={[
-                                styles.styleButton,
-                                selectedStyle === style.id && styles.styleButtonActive,
-                            ]}
-                            onPress={() => setSelectedStyle(style.id)}
-                        >
-                            <Text style={[
-                                styles.styleButtonText,
-                                selectedStyle === style.id && styles.styleButtonTextActive,
-                            ]}>{t(style.labelKey)}</Text>
-                        </TouchableOpacity>
-                    ))}
+                <View style={styles.styleSelectorContainer}>
+                    <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.styleSelectorContent}
+                    >
+                        {STICKER_STYLES.map((style) => (
+                            <TouchableOpacity
+                                key={style.id}
+                                style={[
+                                    styles.styleButton,
+                                    selectedStyle === style.id && styles.styleButtonActive,
+                                ]}
+                                onPress={() => setSelectedStyle(style.id)}
+                            >
+                                <Text style={[
+                                    styles.styleButtonText,
+                                    selectedStyle === style.id && styles.styleButtonTextActive,
+                                ]}>{t(style.labelKey)}</Text>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
                 </View>
 
-                <TouchableOpacity
-                    style={styles.shareButton}
-                    onPress={handleShare}
-                    disabled={isCapturing}
-                >
-                    {isCapturing ? (
-                        <ActivityIndicator color="#0a0a0a" />
-                    ) : (
-                        <>
-                            <Ionicons name="share-outline" size={20} color="#0a0a0a" />
-                            <Text style={styles.shareButtonText}>{t('share.title')}</Text>
-                        </>
-                    )}
-                </TouchableOpacity>
+                <View style={styles.bottomRow}>
+                    <TouchableOpacity
+                        style={styles.changePhotoButton}
+                        onPress={() => pickImage(false)}
+                    >
+                        <Ionicons name="images-outline" size={24} color="#fff" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.shareButton}
+                        onPress={handleShare}
+                        disabled={isCapturing}
+                    >
+                        {isCapturing ? (
+                            <ActivityIndicator color="#0a0a0a" />
+                        ) : (
+                            <>
+                                <Ionicons name="share-outline" size={20} color="#0a0a0a" />
+                                <Text style={styles.shareButtonText}>{t('share.action')}</Text>
+                            </>
+                        )}
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <View style={styles.dragHint}>
@@ -494,25 +509,29 @@ const styles = StyleSheet.create({
     },
     editHeader: {
         position: 'absolute',
-        top: 0,
+        top: 50,
         left: 0,
         right: 0,
-        zIndex: 10,
+        zIndex: 20,
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 16,
-        paddingTop: 50,
-        paddingBottom: 16,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        paddingHorizontal: 20,
     },
-    editHeaderTitle: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#fff',
+    iconButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     configButton: {
-        padding: 8,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     captureView: {
         width: CAPTURE_WIDTH,
@@ -530,71 +549,85 @@ const styles = StyleSheet.create({
     },
     controls: {
         position: 'absolute',
-        bottom: 30,
+        bottom: 30, // Bajamos un poco más (antes 40)
         left: 0,
         right: 0,
-        flexDirection: 'row',
+        gap: 20,
+        paddingHorizontal: 20,
         alignItems: 'center',
+        paddingBottom: 10, // Espacio extra para safe area si es necesario
+    },
+    styleSelectorContainer: {
+        width: '100%',
+        height: 50,
+    },
+    styleSelectorContent: {
         gap: 12,
-        paddingHorizontal: 16,
+        paddingHorizontal: 4,
+        alignItems: 'center',
+    },
+    bottomRow: {
+        flexDirection: 'row',
+        width: '100%',
+        gap: 16,
+        alignItems: 'center',
     },
     changePhotoButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        width: 50,
+        height: 50,
+        borderRadius: 25,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.2)',
-    },
-    styleSelector: {
-        flex: 1,
-        flexDirection: 'row',
-        backgroundColor: '#1a1a1a',
-        borderRadius: 12,
-        padding: 4,
-        justifyContent: 'space-around',
+        backgroundColor: 'rgba(30, 30, 30, 0.8)', // Más oscuro para contraste
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
     },
     styleButton: {
-        flex: 1,
-        height: 40,
-        borderRadius: 8,
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: 'rgba(30, 30, 30, 0.8)', // Fondo oscuro para que se vea siempre
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        height: 36,
         justifyContent: 'center',
-        alignItems: 'center',
     },
     styleButtonActive: {
-        backgroundColor: '#2a2a2a',
+        backgroundColor: 'rgba(255, 213, 74, 0.2)', // Mantener el highlight amarillo
+        borderColor: '#FFD54A',
     },
     styleButtonText: {
         fontSize: 13,
         fontWeight: '500',
-        color: '#666',
+        color: '#ffffff', // Blanco puro para mejor lectura
     },
     styleButtonTextActive: {
         color: '#FFD54A',
-        fontWeight: '600',
+        fontWeight: '700',
     },
     shareButton: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderRadius: 12,
+        justifyContent: 'center',
+        paddingVertical: 14,
+        borderRadius: 25,
         gap: 8,
         backgroundColor: '#FFD54A',
     },
     shareButtonText: {
-        fontWeight: '600',
-        fontSize: 14,
+        fontWeight: '700',
+        fontSize: 16,
         color: '#0a0a0a',
     },
     dragHint: {
         position: 'absolute',
-        bottom: 100,
+        bottom: 150, // Ajustado para que no toque los controles
         alignSelf: 'center',
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
-        backgroundColor: 'rgba(0,0,0,0.7)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 16,

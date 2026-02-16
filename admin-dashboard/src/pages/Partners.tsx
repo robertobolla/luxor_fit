@@ -12,28 +12,36 @@ interface Partner {
   name: string | null;
   role_type: 'socio';
   discount_code: string | null;
+  discount_code_secondary: string | null;
   discount_percentage: number;
+  parent_partner_id: string | null;
+  referred_by: string | null; // Nuevo campo para el Padre (ID de admin_roles)
+  referral_parent_name?: string | null; // Nombre del padre (para mostrar)
   commission_per_subscription: number;
+  commission_per_annual_subscription: number;
+  commission_per_subscription_2nd_level: number;
+  commission_per_annual_subscription_2nd_level: number;
   commission_type: 'fixed' | 'percentage';
   total_earnings: number;
   last_payment_date: string | null;
   free_access: boolean;
   is_active: boolean;
   referral_stats: any;
-  benefit_duration_days: number | null; // null = permanente
-  code_expires_at: string | null; // fecha límite para usar el código
+  benefit_duration_days: number | null;
+  code_expires_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
 interface PartnerReferrals {
   usage_id: string;
+  partner_user_id: string;
   referred_user_id: string;
-  referred_user_name: string | null;
   referred_user_email: string | null;
+  referred_user_name: string | null;
+  used_at: string;
   is_free_access: boolean;
   discount_amount: number | null;
-  used_at: string;
   subscription_status: string | null;
 }
 
@@ -67,9 +75,15 @@ export default function Partners() {
     email: '',
     name: '',
     discount_code: '',
-    commission_per_subscription: 0, // Comisión por cada suscripción activa
+    discount_code_secondary: '',
+    parent_partner_id: '' as string | null,
+    referred_by: '' as string | null, // ID del usuario padre (user_id) o ID de la tabla? Usaremos user_id
+    commission_per_subscription: 3.00,
+    commission_per_annual_subscription: 21.00,
+    commission_per_subscription_2nd_level: 1.00,
+    commission_per_annual_subscription_2nd_level: 7.00,
     commission_type: 'fixed' as 'fixed' | 'percentage',
-    code_expires_at: '' as string, // fecha límite para usar el código (vacío = sin expiración)
+    code_expires_at: '' as string,
   });
 
   useEffect(() => {
@@ -79,6 +93,7 @@ export default function Partners() {
   async function loadPartners() {
     try {
       setLoading(true);
+      // Obtenemos los socios y hacemos un self-join manual o simplemente traemos todo y mapeamos en cliente
       const { data, error } = await supabase
         .from('admin_roles')
         .select('*')
@@ -86,7 +101,17 @@ export default function Partners() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setPartners(data || []);
+
+      // Crear mapa de nombres para mostrar el referido
+      const partnerMap = new Map();
+      data?.forEach(p => partnerMap.set(p.user_id, p.name || p.email));
+
+      const enrichedPartners = data?.map(p => ({
+        ...p,
+        referral_parent_name: p.referred_by ? partnerMap.get(p.referred_by) : null
+      })) || [];
+
+      setPartners(enrichedPartners);
     } catch (error) {
       logger.error('Error cargando socios:', error);
       toast.error('Error al cargar socios');
@@ -120,8 +145,22 @@ export default function Partners() {
         .maybeSingle();
 
       if (existing) {
-        toast.warning('Este código de descuento ya está en uso. Elige otro.');
+        toast.warning('Este código de descuento principal ya está en uso. Elige otro.');
         return;
+      }
+
+      // Validar código secundario único
+      if (formData.discount_code_secondary) {
+        const { data: existingSec } = await supabase
+          .from('admin_roles')
+          .select('id')
+          .or(`discount_code.eq.${formData.discount_code_secondary.toUpperCase().trim()},discount_code_secondary.eq.${formData.discount_code_secondary.toUpperCase().trim()}`)
+          .maybeSingle();
+
+        if (existingSec) {
+          toast.warning('El código anual ya está en uso. Elige otro.');
+          return;
+        }
       }
 
       // Crear un user_id temporal basado en email (se actualizará cuando el usuario se registre en Clerk)
@@ -135,29 +174,28 @@ export default function Partners() {
           name: formData.name.trim(),
           role_type: 'socio',
           discount_code: formData.discount_code.toUpperCase().trim(),
-          discount_percentage: PARTNER_PRICES.monthly.discount, // Descuento fijo (compatible con Apple)
+          discount_percentage: PARTNER_PRICES.monthly.discount,
+          parent_partner_id: formData.parent_partner_id || null, // Deprecated? Mantener por compatibilidad
+          referred_by: formData.referred_by || null, // Nuevo campo
           commission_per_subscription: formData.commission_per_subscription || 0,
+          commission_per_annual_subscription: formData.commission_per_annual_subscription || 0,
+          commission_per_subscription_2nd_level: formData.commission_per_subscription_2nd_level || 0,
+          commission_per_annual_subscription_2nd_level: formData.commission_per_annual_subscription_2nd_level || 0,
           commission_type: formData.commission_type,
-          free_access: true, // Los socios SIEMPRE tienen acceso gratuito
+          free_access: true,
           is_active: true,
-          benefit_duration_days: null, // Ya no aplica - es suscripción de Apple
+          benefit_duration_days: null,
           code_expires_at: formData.code_expires_at || null,
+          discount_code_secondary: formData.discount_code_secondary ? formData.discount_code_secondary.toUpperCase().trim() : null,
         });
 
       if (error) throw error;
 
-      // Enviar invitación por correo (preparado para implementación)
+      // Enviar invitación por correo
       await sendPartnerInvite(formData.email.trim(), formData.discount_code.toUpperCase().trim());
 
       setShowAddModal(false);
-      setFormData({
-        email: '',
-        name: '',
-        discount_code: '',
-        commission_per_subscription: 0,
-        commission_type: 'fixed',
-        code_expires_at: '',
-      });
+      resetFormData();
       loadPartners();
       toast.success('Socio agregado correctamente. Los usuarios que usen su código pagarán $9.99/mes o $89.99/año.');
     } catch (error: unknown) {
@@ -166,10 +204,27 @@ export default function Partners() {
     }
   }
 
+  function resetFormData() {
+    setFormData({
+      email: '',
+      name: '',
+      discount_code: '',
+      discount_code_secondary: '',
+      parent_partner_id: '',
+      referred_by: '',
+      commission_per_subscription: 3.00,
+      commission_per_annual_subscription: 21.00,
+      commission_per_subscription_2nd_level: 1.00,
+      commission_per_annual_subscription_2nd_level: 7.00,
+      commission_type: 'fixed',
+      code_expires_at: '',
+    });
+  }
+
   async function sendPartnerInvite(email: string, discountCode: string) {
     try {
       setSendingInvite(email);
-      
+
       // TODO: Integrar con servicio de email (SendGrid, Resend, etc.)
       // Por ahora, solo preparamos la estructura
       const inviteData = {
@@ -184,10 +239,10 @@ export default function Partners() {
 
       // Aquí iría la llamada al servicio de email
       logger.debug('Enviando invitación:', inviteData);
-      
+
       // Simular delay
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       toast.success(`Invitación enviada a ${email}`);
     } catch (error) {
       logger.error('Error enviando invitación:', error);
@@ -227,7 +282,13 @@ export default function Partners() {
       email: partner.email || '',
       name: partner.name || '',
       discount_code: partner.discount_code || '',
+      discount_code_secondary: partner.discount_code_secondary || '',
+      parent_partner_id: partner.parent_partner_id || '',
+      referred_by: partner.referred_by || '', // Cargar el referido actual
       commission_per_subscription: partner.commission_per_subscription || 0,
+      commission_per_annual_subscription: partner.commission_per_annual_subscription || 0,
+      commission_per_subscription_2nd_level: partner.commission_per_subscription_2nd_level || 1.00,
+      commission_per_annual_subscription_2nd_level: partner.commission_per_annual_subscription_2nd_level || 7.00,
       commission_type: partner.commission_type || 'fixed',
       code_expires_at: partner.code_expires_at ? partner.code_expires_at.split('T')[0] : '',
     });
@@ -239,7 +300,7 @@ export default function Partners() {
 
     try {
       setUpdating(true);
-      
+
       // Validar código único (si cambió)
       if (formData.discount_code.toUpperCase().trim() !== partnerToEdit.discount_code?.toUpperCase().trim()) {
         const { data: existing } = await supabase
@@ -255,6 +316,21 @@ export default function Partners() {
         }
       }
 
+      // Validar código secundario
+      if (formData.discount_code_secondary && formData.discount_code_secondary.toUpperCase().trim() !== partnerToEdit.discount_code_secondary?.toUpperCase().trim()) {
+        const { data: existingSec } = await supabase
+          .from('admin_roles')
+          .select('id')
+          .or(`discount_code.eq.${formData.discount_code_secondary.toUpperCase().trim()},discount_code_secondary.eq.${formData.discount_code_secondary.toUpperCase().trim()}`)
+          .neq('id', partnerToEdit.id)
+          .maybeSingle();
+
+        if (existingSec) {
+          toast.warning('El código anual ya está en uso');
+          return;
+        }
+      }
+
       // Validaciones
       if (!formData.email.trim()) {
         toast.warning('El email es requerido');
@@ -266,6 +342,12 @@ export default function Partners() {
         return;
       }
 
+      // Evitar auto-referencia
+      if (formData.referred_by === partnerToEdit.user_id) {
+        toast.warning('Un socio no puede referirse a sí mismo');
+        return;
+      }
+
       // Actualizar socio
       const { error } = await supabase
         .from('admin_roles')
@@ -273,8 +355,14 @@ export default function Partners() {
           email: formData.email.trim(),
           name: formData.name.trim() || null,
           discount_code: formData.discount_code.toUpperCase().trim(),
-          discount_percentage: PARTNER_PRICES.monthly.discount, // Descuento fijo
+          discount_code_secondary: formData.discount_code_secondary ? formData.discount_code_secondary.toUpperCase().trim() : null,
+          discount_percentage: PARTNER_PRICES.monthly.discount,
+          parent_partner_id: formData.parent_partner_id || null,
+          referred_by: formData.referred_by || null,
           commission_per_subscription: formData.commission_per_subscription,
+          commission_per_annual_subscription: formData.commission_per_annual_subscription,
+          commission_per_subscription_2nd_level: formData.commission_per_subscription_2nd_level,
+          commission_per_annual_subscription_2nd_level: formData.commission_per_annual_subscription_2nd_level,
           commission_type: formData.commission_type,
           free_access: true,
           code_expires_at: formData.code_expires_at || null,
@@ -287,14 +375,7 @@ export default function Partners() {
       toast.success('Socio actualizado correctamente');
       setShowEditModal(false);
       setPartnerToEdit(null);
-      setFormData({
-        email: '',
-        name: '',
-        discount_code: '',
-        commission_per_subscription: 0,
-        commission_type: 'fixed',
-        code_expires_at: '',
-      });
+      resetFormData();
       loadPartners();
     } catch (error: any) {
       logger.error('Error actualizando socio:', error);
@@ -348,7 +429,11 @@ export default function Partners() {
     for (let i = 0; i < 6; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    setFormData({ ...formData, discount_code: code });
+    setFormData({
+      ...formData,
+      discount_code: code,
+      discount_code_secondary: code + 'ANUAL'
+    });
   }
 
   if (loading) {
@@ -377,7 +462,9 @@ export default function Partners() {
             <tr>
               <th>Nombre</th>
               <th>Email</th>
-              <th>Código</th>
+              <th>Código Mensual</th>
+              <th>Código Anual</th>
+              <th>Referido Por</th>
               <th>Descuento</th>
               <th>Comisión</th>
               <th>Activos</th>
@@ -389,7 +476,7 @@ export default function Partners() {
           <tbody>
             {partners.length === 0 ? (
               <tr>
-                <td colSpan={9} className="empty-state">
+                <td colSpan={10} className="empty-state">
                   No hay socios registrados. Agrega el primero.
                 </td>
               </tr>
@@ -402,6 +489,18 @@ export default function Partners() {
                     <code className="discount-code">{partner.discount_code || 'N/A'}</code>
                   </td>
                   <td>
+                    <code className="discount-code">{partner.discount_code_secondary || '-'}</code>
+                  </td>
+                  <td>
+                    {partner.referral_parent_name ? (
+                      <span className="badge" style={{ background: '#283593', color: '#fff' }}>
+                        {partner.referral_parent_name}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#666' }}>-</span>
+                    )}
+                  </td>
+                  <td>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                       <span className="badge badge-free">$9.99/mes</span>
                       <span style={{ fontSize: '10px', color: '#888' }}>$89.99/año</span>
@@ -411,12 +510,10 @@ export default function Partners() {
                     {partner.commission_per_subscription > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <span className="badge badge-paid" style={{ fontSize: '13px' }}>
-                          {partner.commission_type === 'fixed' 
-                            ? `$${partner.commission_per_subscription.toFixed(2)}/sub`
-                            : `${partner.commission_per_subscription}%`}
+                          L1: ${partner.commission_per_subscription.toFixed(2)}
                         </span>
-                        <span style={{ fontSize: '11px', color: '#888' }}>
-                          {partner.commission_type === 'fixed' ? 'Fijo' : 'Porcentaje'}
+                        <span className="badge badge-paid" style={{ fontSize: '11px', background: 'rgba(76, 175, 80, 0.2)' }}>
+                          L2: ${partner.commission_per_subscription_2nd_level?.toFixed(2) || '1.00'}
                         </span>
                       </div>
                     ) : (
@@ -428,9 +525,6 @@ export default function Partners() {
                       <span style={{ color: '#00d4aa', fontWeight: 'bold' }}>
                         {partner.referral_stats?.active_subscriptions || 0} activos
                       </span>
-                      <span style={{ fontSize: '12px', color: '#888' }}>
-                        {partner.referral_stats?.total_referrals || 0} total
-                      </span>
                     </div>
                   </td>
                   <td>
@@ -438,15 +532,6 @@ export default function Partners() {
                       <span style={{ color: '#ffd54a', fontWeight: 'bold', fontSize: '14px' }}>
                         ${(partner.total_earnings || 0).toFixed(2)}
                       </span>
-                      {partner.commission_per_subscription > 0 && partner.referral_stats?.active_subscriptions > 0 && (
-                        <span style={{ fontSize: '11px', color: '#888' }}>
-                          Pendiente: ${(
-                            partner.commission_type === 'fixed' 
-                              ? (partner.referral_stats?.active_subscriptions || 0) * (partner.commission_per_subscription || 0) - (partner.total_earnings || 0)
-                              : ((partner.referral_stats?.active_subscriptions || 0) * ((partner.commission_per_subscription || 0) / 100) * 12.99) - (partner.total_earnings || 0)
-                          ).toFixed(2)}
-                        </span>
-                      )}
                     </div>
                   </td>
                   <td>
@@ -512,11 +597,37 @@ export default function Partners() {
         </table>
       </div>
 
-      {/* Modal para agregar socio */}
-      {showAddModal && (
-        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+      {/* Modal para agregar/editar socio */}
+      {(showAddModal || showEditModal) && (
+        <div className="modal-overlay" onClick={() => {
+          setShowAddModal(false);
+          setShowEditModal(false);
+          resetFormData();
+        }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Agregar Nuevo Socio</h2>
+            <h2>{showEditModal ? 'Editar Socio' : 'Agregar Nuevo Socio'}</h2>
+
+            <div className="form-group">
+              <label>Socio Padre (Quien lo invitó)</label>
+              <select
+                value={formData.referred_by || ''}
+                onChange={(e) => setFormData({ ...formData, referred_by: e.target.value || null })}
+                style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff' }}
+              >
+                <option value="">-- Ninguno (Directo) --</option>
+                {partners
+                  .filter(p => !partnerToEdit || p.id !== partnerToEdit.id) // No mostrarse a sí mismo
+                  .map(p => (
+                    <option key={p.id} value={p.user_id || ''}>
+                      {p.name || p.email} ({p.discount_code})
+                    </option>
+                  ))}
+              </select>
+              <p style={{ color: '#888', fontSize: '12px', marginTop: '4px' }}>
+                Si seleccionas un padre, este recibirá comisiones de Nivel 2 por las ventas de este nuevo socio.
+              </p>
+            </div>
+
             <div className="form-group">
               <label>Email *</label>
               <input
@@ -558,6 +669,18 @@ export default function Partners() {
                 </button>
               </div>
             </div>
+
+            <div className="form-group">
+              <label>Código Anual (Opcional)</label>
+              <input
+                type="text"
+                value={formData.discount_code_secondary}
+                onChange={(e) => setFormData({ ...formData, discount_code_secondary: e.target.value.toUpperCase() })}
+                placeholder="SOCIO10ANUAL"
+                maxLength={20}
+                style={{ textTransform: 'uppercase', width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff' }}
+              />
+            </div>
             {/* Información del descuento fijo */}
             <div className="form-info" style={{ background: '#1a3a1a', padding: '12px', borderRadius: '6px', marginBottom: '16px', border: '1px solid #2d5a2d' }}>
               <p style={{ color: '#4CAF50', fontSize: '14px', margin: 0, fontWeight: '600' }}>
@@ -589,15 +712,52 @@ export default function Partners() {
             </div>
             <div className="form-group">
               <label>Comisión por Suscripción Activa *</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: '8px', alignItems: 'end' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 150px', gap: '8px', alignItems: 'end' }}>
                 <div>
+                  <label style={{ fontSize: '10px', color: '#888' }}>Nivel 1 (Mensual)</label>
                   <input
                     type="number"
                     min="0"
                     step="0.01"
                     value={formData.commission_per_subscription}
                     onChange={(e) => setFormData({ ...formData, commission_per_subscription: parseFloat(e.target.value) || 0 })}
-                    placeholder={formData.commission_type === 'fixed' ? "5.00" : "10"}
+                    placeholder="3.00"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '10px', color: '#888' }}>Nivel 1 (Anual)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.commission_per_annual_subscription}
+                    onChange={(e) => setFormData({ ...formData, commission_per_annual_subscription: parseFloat(e.target.value) || 0 })}
+                    placeholder="21.00"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '10px', color: '#888' }}>Nivel 2 (Mensual)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.commission_per_subscription_2nd_level}
+                    onChange={(e) => setFormData({ ...formData, commission_per_subscription_2nd_level: parseFloat(e.target.value) || 0 })}
+                    placeholder="1.00"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: '10px', color: '#888' }}>Nivel 2 (Anual)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={formData.commission_per_annual_subscription_2nd_level}
+                    onChange={(e) => setFormData({ ...formData, commission_per_annual_subscription_2nd_level: parseFloat(e.target.value) || 0 })}
+                    placeholder="7.00"
                     style={{ width: '100%' }}
                   />
                 </div>
@@ -605,8 +765,8 @@ export default function Partners() {
                   value={formData.commission_type}
                   onChange={(e) => {
                     const newType = e.target.value as 'fixed' | 'percentage';
-                    setFormData({ 
-                      ...formData, 
+                    setFormData({
+                      ...formData,
                       commission_type: newType,
                       commission_per_subscription: newType === 'percentage' ? Math.min(formData.commission_per_subscription, 100) : formData.commission_per_subscription
                     });
@@ -620,21 +780,11 @@ export default function Partners() {
               <p style={{ color: '#888', fontSize: '12px', marginTop: '6px' }}>
                 {formData.commission_type === 'fixed' ? (
                   <>
-                    <strong>Monto fijo:</strong> Se paga este monto por cada usuario con suscripción activa (ej: $5.00 por cada usuario activo)
-                    {formData.commission_per_subscription > 0 && (
-                      <span style={{ display: 'block', marginTop: '4px', color: '#00d4aa' }}>
-                        💰 Si hay 10 usuarios activos: ${(formData.commission_per_subscription * 10).toFixed(2)}/mes
-                      </span>
-                    )}
+                    <strong>Monto fijo:</strong> Se paga este monto por cada usuario con suscripción activa.
                   </>
                 ) : (
                   <>
-                    <strong>Porcentaje:</strong> Se paga este porcentaje del precio mensual por cada suscripción activa (ej: 10% de $12.99 = $1.30 por usuario)
-                    {formData.commission_per_subscription > 0 && (
-                      <span style={{ display: 'block', marginTop: '4px', color: '#00d4aa' }}>
-                        💰 Por usuario activo: ${((formData.commission_per_subscription / 100) * 12.99).toFixed(2)}/mes
-                      </span>
-                    )}
+                    <strong>Porcentaje:</strong> Se paga este porcentaje del precio mensual por cada suscripción activa.
                   </>
                 )}
               </p>
@@ -645,11 +795,15 @@ export default function Partners() {
               </p>
             </div>
             <div className="modal-actions">
-              <button className="btn-secondary" onClick={() => setShowAddModal(false)}>
+              <button className="btn-secondary" onClick={() => {
+                setShowAddModal(false);
+                setShowEditModal(false);
+                resetFormData();
+              }}>
                 Cancelar
               </button>
-              <button className="btn-primary" onClick={handleAddPartner}>
-                Agregar y Enviar Invitación
+              <button className="btn-primary" onClick={showEditModal ? handleUpdatePartner : handleAddPartner}>
+                {showEditModal ? 'Guardar Cambios' : 'Agregar y Enviar Invitación'}
               </button>
             </div>
           </div>
@@ -662,7 +816,7 @@ export default function Partners() {
           <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
             <h2>Referidos de {selectedPartner.name || selectedPartner.email}</h2>
             <p className="subtitle">Código: <code>{selectedPartner.discount_code}</code></p>
-            
+
             {partnerReferrals.length === 0 ? (
               <div className="empty-state">
                 <p>Aún no hay usuarios que hayan usado este código.</p>
@@ -841,6 +995,19 @@ export default function Partners() {
                 </button>
               </div>
             </div>
+
+            <div className="form-group">
+              <label>Código Anual (Opcional)</label>
+              <input
+                type="text"
+                value={formData.discount_code_secondary}
+                onChange={(e) => setFormData({ ...formData, discount_code_secondary: e.target.value.toUpperCase() })}
+                placeholder="SOCIO10ANUAL"
+                maxLength={20}
+                style={{ textTransform: 'uppercase', width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff' }}
+                disabled={updating}
+              />
+            </div>
             {/* Información del descuento fijo */}
             <div className="form-info" style={{ background: '#1a3a1a', padding: '12px', borderRadius: '6px', marginBottom: '16px', border: '1px solid #2d5a2d' }}>
               <p style={{ color: '#4CAF50', fontSize: '14px', margin: 0, fontWeight: '600' }}>
@@ -873,8 +1040,9 @@ export default function Partners() {
             </div>
             <div className="form-group">
               <label>Comisión por Suscripción Activa *</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 150px', gap: '8px', alignItems: 'end' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 150px', gap: '8px', alignItems: 'end' }}>
                 <div>
+                  <label style={{ fontSize: '12px', color: '#888' }}>Mensual</label>
                   <input
                     type="number"
                     min="0"
@@ -890,8 +1058,8 @@ export default function Partners() {
                   value={formData.commission_type}
                   onChange={(e) => {
                     const newType = e.target.value as 'fixed' | 'percentage';
-                    setFormData({ 
-                      ...formData, 
+                    setFormData({
+                      ...formData,
                       commission_type: newType,
                       commission_per_subscription: newType === 'percentage' ? Math.min(formData.commission_per_subscription, 100) : formData.commission_per_subscription
                     });
@@ -903,7 +1071,7 @@ export default function Partners() {
                 </select>
               </div>
               <p style={{ color: '#888', fontSize: '12px', marginTop: '4px' }}>
-                {formData.commission_type === 'fixed' 
+                {formData.commission_type === 'fixed'
                   ? `El socio ganará $${formData.commission_per_subscription.toFixed(2)} por cada suscripción activa que refiera.`
                   : `El socio ganará ${formData.commission_per_subscription}% del valor de cada suscripción activa que refiera.`}
               </p>
@@ -918,7 +1086,13 @@ export default function Partners() {
                     email: '',
                     name: '',
                     discount_code: '',
-                    commission_per_subscription: 0,
+                    discount_code_secondary: '',
+                    parent_partner_id: '',
+                    referred_by: '',
+                    commission_per_subscription: 3.00,
+                    commission_per_annual_subscription: 21.00,
+                    commission_per_subscription_2nd_level: 1.00,
+                    commission_per_annual_subscription_2nd_level: 7.00,
                     commission_type: 'fixed',
                     code_expires_at: '',
                   });

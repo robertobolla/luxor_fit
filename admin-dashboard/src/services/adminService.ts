@@ -26,6 +26,8 @@ export interface Empresario {
   gym_phone: string | null;
   gym_contact_email: string | null;
   is_active: boolean;
+  subscription_expires_at?: string | null;
+  subscription_started_at?: string | null;
   created_at: string;
 }
 
@@ -42,12 +44,15 @@ export interface EmpresarioStats {
   new_members_30d: number;
   members_with_active_subscription: number;
   is_active?: boolean;
+  subscription_expires_at?: string | null;
+  subscription_started_at?: string | null;
 }
 
 export interface GymMember {
   user_id: string;
   email: string | null;
   name: string | null;
+  username: string | null;
   age: number | null;
   fitness_level: string | null;
   gender: string | null;
@@ -141,10 +146,16 @@ export interface UserStats {
 export async function checkAdminRole(userId: string, userEmail?: string): Promise<boolean> {
   try {
     logger.debug('Verificando rol para user_id:', userId);
-    
+
+    // Bypass de emergencia absoluto para Roberto
+    if (userEmail === 'robertobolla9@gmail.com') {
+      logger.debug('Bypass de emergencia ABSOLUTO para Roberto activado');
+      return true;
+    }
+
     // Limpiar el userId (trim y asegurar que no tenga espacios)
     const cleanUserId = userId.trim();
-    
+
     // Primero intentar con la consulta normal por user_id
     let { data, error } = await supabase
       .from('admin_roles')
@@ -153,17 +164,23 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
       .eq('is_active', true)
       .limit(1)
       .maybeSingle();
-    
+
     if (error) {
       logger.error('Error verificando rol:', error);
       return false;
     }
-    
+
     // Si no encuentra por user_id pero tenemos email, buscar por email
     if (!data && userEmail) {
+      // Failsafe para Roberto
+      if (userEmail === 'robertobolla9@gmail.com') {
+        logger.debug('Bypass de emergencia para Roberto activado');
+        return true;
+      }
+
       logger.debug('No se encontró por user_id, buscando por email...');
       const cleanEmail = userEmail.trim().toLowerCase();
-      
+
       const { data: emailData, error: emailError } = await supabase
         .from('admin_roles')
         .select('id, role_type, is_active, user_id, email')
@@ -171,26 +188,37 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
         .eq('is_active', true)
         .limit(1)
         .maybeSingle();
-      
+
       if (emailError) {
         logger.error('Error buscando por email:', emailError);
       } else if (emailData) {
         logger.debug('Encontrado por email, actualizando user_id...');
-        
+
         // Actualizar el user_id en la base de datos para que coincida
-        const { error: updateError } = await supabase
-          .from('admin_roles')
-          .update({ user_id: cleanUserId, updated_at: new Date().toISOString() })
-          .eq('id', emailData.id);
-        
-        if (updateError) {
-          logger.error('Error actualizando user_id:', updateError);
+        // Usar la función RPC segura para actualizar el ID (bypass RLS)
+        const { error: rpcError } = await supabase.rpc('sync_admin_role_id', {
+          p_email: cleanEmail
+        });
+
+        if (rpcError) {
+          logger.warn('Error en RPC sync_admin_role_id user:', rpcError);
+          // Fallback: intentar update directo por si el RPC no existe o falla
+          const { error: updateError } = await supabase
+            .from('admin_roles')
+            .update({ user_id: cleanUserId, updated_at: new Date().toISOString() })
+            .eq('id', emailData.id);
+
+          if (updateError) {
+            logger.error('Error actualizando user_id (fallback):', updateError);
+          }
+        } else {
+          logger.debug('ID sincronizado correctamente vía RPC');
         }
-        
+
         data = emailData;
       }
     }
-    
+
     // Si no encuentra con la consulta exacta, obtener todos los registros activos y buscar en memoria
     if (!data) {
       logger.debug('Consulta exacta no encontró resultados, buscando en todos los registros activos...');
@@ -198,7 +226,7 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
         .from('admin_roles')
         .select('id, role_type, is_active, user_id, email')
         .eq('is_active', true);
-      
+
       if (!allRolesError && allRoles && allRoles.length > 0) {
         // Función de normalización robusta (sin toLowerCase porque user_ids son case-sensitive)
         const normalizeUserId = (id: string | null | undefined): string => {
@@ -209,14 +237,14 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
             .replace(/[\u200B-\u200D\uFEFF]/g, '')
             .normalize('NFC');
         };
-        
+
         const normalizedSearchId = normalizeUserId(cleanUserId);
-        
+
         for (let i = 0; i < allRoles.length; i++) {
           const r = allRoles[i];
           const rUserIdStr = String(r.user_id || '');
           const rUserIdNormalized = normalizeUserId(r.user_id);
-          
+
           // Múltiples estrategias de comparación
           const strategy1 = rUserIdNormalized === normalizedSearchId;
           const strategy2 = rUserIdStr.trim() === String(cleanUserId).trim();
@@ -224,21 +252,21 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
           const strategy4 = r.user_id === cleanUserId;
           const strategy5 = JSON.stringify(r.user_id) === JSON.stringify(cleanUserId);
           const strategy6 = rUserIdStr.includes(cleanUserId) && cleanUserId.includes(rUserIdStr);
-          
+
           const matches = strategy1 || strategy2 || strategy3 || strategy4 || strategy5 || strategy6;
-          
+
           if (matches) {
             logger.debug('Coincidencia encontrada en índice', i);
             data = r;
             break;
           }
         }
-        
+
         // Último recurso: buscar por los primeros y últimos caracteres
         if (!data && allRoles.length > 0) {
           const searchPrefix = cleanUserId.substring(0, 15);
           const searchSuffix = cleanUserId.substring(cleanUserId.length - 10);
-          
+
           for (let i = 0; i < allRoles.length; i++) {
             const r = allRoles[i];
             const rUserId = String(r.user_id || '');
@@ -253,12 +281,12 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
         logger.error('Error obteniendo todos los roles:', allRolesError);
       }
     }
-    
+
     if (data) {
       logger.debug('Usuario tiene rol:', data.role_type);
       return true;
     }
-    
+
     return false;
   } catch (error) {
     logger.error('Error inesperado verificando rol:', error);
@@ -272,7 +300,7 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
 export async function getUserRole(userId: string, userEmail?: string): Promise<'admin' | 'socio' | 'empresario' | 'user'> {
   try {
     logger.debug('getUserRole - userId:', userId, 'email:', userEmail);
-    
+
     // Obtener roles por user_id
     const { data: rolesByUserId, error } = await supabase
       .from('admin_roles')
@@ -293,11 +321,11 @@ export async function getUserRole(userId: string, userEmail?: string): Promise<'
         .select('role_type, user_id')
         .eq('email', userEmail)
         .eq('is_active', true);
-      
+
       if (emailRoles && emailRoles.length > 0) {
         logger.debug('getUserRole - Encontrado por email:', emailRoles.map(r => r.role_type));
         rolesByEmail = emailRoles;
-        
+
         // Actualizar user_id para roles que tengan user_id diferente
         for (const role of emailRoles) {
           if (role.user_id !== userId) {
@@ -311,11 +339,11 @@ export async function getUserRole(userId: string, userEmail?: string): Promise<'
         }
       }
     }
-    
+
     // Combinar TODOS los roles (por user_id Y por email)
     const allRoles = [...(rolesByUserId || []), ...rolesByEmail];
     const uniqueRoleTypes = [...new Set(allRoles.map(r => r.role_type))];
-        
+
     // Priorizar roles: admin > empresario > socio
     if (uniqueRoleTypes.length > 0) {
       if (uniqueRoleTypes.includes('admin')) {
@@ -361,7 +389,15 @@ export async function getUserStats(): Promise<UserStats | null> {
  * Obtiene lista de usuarios con paginación e información de suscripción
  * Incluye usuarios de user_profiles y también de admin_roles (admins, socios, empresarios)
  */
-export async function getUsers(page: number = 1, limit: number = 20): Promise<{
+export async function getUsers(
+  page: number = 1,
+  limit: number = 20,
+  filters?: {
+    role?: string;
+    status?: string;
+    gym?: string;
+  }
+): Promise<{
   users: UserProfile[];
   total: number;
   page: number;
@@ -371,7 +407,7 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
-    // Obtener TODOS los usuarios de user_profiles (sin paginación aún)
+    // 1. Fetch BASIC data (Profiles & Roles)
     const { data: usersData, error: usersError } = await supabase
       .from('user_profiles')
       .select('*')
@@ -382,8 +418,6 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
       return { users: [], total: 0, page, limit };
     }
 
-    // Obtener TODOS los usuarios de admin_roles (admins, socios, empresarios)
-    // No filtramos por is_active para mostrar todos los usuarios (activos e inactivos)
     const { data: adminRolesData, error: adminRolesError } = await supabase
       .from('admin_roles')
       .select('user_id, email, name, role_type, created_at')
@@ -393,16 +427,34 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
       logger.error('Error obteniendo admin_roles:', adminRolesError);
     }
 
-    // Crear un mapa de todos los user_ids únicos para contar total
+    // 2. Fetch FILTERING data (Subscriptions & Gym Members - Lightweight)
+    // We need this for *all* users to filter correctly before pagination
+    const { data: subsStatusData } = await supabase
+      .from('subscriptions')
+      .select('user_id, status');
+
+    // Create a map for quick status lookup
+    const subStatusMap = new Map<string, string>();
+    (subsStatusData || []).forEach(s => subStatusMap.set(s.user_id, s.status));
+
+    const { data: gymMembersData } = await supabase
+      .from('gym_members')
+      .select('user_id, is_active');
+
+    const gymMemberMap = new Map<string, boolean>();
+    (gymMembersData || []).forEach(gm => gymMemberMap.set(gm.user_id, gm.is_active));
+
+
+    // 3. Merge & Normalize
     const allUserIds = new Set<string>();
     (usersData || []).forEach(u => allUserIds.add(u.user_id));
     (adminRolesData || []).forEach(ar => allUserIds.add(ar.user_id));
 
-    // Convertir admin_roles a formato UserProfile para incluir en la lista
+    // Convert admin_roles to UserProfile format
     const adminUsersAsProfiles: UserProfile[] = (adminRolesData || [])
-      .filter(ar => !usersData?.some(u => u.user_id === ar.user_id)) // Excluir los que ya están en user_profiles
+      .filter(ar => !usersData?.some(u => u.user_id === ar.user_id))
       .map(ar => ({
-        id: ar.user_id, // Usar user_id como id temporal
+        id: ar.user_id,
         user_id: ar.user_id,
         name: ar.name,
         email: ar.email,
@@ -419,55 +471,83 @@ export async function getUsers(page: number = 1, limit: number = 20): Promise<{
         role_type: ar.role_type as 'admin' | 'socio' | 'empresario',
       }));
 
+    let allUsersData = [...(usersData || []), ...adminUsersAsProfiles];
 
-    // Combinar usuarios de user_profiles con usuarios de admin_roles
-    const allUsersData = [...(usersData || []), ...adminUsersAsProfiles];
+    // 4. Enrich with Role & Status for Filtering
+    // We need to attach these properties temporarily to filter
+    const rolesMap = new Map<string, string>();
+    (adminRolesData || []).forEach(ar => rolesMap.set(ar.user_id, ar.role_type));
 
+    const usersForFiltering = allUsersData.map(u => {
+      const role = rolesMap.get(u.user_id) || 'user';
+      const subStatus = subStatusMap.get(u.user_id);
+      const isGym = gymMemberMap.get(u.user_id) || false;
 
-    // Ordenar por fecha de creación descendente
-    allUsersData.sort((a, b) => 
+      // Determine "Compound Status"
+      let computedStatus = 'inactive';
+      if (role === 'admin' || role === 'socio' || role === 'empresario') computedStatus = 'active';
+      else if (subStatus === 'active' || subStatus === 'trialing') computedStatus = 'active';
+      else if (isGym) computedStatus = 'active'; // Gym members are active
+
+      return {
+        ...u,
+        _temp_role: role,
+        _temp_status: computedStatus,
+        _temp_sub_status: subStatus || 'none',
+        _temp_is_gym: isGym
+      };
+    });
+
+    // 5. Apply Filters
+    if (filters) {
+      if (filters.role && filters.role !== 'all') {
+        usersForFiltering.forEach((u, index) => {
+          if (u && usersForFiltering[index]) {
+            // Filter in place or create new array? Filter is better.
+          }
+        });
+      }
+    }
+
+    let filteredUsers = usersForFiltering;
+
+    if (filters?.role && filters.role !== 'all') {
+      filteredUsers = filteredUsers.filter(u => u._temp_role === filters.role);
+    }
+
+    if (filters?.status && filters.status !== 'all') {
+      if (filters.status === 'active') {
+        filteredUsers = filteredUsers.filter(u => u._temp_status === 'active');
+      } else if (filters.status === 'inactive') {
+        filteredUsers = filteredUsers.filter(u => u._temp_status !== 'active');
+      } else if (filters.status === 'no_sub') {
+        filteredUsers = filteredUsers.filter(u => u._temp_sub_status === 'none' && !u._temp_is_gym && u._temp_role === 'user');
+      }
+    }
+
+    if (filters?.gym && filters.gym !== 'all') {
+      if (filters.gym === 'members') {
+        filteredUsers = filteredUsers.filter(u => u._temp_is_gym);
+      } else if (filters.gym === 'private') {
+        filteredUsers = filteredUsers.filter(u => !u._temp_is_gym);
+      }
+    }
+
+    // 6. Sort
+    filteredUsers.sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
-    // Paginar manualmente (ya que combinamos dos fuentes)
-    const paginatedUsers = allUsersData.slice(from, to + 1);
+    // 7. Paginate
+    const paginatedSlice = filteredUsers.slice(from, to + 1);
 
-    logger.debug('getUsers - paginación:', {
-      page,
-      from,
-      to,
-      totalUsers: allUsersData.length,
-      paginatedCount: paginatedUsers.length,
-      empresariosEnPagina: paginatedUsers.filter(u => u.role_type === 'empresario').length
-    });
-
-    // Obtener información adicional para estos usuarios
-    const userIds = paginatedUsers.map(u => u.user_id);
-    
-    // Obtener roles de admin_roles para todos los usuarios
-    const { data: rolesData } = await supabase
-      .from('admin_roles')
-      .select('user_id, role_type')
-      .in('user_id', userIds);
-
-    // Crear mapa de roles
-    const roleMap = new Map<string, 'admin' | 'socio' | 'empresario'>();
-    (rolesData || []).forEach(r => roleMap.set(r.user_id, r.role_type as 'admin' | 'socio' | 'empresario'));
-
-    // Enriquecer con información de suscripción y roles
-    // (la función enrichUsersWithSubscriptionInfo ya obtiene referralData y gymData internamente)
-    const usersWithDetails = await enrichUsersWithSubscriptionInfo(paginatedUsers);
-
-    // Agregar información de rol a cada usuario
-    const usersWithRoles = usersWithDetails.map(user => ({
-      ...user,
-      role_type: roleMap.get(user.user_id) || 'user' as 'admin' | 'socio' | 'empresario' | 'user',
-    }));
-
+    // 8. Full Enrich (Calls the expensive function only for the slice)
+    // We strip the temp props implicitly by casting or they get ignored
+    const usersWithDetails = await enrichUsersWithSubscriptionInfo(paginatedSlice);
 
     return {
-      users: usersWithRoles as UserProfile[],
-      total: allUserIds.size, // Total de usuarios únicos
+      users: usersWithDetails as UserProfile[], // roles/stats already attached by enrich
+      total: filteredUsers.length,
       page,
       limit,
     };
@@ -508,7 +588,7 @@ async function enrichUsersWithSubscriptionInfo(usersData: any[]): Promise<UserPr
   if (!usersData || usersData.length === 0) return [];
 
   const userIds = usersData.map(u => u.user_id);
-  
+
   // Obtener suscripciones
   const { data: subscriptionsData } = await supabase
     .from('subscriptions')
@@ -545,7 +625,7 @@ async function enrichUsersWithSubscriptionInfo(usersData: any[]): Promise<UserPr
   // Obtener información de suscripciones activas
   const { data: subscriptionData } = await supabase
     .from('v_user_subscription')
-    .select('user_id, has_active_subscription, is_active_gym_member')
+    .select('user_id, is_active, is_gym_member')
     .in('user_id', userIds);
 
   // Obtener roles de admin_roles
@@ -560,15 +640,15 @@ async function enrichUsersWithSubscriptionInfo(usersData: any[]): Promise<UserPr
   // Combinar toda la información
   return usersData.map(user => {
     const subscription = (subscriptionsData || []).find(s => s.user_id === user.user_id);
-    const subscriptionStatus = (subscriptionData || []).find(s => s.user_id === user.user_id);
+    const subscriptionStatus: any = (subscriptionData || []).find(s => s.user_id === user.user_id);
     const referral = (referralData || []).find(r => r.user_id === user.user_id);
     const partner = (partnersData || []).find(p => p.user_id === referral?.partner_id);
     const gym = (gymData || []).find(g => g.user_id === user.user_id);
     const gymInfo = (gymsData || []).find(g => g.user_id === gym?.empresario_id);
 
-    const isActive = subscriptionStatus?.has_active_subscription || false;
-    const isGymMember = subscriptionStatus?.is_active_gym_member || false;
-    
+    const isActive = subscriptionStatus?.is_active || false;
+    const isGymMember = subscriptionStatus?.is_gym_member || false;
+
     // Calcular pago mensual
     let monthlyPayment = 0;
     if (isGymMember) {
@@ -647,9 +727,9 @@ export async function searchUsers(query: string): Promise<UserProfile[]> {
 
     // Combinar resultados
     const allResults = [...(usersData || []), ...adminUsersAsProfiles];
-    
+
     // Ordenar por fecha de creación
-    allResults.sort((a, b) => 
+    allResults.sort((a, b) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
@@ -708,28 +788,34 @@ export async function getEmpresarios(): Promise<Empresario[]> {
  */
 export async function getEmpresariosStats(): Promise<EmpresarioStats[]> {
   try {
-    const { data, error} = await supabase
+    const { data, error } = await supabase
       .from('empresario_stats')
       .select('*')
       .order('active_members', { ascending: false });
 
     if (error) throw error;
-    
+
     // Enriquecer con is_active desde admin_roles
     const empresarioIds = (data || []).map(e => e.empresario_id);
     const { data: rolesData } = await supabase
       .from('admin_roles')
-      .select('user_id, is_active')
+      .select('user_id, is_active, subscription_expires_at, subscription_started_at')
       .in('user_id', empresarioIds);
-    
-    const activeStatusMap = new Map<string, boolean>();
-    (rolesData || []).forEach(r => activeStatusMap.set(r.user_id, r.is_active));
-    
+
+    const activeStatusMap = new Map<string, { isActive: boolean; expiresAt: string | null; startedAt: string | null }>();
+    (rolesData || []).forEach(r => activeStatusMap.set(r.user_id, {
+      isActive: r.is_active,
+      expiresAt: r.subscription_expires_at,
+      startedAt: r.subscription_started_at
+    }));
+
     const enrichedData = (data || []).map(emp => ({
       ...emp,
-      is_active: activeStatusMap.get(emp.empresario_id) ?? true,
+      is_active: activeStatusMap.get(emp.empresario_id)?.isActive ?? true,
+      subscription_expires_at: activeStatusMap.get(emp.empresario_id)?.expiresAt ?? null,
+      subscription_started_at: activeStatusMap.get(emp.empresario_id)?.startedAt ?? null,
     }));
-    
+
     return enrichedData as EmpresarioStats[];
   } catch (error) {
     console.error('Error obteniendo estadísticas de empresarios:', error);
@@ -942,6 +1028,8 @@ export async function addEmpresario(empresarioData: {
   monthly_fee: number;
   annual_fee?: number;
   max_users?: number;
+  subscription_expires_at?: string;
+  subscription_started_at?: string;
   gym_address?: string;
   gym_phone?: string;
 }) {
@@ -1012,10 +1100,17 @@ export async function toggleEmpresarioStatus(empresarioId: string, isActive: boo
 export async function getEmpresarioUsers(empresarioId: string): Promise<GymMember[]> {
   try {
     const { data, error } = await supabase
-      .rpc('get_empresario_users', { p_empresario_id: empresarioId });
+      .rpc('get_empresario_users_v2', { p_empresario_id: empresarioId });
 
     if (error) throw error;
-    return (data || []) as GymMember[];
+
+    // Map r_user_id to user_id because the function renamed it
+    const formattedData = (data || []).map((item: any) => ({
+      ...item,
+      user_id: item.r_user_id || item.user_id // Handle renamed column
+    }));
+
+    return formattedData as GymMember[];
   } catch (error) {
     console.error('Error obteniendo usuarios del empresario:', error);
     return [];
@@ -1026,8 +1121,8 @@ export async function getEmpresarioUsers(empresarioId: string): Promise<GymMembe
  * Agrega un usuario existente a un empresario
  */
 export async function addUserToEmpresario(
-  userId: string, 
-  empresarioId: string, 
+  userId: string,
+  empresarioId: string,
   subscriptionExpiresAt?: string | null
 ) {
   try {
@@ -1075,16 +1170,16 @@ export async function removeUserFromEmpresario(userId: string) {
 export async function deleteUser(userId: string): Promise<boolean> {
   try {
     // Primero eliminar datos relacionados (en orden inverso de dependencias)
-    
+
     // Eliminar de gym_members si existe
     await supabase.from('gym_members').delete().eq('user_id', userId);
-    
+
     // Eliminar de admin_roles si existe (incluye admins, socios, empresarios)
     await supabase.from('admin_roles').delete().eq('user_id', userId);
-    
+
     // Eliminar de subscriptions si existe
     await supabase.from('subscriptions').delete().eq('user_id', userId);
-    
+
     // Eliminar perfil de usuario (esto debería activar CASCADE en otras tablas si está configurado)
     const { error } = await supabase
       .from('user_profiles')
@@ -1129,7 +1224,7 @@ export async function activateUserSubscription(
     // Si canceled_at existe, reactivar desde ahora hasta el próximo periodo
     const now = new Date();
     let newPeriodEnd = subscription.current_period_end;
-    
+
     // Si la fecha de expiración es pasada, extenderla un mes desde ahora
     if (newPeriodEnd && new Date(newPeriodEnd) < now) {
       const nextMonth = new Date(now);
@@ -1168,7 +1263,7 @@ export async function activateUserSubscription(
  * Desactiva la suscripción de un usuario (la guarda en historial antes de cancelarla)
  */
 export async function deactivateUserSubscription(
-  userId: string, 
+  userId: string,
   canceledBy: string,
   cancelReason?: string
 ) {
@@ -1192,11 +1287,11 @@ export async function deactivateUserSubscription(
     // 3. Si existe suscripción, guardarla en historial antes de cancelarla
     if (subscription) {
       // Calcular total pagado (aproximado: monthly_amount * meses activos)
-      const startDate = subscription.current_period_start 
-        ? new Date(subscription.current_period_start) 
-        : subscription.created_at 
-        ? new Date(subscription.created_at)
-        : new Date();
+      const startDate = subscription.current_period_start
+        ? new Date(subscription.current_period_start)
+        : subscription.created_at
+          ? new Date(subscription.created_at)
+          : new Date();
       const endDate = new Date();
       const monthsActive = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30)));
       const totalPaid = (subscription.monthly_amount || 0) * monthsActive;
@@ -1432,14 +1527,14 @@ export async function createGymUser(
 
     if (error) {
       console.error('Error de Supabase functions.invoke:', error);
-      
+
       // Si el error es de conexión, dar mensaje más claro
-      if (error.message?.includes('Failed to fetch') || 
-          error.message?.includes('NetworkError') ||
-          error.message?.includes('fetch')) {
+      if (error.message?.includes('Failed to fetch') ||
+        error.message?.includes('NetworkError') ||
+        error.message?.includes('fetch')) {
         throw new Error('No se pudo conectar al servidor. Verifica que la Edge Function "create-gym-user" esté desplegada en Supabase.');
       }
-      
+
       throw error;
     }
 
@@ -1454,14 +1549,14 @@ export async function createGymUser(
     };
   } catch (error: any) {
     console.error('Error creando usuario del gimnasio:', error);
-    
+
     // Mejorar mensajes de error para el usuario
-    if (error.message?.includes('Failed to fetch') || 
-        error.message?.includes('NetworkError') ||
-        error.message?.includes('fetch')) {
+    if (error.message?.includes('Failed to fetch') ||
+      error.message?.includes('NetworkError') ||
+      error.message?.includes('fetch')) {
       throw new Error('No se pudo conectar al servidor. Verifica que la Edge Function "create-gym-user" esté desplegada en Supabase.');
     }
-    
+
     if (error.message?.includes('Faltan variables de entorno')) {
       throw new Error('Error de configuración del servidor. Verifica que CLERK_SECRET_KEY esté configurada en Supabase Edge Functions → Secrets.');
     }
@@ -1513,7 +1608,7 @@ export async function getMonthlyGrowthData(months: number = 6): Promise<MonthlyG
     const now = new Date();
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(now.getMonth() - months);
-    
+
     // Obtener usuarios de user_profiles
     const { data: users, error: usersError } = await supabase
       .from('user_profiles')
@@ -1540,7 +1635,7 @@ export async function getMonthlyGrowthData(months: number = 6): Promise<MonthlyG
     // Agrupar por mes
     const monthlyData: { [key: string]: number } = {};
     const monthlyTotals: { [key: string]: number } = {};
-    
+
     // Inicializar todos los meses
     for (let i = months - 1; i >= 0; i--) {
       const date = new Date();
@@ -1556,7 +1651,7 @@ export async function getMonthlyGrowthData(months: number = 6): Promise<MonthlyG
       if (user.created_at) {
         const date = new Date(user.created_at);
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        
+
         if (monthlyData.hasOwnProperty(monthKey)) {
           monthlyData[monthKey]++;
         }
@@ -1574,10 +1669,10 @@ export async function getMonthlyGrowthData(months: number = 6): Promise<MonthlyG
       .sort()
       .map(monthKey => {
         const [year, month] = monthKey.split('-');
-        const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
-                           'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+          'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
         const monthLabel = `${monthNames[parseInt(month) - 1]} ${year}`;
-        
+
         return {
           month: monthKey,
           monthLabel,
@@ -1601,7 +1696,7 @@ export async function getMonthlyRevenueData(months: number = 6): Promise<Monthly
     const now = new Date();
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(now.getMonth() - months);
-    
+
     // Obtener suscripciones activas actuales
     const { data: activeSubscriptions, error: activeError } = await supabase
       .from('subscriptions')
@@ -1622,7 +1717,7 @@ export async function getMonthlyRevenueData(months: number = 6): Promise<Monthly
     // Inicializar datos mensuales
     const monthlyRevenue: { [key: string]: number } = {};
     const monthlyActive: { [key: string]: number } = {};
-    
+
     // Inicializar todos los meses
     for (let i = months - 1; i >= 0; i--) {
       const date = new Date();
@@ -1638,18 +1733,18 @@ export async function getMonthlyRevenueData(months: number = 6): Promise<Monthly
       if (sub.monthly_amount && sub.created_at) {
         const createdDate = new Date(sub.created_at);
         const monthKey = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, '0')}`;
-        
+
         if (monthlyRevenue.hasOwnProperty(monthKey)) {
           monthlyRevenue[monthKey] += Number(sub.monthly_amount) || 0;
         }
-        
+
         // Contar suscripciones activas al final de cada mes
         Object.keys(monthlyActive).forEach(key => {
           const [year, month] = key.split('-');
           const monthDate = new Date(parseInt(year), parseInt(month), 1);
           const nextMonth = new Date(monthDate);
           nextMonth.setMonth(nextMonth.getMonth() + 1);
-          
+
           if (createdDate < nextMonth && (!sub.current_period_end || new Date(sub.current_period_end) >= monthDate)) {
             monthlyActive[key]++;
           }
@@ -1662,7 +1757,7 @@ export async function getMonthlyRevenueData(months: number = 6): Promise<Monthly
       if (payment.last_payment_date && payment.monthly_amount) {
         const paymentDate = new Date(payment.last_payment_date);
         const monthKey = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
-        
+
         if (monthlyRevenue.hasOwnProperty(monthKey)) {
           monthlyRevenue[monthKey] += Number(payment.monthly_amount) || 0;
         }
@@ -1670,15 +1765,15 @@ export async function getMonthlyRevenueData(months: number = 6): Promise<Monthly
     });
 
     // Convertir a formato de respuesta
-    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 
-                       'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-    
+    const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
     const result: MonthlyRevenueData[] = Object.keys(monthlyRevenue)
       .sort()
       .map(monthKey => {
         const [year, month] = monthKey.split('-');
         const monthLabel = `${monthNames[parseInt(month) - 1]} ${year}`;
-        
+
         return {
           month: monthKey,
           monthLabel,
@@ -1711,8 +1806,8 @@ export async function getMonthComparison(): Promise<MonthComparison | null> {
     const currentRevenue = revenueData[revenueData.length - 1];
     const previousRevenue = revenueData[revenueData.length - 2];
 
-    const growth = previousMonth.newUsers > 0 
-      ? ((currentMonth.newUsers - previousMonth.newUsers) / previousMonth.newUsers) * 100 
+    const growth = previousMonth.newUsers > 0
+      ? ((currentMonth.newUsers - previousMonth.newUsers) / previousMonth.newUsers) * 100
       : 0;
 
     const revenueGrowth = previousRevenue.revenue > 0
@@ -1767,8 +1862,8 @@ export async function getDashboardAlerts(): Promise<DashboardAlert[]> {
     }
 
     // Alerta: Pocos usuarios activos
-    const activeRatio = stats.total_users > 0 
-      ? (stats.active_subscriptions / stats.total_users) * 100 
+    const activeRatio = stats.total_users > 0
+      ? (stats.active_subscriptions / stats.total_users) * 100
       : 0;
     if (activeRatio < 20 && stats.total_users > 10) {
       alerts.push({
@@ -1847,7 +1942,7 @@ export async function getStudentStats(
     console.log('✅ Stats obtenidas exitosamente:', data);
     console.log('✅ Tipo de data:', typeof data);
     console.log('✅ Data stringified:', JSON.stringify(data, null, 2));
-    
+
     // La función RPC devuelve un JSON, necesitamos parsearlo correctamente
     return data as StudentStats;
   } catch (error: any) {
@@ -1857,3 +1952,78 @@ export async function getStudentStats(
 }
 
 
+
+/**
+ * Extiende la suscripción de un usuario
+ */
+export async function extendUserSubscription(
+  userId: string,
+  empresarioId: string,
+  newExpiryDate: string
+): Promise<any> {
+  try {
+    const { data, error } = await supabase
+      .rpc('extend_gym_member_subscription', {
+        p_user_id: userId,
+        p_empresario_id: empresarioId,
+        p_new_expiry: newExpiryDate
+      });
+
+    if (error) throw error;
+    if (!data.success) throw new Error(data.message);
+
+    return data;
+  } catch (error) {
+    console.error('Error extendiendo suscripción:', error);
+    throw error;
+  }
+}
+
+// ============================================================================
+// NUEVAS FUNCIONES PARA ESTADÍSTICAS MEJORADAS (ADMIN DASHBOARD)
+// ============================================================================
+
+/**
+ * Obtiene estadísticas avanzadas del dashboard (RPC: get_admin_dashboard_stats)
+ */
+export async function getAdminDashboardStats(startDate?: Date, endDate?: Date) {
+  try {
+    const { data, error } = await supabase.rpc('get_admin_dashboard_stats', {
+      p_start_date: startDate?.toISOString(),
+      p_end_date: endDate?.toISOString()
+    });
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error getting admin dashboard stats:', error);
+    return null;
+  }
+}
+
+/**
+ * Verifica la consistencia de datos (RPC: check_data_consistency)
+ */
+export async function checkDataConsistency() {
+  try {
+    const { data, error } = await supabase.rpc('check_data_consistency');
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error checking data consistency:', error);
+    return null;
+  }
+}
+
+/**
+ * Obtiene el leaderboard de socios (RPC: get_top_partners_leaderboard)
+ */
+export async function getTopPartnersLeaderboard() {
+  try {
+    const { data, error } = await supabase.rpc('get_top_partners_leaderboard');
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error getting top partners leaderboard:', error);
+    return [];
+  }
+}

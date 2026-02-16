@@ -18,6 +18,27 @@
   font-size: 0.9375rem;
 }
 
+.header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+
+
+.admin-badge {
+  background: rgba(255, 213, 74, 0.1);
+  color: #FFD54A;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border: 1px solid rgba(255, 213, 74, 0.2);
+}
+
 /* Alertas */
 .alerts-section {
   margin-bottom: 2rem;

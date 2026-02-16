@@ -142,59 +142,89 @@ export async function getTrainerStudents(
 }> {
   try {
     console.log('🔵 getTrainerStudents - trainerId:', trainerId);
-    
-    // Primero intentar con la vista (más eficiente)
-    let { data, error } = await supabase
-      .from('trainer_students_view')
+
+    // 0. Intentar usar la función segura RPC (soluciona problemas de RLS)
+    const { data: rpcData, error: rpcError } = await supabase.rpc('get_trainer_students_secure', {
+      p_trainer_id: trainerId
+    });
+
+    if (!rpcError && rpcData) {
+      const response = rpcData as any;
+      if (response.success && Array.isArray(response.data)) {
+        console.log(`✅ Students loaded via RPC secure function: ${response.data.length} found`);
+        return { success: true, data: response.data };
+      }
+    } else {
+      console.log('⚠️ RPC fallback to normal query (function might not exist or failed)', rpcError);
+    }
+
+    // 1. Obtener relaciones directamente (sin join complejo ni vistas)
+    const { data: relationships, error: relError } = await supabase
+      .from('trainer_student_relationships')
       .select('*')
       .eq('trainer_id', trainerId)
+      // .eq('status', 'accepted') // Comentado para depuración: obtener todos y filtrar en memoria
       .order('accepted_at', { ascending: false });
-    
-    console.log('📊 Vista result - data:', data);
-    console.log('📊 Vista result - error:', error);
 
-    // Si la vista no existe, hacer query manual
-    if (error && error.code === 'PGRST205') {
-      console.log('Vista no encontrada, haciendo query manual...');
-      const result = await supabase
-        .from('trainer_student_relationships')
-        .select(`
-          *,
-          student:user_profiles!trainer_student_relationships_student_id_fkey(
-            name,
-            username,
-            profile_photo_url
-          )
-        `)
-        .eq('trainer_id', trainerId)
-        .eq('status', 'accepted')
-        .order('accepted_at', { ascending: false });
-
-      console.log('📊 Manual query result - data:', result.data);
-      console.log('📊 Manual query result - error:', result.error);
-
-      if (result.error) {
-        console.error('Error getting trainer students:', result.error);
-        return { success: false, error: result.error.message };
-      }
-
-      // Transformar datos al formato esperado
-      const transformedData = result.data?.map((item: any) => ({
-        ...item,
-        student_name: item.student?.name,
-        student_username: item.student?.username,
-        student_photo: item.student?.profile_photo_url,
-      })) || [];
-
-      return { success: true, data: transformedData };
+    console.log(`📊 Relationships query result: ${relationships?.length || 0} rows found`);
+    if (relationships && relationships.length > 0) {
+      relationships.forEach(r => console.log(`   - Student: ${r.student_id}, Status: ${r.status}`));
     }
 
-    if (error) {
-      console.error('Error getting trainer students:', error);
-      return { success: false, error: error.message };
+    if (relError) {
+      console.error('Error getting trainer relationships:', relError);
+      return { success: false, error: relError.message };
     }
 
-    return { success: true, data: data || [] };
+    if (!relationships || relationships.length === 0) {
+      console.log('⚠️ No relationships found for trainer');
+      return { success: true, data: [] };
+    }
+
+    console.log(`✅ Found ${relationships.length} relationships`);
+
+    // 2. No filtrar por estado por ahora, para ver todo (pending, accepted, etc.)
+    const allRelationships = relationships.sort((a, b) => {
+      if (a.status === 'accepted' && b.status !== 'accepted') return -1;
+      if (a.status !== 'accepted' && b.status === 'accepted') return 1;
+      if (a.status === 'pending' && b.status !== 'pending') return -1;
+      if (a.status !== 'pending' && b.status === 'pending') return 1;
+      return 0;
+    });
+
+    console.log(`✅ Total relationships found: ${allRelationships.length}`);
+
+    if (allRelationships.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    // 3. Obtener perfiles de los alumnos
+    const studentIds = allRelationships.map(r => r.student_id);
+    const { data: students, error: studentError } = await supabase
+      .from('user_profiles')
+      .select('user_id, name, username, profile_photo_url')
+      .in('user_id', studentIds);
+
+    if (studentError) {
+      console.error('Error getting student profiles:', studentError);
+      // Fallback: mostrar sin nombres si falla el perfil
+    }
+
+    // 4. Combinar datos
+    const transformedData: TrainerStudentRelationship[] = allRelationships.map(rel => {
+      const student = students?.find(s => s.user_id === rel.student_id);
+      return {
+        ...rel,
+        status: rel.status as 'pending' | 'accepted' | 'rejected', // Cast seguro ya que filtramos
+        accepted_at: rel.accepted_at || undefined,
+        student_name: student?.name || 'Usuario',
+        student_username: student?.username,
+        student_photo: student?.profile_photo_url
+      };
+    });
+
+    return { success: true, data: transformedData };
+
   } catch (error: any) {
     console.error('Error getting trainer students:', error);
     return { success: false, error: error.message };
@@ -213,16 +243,16 @@ export async function getPendingTrainerInvitations(
 }> {
   try {
     console.log('🔵 getPendingTrainerInvitations - studentId:', studentId);
-    
+
     // Primero, verificar el perfil del usuario
     const { data: userProfile } = await supabase
       .from('user_profiles')
       .select('user_id, username')
       .eq('user_id', studentId)
       .single();
-    
+
     console.log('👤 Perfil del usuario:', userProfile);
-    
+
     // Obtener invitaciones pendientes
     const { data: invitations, error: invError } = await supabase
       .from('trainer_student_relationships')
