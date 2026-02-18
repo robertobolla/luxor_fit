@@ -54,7 +54,7 @@ export const paymentsService = {
     if (error || !data?.url) {
       // Exponer más contexto del error si viene del edge
       let message = 'No se pudo crear la sesión de pago';
-      
+
       if (error) {
         // Intentar extraer el mensaje del error
         if (typeof error === 'string') {
@@ -91,7 +91,7 @@ export const paymentsService = {
           }
         }
       }
-      
+
       throw new Error(message);
     }
     return data.url;
@@ -106,17 +106,11 @@ export const paymentsService = {
     isAdmin?: boolean;
   }> {
     if (!userId) {
-      // Si no se pasa userId, intentar desde Supabase Auth (fallback)
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-      if (userError || !user) throw new Error('Usuario no autenticado');
-      userId = user.id;
+      throw new Error('Usuario no autenticado - se requiere userId de Clerk');
     }
 
     console.log('🔍 getSubscriptionStatus: Consultando v_user_subscription para user_id:', userId);
-    
+
     // PRIMERO verificar si es admin (los admins tienen acceso automático)
     const isAdmin = await checkAdminAccess(userId, user);
     if (isAdmin) {
@@ -130,7 +124,7 @@ export const paymentsService = {
         isAdmin: true,
       };
     }
-    
+
     const { data, error } = await supabase
       .from('v_user_subscription')
       .select('*')
@@ -148,10 +142,10 @@ export const paymentsService = {
 
     // Verificar si el usuario es socio con acceso gratuito
     const isPartnerFree = await checkPartnerFreeAccess(userId);
-    
+
     // Verificar si el usuario es miembro de gimnasio con acceso gratuito
     const isGymMember = await checkGymMemberAccess(userId);
-    
+
     const result = {
       isActive: !!subscription?.is_active || isPartnerFree || isGymMember, // Incluye acceso gratuito de socio y gimnasio
       status: subscription?.status ?? null,
@@ -160,9 +154,9 @@ export const paymentsService = {
       isGymMember,
       isAdmin: false,
     };
-    
+
     console.log('🔍 getSubscriptionStatus: Resultado procesado:', result);
-    
+
     return result;
   },
 };

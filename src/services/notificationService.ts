@@ -6,6 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { supabase } from './supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import i18n from '../i18n';
 
 // Keys para AsyncStorage
 const NOTIFICATIONS_SETUP_KEY = 'notifications_setup_done';
@@ -47,16 +48,16 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   }
 
   if (finalStatus !== 'granted') {
-    console.log('❌ Permiso de notificaciones denegado');
+    console.log(i18n.t('notifications.permissionDenied'));
     return null;
   }
 
   // Obtener token (solo funciona en dispositivos físicos, no en simulador)
   try {
     token = (await Notifications.getExpoPushTokenAsync()).data;
-    console.log('✅ Push token obtenido:', token);
+    console.log(i18n.t('notifications.tokenObtained'), token);
   } catch (error) {
-    console.log('⚠️ No se pudo obtener token (probablemente simulador)');
+    console.log(i18n.t('notifications.tokenError'));
   }
 
   return token;
@@ -68,7 +69,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
 export async function cancelAllNotifications() {
   await Notifications.cancelAllScheduledNotificationsAsync();
-  console.log('🔕 Todas las notificaciones canceladas');
+  console.log(i18n.t('notifications.allCancelled'));
 }
 
 // ============================================================================
@@ -88,12 +89,13 @@ export async function scheduleWorkoutReminderNotification(userId: string) {
     // Programar notificación para las 8:00 PM todos los días
     const id = await Notifications.scheduleNotificationAsync({
       content: {
-        title: '💪 ¿Entrenaste hoy?',
-        body: 'No olvides marcar tu entrenamiento como completado',
+        title: i18n.t('notifications.workoutReminderTitle'),
+        body: i18n.t('notifications.workoutReminderBody'),
         data: { type: 'workout_reminder', userId },
         sound: true,
       },
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
         hour: 20,
         minute: 0,
         repeats: true,
@@ -125,12 +127,13 @@ export async function scheduleLunchReminderNotification(userId: string) {
     // Programar notificación para las 2:00 PM todos los días
     const id = await Notifications.scheduleNotificationAsync({
       content: {
-        title: '🍽️ ¿Ya almorzaste?',
-        body: 'Registra tu almuerzo para llevar un mejor control de tu nutrición',
+        title: i18n.t('notifications.lunchReminderTitle'),
+        body: i18n.t('notifications.lunchReminderBody'),
         data: { type: 'lunch_reminder', userId },
         sound: true,
       },
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
         hour: 14,
         minute: 0,
         repeats: true,
@@ -162,11 +165,12 @@ export async function scheduleWeeklyCheckinNotification() {
     // Programar nueva notificación semanal (Lunes a las 9:00 AM)
     const id = await Notifications.scheduleNotificationAsync({
       content: {
-        title: '📊 Check-in Semanal',
-        body: 'Es hora de registrar tu peso y ajustar tu plan de nutrición',
+        title: i18n.t('notifications.weeklyCheckinTitle'),
+        body: i18n.t('notifications.weeklyCheckinBody'),
         data: { type: 'weekly_checkin' },
       },
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
         weekday: 2, // Lunes (1=Domingo, 2=Lunes, ...)
         hour: 9,
         minute: 0,
@@ -190,38 +194,38 @@ export async function setupUserNotifications(userId: string) {
   try {
     // Verificar si ya se configuraron las notificaciones
     const setupDone = await AsyncStorage.getItem(NOTIFICATIONS_SETUP_KEY);
-    
+
     // Solicitar permisos
     const token = await registerForPushNotificationsAsync();
-    
+
     if (!token) {
-      console.log('⚠️ No se pudieron configurar notificaciones (sin permisos)');
+      console.log(i18n.t('notifications.setupNoPermissions'));
       return false;
     }
 
     // Solo programar notificaciones si no se han configurado antes
     // o si es un nuevo día (para asegurar que estén activas)
     if (!setupDone) {
-      console.log('📅 Configurando notificaciones por primera vez...');
-      
+      console.log(i18n.t('notifications.setupFirstTime'));
+
       // Programar recordatorios diarios (solo a sus horas específicas)
       await scheduleWorkoutReminderNotification(userId);
       await scheduleLunchReminderNotification(userId);
-      
+
       // Programar recordatorio semanal de check-in
       await scheduleWeeklyCheckinNotification();
 
       // Marcar como configurado
       await AsyncStorage.setItem(NOTIFICATIONS_SETUP_KEY, new Date().toISOString());
-      
-      console.log('✅ Notificaciones configuradas correctamente');
+
+      console.log(i18n.t('notifications.setupComplete'));
     } else {
-      console.log('✅ Notificaciones ya estaban configuradas');
+      console.log(i18n.t('notifications.setupAlready'));
     }
 
     return true;
   } catch (error) {
-    console.error('❌ Error configurando notificaciones:', error);
+    console.error(i18n.t('notifications.setupError'), error);
     return false;
   }
 }
@@ -234,13 +238,13 @@ export async function forceReconfigureNotifications(userId: string) {
   try {
     // Limpiar el flag de configuración
     await AsyncStorage.removeItem(NOTIFICATIONS_SETUP_KEY);
-    
+
     // Cancelar todas las notificaciones existentes
     await cancelAllNotifications();
-    
+
     // Reconfigurar
     await setupUserNotifications(userId);
-    
+
     console.log('🔄 Notificaciones reconfiguradas');
     return true;
   } catch (error) {
@@ -260,7 +264,7 @@ export async function sendAchievementNotification(
 ) {
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: `🏆 ${title}`,
+      title: i18n.t('notifications.achievementTitle', { title }),
       body,
       data: { type: 'achievement', achievementId },
       sound: true,
@@ -285,7 +289,7 @@ export async function sendMessageNotification(
     // Verificar permisos antes de enviar
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
-    
+
     if (existingStatus !== 'granted') {
       console.warn('💬 Permisos de notificación no concedidos:', existingStatus);
       const { status } = await Notifications.requestPermissionsAsync();
@@ -299,12 +303,12 @@ export async function sendMessageNotification(
 
     const notificationId = await Notifications.scheduleNotificationAsync({
       content: {
-        title: `💬 Nuevo mensaje de ${senderName}`,
+        title: i18n.t('notifications.newMessageTitle', { sender: senderName }),
         body: messageText.length > 50 ? `${messageText.substring(0, 50)}...` : messageText,
-        data: { 
-          type: 'new_message', 
+        data: {
+          type: 'new_message',
           chatId,
-          senderId 
+          senderId
         },
         sound: true,
         badge: 1,
@@ -331,10 +335,10 @@ export async function sendWorkoutSharedNotification(
 ) {
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: `💪 ${senderName} te compartió un entrenamiento`,
+      title: i18n.t('notifications.workoutSharedTitle', { sender: senderName }),
       body: workoutPlanName,
-      data: { 
-        type: 'workout_shared', 
+      data: {
+        type: 'workout_shared',
         chatId,
         senderId,
         workoutPlanId
@@ -358,22 +362,22 @@ export async function sendWorkoutResponseNotification(
   chatId: string,
   receiverId: string
 ) {
-  const title = accepted 
-    ? `✅ ${receiverName} aceptó tu entrenamiento`
-    : `❌ ${receiverName} rechazó tu entrenamiento`;
-  
+  const title = accepted
+    ? i18n.t('notifications.workoutAcceptedTitle', { name: receiverName })
+    : i18n.t('notifications.workoutRejectedTitle', { name: receiverName });
+
   const body = accepted
-    ? 'Tu entrenamiento compartido fue aceptado'
-    : 'Tu entrenamiento compartido fue rechazado';
+    ? i18n.t('notifications.workoutAcceptedBody')
+    : i18n.t('notifications.workoutRejectedBody');
 
   await Notifications.scheduleNotificationAsync({
     content: {
       title,
       body,
-      data: { 
-        type: accepted ? 'workout_accepted' : 'workout_rejected', 
+      data: {
+        type: accepted ? 'workout_accepted' : 'workout_rejected',
         chatId,
-        receiverId 
+        receiverId
       },
       sound: true,
     },
@@ -393,11 +397,11 @@ export async function sendFriendRequestNotification(
 ) {
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: `👋 ${senderName} te envió una solicitud de amistad`,
-      body: 'Toca para ver y responder',
-      data: { 
-        type: 'friend_request', 
-        senderId 
+      title: i18n.t('notifications.friendRequestTitle', { sender: senderName }),
+      body: i18n.t('notifications.friendRequestBody'),
+      data: {
+        type: 'friend_request',
+        senderId
       },
       sound: true,
       badge: 1,

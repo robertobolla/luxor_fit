@@ -7,6 +7,13 @@ import { TokenManager } from './TokenManager';
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
+console.log('🌐 Supabase Initialized with URL:', supabaseUrl);
+if (supabaseUrl.includes('vsgomemzzmff')) {
+  console.log('🛠️ MODO: DESARROLLO (fitmind-dev)');
+} else {
+  console.log('🚀 MODO: PRODUCCION (fseyophzvhaf)');
+}
+
 // Custom fetch to inject Clerk token into every request
 // @ts-ignore: Fetch signature compatibility
 const customFetch = async (input: RequestInfo | URL, init?: RequestInit) => {

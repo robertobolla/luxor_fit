@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/services/supabase';
-import { useWorkoutStore } from '@/store/workoutStore';
+import { useWorkoutStore } from '../../src/store/workoutStore';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
 import { SkeletonWorkout } from '@/components/SkeletonLoaders';
@@ -378,12 +378,13 @@ export default function WorkoutScreen() {
             <Ionicons name="help-circle-outline" size={28} color="#ffb300" />
           </TouchableOpacity>
           <View style={styles.buttonsRow}>
+            {/* Botón Rutinas del Gym */}
             <TouchableOpacity
-              style={styles.generateButton}
-              onPress={() => setShowSelectionModal(true)}
+              style={styles.gymTemplatesButton}
+              onPress={() => router.push('/gym-templates' as any)}
             >
-              <Ionicons name="add" size={20} color="#1a1a1a" />
-              <Text style={styles.generateButtonText}>{t('workout.createWorkout')}</Text>
+              <Ionicons name="business" size={18} color="#ffb300" />
+              <Text style={styles.gymTemplatesButtonText}>{t('templates.gymTemplates')}</Text>
             </TouchableOpacity>
 
             {/* Botón Modo Entrenador */}
@@ -391,10 +392,19 @@ export default function WorkoutScreen() {
               style={styles.trainerModeButton}
               onPress={() => router.push('/trainer-mode' as any)}
             >
-              <Ionicons name="people" size={20} color="#ffffff" />
+              <Ionicons name="people" size={18} color="#ffffff" />
               <Text style={styles.trainerModeButtonText}>{t('workout.trainerMode')}</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Crear Entrenamiento - full width */}
+          <TouchableOpacity
+            style={styles.generateButton}
+            onPress={() => setShowSelectionModal(true)}
+          >
+            <Ionicons name="add" size={20} color="#1a1a1a" />
+            <Text style={styles.generateButtonText}>{t('workout.createWorkout')}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Planes de Entrenamiento Generados */}
@@ -959,17 +969,33 @@ const styles = StyleSheet.create({
   },
   buttonsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
+    marginBottom: 10,
+  },
+  gymTemplatesButton: {
+    flex: 1,
+    backgroundColor: 'transparent',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 11,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ffb300',
+  },
+  gymTemplatesButtonText: {
+    color: '#ffb300',
+    fontSize: 13,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   generateButton: {
-    flex: 1,
     backgroundColor: '#ffb300',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
     borderRadius: 8,
-    position: 'relative',
   },
   generateButtonText: {
     color: '#1a1a1a',

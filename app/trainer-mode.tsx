@@ -325,6 +325,16 @@ export default function TrainerModeScreen() {
           <Text style={styles.addStudentButtonText}>{t('trainer.addStudent')}</Text>
         </TouchableOpacity>
 
+        {/* Botón Mi Biblioteca de Templates */}
+        <TouchableOpacity
+          style={styles.templateLibraryButton}
+          onPress={() => router.push('/template-library' as any)}
+        >
+          <Ionicons name="library" size={20} color="#ffb300" />
+          <Text style={styles.templateLibraryButtonText}>{t('templates.myLibrary')}</Text>
+          <Ionicons name="chevron-forward" size={18} color="#666" style={{ marginLeft: 'auto' }} />
+        </TouchableOpacity>
+
         {/* Descripción */}
         <View style={styles.infoCard}>
           <Ionicons name="information-circle" size={24} color="#ffb300" />
@@ -734,6 +744,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  templateLibraryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 179, 0, 0.3)',
+    backgroundColor: 'rgba(255, 179, 0, 0.06)',
+  },
+  templateLibraryButtonText: {
+    color: '#ffb300',
+    fontSize: 15,
+    fontWeight: '600',
+    marginLeft: 10,
   },
   infoCard: {
     backgroundColor: '#2a2a2a',

@@ -1,52 +1,46 @@
 import { useEffect } from 'react';
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import { NotificationService } from '@/services/notifications';
+import { useUser } from '@clerk/clerk-expo';
+import {
+  setupUserNotifications,
+  setupNotificationListeners,
+} from '../services/notificationService';
 
 export const useNotifications = () => {
+  const { user } = useUser();
+
   useEffect(() => {
     // Configurar notificaciones al cargar la app
-    const setupNotifications = async () => {
-      if (Platform.OS !== 'web') {
-        await NotificationService.requestPermissions();
-        await NotificationService.setupDefaultNotifications();
+    const setup = async () => {
+      if (Platform.OS !== 'web' && user?.id) {
+        await setupUserNotifications(user.id);
       }
     };
 
-    setupNotifications();
+    setup();
 
     // Configurar listeners de notificaciones
-    const notificationListener = NotificationService.addNotificationReceivedListener(
-      (notification) => {
-        console.log('Notificación recibida:', notification);
+    const cleanup = setupNotificationListeners((data) => {
+      console.log('Respuesta a notificación:', data);
+      // Manejar navegación basada en el tipo de notificación
+      switch (data?.type) {
+        case 'workout_reminder':
+          // Navegar a la pantalla de entrenamiento
+          break;
+        case 'weekly_checkin':
+          // Navegar a la pantalla de check-in
+          break;
+        case 'achievement':
+          // Mostrar modal de logro
+          break;
+        case 'new_message':
+          // Navegar al chat
+          break;
+        default:
+          break;
       }
-    );
+    });
 
-    const responseListener = NotificationService.addNotificationResponseListener(
-      (response) => {
-        console.log('Respuesta a notificación:', response);
-        // Aquí puedes manejar la navegación basada en el tipo de notificación
-        const { type } = response.notification.request.content.data as any;
-        
-        switch (type) {
-          case 'workout_reminder':
-            // Navegar a la pantalla de entrenamiento
-            break;
-          case 'weekly_progress':
-            // Navegar a la pantalla de progreso
-            break;
-          case 'achievement':
-            // Mostrar modal de logro
-            break;
-          default:
-            break;
-        }
-      }
-    );
-
-    return () => {
-      notificationListener.remove();
-      responseListener.remove();
-    };
-  }, []);
+    return cleanup;
+  }, [user?.id]);
 };

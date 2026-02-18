@@ -70,8 +70,7 @@ export async function checkAdminAccess(userId: string, user?: any | null): Promi
         // Actualizar user_id si es diferente
 
         // Usar la función RPC segura para actualizar el ID (bypass RLS)
-        // @ts-ignore - La funcion existe en la DB pero no en los tipos locales
-        const { error: rpcError } = await (supabase.rpc as any)('sync_admin_role_id', {
+        const { error: rpcError } = await (supabase.rpc as Function)('sync_admin_role_id', {
           p_email: userEmail
         });
 

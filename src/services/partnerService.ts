@@ -70,6 +70,36 @@ export interface MonthlyStats {
 }
 
 // ============================================================================
+// VERIFICACIÓN DE ACCESO GRATUITO
+// ============================================================================
+
+/**
+ * Verifica si un usuario tiene acceso gratuito por ser socio/partner.
+ * Busca en admin_roles si el usuario tiene rol 'socio' activo.
+ */
+export async function checkPartnerFreeAccess(userId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('admin_roles')
+      .select('id, role_type, is_active')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .eq('role_type', 'socio')
+      .maybeSingle();
+
+    if (error) {
+      console.error('❌ Error verificando acceso de socio:', error);
+      return false;
+    }
+
+    return !!data;
+  } catch (error) {
+    console.error('❌ Error inesperado verificando acceso de socio:', error);
+    return false;
+  }
+}
+
+// ============================================================================
 // FUNCIONES PÚBLICAS
 // ============================================================================
 
@@ -163,11 +193,11 @@ export async function getPartnerCampaigns(partnerId: string): Promise<OfferCampa
  * Obtener estadísticas mensuales de un socio
  */
 export async function getPartnerMonthlyStats(
-  partnerId: string, 
+  partnerId: string,
   year?: number
 ): Promise<MonthlyStats[]> {
   const currentYear = year || new Date().getFullYear();
-  
+
   const { data, error } = await supabase
     .from('partner_monthly_stats')
     .select('*')
