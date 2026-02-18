@@ -3,6 +3,7 @@
 // ============================================================================
 
 import { supabase } from './supabase';
+import { TokenManager } from './TokenManager';
 import { getClerkUserEmailSync } from '../utils/clerkHelpers';
 
 /**
@@ -13,6 +14,25 @@ export async function checkAdminAccess(userId: string, user?: any | null): Promi
   try {
     const userEmail = user ? getClerkUserEmailSync(user) : null;
 
+    // Obtener token actual para debug
+    const token = await TokenManager.getToken();
+    console.log('🔐 checkAdminAccess: userId =', userId, '| email =', userEmail, '| hasToken =', !!token);
+    if (token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1]));
+          console.log('🕵️ JWT Debug Payload:', {
+            iss: payload.iss,
+            aud: payload.aud,
+            exp: payload.exp
+          });
+        }
+      } catch (e) {
+        console.log('⚠️ Error decodificando JWT para debug:', e);
+      }
+    }
+
     // Buscar rol activo por user_id
     let { data, error } = await supabase
       .from('admin_roles')
@@ -22,8 +42,14 @@ export async function checkAdminAccess(userId: string, user?: any | null): Promi
       .in('role_type', ['admin', 'empresario', 'socio'])
       .maybeSingle();
 
+    console.log('🔐 checkAdminAccess: DB result by userId =', JSON.stringify(data), '| error =', JSON.stringify(error));
+
     if (error) {
-      console.error('Error verificando roles:', error);
+      // Ignorar PGRST301 (JWT invalido) en logs ruidosos, pero si es persistente es un problema
+      if (error.code !== 'PGRST116') { // PGRST116 es "no rows returned" (normal)
+        console.log('⚠️ CheckAdminAccess Supabase Error:', error.code, error.message);
+
+      }
     }
 
     // Si no encuentra por user_id, buscar por email

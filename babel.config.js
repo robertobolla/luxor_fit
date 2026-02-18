@@ -14,6 +14,7 @@ module.exports = function (api) {
   ];
 
   // Eliminar console.logs en producción
+  // Eliminar console.logs en producción
   if (process.env.NODE_ENV === 'production') {
     plugins.push([
       "transform-remove-console",

@@ -64,5 +64,22 @@ export const TokenManager = {
                 resolve(null);
             }, timeoutMs);
         });
+    },
+
+    invalidateToken: async () => {
+        console.log('🔄 TokenManager: Invalidando token actual...');
+        currentToken = null;
+        if (tokenFetcher) {
+            try {
+                // Intentar forzar un refresco si es posible
+                const newToken = await tokenFetcher();
+                if (newToken) {
+                    currentToken = newToken;
+                    console.log('🔄 TokenManager: Token refrescado exitosamente');
+                }
+            } catch (e) {
+                console.error('Error refrescando token:', e);
+            }
+        }
     }
 };

@@ -116,6 +116,19 @@ function clearDevelopmentData() {
     }
   });
 
+  // Limpiar archivo .env para forzar recarga
+  const envFiles = [".env", ".env.development.local"];
+  envFiles.forEach((file) => {
+    if (fs.existsSync(file)) {
+        try {
+            fs.unlinkSync(file);
+            console.log(`   ✅ Eliminado: ${file} (se regenerará al iniciar)`);
+        } catch (error) {
+            console.log(`   ⚠️  No se pudo eliminar: ${file}`);
+        }
+    }
+  });
+
   console.log("✅ Datos de desarrollo limpiados\n");
 }
 

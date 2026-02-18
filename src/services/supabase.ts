@@ -20,24 +20,39 @@ const customFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     }
 
     if (token) {
+
       init = init || {};
       init.headers = init.headers || {};
 
-      // Inject Authorization header if not present or if it's currently using anon key
-      // We force the Clerk token to ensure RLS works
+      // Inject Authorization header
       if (init.headers instanceof Headers) {
         init.headers.set('Authorization', `Bearer ${token}`);
+        // Ensure apikey is present (robustness matching dashboard)
+        if (!init.headers.has('apikey')) {
+          init.headers.set('apikey', supabaseAnonKey);
+        }
       } else if (Array.isArray(init.headers)) {
-        // Handle array headers if needed (rare in this context)
         init.headers.push(['Authorization', `Bearer ${token}`]);
       } else {
-        // Standard object headers
         // @ts-ignore
         init.headers['Authorization'] = `Bearer ${token}`;
+        // @ts-ignore
+        if (!init.headers['apikey']) {
+          // @ts-ignore
+          init.headers['apikey'] = supabaseAnonKey;
+        }
       }
     }
 
-    return fetch(input, init);
+    const response = await fetch(input, init);
+
+    // Detectar 401 (Unauthorized) o errores específicos de JWT
+    if (response.status === 401) {
+      console.warn('🔄 Detectado 401 Unauthorized en Supabase. Invalidando token...');
+      await TokenManager.invalidateToken();
+    }
+
+    return response;
   } catch (error) {
     console.error('❌ FATAL customFetch error:', error);
     throw error;

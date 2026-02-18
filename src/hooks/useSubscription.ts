@@ -26,31 +26,31 @@ export function useSubscription() {
 
     try {
       console.log('📋 useSubscription: Verificando suscripción para user:', user.id);
-      
+
       // 1. Primero verificar en Supabase (admin, socio, gimnasio, etc.)
       const dbResult = await paymentsService.getSubscriptionStatus(user.id, user);
       console.log('📋 useSubscription: Resultado DB:', dbResult);
-      
+
       // Si tiene acceso por admin/socio/gimnasio, usar ese estado
       // TEMPORALMENTE DESACTIVADO PARA VER EL PAYWALL
-      /* if (dbResult.isAdmin || dbResult.isPartnerFree || dbResult.isGymMember) {
+      if (dbResult.isAdmin || dbResult.isPartnerFree || dbResult.isGymMember) {
         setIsActive(true);
         setStatus('active');
         console.log('📋 useSubscription: Acceso por rol especial');
         return;
-      } */
+      }
 
       // 2. Verificar RevenueCat para iOS/Android (In-App Purchase)
       if (Platform.OS !== 'web') {
         try {
           await initializeRevenueCat(user.id);
           const identifiedUser = await identifyUser(user.id);
-          
+
           // Solo verificar estado si el usuario fue identificado (RevenueCat está configurado)
           if (identifiedUser !== null) {
             const rcStatus = await checkSubscriptionStatus();
             console.log('📋 useSubscription: RevenueCat status:', rcStatus);
-            
+
             if (rcStatus.isActive) {
               setIsActive(true);
               setStatus('active');
@@ -70,7 +70,6 @@ export function useSubscription() {
       setStatus(dbResult.status ?? undefined);
       setTrialEnd(dbResult.trialEnd ?? undefined);
       console.log('📋 useSubscription: isActive =', !!dbResult.isActive);
-      
     } catch (e) {
       console.error('❌ useSubscription: Error:', e);
       // Si es error de "no encontrado", está bien (usuario nuevo)
@@ -104,18 +103,18 @@ export function useSubscription() {
       console.log('🔐 refresh: No hay user.id');
       return;
     }
-    
+
     setLoading(true);
     await checkStatus();
     setLoading(false);
   }, [user?.id, checkStatus]);
 
-  return { 
-    loading, 
-    isActive, 
-    status, 
-    trialEnd, 
+  return {
+    loading,
+    isActive,
+    status,
+    trialEnd,
     expirationDate,
-    refresh 
+    refresh
   };
 }

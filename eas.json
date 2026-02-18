@@ -29,6 +29,7 @@
         },
         "production": {
             "distribution": "store",
+            "channel": "production",
             "ios": {
                 "resourceClass": "medium",
                 "simulator": false
