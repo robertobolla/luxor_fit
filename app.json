@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.luxorfitness.app",
-      "buildNumber": "86",
+      "buildNumber": "87",
       "icon": "./assets/icon.png",
       "requireFullScreen": true,
       "infoPlist": {
