@@ -54,7 +54,7 @@ export const paymentsService = {
     if (error || !data?.url) {
       // Exponer más contexto del error si viene del edge
       let message = 'No se pudo crear la sesión de pago';
-      
+
       if (error) {
         // Intentar extraer el mensaje del error
         if (typeof error === 'string') {
@@ -91,7 +91,7 @@ export const paymentsService = {
           }
         }
       }
-      
+
       throw new Error(message);
     }
     return data.url;
@@ -107,62 +107,88 @@ export const paymentsService = {
   }> {
     if (!userId) {
       // Si no se pasa userId, intentar desde Supabase Auth (fallback)
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser();
-      if (userError || !user) throw new Error('Usuario no autenticado');
-      userId = user.id;
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+        if (userError || !user) throw new Error('Usuario no autenticado');
+        userId = user.id;
+      } catch (e) {
+        console.error('❌ getSubscriptionStatus: No se pudo obtener user:', e);
+        return { isActive: false, isAdmin: false };
+      }
     }
 
-    console.log('🔍 getSubscriptionStatus: Consultando v_user_subscription para user_id:', userId);
-    
+    console.log('🔍 getSubscriptionStatus: Verificando acceso para user_id:', userId);
+
     // PRIMERO verificar si es admin (los admins tienen acceso automático)
-    const isAdmin = await checkAdminAccess(userId, user);
-    if (isAdmin) {
-      console.log('✅ Usuario es admin, acceso automático concedido');
-      return {
-        isActive: true,
-        status: 'active',
-        trialEnd: null,
-        isPartnerFree: false,
-        isGymMember: false,
-        isAdmin: true,
-      };
-    }
-    
-    const { data, error } = await supabase
-      .from('v_user_subscription')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (error) {
-      console.error('❌ getSubscriptionStatus: Error de Supabase:', error);
-      throw error;
+    // checkAdminAccess ya es resiliente a errores JWT (usa cliente anon como fallback)
+    try {
+      const isAdmin = await checkAdminAccess(userId, user);
+      if (isAdmin) {
+        console.log('✅ Usuario es admin, acceso automático concedido');
+        return {
+          isActive: true,
+          status: 'active',
+          trialEnd: null,
+          isPartnerFree: false,
+          isGymMember: false,
+          isAdmin: true,
+        };
+      }
+    } catch (adminError) {
+      console.error('❌ Error en checkAdminAccess:', adminError);
+      // Continuar con otros checks
     }
 
-    console.log('🔍 getSubscriptionStatus: Data recibida:', data);
+    // Verificar suscripción en DB (puede fallar si JWT es inválido o vista no existe)
+    let subscription: any = null;
+    try {
+      const { data, error } = await supabase
+        .from('v_user_subscription')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-    const subscription = data as any; // Tipo flexible para la vista
+      if (error) {
+        console.warn('⚠️ getSubscriptionStatus: Error consultando v_user_subscription:', error.code, error.message);
+      } else {
+        subscription = data;
+      }
+    } catch (subError) {
+      console.warn('⚠️ getSubscriptionStatus: Error inesperado en v_user_subscription:', subError);
+    }
 
-    // Verificar si el usuario es socio con acceso gratuito
-    const isPartnerFree = await checkPartnerFreeAccess(userId);
-    
-    // Verificar si el usuario es miembro de gimnasio con acceso gratuito
-    const isGymMember = await checkGymMemberAccess(userId);
-    
+    console.log('🔍 getSubscriptionStatus: Data recibida:', subscription);
+
+    // Verificar acceso por socio/gimnasio (cada uno en su propio try-catch)
+    let isPartnerFree = false;
+    let isGymMember = false;
+
+    try {
+      isPartnerFree = await checkPartnerFreeAccess(userId);
+    } catch (e) {
+      console.warn('⚠️ Error verificando partner access:', e);
+    }
+
+    try {
+      isGymMember = await checkGymMemberAccess(userId);
+    } catch (e) {
+      console.warn('⚠️ Error verificando gym member access:', e);
+    }
+
     const result = {
-      isActive: !!subscription?.is_active || isPartnerFree || isGymMember, // Incluye acceso gratuito de socio y gimnasio
+      isActive: !!subscription?.is_active || isPartnerFree || isGymMember,
       status: subscription?.status ?? null,
       trialEnd: subscription?.trial_end ?? null,
       isPartnerFree,
       isGymMember,
       isAdmin: false,
     };
-    
+
     console.log('🔍 getSubscriptionStatus: Resultado procesado:', result);
-    
+
     return result;
   },
 };
