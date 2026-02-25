@@ -14,6 +14,10 @@ export async function checkGymMemberAccess(userId: string): Promise<boolean> {
       .maybeSingle();
 
     if (error) {
+      if (error.code === 'PGRST301') {
+        console.warn('⚠️ checkGymMemberAccess: JWT error, retornando false');
+        return false;
+      }
       console.error('❌ Error verificando acceso de gimnasio:', error);
       return false;
     }
