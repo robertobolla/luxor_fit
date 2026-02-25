@@ -153,6 +153,13 @@ export const paymentsService = {
 
       if (error) {
         console.warn('⚠️ getSubscriptionStatus: Error consultando v_user_subscription:', error.code, error.message);
+
+        // Fallback vital para el entorno de desarrollo cuando Clerk y Supabase JWT se desincronizan.
+        // Evita que el paywall bloquee todo el trabajo de desarrollo.
+        if (error.code === 'PGRST301' && __DEV__) {
+          console.warn('🛠️ getSubscriptionStatus: BYPASS ACTIVADO (Solución Entorno DEV). Asignando suscripción activa por defecto ante error PGRST301.');
+          subscription = { is_active: true, status: 'active', trial_end: null };
+        }
       } else {
         subscription = data;
       }
