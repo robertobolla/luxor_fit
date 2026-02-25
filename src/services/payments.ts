@@ -106,48 +106,79 @@ export const paymentsService = {
     isAdmin?: boolean;
   }> {
     if (!userId) {
-      throw new Error('Usuario no autenticado - se requiere userId de Clerk');
+      // Si no se pasa userId, intentar desde Supabase Auth (fallback)
+      try {
+        const {
+          data: { user: supabaseUser },
+          error: userError,
+        } = await supabase.auth.getUser();
+        if (userError || !supabaseUser) throw new Error('Usuario no autenticado');
+        userId = supabaseUser.id;
+      } catch (e) {
+        console.error('❌ getSubscriptionStatus: No se pudo obtener user:', e);
+        return { isActive: false, isAdmin: false };
+      }
     }
 
-    console.log('🔍 getSubscriptionStatus: Consultando v_user_subscription para user_id:', userId);
+    console.log('🔍 getSubscriptionStatus: Verificando acceso para user_id:', userId);
 
     // PRIMERO verificar si es admin (los admins tienen acceso automático)
-    const isAdmin = await checkAdminAccess(userId, user);
-    if (isAdmin) {
-      console.log('✅ Usuario es admin, acceso automático concedido');
-      return {
-        isActive: true,
-        status: 'active',
-        trialEnd: null,
-        isPartnerFree: false,
-        isGymMember: false,
-        isAdmin: true,
-      };
+    // checkAdminAccess ya es resiliente a errores JWT (usa cliente anon como fallback)
+    try {
+      const isAdmin = await checkAdminAccess(userId, user);
+      if (isAdmin) {
+        console.log('✅ Usuario es admin, acceso automático concedido');
+        return {
+          isActive: true,
+          status: 'active',
+          trialEnd: null,
+          isPartnerFree: false,
+          isGymMember: false,
+          isAdmin: true,
+        };
+      }
+    } catch (adminError) {
+      console.error('❌ Error en checkAdminAccess:', adminError);
+      // Continuar con otros checks
     }
 
-    const { data, error } = await supabase
-      .from('v_user_subscription')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // Verificar suscripción en DB (puede fallar si JWT es inválido o vista no existe)
+    let subscription: any = null;
+    try {
+      const { data, error } = await supabase
+        .from('v_user_subscription')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-    if (error) {
-      console.error('❌ getSubscriptionStatus: Error de Supabase:', error);
-      throw error;
+      if (error) {
+        console.warn('⚠️ getSubscriptionStatus: Error consultando v_user_subscription:', error.code, error.message);
+      } else {
+        subscription = data;
+      }
+    } catch (subError) {
+      console.warn('⚠️ getSubscriptionStatus: Error inesperado en v_user_subscription:', subError);
     }
 
-    console.log('🔍 getSubscriptionStatus: Data recibida:', data);
+    console.log('🔍 getSubscriptionStatus: Data recibida:', subscription);
 
-    const subscription = data as any; // Tipo flexible para la vista
+    // Verificar acceso por socio/gimnasio (cada uno en su propio try-catch)
+    let isPartnerFree = false;
+    let isGymMember = false;
 
-    // Verificar si el usuario es socio con acceso gratuito
-    const isPartnerFree = await checkPartnerFreeAccess(userId);
+    try {
+      isPartnerFree = !!userId && (await checkPartnerFreeAccess(userId));
+    } catch (e) {
+      console.warn('⚠️ Error verificando partner access:', e);
+    }
 
-    // Verificar si el usuario es miembro de gimnasio con acceso gratuito
-    const isGymMember = await checkGymMemberAccess(userId);
-
+    try {
+      isGymMember = !!userId && (await checkGymMemberAccess(userId));
+    } catch (e) {
+      console.warn('⚠️ Error verificando gym member access:', e);
+    }
     const result = {
-      isActive: !!subscription?.is_active || isPartnerFree || isGymMember, // Incluye acceso gratuito de socio y gimnasio
+      isActive: !!subscription?.is_active || isPartnerFree || isGymMember,
       status: subscription?.status ?? null,
       trialEnd: subscription?.trial_end ?? null,
       isPartnerFree,

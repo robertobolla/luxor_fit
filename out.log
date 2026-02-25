@@ -1,0 +1,16 @@
+
+> fitness-luxor-app@1.1.2 start:prod
+> npm run set-env:prod && expo start --tunnel --clear
+
+
+> fitness-luxor-app@1.1.2 set-env:prod
+> copy .env.production .env.development.local & copy .env.production .env
+
+        1 archivo(s) copiado(s).
+        1 archivo(s) copiado(s).
+env: load .env.development.local .env.development .env
+env: export EXPO_PUBLIC_SUPABASE_URL EXPO_PUBLIC_SUPABASE_ANON_KEY EXPO_PUBLIC_EAS_PROJECT_ID EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY EXPO_PUBLIC_OPENAI_API_KEY EXPO_PUBLIC_REVENUECAT_API_KEY_IOS EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID
+The /android project does not contain any URI schemes. Expo CLI will not be able to use links to launch the project. You can configure a custom URI scheme using the --scheme option.
+Starting project at C:\roberto\apps\luxor\luxor_app
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)

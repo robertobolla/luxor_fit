@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.luxorfitness.app",
-      "buildNumber": "85",
+      "buildNumber": "89",
       "icon": "./assets/icon.png",
       "requireFullScreen": true,
       "infoPlist": {
@@ -32,6 +32,7 @@
         "NSHealthClinicalHealthRecordsShareUsageDescription": "Luxor Fitness necesita acceso a tus registros clínicos para un mejor seguimiento de tu salud.",
         "NSLocationWhenInUseUsageDescription": "Luxor Fitness necesita acceso a tu ubicación para rastrear tus actividades físicas con GPS.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Luxor Fitness necesita acceso a tu ubicación para rastrear tus actividades físicas en segundo plano.",
+        "NSLocationUsageDescription": "Luxor Fitness necesita acceso a tu ubicación para rastrear tus actividades físicas con GPS.",
         "NSCameraUsageDescription": "Luxor Fitness necesita acceso a tu cámara para tomar fotos de progreso y documentar tus cambios físicos.",
         "NSPhotoLibraryUsageDescription": "Luxor Fitness necesita acceso a tu galería para guardar y seleccionar fotos de progreso.",
         "ITSAppUsesNonExemptEncryption": false
@@ -48,7 +49,7 @@
         "backgroundColor": "#0a0a0a"
       },
       "package": "com.luxorfitness.app",
-      "versionCode": 85,
+      "versionCode": 89,
       "permissions": [
         "ACTIVITY_RECOGNITION",
         "android.permission.ACTIVITY_RECOGNITION",

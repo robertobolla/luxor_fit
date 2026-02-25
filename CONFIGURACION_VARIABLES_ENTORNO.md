@@ -214,3 +214,30 @@ EXPO_PUBLIC_OPENAI_API_KEY=sk-proj-abc123xyz456...
 - [Clerk Documentation](https://clerk.com/docs)
 - [Supabase Documentation](https://supabase.com/docs)
 - [OpenAI API Documentation](https://platform.openai.com/docs)
+
+---
+
+## 🔄 Comandos Rápidos para Cambiar Entorno
+
+En lugar de copiar archivos manualmente, puedes usar estos comandos preconfigurados en `package.json`:
+
+### 🛠️ Modo Desarrollo
+Copia las variables de desarrollo y reinicia el servidor:
+```bash
+npm run start:dev
+```
+*(Equivalente a: `npm run set-env:dev` + `npx expo start --clear`)*
+
+### 🚀 Modo Producción
+Copia las variables de producción y reinicia el servidor:
+```bash
+npm run start:prod
+```
+*(Equivalente a: `npm run set-env:prod` + `npx expo start --clear`)*
+
+### ℹ️ Sobre `npm start`
+El comando estándar `npm start` (o `npx expo start`) **NO cambia el entorno**.
+Simplemente inicia la app usando la configuración que tenga el archivo `.env` actual en ese momento.
+
+- Si lo último que ejecutaste fue `start:dev`, `npm start` seguirá en **Desarrollo**.
+- Si lo último que ejecutaste fue `start:prod`, `npm start` seguirá en **Producción**.

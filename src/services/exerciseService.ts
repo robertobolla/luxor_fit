@@ -32,9 +32,26 @@ export async function saveExercise(exercise: Exercise): Promise<{ success: boole
   try {
     console.log('💾 Guardando ejercicio:', exercise);
 
+    // Get the real Supabase UUID from user_profiles before inserting into exercises
+    const { data: profileData, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('user_id', exercise.user_id)
+      .single();
+
+    if (profileError || !profileData) {
+      console.error('❌ Error obteniendo perfil de Supabase UUID para saveExercise:', profileError);
+      return { success: false, error: 'User profile not found' };
+    }
+
+    // The `Exercise` interface matches the `exercises` table columns (route_points is JSONB).
+    const exerciseToSave = {
+      ...exercise,
+    };
+
     const { data, error } = await supabase
       .from('exercises')
-      .insert([exercise])
+      .insert([exerciseToSave])
       .select()
       .single();
 
@@ -73,7 +90,15 @@ export async function getExercisesByDateRange(
       return [];
     }
 
-    return data || [];
+    // Convert null to undefined for properties to match the Exercise interface
+    return (data || []).map((item: any) => ({
+      ...item,
+      distance_km: item.distance_km === null ? undefined : item.distance_km,
+      calories: item.calories === null ? undefined : item.calories,
+      average_speed_kmh: item.average_speed_kmh === null ? undefined : item.average_speed_kmh,
+      elevation_gain: item.elevation_gain === null ? undefined : item.elevation_gain,
+      elevation_loss: item.elevation_loss === null ? undefined : item.elevation_loss,
+    })) as Exercise[];
   } catch (error) {
     console.error('❌ Error inesperado al obtener ejercicios:', error);
     return [];
@@ -100,7 +125,15 @@ export async function getExercisesByDate(
       return [];
     }
 
-    return data || [];
+    // Convert null to undefined for distance_km and other properties to match the Exercise interface
+    return (data || []).map((item: any) => ({
+      ...item,
+      distance_km: item.distance_km === null ? undefined : item.distance_km,
+      calories: item.calories === null ? undefined : item.calories,
+      average_speed_kmh: item.average_speed_kmh === null ? undefined : item.average_speed_kmh,
+      elevation_gain: item.elevation_gain === null ? undefined : item.elevation_gain,
+      elevation_loss: item.elevation_loss === null ? undefined : item.elevation_loss,
+    })) as Exercise[];
   } catch (error) {
     console.error('❌ Error inesperado al obtener ejercicios del día:', error);
     return [];
@@ -118,7 +151,7 @@ export async function getDaysWithExercise(
   try {
     // Calcular el último día del mes correctamente
     const lastDay = new Date(year, month + 1, 0).getDate();
-    
+
     // Formato: YYYY-MM-DD
     const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
@@ -184,7 +217,7 @@ export async function getExerciseDaysDatesThisWeek(userId: string): Promise<stri
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay()); // Domingo
     startOfWeek.setHours(0, 0, 0, 0);
-    
+
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999);
@@ -252,7 +285,7 @@ export async function getExerciseDaysThisWeek(userId: string): Promise<number> {
 export async function cleanupActivePlans(userId: string): Promise<void> {
   try {
     console.log('🧹 Limpiando planes activos duplicados...');
-    
+
     // Obtener todos los planes activos ordenados por fecha de creación
     const { data: activePlans, error: fetchError } = await supabase
       .from('workout_plans')
@@ -301,12 +334,12 @@ export async function getGymDaysDatesThisWeek(userId: string): Promise<string[]>
   try {
     // Limpiar planes activos duplicados antes de continuar
     await cleanupActivePlans(userId);
-    
+
     const today = new Date();
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay()); // Domingo
     startOfWeek.setHours(0, 0, 0, 0);
-    
+
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     endOfWeek.setHours(23, 59, 59, 999);
@@ -353,7 +386,7 @@ export async function getGymDaysThisWeek(userId: string): Promise<{ days: number
 
     // Obtener la meta del plan de entrenamiento activo
     let goal = 3; // Fallback por defecto
-    
+
     try {
       // Buscar el plan de entrenamiento activo del usuario
       const { data: activePlans, error: planError } = await supabase
@@ -367,31 +400,31 @@ export async function getGymDaysThisWeek(userId: string): Promise<{ days: number
       if (!planError && activePlans && activePlans.length > 0) {
         const activePlan = activePlans[0];
         // Contar cuántos días de entrenamiento tiene el plan
-        const planData = activePlan.plan_data;
+        const planData = activePlan.plan_data as any; // Cast to any to avoid TS errors with Json type
         console.log('📋 Plan data encontrado:', planData);
-        
+
         // El plan_data puede tener diferentes estructuras, vamos a buscar weekly_structure
         let weeklyStructure = null;
-        
-        if (planData.weekly_structure) {
+
+        if (planData && planData.weekly_structure) {
           weeklyStructure = planData.weekly_structure;
-        } else if (planData.weekly_plan) {
+        } else if (planData && planData.weekly_plan) {
           weeklyStructure = planData.weekly_plan;
-        } else if (planData.structure) {
+        } else if (planData && planData.structure) {
           weeklyStructure = planData.structure;
         }
-        
+
         if (weeklyStructure) {
           // weekly_structure es un array de objetos con estructura { day, focus, exercises }
           if (Array.isArray(weeklyStructure)) {
-            const trainingDays = weeklyStructure.filter(day => 
+            const trainingDays = weeklyStructure.filter(day =>
               day && day.exercises && day.exercises.length > 0
             );
             goal = trainingDays.length;
             console.log(`🎯 Meta de gimnasio basada en plan activo: ${goal} días (días: ${trainingDays.map(d => d.day).join(', ')})`);
           } else {
             // Si es un objeto con días como claves
-            const trainingDays = Object.keys(weeklyStructure).filter(day => 
+            const trainingDays = Object.keys(weeklyStructure).filter(day =>
               weeklyStructure[day] && weeklyStructure[day].exercises && weeklyStructure[day].exercises.length > 0
             );
             goal = trainingDays.length;
@@ -409,7 +442,7 @@ export async function getGymDaysThisWeek(userId: string): Promise<{ days: number
     } catch (error) {
       console.error('❌ Error al obtener meta del plan:', error);
     }
-    
+
     return { days: gymDaysCount, goal };
   } catch (error) {
     console.error('❌ Error al obtener días de gimnasio de la semana:', error);
@@ -428,7 +461,7 @@ export async function getGymDaysThisMonth(
   try {
     // Calcular el último día del mes correctamente
     const lastDay = new Date(year, month + 1, 0).getDate();
-    
+
     // Formato: YYYY-MM-DD
     const startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
     const endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
@@ -484,7 +517,17 @@ export async function getExerciseById(exerciseId: string): Promise<Exercise | nu
       return null;
     }
 
-    return data;
+    if (!data) return null;
+
+    // Convert null to undefined for properties to match the Exercise interface
+    return {
+      ...data,
+      distance_km: data.distance_km === null ? undefined : data.distance_km,
+      calories: data.calories === null ? undefined : data.calories,
+      average_speed_kmh: data.average_speed_kmh === null ? undefined : data.average_speed_kmh,
+      elevation_gain: (data as any).elevation_gain === null ? undefined : (data as any).elevation_gain,
+      elevation_loss: (data as any).elevation_loss === null ? undefined : (data as any).elevation_loss,
+    } as Exercise;
   } catch (error) {
     console.error('❌ Error inesperado al obtener ejercicio:', error);
     return null;

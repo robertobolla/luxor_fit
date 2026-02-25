@@ -58,7 +58,11 @@ export default function LoginScreen() {
     try {
       setIsLoading(true);
       const startOAuth = provider === 'google' ? startGoogleOAuth : provider === 'apple' ? startAppleOAuth : startTikTokOAuth;
-      const { createdSessionId, setActive: setActiveSession } = await startOAuth();
+      // Usar el scheme fijo de la app para no depender de la IP local en desarrollo
+      const redirectUrl = 'luxorfitness://oauth-callback';
+
+      const { createdSessionId, setActive: setActiveSession } = await startOAuth({ redirectUrl });
+
 
       if (createdSessionId && setActiveSession) {
         await setActiveSession({ session: createdSessionId });
@@ -84,6 +88,8 @@ export default function LoginScreen() {
       setIsLoading(false);
     }
   };
+
+
 
   return (
     <View style={styles.container}>
