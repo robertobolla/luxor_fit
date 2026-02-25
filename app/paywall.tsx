@@ -1,11 +1,11 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  Alert, 
-  ActivityIndicator, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
   ScrollView,
   Linking,
   Platform,
@@ -38,7 +38,7 @@ export default function PaywallScreen() {
   const { signOut } = useAuth();
   const router = useRouter();
   const { isActive, loading: subLoading, refresh } = useSubscription();
-  
+
   // Estado para mostrar error si no hay ofertas
   const [offeringsError, setOfferingsError] = useState<string | null>(null);
 
@@ -47,25 +47,25 @@ export default function PaywallScreen() {
     async function init() {
       try {
         setOfferingsError(null);
-        
+
         // Inicializar RevenueCat
         await initializeRevenueCat(user?.id);
-        
+
         // Identificar usuario si está logueado
         if (user?.id) {
           await identifyUser(user.id);
         }
-        
+
         // Cargar ofertas
         const offering = await getOfferings();
         if (offering?.availablePackages && offering.availablePackages.length > 0) {
           // Filtrar solo productos normales (no partner)
           const normalPackages = offering.availablePackages.filter(
-            pkg => 
+            pkg =>
               pkg.product.identifier === PRODUCT_IDS.MONTHLY ||
               pkg.product.identifier === PRODUCT_IDS.YEARLY
           );
-          
+
           if (normalPackages.length > 0) {
             setPackages(normalPackages);
             // Seleccionar el mensual por defecto
@@ -88,7 +88,7 @@ export default function PaywallScreen() {
         setLoading(false);
       }
     }
-    
+
     init();
   }, [user?.id, t]);
 
@@ -108,9 +108,13 @@ export default function PaywallScreen() {
         .maybeSingle();
 
       if (error) {
-        console.error('❌ Error al verificar perfil:', error);
-        router.replace('/(tabs)/home');
-        return;
+        if (error.code === 'PGRST301') {
+          console.warn('⚠️ Error al verificar perfil: JWT error (PGRST301), ignoring to prevent red screen');
+        } else {
+          console.error('❌ Error al verificar perfil:', error);
+          router.replace('/(tabs)/home');
+          return;
+        }
       }
 
       const hasProfile = !!data && !!data.name && !!data.username;
@@ -147,7 +151,7 @@ export default function PaywallScreen() {
     setPurchasing(true);
     try {
       const result = await purchasePackage(selectedPackage);
-      
+
       if (result.success) {
         Alert.alert(
           t('paywall.purchaseSuccess'),
@@ -178,7 +182,7 @@ export default function PaywallScreen() {
     setPurchasing(true);
     try {
       const result = await restorePurchases();
-      
+
       if (result.isPremium) {
         Alert.alert(
           t('paywall.restoreSuccess'),
@@ -243,7 +247,7 @@ export default function PaywallScreen() {
   const formatPrice = (pkg: PurchasesPackage) => {
     const price = pkg.product.priceString;
     const period = pkg.product.subscriptionPeriod;
-    
+
     if (period === 'P1M') return `${price}${t('paywall.perMonth')}`;
     if (period === 'P1Y') return `${price}${t('paywall.perYear')}`;
     return price;
@@ -261,7 +265,7 @@ export default function PaywallScreen() {
   return (
     <SafeAreaView style={styles.container}>
       {/* Botón de cerrar sesión */}
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.logoutButton}
         onPress={handleLogout}
       >
@@ -276,206 +280,206 @@ export default function PaywallScreen() {
           <Text style={styles.subtitle}>{t('paywall.subtitle')}</Text>
         </View>
 
-      {/* Beneficios */}
-      <View style={styles.benefitsCard}>
-        <Text style={styles.benefitsTitle}>{t('paywall.includes')}</Text>
-        <View style={styles.benefitRow}>
-          <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
-          <Text style={styles.benefitText}>{t('paywall.feature1')}</Text>
+        {/* Beneficios */}
+        <View style={styles.benefitsCard}>
+          <Text style={styles.benefitsTitle}>{t('paywall.includes')}</Text>
+          <View style={styles.benefitRow}>
+            <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
+            <Text style={styles.benefitText}>{t('paywall.feature1')}</Text>
+          </View>
+          <View style={styles.benefitRow}>
+            <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
+            <Text style={styles.benefitText}>{t('paywall.feature2')}</Text>
+          </View>
+          <View style={styles.benefitRow}>
+            <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
+            <Text style={styles.benefitText}>{t('paywall.feature3')}</Text>
+          </View>
+          <View style={styles.benefitRow}>
+            <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
+            <Text style={styles.benefitText}>{t('paywall.feature4')}</Text>
+          </View>
+          <View style={styles.benefitRow}>
+            <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
+            <Text style={styles.benefitText}>{t('paywall.feature5')}</Text>
+          </View>
+          <View style={styles.benefitRow}>
+            <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
+            <Text style={styles.benefitText}>{t('paywall.feature6')}</Text>
+          </View>
         </View>
-        <View style={styles.benefitRow}>
-          <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
-          <Text style={styles.benefitText}>{t('paywall.feature2')}</Text>
-        </View>
-        <View style={styles.benefitRow}>
-          <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
-          <Text style={styles.benefitText}>{t('paywall.feature3')}</Text>
-        </View>
-        <View style={styles.benefitRow}>
-          <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
-          <Text style={styles.benefitText}>{t('paywall.feature4')}</Text>
-        </View>
-        <View style={styles.benefitRow}>
-          <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
-          <Text style={styles.benefitText}>{t('paywall.feature5')}</Text>
-        </View>
-        <View style={styles.benefitRow}>
-          <Ionicons name="checkmark-circle" size={24} color="#4caf50" />
-          <Text style={styles.benefitText}>{t('paywall.feature6')}</Text>
-        </View>
-      </View>
 
-      {/* Planes */}
-      <View style={styles.plansContainer}>
-        <Text style={styles.plansTitle}>{t('paywall.choosePlan')}</Text>
-        
-        {packages.map((pkg) => {
-          const isSelected = selectedPackage?.identifier === pkg.identifier;
-          const isYearlyProduct = pkg.product.identifier === PRODUCT_IDS.YEARLY;
-          const savings = isYearlyProduct ? t('paywall.save', { percentage: '31' }) : null;
-          
-          return (
+        {/* Planes */}
+        <View style={styles.plansContainer}>
+          <Text style={styles.plansTitle}>{t('paywall.choosePlan')}</Text>
+
+          {packages.map((pkg) => {
+            const isSelected = selectedPackage?.identifier === pkg.identifier;
+            const isYearlyProduct = pkg.product.identifier === PRODUCT_IDS.YEARLY;
+            const savings = isYearlyProduct ? t('paywall.save', { percentage: '31' }) : null;
+
+            return (
+              <TouchableOpacity
+                key={pkg.identifier}
+                style={[
+                  styles.planCard,
+                  isSelected && styles.planCardSelected,
+                ]}
+                onPress={() => setSelectedPackage(pkg)}
+                activeOpacity={0.8}
+              >
+                {savings && (
+                  <View style={styles.savingsBadge}>
+                    <Text style={styles.savingsText}>{savings}</Text>
+                  </View>
+                )}
+
+                <View style={styles.planContent}>
+                  <View style={styles.planInfo}>
+                    <Text style={[styles.planName, isSelected && styles.planNameSelected]}>
+                      {isYearlyProduct ? t('paywall.yearly') : t('paywall.monthly')}
+                    </Text>
+                    <Text style={styles.planDescription}>
+                      {isYearlyProduct
+                        ? t('paywall.bestValue')
+                        : t('paywall.fullFlexibility')}
+                    </Text>
+                  </View>
+
+                  <View style={styles.planPricing}>
+                    <Text style={[styles.planPrice, isSelected && styles.planPriceSelected]}>
+                      {formatPrice(pkg)}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.radioOuter, isSelected && styles.radioOuterSelected]}>
+                  {isSelected && <View style={styles.radioInner} />}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {/* Prueba gratuita */}
+        <View style={styles.trialInfo}>
+          <Ionicons name="gift" size={20} color="#ffb300" />
+          <Text style={styles.trialText}>
+            {t('paywall.freeTrial')}
+          </Text>
+        </View>
+
+        {/* Mensaje de error si no hay ofertas */}
+        {offeringsError && (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle" size={24} color="#f44336" />
+            <Text style={styles.errorText}>{offeringsError}</Text>
             <TouchableOpacity
-              key={pkg.identifier}
-              style={[
-                styles.planCard,
-                isSelected && styles.planCardSelected,
-              ]}
-              onPress={() => setSelectedPackage(pkg)}
-              activeOpacity={0.8}
-            >
-              {savings && (
-                <View style={styles.savingsBadge}>
-                  <Text style={styles.savingsText}>{savings}</Text>
-                </View>
-              )}
-              
-              <View style={styles.planContent}>
-                <View style={styles.planInfo}>
-                  <Text style={[styles.planName, isSelected && styles.planNameSelected]}>
-                    {isYearlyProduct ? t('paywall.yearly') : t('paywall.monthly')}
-                  </Text>
-                  <Text style={styles.planDescription}>
-                    {isYearlyProduct 
-                      ? t('paywall.bestValue')
-                      : t('paywall.fullFlexibility')}
-                  </Text>
-                </View>
-                
-                <View style={styles.planPricing}>
-                  <Text style={[styles.planPrice, isSelected && styles.planPriceSelected]}>
-                    {formatPrice(pkg)}
-                  </Text>
-                </View>
-              </View>
-              
-              <View style={[styles.radioOuter, isSelected && styles.radioOuterSelected]}>
-                {isSelected && <View style={styles.radioInner} />}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Prueba gratuita */}
-      <View style={styles.trialInfo}>
-        <Ionicons name="gift" size={20} color="#ffb300" />
-        <Text style={styles.trialText}>
-          {t('paywall.freeTrial')}
-        </Text>
-      </View>
-
-      {/* Mensaje de error si no hay ofertas */}
-      {offeringsError && (
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={24} color="#f44336" />
-          <Text style={styles.errorText}>{offeringsError}</Text>
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={() => {
-              setLoading(true);
-              setOfferingsError(null);
-              // Reintentar carga
-              (async () => {
-                try {
-                  await initializeRevenueCat(user?.id);
-                  if (user?.id) await identifyUser(user.id);
-                  const offering = await getOfferings();
-                  if (offering?.availablePackages && offering.availablePackages.length > 0) {
-                    const normalPackages = offering.availablePackages.filter(
-                      pkg => 
-                        pkg.product.identifier === PRODUCT_IDS.MONTHLY ||
-                        pkg.product.identifier === PRODUCT_IDS.YEARLY
-                    );
-                    if (normalPackages.length > 0) {
-                      setPackages(normalPackages);
-                      const monthly = normalPackages.find(
-                        pkg => pkg.product.identifier === PRODUCT_IDS.MONTHLY
+              style={styles.retryButton}
+              onPress={() => {
+                setLoading(true);
+                setOfferingsError(null);
+                // Reintentar carga
+                (async () => {
+                  try {
+                    await initializeRevenueCat(user?.id);
+                    if (user?.id) await identifyUser(user.id);
+                    const offering = await getOfferings();
+                    if (offering?.availablePackages && offering.availablePackages.length > 0) {
+                      const normalPackages = offering.availablePackages.filter(
+                        pkg =>
+                          pkg.product.identifier === PRODUCT_IDS.MONTHLY ||
+                          pkg.product.identifier === PRODUCT_IDS.YEARLY
                       );
-                      setSelectedPackage(monthly || normalPackages[0]);
-                      setOfferingsError(null);
+                      if (normalPackages.length > 0) {
+                        setPackages(normalPackages);
+                        const monthly = normalPackages.find(
+                          pkg => pkg.product.identifier === PRODUCT_IDS.MONTHLY
+                        );
+                        setSelectedPackage(monthly || normalPackages[0]);
+                        setOfferingsError(null);
+                      } else {
+                        setOfferingsError(t('paywall.noOffersAvailable'));
+                      }
                     } else {
                       setOfferingsError(t('paywall.noOffersAvailable'));
                     }
-                  } else {
-                    setOfferingsError(t('paywall.noOffersAvailable'));
+                  } catch (error: any) {
+                    setOfferingsError(error.message || t('paywall.loadError'));
+                  } finally {
+                    setLoading(false);
                   }
-                } catch (error: any) {
-                  setOfferingsError(error.message || t('paywall.loadError'));
-                } finally {
-                  setLoading(false);
-                }
-              })();
+                })();
+              }}
+            >
+              <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Botón de compra */}
+        <TouchableOpacity
+          style={[
+            styles.purchaseButton,
+            (purchasing || !selectedPackage || offeringsError) && styles.purchaseButtonDisabled
+          ]}
+          onPress={handlePurchase}
+          disabled={purchasing || !selectedPackage || !!offeringsError}
+        >
+          {purchasing ? (
+            <ActivityIndicator color="#000" />
+          ) : (
+            <Text style={styles.purchaseButtonText}>
+              {!selectedPackage && !offeringsError
+                ? t('paywall.loadingOffers')
+                : t('paywall.startTrial')
+              }
+            </Text>
+          )}
+        </TouchableOpacity>
+
+        {/* Restaurar compras */}
+        <TouchableOpacity
+          style={styles.restoreButton}
+          onPress={handleRestore}
+          disabled={purchasing}
+        >
+          <Text style={styles.restoreButtonText}>{t('paywall.restorePurchases')}</Text>
+        </TouchableOpacity>
+
+        {/* Legal */}
+        <View style={styles.legalContainer}>
+          <Text style={styles.legalText}>
+            {t('paywall.legalText', { platform: Platform.OS === 'ios' ? 'Apple ID' : 'Google Play' })}
+          </Text>
+
+          <View style={styles.legalLinks}>
+            <TouchableOpacity onPress={() => Linking.openURL('https://luxor-fitness.gitbook.io/docs/legal/politica-de-privacidad')}>
+              <Text style={styles.legalLink}>{t('profile.privacyPolicy')}</Text>
+            </TouchableOpacity>
+            <Text style={styles.legalSeparator}>•</Text>
+            <TouchableOpacity onPress={() => Linking.openURL('https://luxor-fitness.gitbook.io/docs/legal/terminos-y-condiciones')}>
+              <Text style={styles.legalLink}>{t('profile.termsOfService')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Debug solo en desarrollo */}
+        {__DEV__ && (
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={async () => {
+              try {
+                await refresh();
+                Alert.alert('Debug', 'Suscripción refrescada');
+              } catch (e) {
+                Alert.alert('Error', 'No se pudo refrescar');
+              }
             }}
           >
-            <Text style={styles.retryButtonText}>{t('common.retry')}</Text>
+            <Text style={styles.debugButtonText}>🔄 Debug: Refrescar</Text>
           </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Botón de compra */}
-      <TouchableOpacity
-        style={[
-          styles.purchaseButton, 
-          (purchasing || !selectedPackage || offeringsError) && styles.purchaseButtonDisabled
-        ]}
-        onPress={handlePurchase}
-        disabled={purchasing || !selectedPackage || !!offeringsError}
-      >
-        {purchasing ? (
-          <ActivityIndicator color="#000" />
-        ) : (
-          <Text style={styles.purchaseButtonText}>
-            {!selectedPackage && !offeringsError 
-              ? t('paywall.loadingOffers') 
-              : t('paywall.startTrial')
-            }
-          </Text>
         )}
-      </TouchableOpacity>
-
-      {/* Restaurar compras */}
-      <TouchableOpacity
-        style={styles.restoreButton}
-        onPress={handleRestore}
-        disabled={purchasing}
-      >
-        <Text style={styles.restoreButtonText}>{t('paywall.restorePurchases')}</Text>
-      </TouchableOpacity>
-
-      {/* Legal */}
-      <View style={styles.legalContainer}>
-        <Text style={styles.legalText}>
-          {t('paywall.legalText', { platform: Platform.OS === 'ios' ? 'Apple ID' : 'Google Play' })}
-        </Text>
-        
-        <View style={styles.legalLinks}>
-          <TouchableOpacity onPress={() => Linking.openURL('https://luxor-fitness.gitbook.io/docs/legal/politica-de-privacidad')}>
-            <Text style={styles.legalLink}>{t('profile.privacyPolicy')}</Text>
-          </TouchableOpacity>
-          <Text style={styles.legalSeparator}>•</Text>
-          <TouchableOpacity onPress={() => Linking.openURL('https://luxor-fitness.gitbook.io/docs/legal/terminos-y-condiciones')}>
-            <Text style={styles.legalLink}>{t('profile.termsOfService')}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      {/* Debug solo en desarrollo */}
-      {__DEV__ && (
-        <TouchableOpacity 
-          style={styles.debugButton}
-          onPress={async () => {
-            try {
-              await refresh();
-              Alert.alert('Debug', 'Suscripción refrescada');
-            } catch (e) {
-              Alert.alert('Error', 'No se pudo refrescar');
-            }
-          }}
-        >
-          <Text style={styles.debugButtonText}>🔄 Debug: Refrescar</Text>
-        </TouchableOpacity>
-      )}
       </ScrollView>
     </SafeAreaView>
   );

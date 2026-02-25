@@ -117,8 +117,12 @@ export default function WorkoutScreen() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error loading workout plans:', error);
-        Alert.alert(t('common.error'), t('workout.errorLoadingPlans'));
+        if (error.code === 'PGRST301') {
+          console.warn('⚠️ Error loading workout plans: JWT error (PGRST301), ignoring to prevent red screen');
+        } else {
+          console.error('Error loading workout plans:', error);
+          Alert.alert(t('common.error'), t('workout.errorLoadingPlans'));
+        }
         setWorkoutPlans([]);
         return;
       }

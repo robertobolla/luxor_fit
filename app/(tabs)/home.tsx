@@ -69,13 +69,13 @@ export default function HomeScreen() {
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
   // Tutorial states
-  const { 
-    hasCompletedInitialTour, 
-    shouldShowTooltip, 
-    completeTutorial, 
-    markTooltipShown, 
-    showHelpModal, 
-    setShowHelpModal 
+  const {
+    hasCompletedInitialTour,
+    shouldShowTooltip,
+    completeTutorial,
+    markTooltipShown,
+    showHelpModal,
+    setShowHelpModal
   } = useTutorial();
   const [showTour, setShowTour] = useState(false);
   const [showHomeTooltips, setShowHomeTooltips] = useState(false);
@@ -99,14 +99,18 @@ export default function HomeScreen() {
     try {
       // Cargar nombre del usuario
       const { data: profileData, error: profileError } = await supabase
-      .from('user_profiles')
-      .select('name')
-      .eq('user_id', user.id)
-      .maybeSingle<ProfileNameRow>();
-    
+        .from('user_profiles')
+        .select('name')
+        .eq('user_id', user.id)
+        .maybeSingle<ProfileNameRow>();
+
 
       if (profileError && profileError.code !== 'PGRST116') {
-        console.error('Error loading profile:', profileError);
+        if (profileError.code === 'PGRST301') {
+          console.warn('⚠️ Error loading profile: JWT error (PGRST301), ignoring to prevent red screen');
+        } else {
+          console.error('Error loading profile:', profileError);
+        }
       }
 
       if (profileData?.name) {
@@ -115,25 +119,25 @@ export default function HomeScreen() {
 
       // Cargar plan de entrenamiento activo
       const { data: activePlan, error: planError } = await supabase
-      .from('workout_plans')
-      .select('id, plan_name, plan_data')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle<WorkoutPlanRow>();
-    
+        .from('workout_plans')
+        .select('id, plan_name, plan_data')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle<WorkoutPlanRow>();
+
 
       if (activePlan?.plan_data) {
         const planData = activePlan.plan_data;
-        
+
         // Validar que planData sea un objeto válido
         if (!planData || typeof planData !== 'object') {
           return;
         }
-        
+
         let allDays: any[] = [];
-        
+
         // Verificar si tiene multi_week_structure (planes personalizados)
         if (planData.multi_week_structure && planData.multi_week_structure.length > 0) {
           // Aplanar todas las semanas en un solo array de días
@@ -153,7 +157,7 @@ export default function HomeScreen() {
           const schedule = planData.weekly_structure || planData.weekly_schedule || [];
           allDays = Array.isArray(schedule) ? schedule : [];
         }
-        
+
         // Buscar el primer día sin completar
         if (allDays.length > 0) {
           let foundDay = null;
@@ -161,8 +165,8 @@ export default function HomeScreen() {
           for (let i = 0; i < allDays.length; i++) {
             const dayData = allDays[i];
             const dayIndex = i + 1; // day_1, day_2, etc.
-            const dayKey = dayData.weekNumber 
-              ? `week_${dayData.weekNumber}_day_${dayData.dayInWeek}` 
+            const dayKey = dayData.weekNumber
+              ? `week_${dayData.weekNumber}_day_${dayData.dayInWeek}`
               : `day_${dayIndex}`;
 
             // Verificar si este día está completado
@@ -197,10 +201,10 @@ export default function HomeScreen() {
           } else {
             // Todos los días están completados, mostrar el primero
             const firstDay = allDays[0];
-            const dayKey = firstDay.weekNumber 
-              ? `week_${firstDay.weekNumber}_day_${firstDay.dayInWeek}` 
+            const dayKey = firstDay.weekNumber
+              ? `week_${firstDay.weekNumber}_day_${firstDay.dayInWeek}`
               : 'day_1';
-            
+
             setTodayWorkout({
               ...firstDay,
               name: firstDay.day || t('home.day', { dayIndex: 1 }),
@@ -221,7 +225,11 @@ export default function HomeScreen() {
         .maybeSingle<NutritionPlanRow>();
 
       if (nutritionPlanError && nutritionPlanError.code !== 'PGRST116') {
-        console.error('Error loading nutrition plan:', nutritionPlanError);
+        if (nutritionPlanError.code === 'PGRST301') {
+          console.warn('⚠️ Error loading nutrition plan: JWT error (PGRST301), ignoring to prevent red screen');
+        } else {
+          console.error('Error loading nutrition plan:', nutritionPlanError);
+        }
       }
 
       setActiveNutritionPlan(nutritionPlanData || null);
@@ -236,7 +244,11 @@ export default function HomeScreen() {
         .maybeSingle<NutritionTargetRow>();
 
       if (targetError && targetError.code !== 'PGRST116') {
-        console.error('Error loading nutrition target:', targetError);
+        if (targetError.code === 'PGRST301') {
+          console.warn('⚠️ Error loading nutrition target: JWT error (PGRST301), ignoring to prevent red screen');
+        } else {
+          console.error('Error loading nutrition target:', targetError);
+        }
       }
 
       setTodayNutrition(targetData || null);
@@ -246,7 +258,7 @@ export default function HomeScreen() {
       setUnreadChatsCount(unreadCount);
     } catch (err: any) {
       console.error('Error loading home data:', err);
-      
+
       // Mostrar mensaje amigable si es error de red
       if (
         err?.message?.includes('Network') ||
@@ -324,7 +336,7 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="light-content" backgroundColor="#0a0a0a" />
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
           { paddingBottom: insets.bottom + 30 }
@@ -366,9 +378,9 @@ export default function HomeScreen() {
           <View style={styles.headerIcons}>
             {/* Icono de Notificaciones */}
             <NotificationBell />
-            
+
             {/* Icono de Mensajes Directos */}
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => {
                 router.push('/chats');
               }}
@@ -398,10 +410,10 @@ export default function HomeScreen() {
         <View style={styles.dateCard}>
           <Ionicons name="calendar" size={24} color="#ffb300" />
           <Text style={styles.dateText}>
-            {new Date().toLocaleDateString(t('common.locale') || 'es-ES', { 
-              weekday: 'long', 
-              day: 'numeric', 
-              month: 'long' 
+            {new Date().toLocaleDateString(t('common.locale') || 'es-ES', {
+              weekday: 'long',
+              day: 'numeric',
+              month: 'long'
             })}
           </Text>
         </View>
@@ -414,94 +426,94 @@ export default function HomeScreen() {
         </View>
 
         {/* Tarjeta: Entrenamiento de Hoy */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.activityCard}
           onPress={async () => {
-              // Si no hay workout cargado, intentar cargarlo ahora
-              if (!todayWorkout) {
-                if (!user?.id) return;
+            // Si no hay workout cargado, intentar cargarlo ahora
+            if (!todayWorkout) {
+              if (!user?.id) return;
 
-                // Buscar el plan activo y navegar al primer día
-                const { data: activePlan, error: planError } = await supabase
-                  .from('workout_plans')
-                  .select('*')
-                  .eq('user_id', user?.id)
-                  .eq('is_active', true)
-                  .order('created_at', { ascending: false })
-                  .limit(1)
-                  .maybeSingle();
+              // Buscar el plan activo y navegar al primer día
+              const { data: activePlan, error: planError } = await supabase
+                .from('workout_plans')
+                .select('*')
+                .eq('user_id', user?.id)
+                .eq('is_active', true)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
 
-                if (planError && planError.code !== 'PGRST116') {
-                  console.error('Error loading active plan:', planError);
-                }
-
-                if (activePlan && activePlan.plan_data) {
-                  const planData = activePlan.plan_data as { weekly_structure?: any[]; weekly_schedule?: any[] } | null;
-                  const schedule = planData?.weekly_structure || 
-                                   planData?.weekly_schedule || 
-                                   [];
-                  
-                  // Si schedule es un array, tomar el primer día
-                  if (Array.isArray(schedule) && schedule.length > 0) {
-                    const firstDay = schedule[0];
-                    const dayData = {
-                      ...firstDay,
-                      name: firstDay.day,
-                      dayKey: 'day_1',
-                      planId: activePlan.id,
-                      planName: activePlan.plan_name,
-                    };
-                    
-                    router.push({
-                      pathname: '/(tabs)/workout-day-detail' as any,
-                      params: {
-                        dayData: JSON.stringify(dayData),
-                        planName: activePlan.plan_name,
-                        planId: activePlan.id,
-                        dayName: 'day_1',
-                      },
-                    });
-                    return;
-                  }
-                }
-                
-                // Si no encontró nada, ir a la lista
-                router.push('/(tabs)/workout');
-              } else {
-                // Navegar al detalle del día
-                router.push({
-                  pathname: '/(tabs)/workout-day-detail' as any,
-                  params: {
-                    dayData: JSON.stringify(todayWorkout),
-                    planName: todayWorkout.planName,
-                    planId: todayWorkout.planId,
-                    dayName: todayWorkout.dayKey,
-                  },
-                });
+              if (planError && planError.code !== 'PGRST116') {
+                console.error('Error loading active plan:', planError);
               }
-            }}
-          >
-            <View style={[styles.activityIcon, { backgroundColor: '#FF6B6B20' }]}>
-              <Ionicons name="fitness" size={32} color="#FF6B6B" />
-            </View>
-            <View style={styles.activityContent}>
-              <Text style={styles.activityTitle}>{t('home.todayWorkout')}</Text>
-              <Text style={styles.activitySubtitle}>
-                {todayWorkout 
-                  ? `${todayWorkout.planName} - ${todayWorkout.name || todayWorkout.dayKey}` 
-                  : t('home.noWorkoutScheduled')}
+
+              if (activePlan && activePlan.plan_data) {
+                const planData = activePlan.plan_data as { weekly_structure?: any[]; weekly_schedule?: any[] } | null;
+                const schedule = planData?.weekly_structure ||
+                  planData?.weekly_schedule ||
+                  [];
+
+                // Si schedule es un array, tomar el primer día
+                if (Array.isArray(schedule) && schedule.length > 0) {
+                  const firstDay = schedule[0];
+                  const dayData = {
+                    ...firstDay,
+                    name: firstDay.day,
+                    dayKey: 'day_1',
+                    planId: activePlan.id,
+                    planName: activePlan.plan_name,
+                  };
+
+                  router.push({
+                    pathname: '/(tabs)/workout-day-detail' as any,
+                    params: {
+                      dayData: JSON.stringify(dayData),
+                      planName: activePlan.plan_name,
+                      planId: activePlan.id,
+                      dayName: 'day_1',
+                    },
+                  });
+                  return;
+                }
+              }
+
+              // Si no encontró nada, ir a la lista
+              router.push('/(tabs)/workout');
+            } else {
+              // Navegar al detalle del día
+              router.push({
+                pathname: '/(tabs)/workout-day-detail' as any,
+                params: {
+                  dayData: JSON.stringify(todayWorkout),
+                  planName: todayWorkout.planName,
+                  planId: todayWorkout.planId,
+                  dayName: todayWorkout.dayKey,
+                },
+              });
+            }
+          }}
+        >
+          <View style={[styles.activityIcon, { backgroundColor: '#FF6B6B20' }]}>
+            <Ionicons name="fitness" size={32} color="#FF6B6B" />
+          </View>
+          <View style={styles.activityContent}>
+            <Text style={styles.activityTitle}>{t('home.todayWorkout')}</Text>
+            <Text style={styles.activitySubtitle}>
+              {todayWorkout
+                ? `${todayWorkout.planName} - ${todayWorkout.name || todayWorkout.dayKey}`
+                : t('home.noWorkoutScheduled')}
+            </Text>
+            {todayWorkout && todayWorkout.exercises && (
+              <Text style={styles.activityExtraInfo}>
+                {todayWorkout.exercises.length} {t('home.exercises')}
               </Text>
-              {todayWorkout && todayWorkout.exercises && (
-                <Text style={styles.activityExtraInfo}>
-                  {todayWorkout.exercises.length} {t('home.exercises')}
-                </Text>
-              )}
-            </View>
-            <Ionicons name="chevron-forward" size={24} color="#888888" />
-          </TouchableOpacity>
+            )}
+          </View>
+          <Ionicons name="chevron-forward" size={24} color="#888888" />
+        </TouchableOpacity>
 
         {/* Tarjeta: Dieta de Hoy */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.activityCard}
           onPress={() => {
             if (activeNutritionPlan) {
@@ -519,14 +531,14 @@ export default function HomeScreen() {
           <View style={styles.activityContent}>
             <Text style={styles.activityTitle}>{t('home.todayDiet')}</Text>
             <Text style={styles.activitySubtitle}>
-              {activeNutritionPlan 
+              {activeNutritionPlan
                 ? activeNutritionPlan.plan_name || t('home.activePlan')
                 : t('home.configureNutrition')}
             </Text>
             {activeNutritionPlan && (
               <Text style={styles.activityExtraInfo}>
-                {activeNutritionPlan.is_ai_generated 
-                  ? t('home.aiGeneratedPlan') 
+                {activeNutritionPlan.is_ai_generated
+                  ? t('home.aiGeneratedPlan')
                   : t('home.customPlan')}
                 {activeNutritionPlan.current_week_number && activeNutritionPlan.total_weeks && (
                   ` • ${t('home.week')} ${activeNutritionPlan.current_week_number}/${activeNutritionPlan.total_weeks}`

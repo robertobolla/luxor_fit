@@ -266,7 +266,11 @@ export async function getPendingTrainerInvitations(
     console.log('🔐 RLS está filtrando la consulta');
 
     if (invError) {
-      console.error('Error getting pending invitations:', invError);
+      if (invError.code === 'PGRST301') {
+        console.warn('⚠️ Error getting pending invitations: JWT error (PGRST301), ignoring to prevent red screen');
+      } else {
+        console.error('Error getting pending invitations:', invError);
+      }
       return { success: false, error: invError.message };
     }
 

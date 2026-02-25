@@ -85,7 +85,11 @@ async function savePushToken(userId: string, pushToken: string, retryCount = 0) 
     });
 
     if (error) {
-      console.error('Error saving push token via RPC:', error);
+      if (error.code === 'PGRST301') {
+        console.warn('⚠️ Error saving push token via RPC: JWT error (PGRST301), ignoring to prevent red screen');
+      } else {
+        console.error('Error saving push token via RPC:', error);
+      }
 
       // Retry on auth error (race condition with Clerk sync)
       if ((error.code === 'P0001' || error.message?.includes('Not authenticated')) && retryCount < 3) {
