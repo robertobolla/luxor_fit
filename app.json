@@ -2,8 +2,8 @@
   "expo": {
     "name": "Luxor Fitness",
     "slug": "fitmind",
-    "version": "1.1.2",
-    "runtimeVersion": "1.1.2",
+    "version": "1.1.3",
+    "runtimeVersion": "1.1.3",
     "updates": {
       "url": "https://u.expo.dev/39f4fe90-c5cc-4c8a-baeb-7424da1c4f10"
     },
@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.luxorfitness.app",
-      "buildNumber": "89",
+      "buildNumber": "90",
       "icon": "./assets/icon.png",
       "requireFullScreen": true,
       "infoPlist": {
@@ -49,7 +49,7 @@
         "backgroundColor": "#0a0a0a"
       },
       "package": "com.luxorfitness.app",
-      "versionCode": 89,
+      "versionCode": 90,
       "permissions": [
         "ACTIVITY_RECOGNITION",
         "android.permission.ACTIVITY_RECOGNITION",
