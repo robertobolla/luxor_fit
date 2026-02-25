@@ -51,7 +51,7 @@ function WeightInput({ weightKg, weightUnit, onChangeWeight }: WeightInputProps)
     // Evitar múltiples puntos
     const parts = cleaned.split('.');
     const finalValue = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : cleaned;
-    
+
     setInputValue(finalValue);
 
     // Convertir a kg y notificar al padre
@@ -147,7 +147,7 @@ export function ExerciseSetTracker({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  
+
   // Ref para controlar si debemos notificar cambios al padre
   // Solo notificamos cuando el usuario interactúa, no en la carga inicial
   const shouldNotifyParent = React.useRef(false);
@@ -170,7 +170,7 @@ export function ExerciseSetTracker({
   const loadTodaySetsOrInitialize = async () => {
     try {
       console.log('🔍 Cargando series con:', { userId, exerciseId, planId, dayName });
-      
+
       // Construir la query base
       let query = supabase
         .from('exercise_sets')
@@ -236,7 +236,7 @@ export function ExerciseSetTracker({
   // Inicializar las series con la cantidad por defecto (EXCLUYENDO calentamiento)
   const initializeSets = () => {
     const initialSets: ExerciseSet[] = [];
-    
+
     // Si hay información de tipos de series, filtrar las de calentamiento
     if (setTypes.length > 0) {
       // Crear solo sets para las series que NO son de calentamiento
@@ -261,7 +261,7 @@ export function ExerciseSetTracker({
         });
       }
     }
-    
+
     setSets(initialSets);
     // ⚠️ NO llamar onSetsChange aquí para evitar setState durante render
     // onSetsChange se llamará cuando el usuario modifique algo
@@ -271,9 +271,9 @@ export function ExerciseSetTracker({
   const loadPreviousSets = async () => {
     try {
       setLoading(true);
-      
+
       console.log('📊 Cargando valores anteriores para:', { exerciseId, planId, dayName });
-      
+
       // Construir query base
       let query = supabase
         .from('exercise_sets')
@@ -284,7 +284,7 @@ export function ExerciseSetTracker({
       // Si tenemos planId y dayName, buscar el historial excluyendo el día de rutina actual
       if (planId && dayName) {
         console.log('📋 Buscando historial: última vez que hiciste este ejercicio (sin importar cuándo)');
-        
+
         // Obtener TODOS los registros y filtrar en el código
         // (más simple y confiable que hacer OR complejo en la query)
         // Después filtraremos los que NO sean del día de rutina actual
@@ -307,7 +307,7 @@ export function ExerciseSetTracker({
 
       if (data && data.length > 0) {
         console.log('📦 Datos encontrados:', data.length, 'registros');
-        
+
         // Si tenemos plan+día, filtrar para excluir el día de rutina actual
         let filteredData = data;
         if (planId && dayName) {
@@ -318,7 +318,7 @@ export function ExerciseSetTracker({
               console.log('⏭️ Excluyendo serie del día actual:', set.set_number);
               return false; // ❌ NO incluir en "valores anteriores"
             }
-            
+
             // INCLUIR todas las demás:
             // 1. No tiene plan_id (registro histórico)
             // 2. Tiene un plan_id diferente (otro plan)
@@ -327,12 +327,12 @@ export function ExerciseSetTracker({
           });
           console.log('🔍 Filtrados (excluyendo día actual):', filteredData.length, 'registros de', data.length, 'totales');
         }
-        
+
         // Agrupar por created_at para obtener solo el último entrenamiento
         // Como ordenamos por created_at desc, todos los primeros registros son del último entrenamiento
         const uniqueSets: PreviousSet[] = [];
         const seenSetNumbers = new Set<number>();
-        
+
         for (const set of filteredData) {
           if (!seenSetNumbers.has(set.set_number)) {
             uniqueSets.push({
@@ -343,9 +343,9 @@ export function ExerciseSetTracker({
             seenSetNumbers.add(set.set_number);
           }
         }
-        
+
         setPreviousSets(uniqueSets);
-        
+
         // Log mejorado para debugging
         if (planId && dayName) {
           console.log(`✅ Valores anteriores cargados: última vez que hiciste "${exerciseId}"`, {
@@ -372,17 +372,17 @@ export function ExerciseSetTracker({
   // Actualizar una serie específica
   const updateSet = (setNumber: number, field: 'reps' | 'weight_kg' | 'duration_seconds', value: string) => {
     const numValue = value === '' ? null : parseFloat(value);
-    
+
     // Marcar que debemos notificar al padre (se hará en el useEffect)
     shouldNotifyParent.current = true;
-    
-    setSets(prevSets => 
-      prevSets.map(set => 
+
+    setSets(prevSets =>
+      prevSets.map(set =>
         set.set_number === setNumber
           ? { ...set, [field]: numValue }
           : set
       )
-      );
+    );
   };
 
   // Agregar una nueva serie
@@ -390,28 +390,28 @@ export function ExerciseSetTracker({
     // Obtener el número de serie máximo actual y agregar 1
     const maxSetNumber = sets.length > 0 ? Math.max(...sets.map(s => s.set_number)) : 0;
     const newSetNumber = maxSetNumber + 1;
-    
+
     const newSet: ExerciseSet = {
       set_number: newSetNumber,
       reps: null,
       weight_kg: null,
       duration_seconds: null,
     };
-    
+
     // Marcar que debemos notificar al padre (se hará en el useEffect)
     shouldNotifyParent.current = true;
-    
+
     setSets(prevSets => [...prevSets, newSet]);
   };
 
   // Eliminar una serie
   const removeSet = (setNumber: number) => {
     if (sets.length <= 1) return; // No permitir eliminar si solo hay una serie
-    
+
     // Marcar que debemos notificar al padre (se hará en el useEffect)
     shouldNotifyParent.current = true;
-    
-    setSets(prevSets => 
+
+    setSets(prevSets =>
       // Simplemente filtrar la serie eliminada sin renumerar
       // Los números de serie se mantienen consistentes con el plan original
       prevSets.filter(set => set.set_number !== setNumber)
@@ -422,13 +422,13 @@ export function ExerciseSetTracker({
   const getPreviousData = (setNumber: number, field: 'reps' | 'weight_kg'): string => {
     const previousSet = previousSets.find(s => s.set_number === setNumber);
     if (!previousSet || previousSet[field] === null) return '-';
-    
+
     // Si es peso, convertir a la unidad del usuario
     if (field === 'weight_kg' && previousSet.weight_kg !== null) {
       const weightInUserUnit = getWeightInUserUnit(previousSet.weight_kg, weightUnit);
       return weightInUserUnit.toFixed(1);
     }
-    
+
     return previousSet[field]!.toString();
   };
 
@@ -454,7 +454,7 @@ export function ExerciseSetTracker({
 
       // 1. Eliminar las series existentes para este ejercicio
       console.log('🗑️ Eliminando series anteriores...');
-      
+
       let deleteQuery = supabase
         .from('exercise_sets')
         .delete()
@@ -513,7 +513,7 @@ export function ExerciseSetTracker({
 
       console.log('✅ Series guardadas correctamente');
       setSaveSuccess(true);
-      
+
       // Ocultar el mensaje de éxito después de 3 segundos
       setTimeout(() => {
         setSaveSuccess(false);
@@ -521,7 +521,7 @@ export function ExerciseSetTracker({
 
       // Llamar al callback si existe
       onSave?.();
-      
+
     } catch (err) {
       console.error('Error guardando series:', err);
       Alert.alert('Error', 'Error al guardar las series. Por favor intenta de nuevo.');
@@ -566,9 +566,9 @@ export function ExerciseSetTracker({
         </View>
 
         {/* Filas de series */}
-        <ScrollView style={styles.tableBody}>
+        <ScrollView style={styles.tableBody} keyboardShouldPersistTaps="handled">
           {sets.map((set, index) => (
-            <View key={set.set_number} style={styles.tableRow}>
+            <View key={`set-${set.set_number}`} style={styles.tableRow}>
               {/* Número de serie - Mostrar numeración secuencial (1, 2, 3...) */}
               <View style={[styles.cell, styles.setNumberCell]}>
                 <Text style={styles.setNumberText}>{index + 1}</Text>
@@ -595,11 +595,11 @@ export function ExerciseSetTracker({
                   keyboardType="numeric"
                   placeholder="0"
                   placeholderTextColor="#555"
-                  value={usesTime 
-                    ? (set.duration_seconds?.toString() || '') 
+                  value={usesTime
+                    ? (set.duration_seconds?.toString() || '')
                     : (set.reps?.toString() || '')
                   }
-                  onChangeText={(value) => 
+                  onChangeText={(value) =>
                     updateSet(set.set_number, usesTime ? 'duration_seconds' : 'reps', value)
                   }
                 />
@@ -623,10 +623,10 @@ export function ExerciseSetTracker({
                   disabled={sets.length <= 1}
                   style={styles.deleteButton}
                 >
-                  <Ionicons 
-                    name="trash-outline" 
-                    size={20} 
-                    color={sets.length <= 1 ? '#333' : '#ff4444'} 
+                  <Ionicons
+                    name="trash-outline"
+                    size={20}
+                    color={sets.length <= 1 ? '#333' : '#ff4444'}
                   />
                 </TouchableOpacity>
               </View>
@@ -642,12 +642,12 @@ export function ExerciseSetTracker({
           <Text style={styles.addButtonText}>Agregar Serie</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
-            styles.saveButton, 
+            styles.saveButton,
             saving && styles.saveButtonDisabled,
             saveSuccess && styles.saveButtonSuccess
-          ]} 
+          ]}
           onPress={saveSets}
           disabled={saving}
         >

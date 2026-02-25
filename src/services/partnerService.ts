@@ -163,11 +163,11 @@ export async function getPartnerCampaigns(partnerId: string): Promise<OfferCampa
  * Obtener estadísticas mensuales de un socio
  */
 export async function getPartnerMonthlyStats(
-  partnerId: string, 
+  partnerId: string,
   year?: number
 ): Promise<MonthlyStats[]> {
   const currentYear = year || new Date().getFullYear();
-  
+
   const { data, error } = await supabase
     .from('partner_monthly_stats')
     .select('*')
@@ -350,3 +350,34 @@ export async function createCampaign(
 
   return { success: true, campaign: data };
 }
+
+/**
+ * Verifica si un usuario tiene acceso gratuito como socio/partner
+ * Devuelve false en caso de error (incluyendo PGRST301) para no bloquear el flujo
+ */
+export async function checkPartnerFreeAccess(userId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('partner_redemptions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('access_type', 'free')
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error) {
+      if (error.code === 'PGRST301') {
+        console.warn('⚠️ checkPartnerFreeAccess: JWT error, retornando false');
+        return false;
+      }
+      // Tabla no existe o columna diferente - no es un error crítico
+      return false;
+    }
+
+    return !!data;
+  } catch (e) {
+    console.warn('⚠️ checkPartnerFreeAccess: Error inesperado:', e);
+    return false;
+  }
+}
+
