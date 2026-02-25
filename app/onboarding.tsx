@@ -104,7 +104,11 @@ export default function OnboardingScreen() {
           .maybeSingle();
 
         if (error && error.code !== 'PGRST116') {
-          console.error('❌ Error al cargar perfil:', error);
+          if (error.code === 'PGRST301') {
+            console.warn('⚠️ Error al cargar perfil: JWT error (PGRST301), ignoring to prevent red screen');
+          } else {
+            console.error('❌ Error al cargar perfil:', error);
+          }
           setIsLoadingProfile(false);
           return;
         }
