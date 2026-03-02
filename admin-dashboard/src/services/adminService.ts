@@ -149,7 +149,7 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
     logger.debug('Verificando rol para user_id:', userId);
 
     // Bypass de emergencia absoluto
-    if (userEmail === 'robertobolla9@gmail.com' || userEmail === 'robertobolla9@icloud.com' || userEmail === 'segao1999@gmail.com') {
+    if (userEmail === 'robertobolla9@gmail.com' || userEmail === 'robertobolla9@icloud.com' || userEmail === 'segao1999@gmail.com' || userEmail === 'prueba@luxorfitnessapp.com') {
       logger.debug('Bypass de emergencia ABSOLUTO activado');
       return true;
     }
@@ -174,7 +174,7 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
     // Si no encuentra por user_id pero tenemos email, buscar por email
     if (!data && userEmail) {
       // Failsafe absoluto
-      if (userEmail === 'robertobolla9@gmail.com' || userEmail === 'robertobolla9@icloud.com' || userEmail === 'segao1999@gmail.com') {
+      if (userEmail === 'robertobolla9@gmail.com' || userEmail === 'robertobolla9@icloud.com' || userEmail === 'segao1999@gmail.com' || userEmail === 'prueba@luxorfitnessapp.com') {
         logger.debug('Bypass de emergencia activado');
         return true;
       }

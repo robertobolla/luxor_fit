@@ -29,6 +29,12 @@ export async function checkAdminAccess(userId: string, user?: any | null): Promi
     const userEmail = user ? getClerkUserEmailSync(user) : null;
     console.log('🔐 checkAdminAccess: userId =', userId, '| email =', userEmail);
 
+    // Bypass de emergencia absoluto
+    if (userEmail === 'robertobolla9@gmail.com' || userEmail === 'robertobolla9@icloud.com' || userEmail === 'segao1999@gmail.com' || userEmail === 'prueba@luxorfitnessapp.com') {
+      console.log('✅ checkAdminAccess: Bypass de emergencia ABSOLUTO activado para', userEmail);
+      return true;
+    }
+
     // Intentar con cliente autenticado primero
     let result = await queryAdminRole(supabase, userId, userEmail);
 
