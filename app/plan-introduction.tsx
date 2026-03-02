@@ -77,7 +77,7 @@ export default function PlanIntroductionScreen() {
   };
 
   const handleContinue = () => {
-    router.replace('/(tabs)/dashboard');
+    router.replace('/(tabs)/home');
   };
 
   const getFitnessLevelText = (level: string) => {
@@ -114,13 +114,13 @@ export default function PlanIntroductionScreen() {
           <Text style={styles.errorTitle}>Oops!</Text>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={generateIntroduction}>
-          <Text style={styles.retryButtonText}>
-  {t('actions.retry')}
-</Text>          </TouchableOpacity>
+            <Text style={styles.retryButtonText}>
+              {t('actions.retry')}
+            </Text>          </TouchableOpacity>
           <TouchableOpacity style={styles.skipButton} onPress={handleContinue}>
-          <Text style={styles.skipButtonText}>
-  {t('actions.continueWithoutIntro')}
-</Text>
+            <Text style={styles.skipButtonText}>
+              {t('actions.continueWithoutIntro')}
+            </Text>
           </TouchableOpacity>
         </View>
       </SafeAreaView>
@@ -136,61 +136,61 @@ export default function PlanIntroductionScreen() {
           <Ionicons name="fitness" size={48} color="#ffb300" />
 
           <Text style={styles.headerTitle}>
-  {t('plan.readyTitle', { name: userData.name })}
-</Text>     
-  <Text style={styles.headerSubtitle}>
-  {t('plan.readySubtitle')}
-</Text>
+            {t('plan.readyTitle', { name: userData.name })}
+          </Text>
+          <Text style={styles.headerSubtitle}>
+            {t('plan.readySubtitle')}
+          </Text>
         </View>
 
         {/* Resumen del Perfil */}
         <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('plan.sections.yourProfile')}</Text>
-        <View style={styles.profileCard}>
+          <Text style={styles.sectionTitle}>{t('plan.sections.yourProfile')}</Text>
+          <View style={styles.profileCard}>
             <View style={styles.profileRow}>
               <Text style={styles.profileLabel}>{t('profile.level')}:</Text>
               <Text style={styles.profileValue}>{getFitnessLevelText(userData.fitness_level)}</Text>
             </View>
             <View style={styles.profileRow}>
-            <Text style={styles.profileLabel}>
-  {t('profile.goals')}
-</Text>              <Text style={styles.profileValue}>
+              <Text style={styles.profileLabel}>
+                {t('profile.goals')}
+              </Text>              <Text style={styles.profileValue}>
                 {userData.goals.map(getGoalText).join(', ')}
               </Text>
             </View>
             <View style={styles.profileRow}>
-            <Text style={styles.profileLabel}>
-  {t('profile.availability')}
-</Text>
-<Text style={styles.profileValue}>
-  {t('profile.availabilityDetails', {
-    days: userData.available_days,
-    minutes: userData.session_duration,
-  })}
-</Text>
+              <Text style={styles.profileLabel}>
+                {t('profile.availability')}
+              </Text>
+              <Text style={styles.profileValue}>
+                {t('profile.availabilityDetails', {
+                  days: userData.available_days,
+                  minutes: userData.session_duration,
+                })}
+              </Text>
             </View>
           </View>
         </View>
 
         {/* Introducción Generada por IA */}
         <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('plan.sections.yourPersonalPlan')}</Text>
-        <View style={styles.introductionCard}>
+          <Text style={styles.sectionTitle}>{t('plan.sections.yourPersonalPlan')}</Text>
+          <View style={styles.introductionCard}>
             <Text style={styles.introductionText}>{introduction}</Text>
           </View>
         </View>
 
         {/* Próximos Pasos */}
         <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('plan.sections.nextSteps')}</Text>
-        <View style={styles.stepsCard}>
+          <Text style={styles.sectionTitle}>{t('plan.sections.nextSteps')}</Text>
+          <View style={styles.stepsCard}>
             <View style={styles.stepItem}>
               <View style={styles.stepNumber}>
                 <Text style={styles.stepNumberText}>1</Text>
               </View>
               <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>{t('plan.nextSteps.dashboardTitle')}</Text>
-              <Text style={styles.stepDescription}>{t('plan.nextSteps.dashboardDesc')}</Text>
+                <Text style={styles.stepTitle}>{t('plan.nextSteps.dashboardTitle')}</Text>
+                <Text style={styles.stepDescription}>{t('plan.nextSteps.dashboardDesc')}</Text>
 
               </View>
             </View>
@@ -200,8 +200,8 @@ export default function PlanIntroductionScreen() {
                 <Text style={styles.stepNumberText}>2</Text>
               </View>
               <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>{t('plan.nextSteps.trainTitle')}</Text>
-              <Text style={styles.stepDescription}>{t('plan.nextSteps.trainDesc')}</Text>
+                <Text style={styles.stepTitle}>{t('plan.nextSteps.trainTitle')}</Text>
+                <Text style={styles.stepDescription}>{t('plan.nextSteps.trainDesc')}</Text>
 
               </View>
             </View>
@@ -211,8 +211,8 @@ export default function PlanIntroductionScreen() {
                 <Text style={styles.stepNumberText}>3</Text>
               </View>
               <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>{t('plan.nextSteps.progressTitle')}</Text>
-              <Text style={styles.stepDescription}>{t('plan.nextSteps.progressDesc')}</Text>
+                <Text style={styles.stepTitle}>{t('plan.nextSteps.progressTitle')}</Text>
+                <Text style={styles.stepDescription}>{t('plan.nextSteps.progressDesc')}</Text>
 
               </View>
             </View>
@@ -221,8 +221,8 @@ export default function PlanIntroductionScreen() {
 
         {/* Botón de Continuar */}
         <TouchableOpacity style={styles.continueButton} onPress={handleContinue}>
-        <Text style={styles.continueButtonText}>{t('plan.ctaStartJourney')}</Text>
-        <Ionicons name="arrow-forward" size={24} color="#1a1a1a" />
+          <Text style={styles.continueButtonText}>{t('plan.ctaStartJourney')}</Text>
+          <Ionicons name="arrow-forward" size={24} color="#1a1a1a" />
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />

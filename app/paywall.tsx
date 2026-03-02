@@ -27,6 +27,7 @@ import {
 } from '../src/services/revenueCatService';
 import { PurchasesPackage } from 'react-native-purchases';
 import { supabase } from '../src/services/supabase';
+import { ConfirmModal } from '../src/components/CustomModal';
 
 export default function PaywallScreen() {
   const { t } = useTranslation();
@@ -41,6 +42,7 @@ export default function PaywallScreen() {
 
   // Estado para mostrar error si no hay ofertas
   const [offeringsError, setOfferingsError] = useState<string | null>(null);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Inicializar RevenueCat y cargar ofertas
   useEffect(() => {
@@ -204,7 +206,7 @@ export default function PaywallScreen() {
         );
       }
     } catch (error: any) {
-      Alert.alert(t('common.error'), error.message || t('errors.unknownError'));
+      Alert.alert(t('common.error'), error.message || t('common.unexpectedError'));
     } finally {
       setPurchasing(false);
     }
@@ -222,27 +224,14 @@ export default function PaywallScreen() {
     }
   }, []);
 
-  const handleLogout = useCallback(() => {
-    Alert.alert(
-      t('settings.logout'),
-      '¿Estás seguro de que quieres cerrar sesión?',
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('settings.logout'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut();
-              router.replace('/(auth)/login');
-            } catch (error) {
-              console.error('Error al cerrar sesión:', error);
-            }
-          },
-        },
-      ]
-    );
-  }, [signOut, router, t]);
+  const handleLogout = useCallback(async () => {
+    try {
+      await signOut();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      console.error('Error al cerrar sesión:', error);
+    }
+  }, [signOut, router]);
 
   const formatPrice = (pkg: PurchasesPackage) => {
     const price = pkg.product.priceString;
@@ -267,7 +256,7 @@ export default function PaywallScreen() {
       {/* Botón de cerrar sesión */}
       <TouchableOpacity
         style={styles.logoutButton}
-        onPress={handleLogout}
+        onPress={() => setShowLogoutModal(true)}
       >
         <Ionicons name="log-out-outline" size={24} color="#999" />
       </TouchableOpacity>
@@ -481,6 +470,16 @@ export default function PaywallScreen() {
           </TouchableOpacity>
         )}
       </ScrollView>
+      <ConfirmModal
+        visible={showLogoutModal}
+        onClose={() => setShowLogoutModal(false)}
+        title={t('common.logout')}
+        message={t('auth.confirmLogout')}
+        confirmText={t('common.logout')}
+        cancelText={t('common.cancel')}
+        onConfirm={handleLogout}
+        confirmButtonStyle="danger"
+      />
     </SafeAreaView>
   );
 }
@@ -500,7 +499,7 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     position: 'absolute',
-    top: 16,
+    top: 50,
     right: 16,
     zIndex: 10,
     width: 44,

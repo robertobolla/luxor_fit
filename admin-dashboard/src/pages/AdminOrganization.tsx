@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { supabase } from '../services/adminService';
 import { useToastContext } from '../contexts/ToastContext';
+import { useTranslation } from 'react-i18next';
 import './AdminOrganization.css';
 
 interface OrgMember {
@@ -14,6 +15,7 @@ interface OrgMember {
 }
 
 export default function AdminOrganization() {
+    const { t } = useTranslation();
     const { user } = useUser();
     const toast = useToastContext();
     const [members, setMembers] = useState<OrgMember[]>([]);
@@ -182,29 +184,29 @@ export default function AdminOrganization() {
     }
 
     if (loading) {
-        return <div className="page-loading">Cargando organización...</div>;
+        return <div className="page-loading">{t('admin_org.loading')}</div>;
     }
 
     return (
         <div className="admin-org-page">
             <header className="page-header">
                 <div>
-                    <h1>Mi Organización</h1>
-                    <p className="subtitle">Gestiona los usuarios de tu organización</p>
+                    <h1>{t('admin_org.title')}</h1>
+                    <p className="subtitle">{t('admin_org.subtitle')}</p>
                 </div>
                 <button className="btn-primary" onClick={() => setShowAddModal(true)}>
-                    + Agregar Usuario
+                    {t('admin_org.add')}
                 </button>
             </header>
 
             <div className="org-stats">
                 <div className="stat-card">
                     <span className="stat-value">{members.filter(m => m.is_active).length}</span>
-                    <span className="stat-label">Miembros Activos</span>
+                    <span className="stat-label">{t('admin_org.stats.active')}</span>
                 </div>
                 <div className="stat-card">
                     <span className="stat-value">{members.length}</span>
-                    <span className="stat-label">Total Miembros</span>
+                    <span className="stat-label">{t('admin_org.stats.total')}</span>
                 </div>
             </div>
 
@@ -212,24 +214,24 @@ export default function AdminOrganization() {
                 <table className="members-table">
                     <thead>
                         <tr>
-                            <th>Usuario</th>
-                            <th>Email</th>
-                            <th>Fecha de Ingreso</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
+                            <th>{t('admin_org.table.user')}</th>
+                            <th>{t('admin_org.table.email')}</th>
+                            <th>{t('admin_org.table.joined')}</th>
+                            <th>{t('admin_org.table.status')}</th>
+                            <th>{t('admin_org.table.actions')}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {members.map((member) => (
                             <tr key={member.user_id}>
                                 <td>
-                                    <strong>{member.name || 'Sin nombre'}</strong>
+                                    <strong>{member.name || t('admin_org.no_name')}</strong>
                                 </td>
                                 <td>{member.email || '-'}</td>
                                 <td>{new Date(member.joined_at).toLocaleDateString()}</td>
                                 <td>
                                     <span className={`badge ${member.is_active ? 'badge-success' : 'badge-inactive'}`}>
-                                        {member.is_active ? 'Activo' : 'Inactivo'}
+                                        {member.is_active ? t('admin_org.status.active') : t('admin_org.status.inactive')}
                                     </span>
                                 </td>
                                 <td>
@@ -241,7 +243,7 @@ export default function AdminOrganization() {
                                                 setShowDeleteModal(true);
                                             }}
                                         >
-                                            Remover
+                                            {t('admin_org.remove')}
                                         </button>
                                     )}
                                 </td>
@@ -252,9 +254,9 @@ export default function AdminOrganization() {
 
                 {members.length === 0 && (
                     <div className="empty-state">
-                        <p>No tienes usuarios en tu organización</p>
+                        <p>{t('admin_org.empty')}</p>
                         <button className="btn-primary" onClick={() => setShowAddModal(true)}>
-                            Agregar tu primer usuario
+                            {t('admin_org.add_first')}
                         </button>
                     </div>
                 )}
@@ -264,50 +266,50 @@ export default function AdminOrganization() {
             {showAddModal && (
                 <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <h2>Agregar Usuario a Mi Organización</h2>
+                        <h2>{t('admin_org.add_modal.title')}</h2>
                         <p style={{ color: '#888', fontSize: '14px', marginBottom: '20px' }}>
-                            El usuario debe estar registrado en la app para poder añadirlo.
+                            {t('admin_org.add_modal.desc')}
                         </p>
 
                         <div className="form-group">
-                            <label>Email del Usuario *</label>
+                            <label>{t('admin_org.add_modal.email')}</label>
                             <input
                                 type="email"
                                 value={formData.email}
                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                placeholder="usuario@ejemplo.com"
+                                placeholder={t('admin_org.add_modal.email_placeholder')}
                             />
                         </div>
 
                         <div className="form-group">
-                            <label>Nombre (opcional)</label>
+                            <label>{t('admin_org.add_modal.name')}</label>
                             <input
                                 type="text"
                                 value={formData.name}
                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                placeholder="Nombre del usuario"
+                                placeholder={t('admin_org.add_modal.name_placeholder')}
                             />
                         </div>
 
                         <div className="form-group">
-                            <label>Duración de Suscripción</label>
+                            <label>{t('admin_org.add_modal.duration')}</label>
                             <select
                                 value={formData.subscriptionMonths}
                                 onChange={(e) => setFormData({ ...formData, subscriptionMonths: parseInt(e.target.value) })}
                             >
-                                <option value={1}>1 mes</option>
-                                <option value={3}>3 meses</option>
-                                <option value={6}>6 meses</option>
-                                <option value={12}>12 meses</option>
+                                <option value={1}>{t('admin_org.add_modal.months_1')}</option>
+                                <option value={3}>{t('admin_org.add_modal.months_3')}</option>
+                                <option value={6}>{t('admin_org.add_modal.months_6')}</option>
+                                <option value={12}>{t('admin_org.add_modal.months_12')}</option>
                             </select>
                         </div>
 
                         <div className="modal-actions">
                             <button className="btn-secondary" onClick={() => setShowAddModal(false)} disabled={adding}>
-                                Cancelar
+                                {t('admin_org.add_modal.cancel')}
                             </button>
                             <button className="btn-primary" onClick={handleAddMember} disabled={adding || !formData.email.trim()}>
-                                {adding ? 'Agregando...' : 'Agregar Usuario'}
+                                {adding ? t('admin_org.add_modal.adding') : t('admin_org.add_modal.add')}
                             </button>
                         </div>
                     </div>
@@ -318,20 +320,20 @@ export default function AdminOrganization() {
             {showDeleteModal && memberToDelete && (
                 <div className="modal-overlay" onClick={() => setShowDeleteModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <h2>Remover Usuario</h2>
+                        <h2>{t('admin_org.delete_modal.title')}</h2>
                         <p style={{ color: '#ccc', marginBottom: '20px' }}>
-                            ¿Estás seguro de que quieres remover a <strong>{memberToDelete.name || memberToDelete.email}</strong> de tu organización?
+                            {t('admin_org.delete_modal.desc')} <strong>{memberToDelete.name || memberToDelete.email}</strong> {t('admin_org.delete_modal.from_org')}
                         </p>
                         <p style={{ color: '#888', fontSize: '13px' }}>
-                            El usuario perderá acceso a los beneficios de tu organización.
+                            {t('admin_org.delete_modal.warning')}
                         </p>
 
                         <div className="modal-actions">
                             <button className="btn-secondary" onClick={() => setShowDeleteModal(false)} disabled={deleting}>
-                                Cancelar
+                                {t('admin_org.delete_modal.cancel')}
                             </button>
                             <button className="btn-danger" onClick={handleRemoveMember} disabled={deleting}>
-                                {deleting ? 'Removiendo...' : 'Remover Usuario'}
+                                {deleting ? t('admin_org.delete_modal.removing') : t('admin_org.delete_modal.remove')}
                             </button>
                         </div>
                     </div>

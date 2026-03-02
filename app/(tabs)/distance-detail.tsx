@@ -34,7 +34,7 @@ export default function DistanceDetailScreen() {
   const [totalDistance, setTotalDistance] = useState(0);
   const [averageDistance, setAverageDistance] = useState(0);
   const [goalDistance] = useState(8.05); // Meta en km (5 millas)
-  
+
   // Formatear distancia con la unidad del usuario
   const formatDist = (km: number, decimals: number = 2) => formatDistance(km, distanceUnit, decimals);
   const distUnitLabel = distanceUnit === 'km' ? 'km' : 'mi';
@@ -48,7 +48,7 @@ export default function DistanceDetailScreen() {
     // Por ahora usamos datos simulados
     const data = generateMockData();
     setDistanceData(data);
-    
+
     const total = data.reduce((sum, item) => sum + item.value, 0);
     setTotalDistance(total);
     setAverageDistance(total / (data.length || 1));
@@ -65,7 +65,7 @@ export default function DistanceDetailScreen() {
           0, 0, 0, // 18:00 - 20:00
           0.5, 0.8, 0 // 21:00 - 23:00 (actividad nocturna)
         ];
-        
+
         return Array.from({ length: 24 }, (_, i) => {
           let label = '';
           // Mostrar cada 3 horas
@@ -75,13 +75,13 @@ export default function DistanceDetailScreen() {
             else if (i === 12) label = '12:00';
             else label = `${i - 12}:00`;
           }
-          
-          return { 
-            label, 
-            value: hourlyData[i] || 0 
+
+          return {
+            label,
+            value: hourlyData[i] || 0
           };
         });
-      
+
       case 'week':
         // Datos por día de la semana
         const weekDays = t('common.weekDaysShort', { returnObjects: true }) as string[];
@@ -89,7 +89,7 @@ export default function DistanceDetailScreen() {
           label: day,
           value: Math.random() * 5,
         }));
-      
+
       case 'month':
         // Datos por día del mes
         const daysInMonth = new Date(
@@ -109,7 +109,7 @@ export default function DistanceDetailScreen() {
             value: Math.random() * 8,
           };
         });
-      
+
       case 'year':
         // Datos por mes del año
         const months = t('common.monthsShort', { returnObjects: true }) as string[];
@@ -117,7 +117,7 @@ export default function DistanceDetailScreen() {
           label: month,
           value: Math.random() * 150,
         }));
-      
+
       default:
         return [];
     }
@@ -165,40 +165,40 @@ export default function DistanceDetailScreen() {
     const now = new Date();
     const isToday = currentDate.toDateString() === now.toDateString();
     const locale = i18n.language?.startsWith('es') ? 'es-ES' : 'en-US';
-  
+
     switch (viewMode) {
       case 'day': {
         if (isToday) return t('common.today');
-  
+
         const yesterday = new Date(now);
         yesterday.setDate(now.getDate() - 1);
         if (currentDate.toDateString() === yesterday.toDateString()) return t('common.yesterday');
-  
+
         return currentDate.toLocaleDateString(locale, {
           weekday: 'long',
           day: 'numeric',
           month: 'short',
         });
       }
-  
+
       case 'week': {
         const currentDay = currentDate.getDay();
         const weekStart = new Date(currentDate);
         weekStart.setDate(currentDate.getDate() - currentDay);
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
-  
+
         const nowDay = now.getDay();
         const nowWeekStart = new Date(now);
         nowWeekStart.setDate(now.getDate() - nowDay);
-  
+
         if (weekStart.toDateString() === nowWeekStart.toDateString()) {
           return t('common.thisWeek');
         }
-  
+
         const startMonth = weekStart.toLocaleDateString(locale, { month: 'short' });
         const endMonth = weekEnd.toLocaleDateString(locale, { month: 'short' });
-  
+
         if (weekStart.getMonth() === weekEnd.getMonth()) {
           return t('distance.weekRangeSameMonth', {
             startDay: weekStart.getDate(),
@@ -206,7 +206,7 @@ export default function DistanceDetailScreen() {
             month: startMonth,
           });
         }
-  
+
         return t('distance.weekRangeDifferentMonths', {
           startDay: weekStart.getDate(),
           startMonth,
@@ -214,54 +214,54 @@ export default function DistanceDetailScreen() {
           endMonth,
         });
       }
-  
+
       case 'month': {
         if (currentDate.getFullYear() === now.getFullYear() && currentDate.getMonth() === now.getMonth()) {
           return t('common.thisMonth');
         }
         return currentDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
       }
-  
+
       case 'year': {
         if (currentDate.getFullYear() === now.getFullYear()) {
           return t('common.thisYear');
         }
         return currentDate.getFullYear().toString();
       }
-  
+
       default:
         return '';
     }
   };
-  
+
 
   const isCurrentPeriod = () => {
     const now = new Date();
-    
+
     switch (viewMode) {
       case 'day':
         return currentDate.toDateString() === now.toDateString();
-      
+
       case 'week':
         const nowDay = now.getDay();
         const nowWeekStart = new Date(now);
         nowWeekStart.setDate(now.getDate() - nowDay);
         nowWeekStart.setHours(0, 0, 0, 0);
-        
+
         const currentDay = currentDate.getDay();
         const currentWeekStart = new Date(currentDate);
         currentWeekStart.setDate(currentDate.getDate() - currentDay);
         currentWeekStart.setHours(0, 0, 0, 0);
-        
+
         return nowWeekStart.getTime() === currentWeekStart.getTime();
-      
+
       case 'month':
-        return currentDate.getFullYear() === now.getFullYear() && 
-               currentDate.getMonth() === now.getMonth();
-      
+        return currentDate.getFullYear() === now.getFullYear() &&
+          currentDate.getMonth() === now.getMonth();
+
       case 'year':
         return currentDate.getFullYear() === now.getFullYear();
-      
+
       default:
         return false;
     }
@@ -275,7 +275,7 @@ export default function DistanceDetailScreen() {
   const getStatusText = () => {
     if (viewMode === 'day') {
       const remaining = goalDistance - averageDistance;
-  
+
       if (remaining > 0) {
         const remainingInUserUnit = distanceUnit === 'mi' ? conversions.kmToMi(remaining) : remaining;
         return t('distance.dailyGoalRemaining', {
@@ -283,22 +283,22 @@ export default function DistanceDetailScreen() {
           unit: distUnitLabel,
         });
       }
-  
+
       return t('distance.dailyGoalAchieved');
     }
-  
+
     const totalInUserUnit = distanceUnit === 'mi' ? conversions.kmToMi(totalDistance) : totalDistance;
     return t('distance.totalDistanceSoFar', {
       distance: totalInUserUnit.toFixed(2),
       unit: distUnitLabel,
     });
   };
-  
+
 
   const renderChart = () => {
     // Usar un valor máximo fijo para la escala del gráfico
     let maxValue = 2; // 2 km como máximo para el día
-    
+
     if (viewMode === 'week') {
       maxValue = 10;
     } else if (viewMode === 'month') {
@@ -306,12 +306,12 @@ export default function DistanceDetailScreen() {
     } else if (viewMode === 'year') {
       maxValue = 200;
     }
-    
+
     const chartHeight = 260;
-    
+
     let barWidth = 28;
     let barSpacing = 12;
-    
+
     if (viewMode === 'day') {
       barWidth = 20;
       barSpacing = 6;
@@ -322,16 +322,16 @@ export default function DistanceDetailScreen() {
       barWidth = 20;
       barSpacing = 8;
     }
-    
+
     const yAxisLabels = ['2', '1', '0'];
     const goalLinePercentage = 0; // Línea en el fondo (nivel 0)
-    
+
     const now = new Date();
     const isToday = currentDate.toDateString() === now.toDateString();
     const currentHour = now.getHours();
     const currentMonth = now.getMonth();
     const currentDay = now.getDate();
-    
+
     return (
       <View style={styles.chartWrapper}>
         {/* Eje Y */}
@@ -342,21 +342,21 @@ export default function DistanceDetailScreen() {
             </Text>
           ))}
         </View>
-        
+
         {/* Contenedor del gráfico */}
         <View style={styles.chartContainer}>
           {/* Contenido scrollable */}
-          <ScrollView 
-            horizontal 
+          <ScrollView
+            horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chartContent}
           >
             {/* Línea de objetivo */}
             <View style={styles.goalLine} />
-            
+
             {distanceData.map((item, index) => {
               const barHeight = (item.value / maxValue) * chartHeight;
-              
+
               let isHighlighted = false;
               if (viewMode === 'day' && isToday) {
                 isHighlighted = index === currentHour;
@@ -365,12 +365,12 @@ export default function DistanceDetailScreen() {
               } else if (viewMode === 'year' && isCurrentPeriod()) {
                 isHighlighted = index === currentMonth;
               }
-              
+
               return (
-                <View 
-                  key={index} 
+                <View
+                  key={index}
                   style={[
-                    styles.barContainer, 
+                    styles.barContainer,
                     { width: barWidth, marginRight: barSpacing }
                   ]}
                 >
@@ -402,7 +402,7 @@ export default function DistanceDetailScreen() {
     if (viewMode === 'week') {
       return (
         <View style={styles.summarySection}>
-<Text style={styles.summaryTitle}>{t('common.thisWeek')}</Text>
+          <Text style={styles.summaryTitle}>{t('common.thisWeek')}</Text>
 
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>{t('common.today')}</Text>
@@ -419,7 +419,7 @@ export default function DistanceDetailScreen() {
         </View>
       );
     }
-    
+
     if (viewMode === 'month') {
       return (
         <View style={styles.summarySection}>
@@ -439,7 +439,7 @@ export default function DistanceDetailScreen() {
         </View>
       );
     }
-    
+
     if (viewMode === 'year') {
       return (
         <View style={styles.summarySection}>
@@ -459,7 +459,7 @@ export default function DistanceDetailScreen() {
         </View>
       );
     }
-    
+
     return null;
   };
 
@@ -469,7 +469,7 @@ export default function DistanceDetailScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard' as any)}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/progress' as any)}>
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t('distance.title')}</Text>
@@ -485,7 +485,7 @@ export default function DistanceDetailScreen() {
             onPress={() => setViewMode('day')}
           >
             <Text style={[styles.tabText, viewMode === 'day' && styles.tabTextActive]}>
-            {t('common.day')}
+              {t('common.day')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -493,7 +493,7 @@ export default function DistanceDetailScreen() {
             onPress={() => setViewMode('week')}
           >
             <Text style={[styles.tabText, viewMode === 'week' && styles.tabTextActive]}>
-            {t('common.week')}
+              {t('common.week')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -501,7 +501,7 @@ export default function DistanceDetailScreen() {
             onPress={() => setViewMode('month')}
           >
             <Text style={[styles.tabText, viewMode === 'month' && styles.tabTextActive]}>
-            {t('common.month')}
+              {t('common.month')}
 
             </Text>
           </TouchableOpacity>
@@ -510,7 +510,7 @@ export default function DistanceDetailScreen() {
             onPress={() => setViewMode('year')}
           >
             <Text style={[styles.tabText, viewMode === 'year' && styles.tabTextActive]}>
-            {t('common.year')}
+              {t('common.year')}
             </Text>
           </TouchableOpacity>
         </View>

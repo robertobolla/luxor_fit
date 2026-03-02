@@ -4,10 +4,13 @@ import { getEmpresarios, getEmpresariosStats, addEmpresario, updateEmpresario, t
 import { useToastContext } from '../contexts/ToastContext';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
+import { useTranslation } from 'react-i18next';
 import './Empresarios.css';
 
 export default function Empresarios() {
+  const { t } = useTranslation();
   const toast = useToastContext();
   const { handleApiError } = useErrorHandler();
   const [empresarios, setEmpresarios] = useState<EmpresarioStats[]>([]);
@@ -50,7 +53,7 @@ export default function Empresarios() {
 
   // Función auxiliar para determinar si un empresario está vencido
   function getExpirationStatus(expiresAt?: string | null) {
-    if (!expiresAt) return { status: 'active', label: 'Sin Vencimiento', color: '#888' };
+    if (!expiresAt) return { status: 'active', label: t('empresarios.status.no_expiration'), color: '#888' };
 
     const expiryDate = new Date(expiresAt);
     const now = new Date();
@@ -65,16 +68,16 @@ export default function Empresarios() {
 
     if (diffDays < 0) {
       if (isInGracePeriod) {
-        return { status: 'grace', label: `Vencido (Gracia: ${7 + diffDays}d restantes)`, color: '#F7931E' };
+        return { status: 'grace', label: t('empresarios.status.grace', { days: 7 + diffDays }), color: '#F7931E' };
       }
-      return { status: 'expired', label: `Vencido hace ${Math.abs(diffDays)} días`, color: '#E74C3C' };
+      return { status: 'expired', label: t('empresarios.status.expired', { days: Math.abs(diffDays) }), color: '#E74C3C' };
     }
 
     if (diffDays <= 7) {
-      return { status: 'warning', label: `Vence en ${diffDays} días`, color: '#F7931E' };
+      return { status: 'warning', label: t('empresarios.status.expires_in', { days: diffDays }), color: '#F7931E' };
     }
 
-    return { status: 'active', label: `Vence: ${expiryDate.toLocaleDateString()}`, color: '#27AE60' };
+    return { status: 'active', label: t('empresarios.status.expires_on', { date: expiryDate.toLocaleDateString() }), color: '#27AE60' };
   }
 
   async function handleAddEmpresario() {
@@ -84,9 +87,8 @@ export default function Empresarios() {
         return;
       }
 
-      // Crear un user_id temporal basado en email (se actualizará cuando el usuario se registre en Clerk)
-      // O usar el email como identificador temporal hasta que se asocie un user_id real
-      const tempUserId = `temp_${Date.now()}_${formData.email.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      // The user_id must be a valid UUID because admin_roles.user_id is typed as UUID
+      const tempUserId = uuidv4();
 
       const monthlyFee = formData.billing_cycle === 'monthly' ? formData.price : null;
       const annualFee = formData.billing_cycle === 'annual' ? formData.price : null;
@@ -110,7 +112,16 @@ export default function Empresarios() {
       setShowAddModal(false);
       resetFormData();
       loadEmpresarios();
-    } catch (error: unknown) {
+    } catch (error: any) {
+      console.error('------- CRITICAL DB ERROR LOG -------');
+      console.error('Full Error Object:', error);
+      if (error && typeof error === 'object') {
+        console.error('Error Code:', error.code);
+        console.error('Error Details:', error.details);
+        console.error('Error Hint:', error.hint);
+        console.error('Error Message:', error.message);
+      }
+      console.error('------- END DB ERROR LOG -------');
       const errorMessage = handleApiError(error, 'Error al crear empresario');
       toast.error(errorMessage);
     }
@@ -252,15 +263,15 @@ export default function Empresarios() {
   }
 
   if (loading) {
-    return <div className="page-loading">Cargando empresarios...</div>;
+    return <div className="page-loading">{t('empresarios.loading')}</div>;
   }
 
   return (
     <div className="page-container">
       <div className="page-header">
-        <h1>Empresarios (Gimnasios)</h1>
+        <h1>{t('empresarios.title')}</h1>
         <button className="btn-primary" onClick={() => setShowAddModal(true)}>
-          + Agregar Empresario
+          {t('empresarios.add')}
         </button>
       </div>
 
@@ -268,15 +279,15 @@ export default function Empresarios() {
         <table className="empresarios-table">
           <thead>
             <tr>
-              <th>Gimnasio</th>
-              <th>Contacto</th>
-              <th>Estado</th>
-              <th>Vencimiento</th>
-              <th>Inicio Pack</th>
-              <th>Usuarios</th>
-              <th>Total Miembros</th>
-              <th>Valor Pack</th>
-              <th>Acciones</th>
+              <th>{t('empresarios.table.gym')}</th>
+              <th>{t('empresarios.table.contact')}</th>
+              <th>{t('empresarios.table.status')}</th>
+              <th>{t('empresarios.table.expiration')}</th>
+              <th>{t('empresarios.table.pack_start')}</th>
+              <th>{t('empresarios.table.users')}</th>
+              <th>{t('empresarios.table.total_members')}</th>
+              <th>{t('empresarios.table.pack_value')}</th>
+              <th>{t('empresarios.table.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -290,13 +301,13 @@ export default function Empresarios() {
               return (
                 <tr key={emp.empresario_id} style={expirationStatus.status === 'expired' ? { backgroundColor: '#fff5f5' } : {}}>
                   <td>
-                    <strong>{emp.gym_name || emp.empresario_name || 'Sin nombre'}</strong>
+                    <strong>{emp.gym_name || emp.empresario_name || t('empresarios.no_name')}</strong>
                     {emp.max_users ? (
                       <div style={{ fontSize: '12px', color: '#666', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ fontWeight: 600 }}>Pack: {emp.max_users} </span> usuarios
+                        <span style={{ fontWeight: 600 }}>{t('empresarios.pack')}: {emp.max_users} </span> {t('empresarios.table.users').toLowerCase()}
                       </div>
                     ) : (
-                      <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>Sin límite</div>
+                      <div style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>{t('empresarios.no_limit')}</div>
                     )}
                   </td>
                   <td>{emp.empresario_email || '-'}</td>
@@ -305,9 +316,9 @@ export default function Empresarios() {
                       className={`badge ${emp.is_active !== false ? 'badge-success' : 'badge-default'}`}
                       onClick={() => handleToggleStatus(emp)}
                       style={{ cursor: 'pointer', border: 'none' }}
-                      title={emp.is_active !== false ? 'Click para desactivar' : 'Click para activar'}
+                      title={emp.is_active !== false ? t('empresarios.click_deactivate') : t('empresarios.click_activate')}
                     >
-                      {emp.is_active !== false ? 'Activo' : 'Inactivo'}
+                      {emp.is_active !== false ? t('empresarios.active') : t('empresarios.inactive')}
                     </button>
                   </td>
                   <td>
@@ -342,10 +353,10 @@ export default function Empresarios() {
                   <td>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button className="btn-secondary btn-sm" onClick={() => handleViewUsers(emp)}>
-                        Ver Usuarios
+                        {t('empresarios.view_users')}
                       </button>
                       <button className="btn-primary btn-sm" onClick={() => handleEdit(emp)}>
-                        Editar
+                        {t('empresarios.edit')}
                       </button>
                     </div>
                   </td>
@@ -358,7 +369,7 @@ export default function Empresarios() {
         {
           empresarios.length === 0 && (
             <div className="empty-state">
-              <p>No hay empresarios registrados</p>
+              <p>{t('empresarios.empty')}</p>
             </div>
           )
         }
@@ -369,12 +380,12 @@ export default function Empresarios() {
         showEditModal && editingEmpresario && (
           <div className="modal-overlay" onClick={() => { setShowEditModal(false); setEditingEmpresario(null); }}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2>Editar Empresario</h2>
+              <h2>{t('empresarios.edit_modal.title')}</h2>
               <p style={{ color: '#888', fontSize: '14px', marginBottom: '20px' }}>
-                Actualiza la información del empresario
+                {t('empresarios.edit_modal.desc')}
               </p>
               <div className="form-group">
-                <label>Email *</label>
+                <label>{t('empresarios.edit_modal.email')}</label>
                 <input
                   type="email"
                   value={formData.email}
@@ -384,7 +395,7 @@ export default function Empresarios() {
                 />
               </div>
               <div className="form-group">
-                <label>Nombre del Empresario</label>
+                <label>{t('empresarios.edit_modal.name')}</label>
                 <input
                   type="text"
                   value={formData.name}
@@ -393,7 +404,7 @@ export default function Empresarios() {
                 />
               </div>
               <div className="form-group">
-                <label>Nombre del Gimnasio *</label>
+                <label>{t('empresarios.edit_modal.gym_name')}</label>
                 <input
                   type="text"
                   value={formData.gym_name}
@@ -404,7 +415,7 @@ export default function Empresarios() {
               </div>
               <div className="row" style={{ display: 'flex', gap: '15px' }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>Tipo de Pack *</label>
+                  <label>{t('empresarios.edit_modal.pack_type')}</label>
                   <div style={{ display: 'flex', gap: '15px', marginTop: '8px' }}>
                     <label style={{ fontWeight: 'normal', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <input
@@ -412,7 +423,7 @@ export default function Empresarios() {
                         name="billing_cycle_edit"
                         checked={formData.billing_cycle === 'monthly'}
                         onChange={() => setFormData({ ...formData, billing_cycle: 'monthly' })}
-                      /> Mensual
+                      /> {t('empresarios.edit_modal.monthly')}
                     </label>
                     <label style={{ fontWeight: 'normal', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <input
@@ -420,12 +431,12 @@ export default function Empresarios() {
                         name="billing_cycle_edit"
                         checked={formData.billing_cycle === 'annual'}
                         onChange={() => setFormData({ ...formData, billing_cycle: 'annual' })}
-                      /> Anual
+                      /> {t('empresarios.edit_modal.annual')}
                     </label>
                   </div>
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>Precio del Pack ({formData.billing_cycle === 'monthly' ? 'Mensual' : 'Anual'}) ($) *</label>
+                  <label>{t('empresarios.edit_modal.pack_price')}</label>
                   <input
                     type="number"
                     step="0.01"
@@ -440,7 +451,7 @@ export default function Empresarios() {
 
               <div className="row" style={{ display: 'flex', gap: '15px' }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>Límite de Usuarios (Pack)</label>
+                  <label>{t('empresarios.edit_modal.user_limit')}</label>
                   <input
                     type="number"
                     min="1"
@@ -450,20 +461,20 @@ export default function Empresarios() {
                   />
                 </div>
                 <div className="form-group" style={{ flex: 2 }}>
-                  <label>Fecha de Vencimiento de Servicio (Opcional)</label>
+                  <label>{t('empresarios.edit_modal.expiration_date')}</label>
                   <input
                     type="date"
                     value={formData.subscription_expires_at || ''}
                     onChange={(e) => setFormData({ ...formData, subscription_expires_at: e.target.value })}
                   />
                   <small style={{ color: '#888', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-                    Si vence, hay 7 días de gracia antes del corte.
+                    {t('empresarios.edit_modal.expiration_help')}
                   </small>
                 </div>
               </div>
 
               <div className="form-group">
-                <label>Dirección del Gimnasio</label>
+                <label>{t('empresarios.edit_modal.address')}</label>
                 <input
                   type="text"
                   value={formData.gym_address}
@@ -472,7 +483,7 @@ export default function Empresarios() {
                 />
               </div>
               <div className="form-group">
-                <label>Teléfono</label>
+                <label>{t('empresarios.edit_modal.phone')}</label>
                 <input
                   type="text"
                   value={formData.gym_phone}
@@ -482,10 +493,10 @@ export default function Empresarios() {
               </div>
               <div className="modal-actions">
                 <button className="btn-secondary" onClick={() => { setShowEditModal(false); setEditingEmpresario(null); }}>
-                  Cancelar
+                  {t('empresarios.edit_modal.cancel')}
                 </button>
                 <button className="btn-primary" onClick={handleUpdateEmpresario}>
-                  Guardar Cambios
+                  {t('empresarios.edit_modal.save')}
                 </button>
               </div>
             </div>
@@ -498,12 +509,12 @@ export default function Empresarios() {
         showAddModal && (
           <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-              <h2>Agregar Empresario</h2>
+              <h2>{t('empresarios.add_modal.title')}</h2>
               <p style={{ color: '#888', fontSize: '14px', marginBottom: '20px' }}>
-                Completa los datos básicos. El empresario podrá registrarse después con este email.
+                {t('empresarios.add_modal.desc')}
               </p>
               <div className="form-group">
-                <label>Email *</label>
+                <label>{t('empresarios.edit_modal.email')}</label>
                 <input
                   type="email"
                   value={formData.email}
@@ -512,11 +523,11 @@ export default function Empresarios() {
                   required
                 />
                 <small style={{ color: '#888', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-                  El empresario deberá registrarse en la app con este email
+                  {t('empresarios.add_modal.email_help')}
                 </small>
               </div>
               <div className="form-group">
-                <label>Nombre del Empresario</label>
+                <label>{t('empresarios.edit_modal.name')}</label>
                 <input
                   type="text"
                   value={formData.name}
@@ -544,7 +555,7 @@ export default function Empresarios() {
                         name="billing_cycle"
                         checked={formData.billing_cycle === 'monthly'}
                         onChange={() => setFormData({ ...formData, billing_cycle: 'monthly' })}
-                      /> Mensual
+                      /> {t('empresarios.edit_modal.monthly')}
                     </label>
                     <label style={{ fontWeight: 'normal', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <input
@@ -552,12 +563,12 @@ export default function Empresarios() {
                         name="billing_cycle"
                         checked={formData.billing_cycle === 'annual'}
                         onChange={() => setFormData({ ...formData, billing_cycle: 'annual' })}
-                      /> Anual
+                      /> {t('empresarios.edit_modal.annual')}
                     </label>
                   </div>
                 </div>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>Precio del Pack ({formData.billing_cycle === 'monthly' ? 'Mensual' : 'Anual'}) ($) *</label>
+                  <label>{t('empresarios.edit_modal.pack_price')}</label>
                   <input
                     type="number"
                     step="0.01"
@@ -572,7 +583,7 @@ export default function Empresarios() {
 
               <div className="row" style={{ display: 'flex', gap: '15px' }}>
                 <div className="form-group" style={{ flex: 1 }}>
-                  <label>Límite de Usuarios (Pack)</label>
+                  <label>{t('empresarios.edit_modal.user_limit')}</label>
                   <input
                     type="number"
                     min="1"
@@ -582,20 +593,20 @@ export default function Empresarios() {
                   />
                 </div>
                 <div className="form-group" style={{ flex: 2 }}>
-                  <label>Fecha de Vencimiento de Servicio (Opcional)</label>
+                  <label>{t('empresarios.edit_modal.expiration_date')}</label>
                   <input
                     type="date"
                     value={formData.subscription_expires_at || ''}
                     onChange={(e) => setFormData({ ...formData, subscription_expires_at: e.target.value })}
                   />
                   <small style={{ color: '#888', fontSize: '12px', marginTop: '4px', display: 'block' }}>
-                    Si vence, hay 7 días de gracia antes del corte.
+                    {t('empresarios.edit_modal.expiration_help')}
                   </small>
                 </div>
               </div>
 
               <div className="form-group">
-                <label>Dirección del Gimnasio</label>
+                <label>{t('empresarios.edit_modal.address')}</label>
                 <input
                   type="text"
                   value={formData.gym_address}
@@ -604,7 +615,7 @@ export default function Empresarios() {
                 />
               </div>
               <div className="form-group">
-                <label>Teléfono</label>
+                <label>{t('empresarios.edit_modal.phone')}</label>
                 <input
                   type="text"
                   value={formData.gym_phone}
@@ -614,10 +625,10 @@ export default function Empresarios() {
               </div>
               <div className="modal-actions">
                 <button className="btn-secondary" onClick={() => setShowAddModal(false)}>
-                  Cancelar
+                  {t('empresarios.edit_modal.cancel')}
                 </button>
                 <button className="btn-primary" onClick={handleAddEmpresario}>
-                  Crear Empresario
+                  {t('empresarios.add_modal.create')}
                 </button>
               </div>
             </div>
@@ -627,10 +638,10 @@ export default function Empresarios() {
 
       <ConfirmDialog
         isOpen={showConfirmToggle}
-        title={empresarioToToggle ? `¿${empresarioToToggle.is_active ? 'Desactivar' : 'Activar'} empresario?` : ''}
-        message={empresarioToToggle ? `¿Estás seguro de ${empresarioToToggle.is_active ? 'desactivar' : 'activar'} a ${empresarioToToggle.gym_name}?` : ''}
-        confirmText={empresarioToToggle?.is_active ? 'Desactivar' : 'Activar'}
-        cancelText="Cancelar"
+        title={empresarioToToggle ? (empresarioToToggle.is_active ? t('empresarios.confirm.deactivate_title') : t('empresarios.confirm.activate_title')) : ''}
+        message={empresarioToToggle ? `${empresarioToToggle.is_active ? t('empresarios.confirm.deactivate_msg') : t('empresarios.confirm.activate_msg')} ${empresarioToToggle.gym_name}?` : ''}
+        confirmText={empresarioToToggle?.is_active ? t('empresarios.confirm.deactivate') : t('empresarios.confirm.activate')}
+        cancelText={t('empresarios.confirm.cancel')}
         type="warning"
         onConfirm={confirmToggleStatus}
         onCancel={() => {

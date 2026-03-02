@@ -225,7 +225,7 @@ export default function StepsDetailScreen() {
 
       case 'month':
         return currentDate.getFullYear() === now.getFullYear() &&
-               currentDate.getMonth() === now.getMonth();
+          currentDate.getMonth() === now.getMonth();
 
       case 'year':
         return currentDate.getFullYear() === now.getFullYear();
@@ -257,7 +257,8 @@ export default function StepsDetailScreen() {
       if (remaining > 0) {
         return t('stepsDetail.status.remaining', {
           remaining: remaining.toLocaleString(locale),
-        });      }
+        });
+      }
       return t('stepsDetail.status.achieved');
     }
     return t('stepsDetail.status.totalSoFar', {
@@ -433,7 +434,7 @@ export default function StepsDetailScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard' as any)}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/progress' as any)}>
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{t('stepsDetail.title')}</Text>

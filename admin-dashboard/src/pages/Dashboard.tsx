@@ -17,11 +17,11 @@ import {
   type DashboardAlert
 } from '../services/adminService';
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
-import './Dashboard.css';
-
+import { useTranslation } from 'react-i18next';
 import './Dashboard.css';
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [userRole, setUserRole] = useState<'admin' | 'socio' | 'empresario' | 'user' | null>(null);
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -124,8 +124,8 @@ export default function Dashboard() {
     <div className="dashboard">
       <header className="dashboard-header">
         <div>
-          <h1>Dashboard</h1>
-          <p className="subtitle">Resumen general de Luxor Fitness</p>
+          <h1>{t('sidebar.dashboard')}</h1>
+          <p className="subtitle">Luxor Fitness</p>
         </div>
 
         <div className="header-actions">
@@ -133,7 +133,7 @@ export default function Dashboard() {
 
           {userRole === 'admin' && (
             <div className="admin-badge">
-              🛡️ Modo Administrador
+              🛡️ {t('dashboard.admin_mode')}
             </div>
           )}
         </div>
@@ -142,22 +142,22 @@ export default function Dashboard() {
       {/* ADMIN SPECIFIC METRICS */}
       {userRole === 'admin' && adminStats && (
         <div className="admin-kpi-section">
-          <h2>📊 Métricas Clave (Admin)</h2>
+          <h2>📊 {t('dashboard.kpis')}</h2>
           <div className="stats-grid">
             <StatCard
-              title="Ingresos Hoy"
+              title={t('dashboard.revenue_today')}
               value={`$${adminStats.revenue_today?.toFixed(2) || '0.00'}`}
               icon="💰"
               color="#00D4AA"
             />
             <StatCard
-              title="Socios Activos"
+              title={t('dashboard.active_partners')}
               value={adminStats.active_partners || 0}
               icon="🤝"
               color="#FFD54A"
             />
             <StatCard
-              title="Tasa de Cancelación (Mes)"
+              title={t('dashboard.churn_rate')}
               value={`${adminStats.churn_rate?.toFixed(1) || '0.0'}%`}
               icon="📉"
               color="#FF5722"
@@ -169,7 +169,7 @@ export default function Dashboard() {
       {/* Alertas y Notificaciones */}
       {alerts.length > 0 && (
         <div className="alerts-section">
-          <h2>📢 Alertas y Notificaciones</h2>
+          <h2>📢 {t('dashboard.alerts')}</h2>
           <div className="alerts-grid">
             {alerts.map((alert) => (
               <div key={alert.id} className={`alert alert-${alert.type}`}>
@@ -192,10 +192,10 @@ export default function Dashboard() {
       {/* Comparativa Mes a Mes */}
       {comparison && (
         <div className="comparison-section">
-          <h2>📊 Comparativa Mes a Mes</h2>
+          <h2>📊 {t('dashboard.comparison.title')}</h2>
           <div className="comparison-cards">
             <div className="comparison-card">
-              <h3>Usuarios</h3>
+              <h3>{t('dashboard.comparison.users')}</h3>
               <div className="comparison-values">
                 <div className="comparison-item">
                   <span className="comparison-label">Mes Actual</span>
@@ -212,7 +212,7 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="comparison-card">
-              <h3>Ingresos</h3>
+              <h3>{t('dashboard.comparison.revenue')}</h3>
               <div className="comparison-values">
                 <div className="comparison-item">
                   <span className="comparison-label">Mes Actual</span>
@@ -236,13 +236,13 @@ export default function Dashboard() {
       {stats && (
         <div className="stats-grid">
           <StatCard
-            title="Total de Usuarios"
+            title={t('dashboard.stats_users')}
             value={stats.total_users}
             icon="👥"
             color="#00D4AA"
           />
           <StatCard
-            title="Nuevos (7 días)"
+            title={t('dashboard.new_user')}
             value={stats.new_users_7d}
             icon="🆕"
             color="#4CAF50"
@@ -303,7 +303,7 @@ export default function Dashboard() {
           {/* ADMIN ONLY: Revenue Split */}
           {userRole === 'admin' && adminStats && (
             <div className="chart-section half-width">
-              <h2>🪙 Origen de Ingresos</h2>
+              <h2>🪙 {t('dashboard.comparison.sales')}</h2>
               <div className="chart-container">
                 <ResponsiveContainer width="100%" height={250}>
                   <PieChart>
@@ -383,19 +383,19 @@ export default function Dashboard() {
       )}
 
       <div className="quick-actions">
-        <h2>Acciones Rápidas</h2>
+        <h2>{t('dashboard.quick_actions')}</h2>
         <div className="actions-grid">
           <Link to="/users" className="action-card">
             <span className="action-icon">👥</span>
-            <h3>Usuarios</h3>
+            <h3>{t('sidebar.users')}</h3>
           </Link>
           <Link to="/stats" className="action-card">
             <span className="action-icon">📊</span>
-            <h3>Estadísticas</h3>
+            <h3>{t('sidebar.stats')}</h3>
           </Link>
           <Link to="/partners" className="action-card">
             <span className="action-icon">🤝</span>
-            <h3>Socios</h3>
+            <h3>{t('sidebar.partners')}</h3>
           </Link>
         </div>
       </div>

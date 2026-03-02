@@ -6,6 +6,7 @@ import {
   getEmpresarioUsers,
   type GymMember
 } from '../services/adminService';
+import { useTranslation } from 'react-i18next';
 import './Mensajeria.css';
 
 interface MessageHistory {
@@ -20,6 +21,7 @@ interface MessageHistory {
 
 export default function Mensajeria() {
   const { user } = useUser();
+  const { t } = useTranslation();
   const [senderName, setSenderName] = useState('');
   const [messageTitle, setMessageTitle] = useState('');
   const [messageBody, setMessageBody] = useState('');
@@ -234,37 +236,37 @@ export default function Mensajeria() {
   return (
     <div className="mensajeria-page">
       <header className="page-header">
-        <h1>📧 Mensajería</h1>
-        <p className="subtitle">Envía mensajes a tus miembros</p>
+        <h1>{t('mensajeria.title')}</h1>
+        <p className="subtitle">{t('mensajeria.subtitle')}</p>
       </header>
 
       <div className="mensajeria-container">
         {/* Formulario de Envío */}
         <section className="message-form-section">
-          <h2>✉️ Nuevo Mensaje</h2>
+          <h2>{t('mensajeria.compose.title')}</h2>
 
           {/* Nombre del Remitente */}
           <div className="form-group">
-            <label htmlFor="sender-name">Nombre del Remitente</label>
+            <label htmlFor="sender-name">{t('mensajeria.compose.sender')}</label>
             <input
               id="sender-name"
               type="text"
               className="form-input"
-              placeholder='Ej: "Rocket Gym"'
+              placeholder={t('mensajeria.compose.sender_placeholder')}
               value={senderName}
               onChange={(e) => setSenderName(e.target.value)}
             />
-            <p className="form-hint">Este nombre aparecerá como el remitente del mensaje</p>
+            <p className="form-hint">{t('mensajeria.compose.sender_hint')}</p>
           </div>
 
           {/* Título del Mensaje */}
           <div className="form-group">
-            <label htmlFor="message-title">Título</label>
+            <label htmlFor="message-title">{t('mensajeria.compose.msg_title')}</label>
             <input
               id="message-title"
               type="text"
               className="form-input"
-              placeholder='Ej: "Horarios especiales esta semana"'
+              placeholder={t('mensajeria.compose.title_placeholder')}
               value={messageTitle}
               onChange={(e) => setMessageTitle(e.target.value)}
             />
@@ -272,12 +274,12 @@ export default function Mensajeria() {
 
           {/* Cuerpo del Mensaje */}
           <div className="form-group">
-            <label htmlFor="message-body">Mensaje</label>
+            <label htmlFor="message-body">{t('mensajeria.compose.body')}</label>
             <div className="message-input-container">
               <textarea
                 id="message-body"
                 className="form-textarea"
-                placeholder="Escribe tu mensaje aquí..."
+                placeholder={t('mensajeria.compose.body_placeholder')}
                 rows={6}
                 value={messageBody}
                 onChange={(e) => setMessageBody(e.target.value)}
@@ -290,7 +292,7 @@ export default function Mensajeria() {
                     onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                     title="Agregar emoji"
                   >
-                    😊 Emojis
+                    {t('mensajeria.compose.emojis')}
                   </button>
                   <button
                     type="button"
@@ -298,10 +300,10 @@ export default function Mensajeria() {
                     onClick={openLinkModal}
                     title="Insertar link"
                   >
-                    🔗 Link
+                    {t('mensajeria.compose.link')}
                   </button>
                 </div>
-                <p className="form-hint">{messageBody.length} caracteres</p>
+                <p className="form-hint">{t('mensajeria.compose.chars', { count: messageBody.length })}</p>
               </div>
 
               {/* Panel de Emojis */}
@@ -326,19 +328,19 @@ export default function Mensajeria() {
 
           {/* Tipo de Destinatarios */}
           <div className="form-group">
-            <label>Destinatarios</label>
+            <label>{t('mensajeria.compose.recipients')}</label>
             <div className="recipient-type-selector">
               <button
                 className={`recipient-btn ${recipientType === 'all' ? 'active' : ''}`}
                 onClick={() => setRecipientType('all')}
               >
-                👥 Todos los Miembros ({allMembers.length})
+                {t('mensajeria.compose.all_members', { count: allMembers.length })}
               </button>
               <button
                 className={`recipient-btn ${recipientType === 'selected' ? 'active' : ''}`}
                 onClick={() => setRecipientType('selected')}
               >
-                ✅ Seleccionar
+                {t('mensajeria.compose.selected')}
               </button>
             </div>
           </div>
@@ -350,16 +352,16 @@ export default function Mensajeria() {
                 <input
                   type="text"
                   className="search-input"
-                  placeholder="Buscar por nombre o email..."
+                  placeholder={t('mensajeria.compose.search_placeholder')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
                 <div className="selection-actions">
                   <button className="btn-secondary" onClick={selectAll}>
-                    Seleccionar Todos
+                    {t('mensajeria.compose.select_all')}
                   </button>
                   <button className="btn-secondary" onClick={deselectAll}>
-                    Deseleccionar Todos
+                    {t('mensajeria.compose.deselect_all')}
                   </button>
                 </div>
               </div>
@@ -375,8 +377,8 @@ export default function Mensajeria() {
                       {selectedMembers.has(member.user_id) && '✓'}
                     </div>
                     <div className="member-info">
-                      <div className="member-name">{member.name || 'Sin nombre'}</div>
-                      <div className="member-email">{member.email || 'Sin email'}</div>
+                      <div className="member-name">{member.name || t('mensajeria.compose.no_name')}</div>
+                      <div className="member-email">{member.email || t('mensajeria.compose.no_email')}</div>
                     </div>
                   </div>
                 ))}
@@ -387,7 +389,7 @@ export default function Mensajeria() {
           {/* Vista Previa */}
           {senderName && messageTitle && messageBody && (
             <div className="message-preview">
-              <h3>👁️ Vista Previa</h3>
+              <h3>{t('mensajeria.compose.preview')}</h3>
               <div className="preview-notification">
                 <div className="preview-header">
                   <div className="preview-icon">🔔</div>
@@ -396,7 +398,7 @@ export default function Mensajeria() {
                 <div className="preview-title">{messageTitle}</div>
                 <div className="preview-body">{renderMessageWithLinks(messageBody)}</div>
                 <div className="preview-footer">
-                  Ahora · {getRecipientCount()} destinatario(s)
+                  {t('mensajeria.compose.preview_footer', { count: getRecipientCount() })}
                 </div>
               </div>
             </div>
@@ -409,7 +411,7 @@ export default function Mensajeria() {
               onClick={handleSendButtonClick}
               disabled={sending || !senderName || !messageTitle || !messageBody || (recipientType === 'selected' && selectedMembers.size === 0)}
             >
-              {sending ? '📤 Enviando...' : `📨 Enviar a ${getRecipientCount()} miembro(s)`}
+              {sending ? t('mensajeria.compose.sending') : t('mensajeria.compose.send_btn', { count: getRecipientCount() })}
             </button>
           </div>
         </section>
@@ -417,7 +419,7 @@ export default function Mensajeria() {
         {/* Historial de Mensajes */}
         <section className="history-section">
           <div className="history-header">
-            <h2>📜 Historial de Mensajes</h2>
+            <h2>{t('mensajeria.history.title')}</h2>
             <button
               className="btn-refresh"
               onClick={() => {
@@ -425,16 +427,16 @@ export default function Mensajeria() {
                 if (!showHistory) loadHistory();
               }}
             >
-              {showHistory ? '🔽 Ocultar' : '🔼 Mostrar'}
+              {showHistory ? t('mensajeria.history.hide') : t('mensajeria.history.show')}
             </button>
           </div>
 
           {showHistory && (
             <>
               {loadingHistory ? (
-                <div className="loading-state">Cargando historial...</div>
+                <div className="loading-state">{t('mensajeria.history.loading')}</div>
               ) : messageHistory.length === 0 ? (
-                <div className="empty-state">No has enviado mensajes aún</div>
+                <div className="empty-state">{t('mensajeria.history.empty')}</div>
               ) : (
                 <div className="history-list">
                   {messageHistory.map(msg => (
@@ -455,10 +457,10 @@ export default function Mensajeria() {
                       <div className="history-body">{msg.message_body}</div>
                       <div className="history-footer">
                         <span className="history-recipients">
-                          👥 {msg.recipient_count} destinatario(s)
+                          {t('mensajeria.history.recipients', { count: msg.recipient_count })}
                         </span>
                         <span className="history-type">
-                          {msg.recipient_type === 'all' ? '📢 Todos' : '✅ Seleccionados'}
+                          {msg.recipient_type === 'all' ? t('mensajeria.history.type_all') : t('mensajeria.history.type_selected')}
                         </span>
                       </div>
                     </div>
@@ -475,7 +477,7 @@ export default function Mensajeria() {
         <div className="modal-overlay" onClick={() => setShowLinkModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>🔗 Insertar Link</h3>
+              <h3>{t('mensajeria.link_modal.title')}</h3>
               <button
                 className="modal-close-btn"
                 onClick={() => setShowLinkModal(false)}
@@ -485,24 +487,24 @@ export default function Mensajeria() {
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label htmlFor="link-text">Texto del enlace</label>
+                <label htmlFor="link-text">{t('mensajeria.link_modal.text_label')}</label>
                 <input
                   id="link-text"
                   type="text"
                   className="form-input"
-                  placeholder='Ej: "Ver horarios"'
+                  placeholder={t('mensajeria.link_modal.text_placeholder')}
                   value={linkText}
                   onChange={(e) => setLinkText(e.target.value)}
                   autoFocus
                 />
               </div>
               <div className="form-group">
-                <label htmlFor="link-url">URL</label>
+                <label htmlFor="link-url">{t('mensajeria.link_modal.url_label')}</label>
                 <input
                   id="link-url"
                   type="url"
                   className="form-input"
-                  placeholder="https://ejemplo.com"
+                  placeholder={t('mensajeria.link_modal.url_placeholder')}
                   value={linkUrl}
                   onChange={(e) => setLinkUrl(e.target.value)}
                 />
@@ -517,14 +519,14 @@ export default function Mensajeria() {
                   setLinkUrl('');
                 }}
               >
-                Cancelar
+                {t('mensajeria.link_modal.cancel')}
               </button>
               <button
                 className="btn-confirm"
                 onClick={insertLink}
                 disabled={!linkText.trim() || !linkUrl.trim()}
               >
-                Insertar Link
+                {t('mensajeria.link_modal.insert')}
               </button>
             </div>
           </div>
@@ -536,7 +538,7 @@ export default function Mensajeria() {
         <div className="modal-overlay" onClick={() => setShowConfirmModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3>📨 Confirmar Envío</h3>
+              <h3>{t('mensajeria.confirm.title')}</h3>
               <button
                 className="modal-close-btn"
                 onClick={() => setShowConfirmModal(false)}
@@ -547,24 +549,24 @@ export default function Mensajeria() {
             <div className="modal-body">
               <div className="confirm-details">
                 <div className="confirm-item">
-                  <span className="confirm-label">De:</span>
+                  <span className="confirm-label">{t('mensajeria.confirm.from')}</span>
                   <span className="confirm-value">{senderName}</span>
                 </div>
                 <div className="confirm-item">
-                  <span className="confirm-label">Título:</span>
+                  <span className="confirm-label">{t('mensajeria.confirm.title_label')}</span>
                   <span className="confirm-value">{messageTitle}</span>
                 </div>
                 <div className="confirm-item">
-                  <span className="confirm-label">Destinatarios:</span>
+                  <span className="confirm-label">{t('mensajeria.confirm.recipients_label')}</span>
                   <span className="confirm-value">{getRecipientCount()} miembro(s)</span>
                 </div>
                 <div className="confirm-message-preview">
-                  <p className="preview-label">Mensaje:</p>
+                  <p className="preview-label">{t('mensajeria.confirm.msg_label')}</p>
                   <p className="preview-text">{renderMessageWithLinks(messageBody)}</p>
                 </div>
               </div>
               <div className="confirm-warning">
-                <p>⚠️ Este mensaje se enviará como notificación a los miembros seleccionados y no podrá ser eliminado.</p>
+                <p>{t('mensajeria.confirm.warning')}</p>
               </div>
             </div>
             <div className="modal-footer">
@@ -572,13 +574,13 @@ export default function Mensajeria() {
                 className="btn-cancel"
                 onClick={() => setShowConfirmModal(false)}
               >
-                Cancelar
+                {t('mensajeria.confirm.cancel')}
               </button>
               <button
                 className="btn-confirm"
                 onClick={confirmSendMessage}
               >
-                Confirmar y Enviar
+                {t('mensajeria.confirm.confirm')}
               </button>
             </div>
           </div>

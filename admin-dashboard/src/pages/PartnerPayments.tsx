@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { supabase } from '../services/adminService';
+import { useTranslation } from 'react-i18next';
 import './PartnerPayments.css';
 
 interface PartnerPayment {
@@ -54,6 +55,7 @@ interface PartnerPaymentsProps {
 }
 
 export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
+  const { t } = useTranslation();
   const { user } = useUser();
   const { partnerId } = useParams<{ partnerId?: string }>();
   const navigate = useNavigate();
@@ -294,7 +296,7 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
   if (loading) {
     return (
       <div className="partner-payments-page">
-        <div className="loading">Cargando...</div>
+        <div className="loading">{t('partner_payments.loading')}</div>
       </div>
     );
   }
@@ -303,8 +305,8 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
     <div className="partner-payments-page">
       <header className="page-header">
         <div>
-          <h1>Control de Pagos y Comisiones</h1>
-          <p className="subtitle">Gestiona pagos y comisiones de socios</p>
+          <h1>{t('partner_payments.title')}</h1>
+          <p className="subtitle">{t('partner_payments.subtitle')}</p>
         </div>
         {selectedPartner && !isSocioView && (
           <button className="btn-primary" onClick={() => {
@@ -322,7 +324,7 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
             });
             setShowPaymentModal(true);
           }}>
-            + Registrar Pago
+            + {t('partner_payments.register_payment')}
           </button>
         )}
       </header>
@@ -330,11 +332,11 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
       <div className="payments-layout" style={isSocioView ? { display: 'block' } : {}}>
         {!isSocioView && (
           <div className="partners-sidebar">
-            <h3>Socios</h3>
+            <h3>{t('partner_payments.sidebar.title')}</h3>
             <div className="search-box">
               <input
                 type="text"
-                placeholder="Buscar socio (nombre o email)..."
+                placeholder={t('partner_payments.sidebar.search')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -357,11 +359,11 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
                   </div>
                   <div className="partner-card-stats">
                     <div>
-                      <span className="stat-label">Activos:</span>
+                      <span className="stat-label">{t('partner_payments.sidebar.active')}</span>
                       <span className="stat-value">{partner.active_subscriptions}</span>
                     </div>
                     <div>
-                      <span className="stat-label">Pagado:</span>
+                      <span className="stat-label">{t('partner_payments.sidebar.paid')}</span>
                       <span className="stat-value">${partner.total_paid.toFixed(2)}</span>
                     </div>
                   </div>
@@ -375,7 +377,7 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
           {selectedPartner ? (
             <>
               <div className="earnings-summary">
-                <h2>Resumen de {selectedPartner.name || selectedPartner.email}</h2>
+                <h2>{t('partner_payments.summary.title')} {selectedPartner.name || selectedPartner.email}</h2>
 
                 {/* DETALLE DE GANANCIAS NIVEL 1 y 2 */}
                 {selectedPartner.detailed_stats ? (
@@ -384,15 +386,15 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
                     {/* NIVEL 1: DIRECTOS */}
                     <div className="stats-box">
                       <h3 className="stats-title-direct">
-                        <span>Nivel 1 (Directos)</span>
+                        <span>{t('partner_payments.summary.level_1')}</span>
                         <span>${selectedPartner.detailed_stats.earnings_direct.toFixed(2)}</span>
                       </h3>
                       <div className="stats-row" style={{ marginTop: '12px' }}>
-                        <span className="stats-label">Mensuales ({selectedPartner.detailed_stats.direct_active_monthly})</span>
+                        <span className="stats-label">{t('partner_payments.summary.monthly')} ({selectedPartner.detailed_stats.direct_active_monthly})</span>
                         <span className="stats-value">x ${selectedPartner.detailed_stats.comm_direct_monthly.toFixed(2)} = ${(selectedPartner.detailed_stats.direct_active_monthly * selectedPartner.detailed_stats.comm_direct_monthly).toFixed(2)}</span>
                       </div>
                       <div className="stats-row">
-                        <span className="stats-label">Anuales ({selectedPartner.detailed_stats.direct_active_annual})</span>
+                        <span className="stats-label">{t('partner_payments.summary.annual')} ({selectedPartner.detailed_stats.direct_active_annual})</span>
                         <span className="stats-value">x ${selectedPartner.detailed_stats.comm_direct_annual.toFixed(2)} = ${(selectedPartner.detailed_stats.direct_active_annual * selectedPartner.detailed_stats.comm_direct_annual).toFixed(2)}</span>
                       </div>
                     </div>
@@ -400,28 +402,28 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
                     {/* NIVEL 2: INDIRECTOS */}
                     <div className="stats-box">
                       <h3 className="stats-title-indirect">
-                        <span>Nivel 2 (Referidos)</span>
+                        <span>{t('partner_payments.summary.level_2')}</span>
                         <span>${selectedPartner.detailed_stats.earnings_indirect.toFixed(2)}</span>
                       </h3>
                       <div className="stats-row" style={{ marginTop: '12px' }}>
-                        <span className="stats-label">Mensuales ({selectedPartner.detailed_stats.indirect_active_monthly})</span>
+                        <span className="stats-label">{t('partner_payments.summary.monthly')} ({selectedPartner.detailed_stats.indirect_active_monthly})</span>
                         <span className="stats-value">x ${selectedPartner.detailed_stats.comm_indirect_monthly.toFixed(2)} = ${(selectedPartner.detailed_stats.indirect_active_monthly * selectedPartner.detailed_stats.comm_indirect_monthly).toFixed(2)}</span>
                       </div>
                       <div className="stats-row">
-                        <span className="stats-label">Anuales ({selectedPartner.detailed_stats.indirect_active_annual})</span>
+                        <span className="stats-label">{t('partner_payments.summary.annual')} ({selectedPartner.detailed_stats.indirect_active_annual})</span>
                         <span className="stats-value">x ${selectedPartner.detailed_stats.comm_indirect_annual.toFixed(2)} = ${(selectedPartner.detailed_stats.indirect_active_annual * selectedPartner.detailed_stats.comm_indirect_annual).toFixed(2)}</span>
                       </div>
                     </div>
 
                   </div>
                 ) : (
-                  <div className="loading" style={{ padding: '20px' }}>Calculando desglose...</div>
+                  <div className="loading" style={{ padding: '20px' }}>{t('partner_payments.summary.calculating')}</div>
                 )}
 
                 {/* TOTALES */}
                 <div className="summary-cards">
                   <div className="summary-card">
-                    <div className="summary-label">Total Suscripciones</div>
+                    <div className="summary-label">{t('partner_payments.summary.total_subs')}</div>
                     <div className="summary-value">
                       {selectedPartner.detailed_stats
                         ? (selectedPartner.detailed_stats.direct_active_monthly + selectedPartner.detailed_stats.direct_active_annual + selectedPartner.detailed_stats.indirect_active_monthly + selectedPartner.detailed_stats.indirect_active_annual)
@@ -429,16 +431,16 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
                     </div>
                   </div>
                   <div className="summary-card">
-                    <div className="summary-label">Total Pagado Histórico</div>
+                    <div className="summary-label">{t('partner_payments.summary.total_paid')}</div>
                     <div className="summary-value">${selectedPartner.total_paid.toFixed(2)}</div>
                   </div>
                   <div className="summary-card highlight">
-                    <div className="summary-label">Generación Mensual Actual</div>
+                    <div className="summary-label">{t('partner_payments.summary.monthly_generation')}</div>
                     <div className="summary-value">
                       ${calculatePending(selectedPartner).toFixed(2)}
                     </div>
                     <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>
-                      Total nivel 1 + nivel 2
+                      {t('partner_payments.summary.total_l1_l2')}
                     </div>
                   </div>
                 </div>
@@ -446,27 +448,27 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
 
               {/* HISTORIAL DE COMISIONES (NUEVO) */}
               <div className="payments-table-container">
-                <h3>Historial de Transacciones (Comisiones)</h3>
+                <h3>{t('partner_payments.history_commissions.title')}</h3>
                 <CommissionHistoryTable partnerUserId={selectedPartner.user_id} />
               </div>
 
               <div className="payments-table-container">
-                <h3>Historial de Pagos Recibidos</h3>
+                <h3>{t('partner_payments.history_payments.title')}</h3>
                 {payments.length === 0 ? (
                   <div className="empty-state">
-                    <p>No hay pagos registrados para este socio.</p>
+                    <p>{t('partner_payments.history_payments.empty')}</p>
                   </div>
                 ) : (
                   <table className="payments-table">
                     <thead>
                       <tr>
-                        <th>Período</th>
-                        <th>Fecha Pago</th>
-                        <th>Monto</th>
-                        <th>Suscripciones</th>
-                        <th>Referencia</th>
-                        <th>Estado</th>
-                        <th>Acciones</th>
+                        <th>{t('partner_payments.history_payments.period')}</th>
+                        <th>{t('partner_payments.history_payments.date')}</th>
+                        <th>{t('partner_payments.history_payments.amount')}</th>
+                        <th>{t('partner_payments.history_payments.subs')}</th>
+                        <th>{t('partner_payments.history_payments.ref')}</th>
+                        <th>{t('partner_payments.history_payments.status')}</th>
+                        <th>{t('partner_payments.history_payments.actions')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -481,7 +483,7 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
                           <td>{payment.payment_reference || '-'}</td>
                           <td>
                             <span className={`badge badge-${payment.status}`}>
-                              {payment.status === 'paid' ? 'Pagado' : payment.status === 'pending' ? 'Pendiente' : 'Cancelado'}
+                              {payment.status === 'paid' ? t('partner_payments.history_payments.status_paid') : payment.status === 'pending' ? t('partner_payments.history_payments.status_pending') : t('partner_payments.history_payments.status_cancelled')}
                             </span>
                           </td>
                           <td>
@@ -510,13 +512,12 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
         </div>
       </div>
 
-      {/* Modal para registrar pago */}
       {showPaymentModal && selectedPartner && (
         <div className="modal-overlay" onClick={() => setShowPaymentModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>Registrar Pago - {selectedPartner.name || selectedPartner.email}</h2>
+            <h2>{t('partner_payments.form.title')} - {selectedPartner.name || selectedPartner.email}</h2>
             <div className="form-group">
-              <label>Período Inicio *</label>
+              <label>{t('partner_payments.form.period_start')}</label>
               <input
                 type="date"
                 value={paymentForm.period_start}
@@ -525,7 +526,7 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
               />
             </div>
             <div className="form-group">
-              <label>Período Fin *</label>
+              <label>{t('partner_payments.form.period_end')}</label>
               <input
                 type="date"
                 value={paymentForm.period_end}
@@ -534,7 +535,7 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
               />
             </div>
             <div className="form-group">
-              <label>Monto ($) *</label>
+              <label>{t('partner_payments.form.amount')}</label>
               <input
                 type="number"
                 min="0"
@@ -544,25 +545,25 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
                 required
               />
               <p style={{ color: '#888', fontSize: '12px', marginTop: '4px' }}>
-                Monto sugerido basado en la generación actual. Puedes ajustarlo manualmente si pagas un período parcial o diferente.
+                {t('partner_payments.form.amount_desc')}
               </p>
             </div>
             <div className="form-group">
-              <label>Método de Pago</label>
+              <label>{t('partner_payments.form.method')}</label>
               <select
                 value={paymentForm.payment_method}
                 onChange={(e) => setPaymentForm({ ...paymentForm, payment_method: e.target.value })}
               >
-                <option value="">Seleccionar...</option>
-                <option value="bank_transfer">Transferencia Bancaria</option>
-                <option value="paypal">PayPal</option>
-                <option value="stripe">Stripe</option>
-                <option value="check">Cheque</option>
-                <option value="other">Otro</option>
+                <option value="">{t('partner_payments.form.select')}</option>
+                <option value="bank_transfer">{t('partner_payments.form.transfer')}</option>
+                <option value="paypal">{t('partner_payments.form.paypal')}</option>
+                <option value="stripe">{t('partner_payments.form.stripe')}</option>
+                <option value="check">{t('partner_payments.form.check')}</option>
+                <option value="other">{t('partner_payments.form.other')}</option>
               </select>
             </div>
             <div className="form-group">
-              <label>Referencia/Número de Transacción</label>
+              <label>{t('partner_payments.form.ref')}</label>
               <input
                 type="text"
                 value={paymentForm.payment_reference}
@@ -571,20 +572,20 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
               />
             </div>
             <div className="form-group">
-              <label>Notas</label>
+              <label>{t('partner_payments.form.notes')}</label>
               <textarea
                 value={paymentForm.notes}
                 onChange={(e) => setPaymentForm({ ...paymentForm, notes: e.target.value })}
                 rows={3}
-                placeholder="Notas adicionales sobre el pago..."
+                placeholder=""
               />
             </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowPaymentModal(false)}>
-                Cancelar
+                {t('partner_payments.form.cancel')}
               </button>
               <button className="btn-primary" onClick={handleCreatePayment}>
-                Registrar Pago
+                {t('partner_payments.form.register')}
               </button>
             </div>
           </div>
@@ -595,6 +596,7 @@ export default function PartnerPayments({ viewMode }: PartnerPaymentsProps) {
 }
 
 function CommissionHistoryTable({ partnerUserId }: { partnerUserId: string }) {
+  const { t } = useTranslation();
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -618,18 +620,18 @@ function CommissionHistoryTable({ partnerUserId }: { partnerUserId: string }) {
     }
   }
 
-  if (loading) return <div className="loading" style={{ padding: '10px' }}>Cargando historial...</div>;
-  if (history.length === 0) return <div className="empty-state" style={{ padding: '20px' }}>No hay transacciones registradas.</div>;
+  if (loading) return <div className="loading" style={{ padding: '10px' }}>{t('partner_payments.history_commissions.loading')}</div>;
+  if (history.length === 0) return <div className="empty-state" style={{ padding: '20px' }}>{t('partner_payments.history_commissions.empty')}</div>;
 
   return (
     <table className="payments-table">
       <thead>
         <tr>
-          <th>Fecha</th>
-          <th>Usuario Origen</th>
-          <th>Nivel</th>
-          <th>Detalle</th>
-          <th>Comisión</th>
+          <th>{t('partner_payments.history_commissions.date')}</th>
+          <th>{t('partner_payments.history_commissions.origin_user')}</th>
+          <th>{t('partner_payments.history_commissions.level')}</th>
+          <th>{t('partner_payments.history_commissions.detail')}</th>
+          <th>{t('partner_payments.history_commissions.commission')}</th>
         </tr>
       </thead>
       <tbody>

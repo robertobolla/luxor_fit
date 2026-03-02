@@ -11,16 +11,21 @@ interface ConfirmDialogProps {
   onCancel: () => void;
 }
 
+import { useTranslation } from 'react-i18next';
+
 export function ConfirmDialog({
   isOpen,
   title,
   message,
-  confirmText = 'Confirmar',
-  cancelText = 'Cancelar',
+  confirmText,
+  cancelText,
   type = 'info',
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
+  const defaultConfirmText = confirmText || t('confirm_dialog.confirm');
+  const defaultCancelText = cancelText || t('confirm_dialog.cancel');
   if (!isOpen) return null;
 
   return (
@@ -37,13 +42,13 @@ export function ConfirmDialog({
             className="confirm-dialog-button confirm-dialog-button-cancel"
             onClick={onCancel}
           >
-            {cancelText}
+            {defaultCancelText}
           </button>
           <button
             className={`confirm-dialog-button confirm-dialog-button-confirm confirm-dialog-button-${type}`}
             onClick={onConfirm}
           >
-            {confirmText}
+            {defaultConfirmText}
           </button>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { supabase } from '../services/adminService';
 import { useToastContext } from '../contexts/ToastContext';
+import { useTranslation } from 'react-i18next';
 import './AdminMessaging.css';
 
 type AudienceType = 'org_selected' | 'org_all' | 'app_all' | 'app_selected';
@@ -26,6 +27,7 @@ interface MessageHistory {
 export default function AdminMessaging() {
     const { user } = useUser();
     const toast = useToastContext();
+    const { t } = useTranslation();
 
     // Estados
     const [audienceType, setAudienceType] = useState<AudienceType>('org_all');
@@ -193,21 +195,21 @@ export default function AdminMessaging() {
 
     function getAudienceLabel(): string {
         switch (audienceType) {
-            case 'org_all': return 'Todos los miembros de mi organización';
-            case 'org_selected': return 'Miembros seleccionados de mi organización';
-            case 'app_all': return 'Todos los usuarios de la app';
-            case 'app_selected': return 'Usuarios seleccionados de la app';
+            case 'org_all': return t('admin_messaging.audience_labels.org_all');
+            case 'org_selected': return t('admin_messaging.audience_labels.org_selected');
+            case 'app_all': return t('admin_messaging.audience_labels.app_all');
+            case 'app_selected': return t('admin_messaging.audience_labels.app_selected');
         }
     }
 
     async function handleSendMessage() {
         if (!messageTitle.trim() || !messageBody.trim()) {
-            toast.warning('El título y mensaje son requeridos');
+            toast.warning(t('admin_messaging.alerts.required'));
             return;
         }
 
         if (getRecipientCount() === 0) {
-            toast.warning('No hay destinatarios seleccionados');
+            toast.warning(t('admin_messaging.alerts.no_recipients'));
             return;
         }
 
@@ -289,13 +291,13 @@ export default function AdminMessaging() {
                 console.log('Push notification result:', pushResult);
 
                 if (pushResult.sent > 0) {
-                    toast.success(`Mensaje enviado a ${recipientIds.length} usuarios (${pushResult.sent} push enviados)`);
+                    toast.success(t('admin_messaging.alerts.success_push', { count: recipientIds.length, push: pushResult.sent }));
                 } else {
-                    toast.success(`Mensaje enviado a ${recipientIds.length} usuarios`);
+                    toast.success(t('admin_messaging.alerts.success', { count: recipientIds.length }));
                 }
             } catch (pushError) {
                 console.error('Error sending push notifications:', pushError);
-                toast.success(`Mensaje enviado a ${recipientIds.length} usuarios (push notifications no disponibles)`);
+                toast.success(t('admin_messaging.alerts.success_no_push', { count: recipientIds.length }));
             }
             setShowConfirmModal(false);
             setMessageTitle('');
@@ -304,7 +306,7 @@ export default function AdminMessaging() {
             loadData();
         } catch (error: any) {
             console.error('Error enviando mensaje:', error);
-            toast.error(error.message || 'Error al enviar mensaje');
+            toast.error(error.message || t('admin_messaging.alerts.error'));
         } finally {
             setSending(false);
         }
@@ -321,26 +323,26 @@ export default function AdminMessaging() {
         <div className="admin-messaging-page">
             <header className="page-header">
                 <div>
-                    <h1>Mensajería</h1>
-                    <p className="subtitle">Envía mensajes a tus usuarios</p>
+                    <h1>{t('admin_messaging.title')}</h1>
+                    <p className="subtitle">{t('admin_messaging.subtitle')}</p>
                 </div>
             </header>
 
             <div className="messaging-container">
                 {/* Panel de Composición */}
                 <div className="compose-panel">
-                    <h3>Nuevo Mensaje</h3>
+                    <h3>{t('admin_messaging.compose.title')}</h3>
 
                     {/* Selector de Audiencia */}
                     <div className="form-group">
-                        <label>Audiencia</label>
+                        <label>{t('admin_messaging.compose.audience')}</label>
                         <div className="audience-options">
                             <button
                                 className={`audience-btn ${audienceType === 'org_all' ? 'active' : ''}`}
                                 onClick={() => { setAudienceType('org_all'); setSelectedUserIds(new Set()); }}
                             >
                                 <span className="icon">👥</span>
-                                <span className="label">Toda mi organización</span>
+                                <span className="label">{t('admin_messaging.audience_labels.org_all')}</span>
                                 <span className="count">{orgMembers.length}</span>
                             </button>
                             <button
@@ -348,14 +350,14 @@ export default function AdminMessaging() {
                                 onClick={() => { setAudienceType('org_selected'); setSelectedUserIds(new Set()); }}
                             >
                                 <span className="icon">✓</span>
-                                <span className="label">Seleccionar de mi org</span>
+                                <span className="label">{t('admin_messaging.audience_labels.select_org')}</span>
                             </button>
                             <button
                                 className={`audience-btn ${audienceType === 'app_all' ? 'active' : ''}`}
                                 onClick={() => { setAudienceType('app_all'); setSelectedUserIds(new Set()); }}
                             >
                                 <span className="icon">🌍</span>
-                                <span className="label">Toda la app</span>
+                                <span className="label">{t('admin_messaging.audience_labels.app_all')}</span>
                                 <span className="count">{allAppUsers.length}</span>
                             </button>
                             <button
@@ -363,7 +365,7 @@ export default function AdminMessaging() {
                                 onClick={() => { setAudienceType('app_selected'); setSelectedUserIds(new Set()); }}
                             >
                                 <span className="icon">🔍</span>
-                                <span className="label">Buscar en toda la app</span>
+                                <span className="label">{t('admin_messaging.audience_labels.search_app')}</span>
                             </button>
                         </div>
                     </div>
@@ -374,14 +376,14 @@ export default function AdminMessaging() {
                             <div className="selector-header">
                                 <input
                                     type="text"
-                                    placeholder="Buscar usuario..."
+                                    placeholder={t('admin_messaging.compose.search_placeholder')}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="search-input"
                                 />
                                 <div className="selector-actions">
-                                    <button className="btn-link" onClick={selectAll}>Seleccionar todos</button>
-                                    <button className="btn-link" onClick={deselectAll}>Deseleccionar</button>
+                                    <button className="btn-link" onClick={selectAll}>{t('admin_messaging.compose.select_all')}</button>
+                                    <button className="btn-link" onClick={deselectAll}>{t('admin_messaging.compose.deselect_all')}</button>
                                 </div>
                             </div>
                             <div className="user-list">
@@ -397,39 +399,39 @@ export default function AdminMessaging() {
                                             onChange={() => { }}
                                         />
                                         <div className="user-info">
-                                            <span className="user-name">{u.name || 'Sin nombre'}</span>
+                                            <span className="user-name">{u.name || t('admin_messaging.badges.no_name')}</span>
                                             <span className="user-email">{u.email}</span>
                                         </div>
-                                        {u.is_org_member && <span className="org-badge">Mi org</span>}
+                                        {u.is_org_member && <span className="org-badge">{t('admin_messaging.badges.my_org')}</span>}
                                     </div>
                                 ))}
                                 {filteredUsers.length === 0 && (
-                                    <p className="no-users">No se encontraron usuarios</p>
+                                    <p className="no-users">{t('admin_messaging.compose.no_users')}</p>
                                 )}
                             </div>
                             <p className="selected-count">
-                                {selectedUserIds.size} usuario(s) seleccionado(s)
+                                {t('admin_messaging.compose.selected_count', { count: selectedUserIds.size })}
                             </p>
                         </div>
                     )}
 
                     {/* Campos del mensaje */}
                     <div className="form-group">
-                        <label>Título del mensaje</label>
+                        <label>{t('admin_messaging.compose.message_title')}</label>
                         <input
                             type="text"
                             value={messageTitle}
                             onChange={(e) => setMessageTitle(e.target.value)}
-                            placeholder="Ej: Nuevo plan de entrenamiento disponible"
+                            placeholder={t('admin_messaging.compose.title_placeholder')}
                         />
                     </div>
 
                     <div className="form-group">
-                        <label>Mensaje</label>
+                        <label>{t('admin_messaging.compose.message_body')}</label>
                         <textarea
                             value={messageBody}
                             onChange={(e) => setMessageBody(e.target.value)}
-                            placeholder="Escribe tu mensaje aquí..."
+                            placeholder={t('admin_messaging.compose.body_placeholder')}
                             rows={5}
                         />
                     </div>
@@ -439,15 +441,15 @@ export default function AdminMessaging() {
                         onClick={() => setShowConfirmModal(true)}
                         disabled={!messageTitle.trim() || !messageBody.trim() || getRecipientCount() === 0}
                     >
-                        Enviar a {getRecipientCount()} usuario(s)
+                        {t('admin_messaging.compose.send_btn', { count: getRecipientCount() })}
                     </button>
                 </div>
 
                 {/* Panel de Historial */}
                 <div className="history-panel">
-                    <h3>Mensajes Enviados</h3>
+                    <h3>{t('admin_messaging.history.title')}</h3>
                     {messageHistory.length === 0 ? (
-                        <p className="no-history">No has enviado mensajes aún</p>
+                        <p className="no-history">{t('admin_messaging.history.no_history')}</p>
                     ) : (
                         <div className="history-list">
                             {messageHistory.map(msg => (
@@ -460,7 +462,7 @@ export default function AdminMessaging() {
                                     </div>
                                     <p className="history-body">{msg.message_body}</p>
                                     <span className="history-recipients">
-                                        Enviado a {msg.recipient_count} usuario(s)
+                                        {t('admin_messaging.history.sent_to', { count: msg.recipient_count })}
                                     </span>
                                 </div>
                             ))}
@@ -473,14 +475,14 @@ export default function AdminMessaging() {
             {showConfirmModal && (
                 <div className="modal-overlay" onClick={() => setShowConfirmModal(false)}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <h2>Confirmar Envío</h2>
+                        <h2>{t('admin_messaging.confirm.title')}</h2>
                         <p style={{ color: '#ccc', marginBottom: '16px' }}>
-                            Estás a punto de enviar un mensaje a:
+                            {t('admin_messaging.confirm.desc')}
                         </p>
                         <div className="confirm-details">
-                            <p><strong>Audiencia:</strong> {getAudienceLabel()}</p>
-                            <p><strong>Destinatarios:</strong> {getRecipientCount()} usuario(s)</p>
-                            <p><strong>Título:</strong> {messageTitle}</p>
+                            <p><strong>{t('admin_messaging.confirm.audience_label')}</strong> {getAudienceLabel()}</p>
+                            <p><strong>{t('admin_messaging.confirm.recipients_label')}</strong> {getRecipientCount()} usuario(s)</p>
+                            <p><strong>{t('admin_messaging.confirm.title_label')}</strong> {messageTitle}</p>
                         </div>
 
                         <div className="modal-actions">
@@ -489,14 +491,14 @@ export default function AdminMessaging() {
                                 onClick={() => setShowConfirmModal(false)}
                                 disabled={sending}
                             >
-                                Cancelar
+                                {t('admin_messaging.confirm.cancel')}
                             </button>
                             <button
                                 className="btn-primary"
                                 onClick={handleSendMessage}
                                 disabled={sending}
                             >
-                                {sending ? 'Enviando...' : 'Confirmar Envío'}
+                                {sending ? t('admin_messaging.confirm.sending') : t('admin_messaging.confirm.confirm')}
                             </button>
                         </div>
                     </div>

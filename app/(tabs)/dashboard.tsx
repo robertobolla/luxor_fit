@@ -20,32 +20,32 @@ import { getHealthDataForDate, requestHealthPermissions, hasHealthPermissions, r
 import { getExerciseDaysThisWeek, getGymDaysThisWeek } from '@/services/exerciseService';
 import { syncHealthDataToSupabase } from '@/services/healthSyncService';
 import DashboardCustomizationModal from '@/components/DashboardCustomizationModal';
-import WeeklyCheckinModal from '@/components/WeeklyCheckinModal';
+
 import { DashboardConfig, MetricType, AVAILABLE_METRICS, PRESET_PRIORITIES } from '@/types/dashboard';
 import { loadDashboardConfig } from '@/services/dashboardPreferences';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
 import { SkeletonDashboard } from '@/components/SkeletonLoaders';
-import { checkIfNeedsWeeklyCheckin, CheckinStatus, shouldShowCheckinReminder, markCheckinReminderShown } from '@/services/weeklyCheckinService';
+
 import { getTotalUnreadChatsCount } from '@/services/chatService';
 import { useUnitsStore, conversions } from '../../src/store/unitsStore';
 
 const { width } = Dimensions.get('window');
 
 // Componente para círculos de progreso
-function ProgressCircle({ 
-  size, 
-  strokeWidth, 
-  progress, 
-  color, 
-  icon, 
-  iconSize = 40 
-}: { 
-  size: number; 
-  strokeWidth: number; 
-  progress: number; 
-  color: string; 
-  icon: any; 
+function ProgressCircle({
+  size,
+  strokeWidth,
+  progress,
+  color,
+  icon,
+  iconSize = 40
+}: {
+  size: number;
+  strokeWidth: number;
+  progress: number;
+  color: string;
+  icon: any;
   iconSize?: number;
 }) {
   const radius = (size - strokeWidth) / 2;
@@ -95,14 +95,12 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
-  const [showCheckinModal, setShowCheckinModal] = useState(false);
-  const [checkinStatus, setCheckinStatus] = useState<CheckinStatus | null>(null);
+
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig | null>(null);
   const { isLoading: isCheckingOnboarding, setLoading: setIsCheckingOnboarding, executeAsync } = useLoadingState(true);
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
-  
-  // Ref para cleanup de timeout del modal de checkin
-  const checkinModalTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+
 
   // Datos de salud
   const [stats, setStats] = useState({
@@ -123,7 +121,7 @@ export default function DashboardScreen() {
     water: 0,
     waterGoal: 2000,
   });
-  
+
   // Fuente de datos de salud
   const [healthDataSource, setHealthDataSource] = useState<'apple_health' | 'google_fit' | 'expo_pedometer' | 'none'>('none');
 
@@ -135,45 +133,37 @@ export default function DashboardScreen() {
         return;
       }
 
-        await executeAsync(async () => {
-          const { data, error } = await supabase
-            .from('user_profiles')
-            .select('id, name, username')
-            .eq('user_id', user.id)
-            .maybeSingle();
+      await executeAsync(async () => {
+        const { data, error } = await supabase
+          .from('user_profiles')
+          .select('id, name, username')
+          .eq('user_id', user.id)
+          .maybeSingle();
 
-          if (error && error.code !== 'PGRST116') {
-            console.error('Error al verificar onboarding:', error);
-          }
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error al verificar onboarding:', error);
+        }
 
-          // El onboarding simplificado solo requiere name y username
-          // fitness_level se recopila más tarde al generar un plan
-          const hasProfile = !!data && !!data.name && !!data.username;
+        // El onboarding simplificado solo requiere name y username
+        // fitness_level se recopila más tarde al generar un plan
+        const hasProfile = !!data && !!data.name && !!data.username;
 
-          if (!hasProfile) {
-            // Redirigir al onboarding si no tiene perfil
-            router.replace('/onboarding');
-          }
-        }, { showError: false });
+        if (!hasProfile) {
+          // Redirigir al onboarding si no tiene perfil
+          router.replace('/onboarding');
+        }
+      }, { showError: false });
     };
 
     checkOnboarding();
   }, [user]);
 
-  // Cleanup: Limpiar timeout del modal de checkin al desmontar
-  useEffect(() => {
-    return () => {
-      if (checkinModalTimeoutRef.current) {
-        clearTimeout(checkinModalTimeoutRef.current);
-        console.log('🧹 Timeout de modal de checkin limpiado al desmontar');
-      }
-    };
-  }, []);
+
 
   // Cargar configuración del dashboard
   useEffect(() => {
     if (isCheckingOnboarding) return; // Esperar a verificar onboarding
-    
+
     const loadConfig = async () => {
       const config = await loadDashboardConfig();
       console.log('📊 Config cargada:', config);
@@ -188,11 +178,11 @@ export default function DashboardScreen() {
   // Solicitar permisos al cargar por primera vez (solo una vez por sesión)
   useEffect(() => {
     if (isCheckingOnboarding || permissionsChecked) return; // Esperar a verificar onboarding y solo verificar una vez
-    
+
     const initializeHealthData = async () => {
       // Primero verificar si ya tiene permisos
       const alreadyHasPermissions = await hasHealthPermissions();
-      
+
       if (!alreadyHasPermissions) {
         // Si no tiene permisos, solicitarlos
         const granted = await requestHealthPermissions();
@@ -202,32 +192,32 @@ export default function DashboardScreen() {
             // Verificar si hay datos cargados
             const healthData = await getHealthDataForDate(new Date());
             const hasData = healthData && (
-              healthData.steps > 0 || 
-              healthData.distance > 0 || 
+              healthData.steps > 0 ||
+              healthData.distance > 0 ||
               healthData.calories > 0
             );
-            
+
             // Solo mostrar el modal si realmente no hay datos
             if (!hasData) {
-          const platformMessage = Platform.OS === 'ios' 
-            ? t('home.iosHealthPermissionsHelp')
-            : t('home.androidHealthPermissionsHelp');
-          
-          Alert.alert(
-            t('home.healthPermissions'),
-            t('home.healthPermissionsMessage') + '\n\n' + platformMessage,
-            [
-              { text: t('common.later'), style: 'cancel' },
-              { 
-                text: t('common.tryAgain'), 
-                onPress: async () => {
-                  resetPermissionsCache();
+              const platformMessage = Platform.OS === 'ios'
+                ? t('home.iosHealthPermissionsHelp')
+                : t('home.androidHealthPermissionsHelp');
+
+              Alert.alert(
+                t('home.healthPermissions'),
+                t('home.healthPermissionsMessage') + '\n\n' + platformMessage,
+                [
+                  { text: t('common.later'), style: 'cancel' },
+                  {
+                    text: t('common.tryAgain'),
+                    onPress: async () => {
+                      resetPermissionsCache();
                       setPermissionsChecked(false); // Permitir re-verificar
-                  await requestHealthPermissions();
-                }
-              }
-            ]
-          );
+                      await requestHealthPermissions();
+                    }
+                  }
+                ]
+              );
             } else {
               console.log('✅ Datos de salud disponibles, permisos funcionando correctamente');
             }
@@ -238,10 +228,10 @@ export default function DashboardScreen() {
       } else {
         console.log('✅ Ya tiene permisos de salud');
       }
-      
+
       setPermissionsChecked(true);
     };
-    
+
     initializeHealthData();
   }, [isCheckingOnboarding, permissionsChecked]);
 
@@ -256,63 +246,22 @@ export default function DashboardScreen() {
     useCallback(() => {
       if (!isCheckingOnboarding && user?.id) {
         loadHealthData();
-        checkWeeklyCheckin();
       }
     }, [isCheckingOnboarding, user])
   );
 
-  // Verificar si necesita hacer check-in semanal
-  const checkWeeklyCheckin = async () => {
-    if (!user?.id) return;
 
-    try {
-      const status = await checkIfNeedsWeeklyCheckin(user.id);
-      setCheckinStatus(status);
-
-      // Solo mostrar el modal si:
-      // 1. Necesita check-in
-      // 2. Estamos viendo "hoy" (no navegando por días pasados)
-      // 3. No se ha mostrado el recordatorio esta semana
-      const isViewingToday = selectedDate.toDateString() === new Date().toDateString();
-      const showReminder = await shouldShowCheckinReminder();
-
-      if (status.needsCheckin && isViewingToday && showReminder) {
-        // Mostrar el modal después de un pequeño delay para mejor UX
-        // Guardar referencia del timeout para poder limpiarlo
-        checkinModalTimeoutRef.current = setTimeout(() => {
-          setShowCheckinModal(true);
-          markCheckinReminderShown();
-          checkinModalTimeoutRef.current = null; // Limpiar referencia después de ejecutar
-        }, 1500);
-      }
-    } catch (error) {
-      console.error('Error verificando check-in semanal:', error);
-    }
-  };
-
-  const handleCheckinComplete = async () => {
-    // Recargar datos después del check-in
-    await loadHealthData();
-    
-    // Mostrar mensaje de éxito
- Alert.alert(
- '✅ ' + t('common.successTitle'),
-  t('nutrition.checkInSuccess'),
-  [{ text: t('common.ok') }]
-);
-
-  };
 
   const loadHealthData = async () => {
     try {
       if (!user?.id) return;
-      
+
       // Obtener datos de Apple Health, Google Fit o Expo Pedometer
       const healthData = await getHealthDataForDate(selectedDate);
-      
+
       // Guardar la fuente de datos
       setHealthDataSource(healthData.source || 'none');
-      
+
       // Sincronizar datos a Supabase para que los entrenadores puedan verlos
       const dateStr = selectedDate.toISOString().split('T')[0];
       if (healthData.steps > 0 || healthData.distance > 0 || healthData.calories > 0) {
@@ -321,13 +270,13 @@ export default function DashboardScreen() {
           // No mostrar error al usuario, es una sincronización en segundo plano
         });
       }
-      
+
       // Obtener días de ejercicio de la semana actual (incluye ejercicios libres y entrenamientos)
       const exerciseDays = await getExerciseDaysThisWeek(user.id);
-      
+
       // Obtener días de gimnasio de la semana actual (solo entrenamientos completados)
       const gymData = await getGymDaysThisWeek(user.id);
-      
+
       // Obtener peso actual del perfil del usuario
       let userWeight = 0;
       try {
@@ -336,12 +285,12 @@ export default function DashboardScreen() {
           .select('weight')
           .eq('user_id', user.id)
           .maybeSingle();
-        
+
         userWeight = profileData?.weight || 0;
       } catch (error) {
         console.error('Error al obtener peso del perfil:', error);
       }
-      
+
       // Log para debugging
       console.log('📊 Datos de salud obtenidos:', {
         pasos: healthData.steps,
@@ -352,7 +301,7 @@ export default function DashboardScreen() {
         fuente: healthData.source,
         fecha: dateStr,
       });
-      
+
       // Actualizar estados con los datos obtenidos
       setStats({
         steps: Math.round(healthData.steps),
@@ -381,7 +330,7 @@ export default function DashboardScreen() {
       setHealthDataSource('none');
     }
   };
-  
+
   // Función para obtener el texto de la fuente de datos
   const getHealthSourceLabel = () => {
     switch (healthDataSource) {
@@ -421,13 +370,13 @@ export default function DashboardScreen() {
 
   const formatDate = (date: Date) => {
     if (isToday) return 'Hoy';
-    
+
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     if (date.toDateString() === yesterday.toDateString()) return 'Ayer';
-    
-    const options: Intl.DateTimeFormatOptions = { 
-      day: 'numeric', 
+
+    const options: Intl.DateTimeFormatOptions = {
+      day: 'numeric',
       month: 'long',
       year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
     };
@@ -574,10 +523,10 @@ export default function DashboardScreen() {
         <TouchableOpacity onPress={goToPreviousDay}>
           <Ionicons name="chevron-back" size={28} color="#ffffff" />
         </TouchableOpacity>
-        
+
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Luxor Fitness</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => {
               if (!isToday) setSelectedDate(new Date());
             }}
@@ -589,7 +538,7 @@ export default function DashboardScreen() {
             )}
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.headerRight}>
           {!isToday ? (
             <TouchableOpacity onPress={goToNextDay}>
@@ -597,13 +546,13 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           ) : (
             <>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.headerIcon}
                 onPress={() => setShowCustomizationModal(true)}
               >
                 <Ionicons name="create-outline" size={24} color="#ffffff" />
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.headerIcon}
                 onPress={() => {
                   router.push('/chats');
@@ -626,8 +575,8 @@ export default function DashboardScreen() {
       <ScrollView
         style={styles.scrollView}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor="#ffb300"
           />
@@ -655,7 +604,7 @@ export default function DashboardScreen() {
           {secondaryMetrics.map((metricType, index) => {
             const metricConfig = getMetricConfig(metricType);
             const metricData = getMetricData(metricType);
-            
+
             return (
               <View key={metricType} style={styles.secondaryCircle}>
                 <ProgressCircle
@@ -678,7 +627,7 @@ export default function DashboardScreen() {
         {/* Sección de Recuperación */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('dashboard.recovery')}</Text>
-          
+
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
@@ -698,8 +647,8 @@ export default function DashboardScreen() {
         {/* Sección de Actividad */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('dashboard.activity')}</Text>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.card}
             onPress={() => router.push('/(tabs)/exercise-detail')}
           >
@@ -725,7 +674,7 @@ export default function DashboardScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.card}
             onPress={() => router.push('/gym-detail')}
           >
@@ -751,7 +700,7 @@ export default function DashboardScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.card}
             onPress={() => router.push('/(tabs)/steps-detail')}
             onLongPress={() => showHealthDiagnosticsAlert()}
@@ -775,7 +724,7 @@ export default function DashboardScreen() {
               />
             </View>
             {healthDataSource === 'none' && (
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.diagnosticButton}
                 onPress={() => showHealthDiagnosticsAlert()}
               >
@@ -785,7 +734,7 @@ export default function DashboardScreen() {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.card}
             onPress={() => router.push('/(tabs)/distance-detail')}
           >
@@ -806,7 +755,7 @@ export default function DashboardScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.card}
             onPress={() => router.push('/(tabs)/calories-detail')}
           >
@@ -827,7 +776,7 @@ export default function DashboardScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.card}
             onPress={() => router.push('/(tabs)/nutrition' as any)}
           >
@@ -847,7 +796,7 @@ export default function DashboardScreen() {
         {/* Sección de Salud */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('dashboard.section.health')}</Text>
-          
+
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
@@ -882,7 +831,7 @@ export default function DashboardScreen() {
         {/* Sección de Nutrición */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('dashboard.section.nutrition')}</Text>
-          
+
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <View style={{ flex: 1 }}>
@@ -934,16 +883,7 @@ export default function DashboardScreen() {
         onSave={handleSaveCustomization}
       />
 
-      {/* Modal de check-in semanal */}
-      {checkinStatus && (
-        <WeeklyCheckinModal
-          visible={showCheckinModal}
-          onClose={() => setShowCheckinModal(false)}
-          userId={user?.id || ''}
-          checkinStatus={checkinStatus}
-          onCheckinComplete={handleCheckinComplete}
-        />
-      )}
+
     </View>
   );
 }

@@ -1,0 +1,36 @@
+Initialising login role...
+Connecting to remote database...
+Do you want to push these migrations to the remote database?
+ • 20260205_enable_rls_security.sql
+ • 20260206_fix_push_token_rls.sql
+ • 20260207_fix_push_token_policy_definitive.sql
+ • 20260210_debug_auth.sql
+ • 20260210_fix_extension_schema.sql
+ • 20260210_fix_function_search_paths.sql
+ • 20260210_fix_rls_admin_shared.sql
+ • 20260210_fix_rls_master_hotfix.sql
+ • 20260210_fix_rls_nutrition_plans.sql
+ • 20260210_fix_rls_push_tokens.sql
+ • 20260210_fix_rls_remaining.sql
+ • 20260210_fix_rls_user_data.sql
+ • 20260210_fix_security_definer_views.sql
+ • 20260211_FINAL_FIX_ALL_RLS.sql
+ • 20260211_create_plan_rpc.sql
+ • 20260211_debug_push_token_rpc.sql
+ • 20260211_enhance_nutrition_rpcs.sql
+ • 20260211_fix_clerk_recipies.sql
+ • 20260211_fix_nested_rls.sql
+ • 20260211_push_token_rpc.sql
+ • 20260211_remove_debug_rpc.sql
+ • 20260227_add_nutrition_fks.sql
+ • 20260228_fix_admin_roles_rls.sql
+
+ [Y/n] y
+Applying migration 20260205_enable_rls_security.sql...
+ERROR: policy "Authenticated access notifications" for table "user_notifications" already exists (SQLSTATE 42710)
+At statement: 6                                                                                                  
+-- user_notifications                                                                                            
+CREATE POLICY "Authenticated access notifications"                                                               
+ON public.user_notifications FOR ALL                                                                             
+USING (auth.uid() IS NOT NULL)                                                                                   
+Try rerunning the command with --debug to troubleshoot the error.

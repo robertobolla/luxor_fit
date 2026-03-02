@@ -3,9 +3,11 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useUser, UserButton } from '@clerk/clerk-react';
 import { supabase } from '../services/adminService';
 import { useViewAs } from '../contexts/ViewAsContext';
+import { useTranslation } from 'react-i18next';
 import './Layout.css';
 
 export default function Layout() {
+  const { t } = useTranslation();
   const location = useLocation();
   const { user } = useUser();
   const [userRole, setUserRole] = React.useState<'admin' | 'socio' | 'empresario' | null>(null);
@@ -37,6 +39,9 @@ export default function Layout() {
     }
     if (location.pathname === '/admin-tools' || location.pathname === '/admin-organization' || location.pathname === '/admin-messaging') {
       setExpandedSections(prev => new Set([...prev, '/admin-tools']));
+    }
+    if (location.pathname === '/empresario-foods' || location.pathname === '/empresario-diets') {
+      setExpandedSections(prev => new Set([...prev, '/empresario-foods']));
     }
   }, [location.pathname]);
 
@@ -118,11 +123,11 @@ export default function Layout() {
         <nav className="sidebar-nav">
           {/* GRUPO PRINCIPAL */}
           <div className="nav-group">
-            <p className="nav-group-title">GENERAL</p>
+            <p className="nav-group-title">{t('sidebar.general')}</p>
             {(effectiveRole === 'empresario' ? [
-              { path: '/empresario-dashboard', label: 'Dashboard', icon: '📊' }
+              { path: '/empresario-dashboard', label: t('sidebar.dashboard'), icon: '📊' }
             ] : [
-              { path: '/', label: 'Dashboard', icon: '📊' }
+              { path: '/', label: t('sidebar.dashboard'), icon: '📊' }
             ]).map(item => (
               <Link
                 key={item.path}
@@ -136,28 +141,28 @@ export default function Layout() {
           </div>
 
           {/* GRUPO ADMINISTRACIÓN (Solo Admins) */}
-          {(effectiveRole === 'admin' || (effectiveRole !== 'socio' && effectiveRole !== 'empresario')) && (
+          {(effectiveRole === 'admin') && (
             <div className="nav-group">
-              <p className="nav-group-title">ADMINISTRACIÓN</p>
+              <p className="nav-group-title">{t('sidebar.admin')}</p>
               {[
-                { path: '/users', label: 'Usuarios', icon: '👥' },
+                { path: '/users', label: t('sidebar.users'), icon: '👥' },
                 {
-                  path: '/partners', label: 'Socios', icon: '🤝', subItems: [
-                    { path: '/partners', label: 'Lista de Socios' },
-                    { path: '/partner-payments', label: 'Gestión de Pagos' },
+                  path: '/partners', label: t('sidebar.partners'), icon: '🤝', subItems: [
+                    { path: '/partners', label: t('sidebar.partner_list') },
+                    { path: '/partner-payments', label: t('sidebar.partner_payments') },
                   ]
                 },
-                { path: '/empresarios', label: 'Empresarios', icon: '🏢' },
-                { path: '/exercises', label: 'Ejercicios', icon: '🏋️' },
-                { path: '/foods', label: 'Alimentos', icon: '🍎' },
+                { path: '/empresarios', label: t('sidebar.empresarios'), icon: '🏢' },
+                { path: '/exercises', label: t('sidebar.exercises'), icon: '🏋️' },
+                { path: '/foods', label: t('sidebar.foods'), icon: '🍎' },
                 {
-                  path: '/admin-tools', label: 'Herramientas', icon: '🛠️', subItems: [
-                    { path: '/admin-tools', label: 'General' },
-                    { path: '/admin-organization', label: 'Mi Organización' },
-                    { path: '/admin-messaging', label: 'Mensajería' },
+                  path: '/admin-tools', label: t('sidebar.tools'), icon: '🛠️', subItems: [
+                    { path: '/admin-tools', label: t('sidebar.general_tools') },
+                    { path: '/admin-organization', label: t('sidebar.organization') },
+                    { path: '/admin-messaging', label: t('sidebar.messaging') },
                   ]
                 },
-                { path: '/stats', label: 'Estadísticas', icon: '📈' },
+                { path: '/stats', label: t('sidebar.stats'), icon: '📈' },
               ].map((item) => {
                 const isActive = location.pathname === item.path ||
                   (item.path === '/partners' && (location.pathname === '/partners' || (location.pathname.startsWith('/partner-payments') && !location.pathname.includes('my-earnings')))) ||
@@ -214,10 +219,10 @@ export default function Layout() {
           {/* GRUPO MI NEGOCIO (Socios y Admins) */}
           {(effectiveRole === 'socio' || effectiveRole === 'admin') && (
             <div className="nav-group">
-              <p className="nav-group-title">MI NEGOCIO</p>
+              <p className="nav-group-title">{t('sidebar.business')}</p>
               {[
-                { path: '/partner-referrals', label: 'Mis Ventas', icon: '📈' },
-                { path: '/my-earnings', label: 'Mis Finanzas', icon: '💰' },
+                { path: '/partner-referrals', label: t('sidebar.my_sales'), icon: '📈' },
+                { path: '/my-earnings', label: t('sidebar.my_earnings'), icon: '💰' },
               ].map(item => (
                 <Link
                   key={item.path}
@@ -234,32 +239,85 @@ export default function Layout() {
           {/* GRUPO EMPRESARIO (Solo Empresarios) */}
           {effectiveRole === 'empresario' && (
             <div className="nav-group">
-              <p className="nav-group-title">MI GIMNASIO</p>
+              <p className="nav-group-title">{t('sidebar.gym')}</p>
               {[
-                { path: '/empresario-users', label: 'Mis Usuarios', icon: '👥' },
-                { path: '/mensajeria', label: 'Mensajería', icon: '📧' },
-              ].map(item => (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`nav-item ${location.pathname === item.path ? 'active' : ''}`}
-                >
-                  <span className="nav-icon">{item.icon}</span>
-                  <span className="nav-label">{item.label}</span>
-                </Link>
-              ))}
+                { path: '/empresario-users', label: t('sidebar.my_users'), icon: '👥' },
+                {
+                  path: '/empresario-foods', label: t('sidebar.nutrition'), icon: '🍎', subItems: [
+                    { path: '/empresario-foods', label: t('sidebar.foods') },
+                    { path: '/empresario-diets', label: t('sidebar.diets') },
+                  ]
+                },
+                {
+                  path: '/empresario-routines', label: t('sidebar.training'), icon: '💪', subItems: [
+                    { path: '/empresario-routines', label: t('sidebar.routines') },
+                    { path: '/empresario-routine-bank', label: t('sidebar.routine_bank') },
+                  ]
+                },
+                { path: '/mensajeria', label: t('sidebar.messaging'), icon: '📧' },
+              ].map((item) => {
+                const isActive = location.pathname === item.path ||
+                  (item.subItems && item.subItems.some(sub => location.pathname === sub.path));
+                const isExpanded = item.subItems && expandedSections.has(item.path);
+
+                return (
+                  <div key={item.path}>
+                    {item.subItems ? (
+                      <div
+                        onClick={() => toggleSection(item.path)}
+                        className={`nav-item ${isActive ? 'active' : ''} has-subitems`}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <span className="nav-icon">{item.icon}</span>
+                        <span className="nav-label">{item.label}</span>
+                        <span className="nav-arrow" style={{ marginLeft: 'auto', fontSize: '10px' }}>
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
+                      </div>
+                    ) : (
+                      <Link
+                        to={item.path}
+                        className={`nav-item ${isActive ? 'active' : ''}`}
+                      >
+                        <span className="nav-icon">{item.icon}</span>
+                        <span className="nav-label">{item.label}</span>
+                      </Link>
+                    )}
+                    {isExpanded && item.subItems && (
+                      <div className="sub-nav">
+                        {item.subItems.map((subItem) => (
+                          <Link
+                            key={subItem.path}
+                            to={subItem.path}
+                            className={`sub-nav-item ${location.pathname === subItem.path ? 'active' : ''}`}
+                          >
+                            {subItem.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
           {/* GRUPO CUENTA */}
           <div className="nav-group" style={{ marginTop: 'auto' }}>
-            <p className="nav-group-title">CUENTA</p>
+            <p className="nav-group-title">{t('sidebar.account')}</p>
+            <Link
+              to="/settings"
+              className={`nav-item ${location.pathname === '/settings' ? 'active' : ''}`}
+            >
+              <span className="nav-icon">⚙️</span>
+              <span className="nav-label">{t('sidebar.settings')}</span>
+            </Link>
             <Link
               to="/delete-account"
               className={`nav-item ${location.pathname === '/delete-account' ? 'active' : ''}`}
             >
               <span className="nav-icon">🗑️</span>
-              <span className="nav-label">Eliminar Cuenta</span>
+              <span className="nav-label">{t('sidebar.delete_account')}</span>
             </Link>
           </div>
         </nav>

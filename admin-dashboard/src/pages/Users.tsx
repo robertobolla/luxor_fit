@@ -5,9 +5,11 @@ import { getUsers, searchUsers, deleteUser, getUserRole, deactivateUserSubscript
 import type { UserProfile } from '../services/adminService';
 import { useToastContext } from '../contexts/ToastContext';
 import { useErrorHandler } from '../hooks/useErrorHandler';
+import { useTranslation } from 'react-i18next';
 import './Users.css';
 
 export default function Users() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const navigate = useNavigate();
   const toast = useToastContext();
@@ -194,7 +196,7 @@ export default function Users() {
   return (
     <div className="users-page">
       <header className="page-header">
-        <h1>Usuarios</h1>
+        <h1>{t('sidebar.users')}</h1>
         <div className="header-actions">
           {/* ... existing header actions ... */}
           {isAdmin && (
@@ -217,14 +219,14 @@ export default function Users() {
                 }}
               >
                 <span>👤+</span>
-                Crear Usuario
+                {t('dashboard.new_user')}
               </button>
-              <span style={{ color: '#4caf50', fontSize: '14px', marginRight: '12px' }}>👤 Eres Admin</span>
+              <span style={{ color: '#4caf50', fontSize: '14px', marginRight: '12px' }}>👤 {t('dashboard.admin_mode')}</span>
             </>
           )}
           <input
             type="text"
-            placeholder="Buscar por nombre o email..."
+            placeholder={t('users.search')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="search-input"
@@ -328,7 +330,7 @@ export default function Users() {
       </div>
 
       {loading ? (
-        <div className="loading">Cargando usuarios...</div>
+        <div className="loading">{t('users.loading')}</div>
       ) : users.length === 0 ? (
         <div className="empty-state">
           <p>No se encontraron usuarios {searchQuery ? `para "${searchQuery}"` : 'con estos filtros'}</p>
@@ -349,14 +351,14 @@ export default function Users() {
               {/* ... table headers and row mapping ... */}
               <thead>
                 <tr>
-                  <th>Nombre</th>
-                  <th>Email</th>
+                  <th>{t('users.table.name')}</th>
+                  <th>{t('users.table.email')}</th>
                   <th>Rol</th>
-                  <th>Registro</th>
-                  <th>Suscripción / Estado</th>
+                  <th>{t('users.table.joined')}</th>
+                  <th>{t('users.table.subscription')}</th>
                   <th>Origen</th>
                   <th>Pagos</th>
-                  <th>Acciones</th>
+                  <th>{t('users.table.actions')}</th>
                 </tr>
               </thead>
               <tbody>

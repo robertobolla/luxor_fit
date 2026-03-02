@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { useUser } from '@clerk/clerk-react';
-import { 
-  getUserNotifications, 
-  markNotificationAsRead, 
+import {
+  getUserNotifications,
+  markNotificationAsRead,
   markAllNotificationsAsRead,
-  getUnreadNotificationsCount 
+  getUnreadNotificationsCount
 } from '../services/adminService';
+import { useTranslation } from 'react-i18next';
 import './NotificationBell.css';
 
 interface Notification {
@@ -20,6 +21,7 @@ interface Notification {
 }
 
 export default function NotificationBell() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -85,7 +87,7 @@ export default function NotificationBell() {
   async function handleMarkAsRead(notificationId: string) {
     try {
       await markNotificationAsRead(notificationId);
-      setNotifications(prev => 
+      setNotifications(prev =>
         prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
       );
       setUnreadCount(prev => Math.max(0, prev - 1));
@@ -123,16 +125,16 @@ export default function NotificationBell() {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return 'Ahora';
-    if (diffMins < 60) return `Hace ${diffMins} min`;
-    if (diffHours < 24) return `Hace ${diffHours}h`;
-    if (diffDays < 7) return `Hace ${diffDays}d`;
+    if (diffMins < 1) return t('notification_bell.time.now');
+    if (diffMins < 60) return t('notification_bell.time.mins_ago', { count: diffMins });
+    if (diffHours < 24) return t('notification_bell.time.hours_ago', { count: diffHours });
+    if (diffDays < 7) return t('notification_bell.time.days_ago', { count: diffDays });
     return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
   };
 
   return (
     <div className="notification-bell-container" ref={dropdownRef}>
-      <button 
+      <button
         className="notification-bell-btn"
         onClick={() => setShowDropdown(!showDropdown)}
       >
@@ -145,28 +147,28 @@ export default function NotificationBell() {
       {showDropdown && (
         <div className="notifications-dropdown">
           <div className="dropdown-header">
-            <h3>Notificaciones</h3>
+            <h3>{t('notification_bell.title')}</h3>
             {unreadCount > 0 && (
-              <button 
+              <button
                 className="mark-all-read-btn"
                 onClick={handleMarkAllAsRead}
               >
-                Marcar todas como leídas
+                {t('notification_bell.mark_all_read')}
               </button>
             )}
           </div>
 
           <div className="notifications-list">
             {loading ? (
-              <div className="loading-notifications">Cargando...</div>
+              <div className="loading-notifications">{t('notification_bell.loading')}</div>
             ) : notifications.length === 0 ? (
               <div className="empty-notifications">
                 <div className="empty-icon">🔕</div>
-                <p>No tienes notificaciones</p>
+                <p>{t('notification_bell.empty')}</p>
               </div>
             ) : (
               notifications.map(notification => (
-                <div 
+                <div
                   key={notification.id}
                   className={`notification-item ${notification.is_read ? 'read' : 'unread'}`}
                   onClick={() => !notification.is_read && handleMarkAsRead(notification.id)}
@@ -194,7 +196,7 @@ export default function NotificationBell() {
 
           {notifications.length > 0 && (
             <div className="dropdown-footer">
-              <button className="view-all-btn">Ver todas</button>
+              <button className="view-all-btn">{t('notification_bell.view_all')}</button>
             </div>
           )}
         </div>

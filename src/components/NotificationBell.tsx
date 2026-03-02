@@ -52,10 +52,10 @@ export default function NotificationBell() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const { t } = useTranslation();
-  
+
   // IDs de notificaciones que se vieron en esta sesión del modal
   const viewedNotificationIds = useRef<Set<string>>(new Set());
-  
+
   // Estado para la vista de confirmación (dentro del mismo modal)
   const [confirmView, setConfirmView] = useState<ConfirmViewState>({
     active: false,
@@ -69,17 +69,17 @@ export default function NotificationBell() {
   // Verificar el estado de los planes compartidos para una lista de notificaciones
   const enrichNotificationsWithSharedStatus = useCallback(async (notifs: Notification[]): Promise<Notification[]> => {
     if (!user?.id) return notifs;
-    
+
     const enriched = [...notifs];
-    
+
     for (let i = 0; i < enriched.length; i++) {
       const notification = enriched[i];
       const type = notification.notification_type;
-      
+
       // Solo verificar para notificaciones de tipo compartido (nuevas o legacy)
-      const isWorkoutShared = type === 'workout_plan_shared' || type === 'workout_plan';
+      const isWorkoutShared = type === 'workout_plan_shared' || type === 'workout_plan' || type === 'new_routine_assigned';
       const isNutritionShared = type === 'nutrition_plan_shared' || type === 'nutrition_plan';
-      
+
       if ((isWorkoutShared || isNutritionShared) && notification.related_id) {
         try {
           if (isWorkoutShared) {
@@ -91,7 +91,7 @@ export default function NotificationBell() {
               .order('created_at', { ascending: false })
               .limit(1)
               .maybeSingle();
-            
+
             enriched[i] = {
               ...notification,
               shared_status: (sharedWorkout as any)?.status || null,
@@ -105,7 +105,7 @@ export default function NotificationBell() {
               .order('created_at', { ascending: false })
               .limit(1)
               .maybeSingle();
-            
+
             enriched[i] = {
               ...notification,
               shared_status: sharedNutrition?.status || null,
@@ -116,7 +116,7 @@ export default function NotificationBell() {
         }
       }
     }
-    
+
     return enriched;
   }, [user?.id]);
 
@@ -128,7 +128,7 @@ export default function NotificationBell() {
       if (showLoading && notifications.length === 0) {
         setLoading(true);
       }
-      
+
       const { data, error, status } = await supabase
         .rpc('get_user_notifications', { p_user_id: user.id });
 
@@ -191,7 +191,7 @@ export default function NotificationBell() {
   const markAsRead = async (notificationId: string) => {
     try {
       await supabase.rpc('mark_notification_as_read', { p_notification_id: notificationId });
-      
+
       setNotifications(prev =>
         prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n)
       );
@@ -204,13 +204,13 @@ export default function NotificationBell() {
   // Marcar todas las notificaciones vistas como leídas (al cerrar el modal)
   const markViewedAsRead = async () => {
     if (viewedNotificationIds.current.size === 0) return;
-    
+
     const idsToMark = Array.from(viewedNotificationIds.current);
     const unreadIds = idsToMark.filter(id => {
       const notification = notifications.find(n => n.id === id);
       return notification && !notification.is_read;
     });
-    
+
     if (unreadIds.length === 0) return;
 
     // Actualizar localmente primero
@@ -227,7 +227,7 @@ export default function NotificationBell() {
     } catch (error) {
       console.error('Error marcando notificaciones como leídas:', error);
     }
-    
+
     // Limpiar el set
     viewedNotificationIds.current.clear();
   };
@@ -252,7 +252,7 @@ export default function NotificationBell() {
       });
       return;
     }
-    
+
     // Marcar las vistas como leídas y cerrar
     await markViewedAsRead();
     setIsModalVisible(false);
@@ -269,8 +269,8 @@ export default function NotificationBell() {
 
     try {
       const type = notification.notification_type;
-      const isWorkout = type === 'workout_plan_shared' || type === 'workout_plan';
-      
+      const isWorkout = type === 'workout_plan_shared' || type === 'workout_plan' || type === 'new_routine_assigned';
+
       if (isWorkout) {
         let { data: sharedWorkout } = await supabase
           .from('shared_workouts')
@@ -300,7 +300,7 @@ export default function NotificationBell() {
         }
 
         const receiverId = sharedWorkout.receiver_id || user.id;
-        
+
         // Mostrar vista de confirmación
         setConfirmView({
           active: true,
@@ -310,7 +310,7 @@ export default function NotificationBell() {
           receiverId,
           isLoading: false,
         });
-        
+
       } else {
         // Nutrition plan (type === 'nutrition_plan_shared' || type === 'nutrition_plan')
         let { data: sharedPlan } = await (supabase as any)
@@ -356,13 +356,13 @@ export default function NotificationBell() {
       Alert.alert('Error', t('notifications.processError'));
     }
   };
-  
+
   // Procesar aceptación del plan
   const processAcceptPlan = async (activate: boolean) => {
     if (!confirmView.sharedId || !confirmView.receiverId || !confirmView.notification) return;
-    
+
     setConfirmView(prev => ({ ...prev, isLoading: true }));
-    
+
     try {
       let result;
       if (confirmView.type === 'workout') {
@@ -370,7 +370,7 @@ export default function NotificationBell() {
       } else {
         result = await acceptSharedNutritionPlan(confirmView.sharedId, confirmView.receiverId, activate);
       }
-      
+
       if (result.success) {
         markAsRead(confirmView.notification.id);
         loadNotifications(false);
@@ -400,8 +400,8 @@ export default function NotificationBell() {
 
     try {
       const type = notification.notification_type;
-      const isWorkout = type === 'workout_plan_shared' || type === 'workout_plan';
-      
+      const isWorkout = type === 'workout_plan_shared' || type === 'workout_plan' || type === 'new_routine_assigned';
+
       if (isWorkout) {
         let { data: sharedWorkout } = await supabase
           .from('shared_workouts')
@@ -440,7 +440,7 @@ export default function NotificationBell() {
           receiverId: workoutReceiverId,
           isLoading: false,
         });
-        
+
       } else {
         // Nutrition plan (type === 'nutrition_plan_shared' || type === 'nutrition_plan')
         let { data: sharedPlan } = await (supabase as any)
@@ -486,23 +486,23 @@ export default function NotificationBell() {
       Alert.alert('Error', t('notifications.processError'));
     }
   };
-  
+
   // Procesar rechazo del plan
   const processRejectPlan = async () => {
     if (!confirmView.sharedId || !confirmView.receiverId || !confirmView.notification) return;
-    
+
     setConfirmView(prev => ({ ...prev, isLoading: true }));
-    
+
     try {
       let result;
       const isWorkout = confirmView.notification.notification_type === 'workout_plan';
-      
+
       if (isWorkout) {
         result = await rejectSharedWorkout(confirmView.sharedId, confirmView.receiverId);
       } else {
         result = await rejectSharedNutritionPlan(confirmView.sharedId, confirmView.receiverId);
       }
-      
+
       if (result.success) {
         markAsRead(confirmView.notification.id);
         loadNotifications(false);
@@ -573,23 +573,23 @@ export default function NotificationBell() {
           styles.confirmIconContainer,
           confirmView.type === 'reject' && styles.confirmIconContainerReject
         ]}>
-          <Ionicons 
-            name={confirmView.type === 'reject' ? 'warning' : confirmView.type === 'workout' ? 'barbell' : 'nutrition'} 
-            size={56} 
-            color={confirmView.type === 'reject' ? '#ff4444' : '#ffb300'} 
+          <Ionicons
+            name={confirmView.type === 'reject' ? 'warning' : confirmView.type === 'workout' ? 'barbell' : 'nutrition'}
+            size={56}
+            color={confirmView.type === 'reject' ? '#ff4444' : '#ffb300'}
           />
         </View>
-        
+
         {/* Título */}
         <Text style={styles.confirmTitle}>
-          {confirmView.type === 'reject' 
+          {confirmView.type === 'reject'
             ? (t('notifications.rejectPlanTitle') || 'Rechazar plan')
-            : confirmView.type === 'workout' 
+            : confirmView.type === 'workout'
               ? (t('notifications.acceptWorkoutTitle') || 'Plan de entrenamiento')
               : (t('notifications.acceptNutritionTitle') || 'Plan nutricional')
           }
         </Text>
-        
+
         {/* Mensaje */}
         <Text style={styles.confirmMessage}>
           {confirmView.type === 'reject'
@@ -597,7 +597,7 @@ export default function NotificationBell() {
             : (t('notifications.acceptPlanMessage') || '¿Deseas agregar este plan a tu biblioteca o también activarlo?')
           }
         </Text>
-        
+
         {/* Info del remitente */}
         {confirmView.notification && (
           <View style={styles.confirmSenderInfo}>
@@ -607,7 +607,7 @@ export default function NotificationBell() {
             </Text>
           </View>
         )}
-        
+
         {/* Botones */}
         {confirmView.type === 'reject' ? (
           <View style={styles.confirmButtons}>
@@ -677,7 +677,7 @@ export default function NotificationBell() {
     statusType: 'accepted' | 'rejected' | null;
   } => {
     const type = notification.notification_type;
-    
+
     // Notificaciones de respuesta (solo informativas, nunca muestran botones)
     if (type === 'workout_plan_accepted' || type === 'nutrition_plan_accepted') {
       return { canShowButtons: false, statusText: null, statusType: null };
@@ -685,41 +685,42 @@ export default function NotificationBell() {
     if (type === 'workout_plan_rejected' || type === 'nutrition_plan_rejected') {
       return { canShowButtons: false, statusText: null, statusType: null };
     }
-    
+
     // Notificaciones de compartido (pueden tener botones si está pendiente)
-    const isShareNotification = 
-      type === 'workout_plan_shared' || 
+    const isShareNotification =
+      type === 'workout_plan_shared' ||
       type === 'nutrition_plan_shared' ||
       type === 'workout_plan' ||  // Legacy
-      type === 'nutrition_plan';  // Legacy
-    
+      type === 'nutrition_plan' ||  // Legacy
+      type === 'new_routine_assigned';
+
     if (!isShareNotification) {
       return { canShowButtons: false, statusText: null, statusType: null };
     }
-    
+
     // Verificar el estado del shared
     const sharedStatus = notification.shared_status;
-    
+
     if (sharedStatus === 'pending') {
       return { canShowButtons: true, statusText: null, statusType: null };
     }
-    
+
     if (sharedStatus === 'accepted' || sharedStatus === 'active') {
-      return { 
-        canShowButtons: false, 
+      return {
+        canShowButtons: false,
         statusText: t('notifications.youAccepted') || 'Has aceptado este plan',
         statusType: 'accepted'
       };
     }
-    
+
     if (sharedStatus === 'rejected') {
-      return { 
-        canShowButtons: false, 
+      return {
+        canShowButtons: false,
         statusText: t('notifications.youRejected') || 'Has rechazado este plan',
         statusType: 'rejected'
       };
     }
-    
+
     // Si no hay shared_status, probablemente la notificación es antigua o ya fue procesada
     return { canShowButtons: false, statusText: null, statusType: null };
   };
@@ -742,7 +743,7 @@ export default function NotificationBell() {
         <ScrollView style={styles.notificationsList} showsVerticalScrollIndicator={false}>
           {notifications.map((notification) => {
             const actionState = getNotificationActionState(notification);
-            
+
             // Registrar como vista al renderizar
             registerAsViewed(notification.id);
 
@@ -782,7 +783,7 @@ export default function NotificationBell() {
                     </Text>
                   </View>
                 </View>
-                
+
                 {/* Botones de aceptar/rechazar solo si el plan está pendiente */}
                 {actionState.canShowButtons && (
                   <View style={styles.planActions}>
@@ -802,7 +803,7 @@ export default function NotificationBell() {
                     </TouchableOpacity>
                   </View>
                 )}
-                
+
                 {/* Indicador de estado si ya se procesó */}
                 {actionState.statusText && (
                   <View style={[
@@ -810,10 +811,10 @@ export default function NotificationBell() {
                     actionState.statusType === 'accepted' && styles.statusIndicatorAccepted,
                     actionState.statusType === 'rejected' && styles.statusIndicatorRejected,
                   ]}>
-                    <Ionicons 
-                      name={actionState.statusType === 'accepted' ? "checkmark-circle" : "close-circle"} 
-                      size={16} 
-                      color={actionState.statusType === 'accepted' ? "#4CAF50" : "#ff4444"} 
+                    <Ionicons
+                      name={actionState.statusType === 'accepted' ? "checkmark-circle" : "close-circle"}
+                      size={16}
+                      color={actionState.statusType === 'accepted' ? "#4CAF50" : "#ff4444"}
                     />
                     <Text style={[
                       styles.statusText,

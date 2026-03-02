@@ -1,0 +1,3 @@
+src/pages/EmpresarioRoutines.tsx(30,9): error TS6133: 't' is declared but its value is never read.
+src/pages/EmpresarioRoutines.tsx(72,10): error TS6133: 'supersetExCount' is declared but its value is never read.
+src/pages/EmpresarioRoutines.tsx(77,10): error TS6133: 'supersetSearchIdx' is declared but its value is never read.

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
+import { useTranslation } from 'react-i18next';
 import { searchUsers, addAdmin } from '../services/adminService';
 import { supabase } from '../services/supabase';
 import './AdminTools.css';
@@ -20,6 +21,7 @@ interface FormData {
 }
 
 export default function CreateUser() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useUser();
   const [loading, setLoading] = useState(false);
@@ -31,9 +33,9 @@ export default function CreateUser() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    
+
     if (!user?.id || !formData.email.trim()) {
-      alert('Email es requerido');
+      alert(t('create_user.alerts.email_required'));
       return;
     }
 
@@ -51,11 +53,11 @@ export default function CreateUser() {
         // Usuario existe - usar su user_id real
         userId = existingUser.user_id;
         userName = formData.name || existingUser.name || formData.email.split('@')[0];
-        
+
         // Verificar si ya tiene un rol
         if (existingUser.role_type) {
           const confirmChange = window.confirm(
-            `Este usuario ya tiene el rol "${existingUser.role_type}".\n\n¿Deseas cambiar su rol a "${formData.role}"?`
+            t('create_user.alerts.confirm_role', { role: existingUser.role_type, newRole: formData.role })
           );
           if (!confirmChange) {
             setLoading(false);
@@ -65,13 +67,9 @@ export default function CreateUser() {
       } else {
         // Usuario NO existe - crear con advertencia
         const confirmCreate = window.confirm(
-          `⚠️ Este usuario no está registrado en la app.\n\n` +
-          `Se creará un registro PRE-ASIGNADO con rol "${formData.role}".\n\n` +
-          `El usuario deberá registrarse en la app con el email:\n${formData.email}\n\n` +
-          `Una vez registrado, el sistema lo reconocerá automáticamente y le asignará el rol.\n\n` +
-          `¿Deseas continuar?`
+          t('create_user.alerts.confirm_new', { role: formData.role, email: formData.email })
         );
-        
+
         if (!confirmCreate) {
           setLoading(false);
           return;
@@ -96,7 +94,7 @@ export default function CreateUser() {
         case 'socio':
           // Validar campos requeridos
           if (!formData.discountCode || !formData.discountPercentage || !formData.commissionPercentage) {
-            alert('Para crear un socio, debes completar: Código, Descuento y Comisión');
+            alert(t('create_user.alerts.socio_fields'));
             setLoading(false);
             return;
           }
@@ -109,7 +107,7 @@ export default function CreateUser() {
             .maybeSingle();
 
           if (existingCode) {
-            alert('Este código de descuento ya está en uso');
+            alert(t('create_user.alerts.code_used'));
             setLoading(false);
             return;
           }
@@ -141,7 +139,7 @@ export default function CreateUser() {
         case 'gym_member':
           // Validar campos requeridos
           if (!formData.gymId || !formData.subscriptionEndDate) {
-            alert('Para crear un miembro de gimnasio, debes especificar el Gimnasio y Fecha de expiración');
+            alert(t('create_user.alerts.member_fields'));
             setLoading(false);
             return;
           }
@@ -159,14 +157,14 @@ export default function CreateUser() {
 
       alert(
         existingUser
-          ? `✅ Usuario actualizado exitosamente.\n\nRol: ${formData.role}\nEl cambio es inmediato.`
-          : `✅ Usuario pre-creado exitosamente.\n\nRol: ${formData.role}\nEmail: ${formData.email}\n\nCuando el usuario se registre con este email, se le asignará el rol automáticamente.`
+          ? t('create_user.alerts.success_update', { role: formData.role })
+          : t('create_user.alerts.success_create', { role: formData.role, email: formData.email })
       );
 
       navigate('/users');
     } catch (error: any) {
       console.error('Error creando usuario:', error);
-      alert(error.message || 'Error al crear usuario');
+      alert(error.message || t('create_user.alerts.error'));
     } finally {
       setLoading(false);
     }
@@ -176,8 +174,8 @@ export default function CreateUser() {
     <div className="settings-page">
       <header className="page-header">
         <div>
-          <h1>Crear Usuario con Rol</h1>
-          <p className="subtitle">Asignar roles a usuarios existentes o pre-crear para nuevos</p>
+          <h1>{t('create_user.title')}</h1>
+          <p className="subtitle">{t('create_user.subtitle')}</p>
         </div>
       </header>
 
@@ -185,44 +183,44 @@ export default function CreateUser() {
         <form onSubmit={handleSubmit} style={{ maxWidth: '600px' }}>
           {/* Email */}
           <div className="form-group">
-            <label>Email *</label>
+            <label>{t('create_user.form.email')}</label>
             <input
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              placeholder="usuario@ejemplo.com"
+              placeholder={t('create_user.form.email_placeholder')}
               required
               style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginTop: '8px' }}
             />
             <p style={{ color: '#999', fontSize: '12px', marginTop: '4px' }}>
-              Si el usuario existe, se le asignará el rol. Si no, se pre-creará.
+              {t('create_user.form.email_help')}
             </p>
           </div>
 
           {/* Nombre */}
           <div className="form-group" style={{ marginTop: '16px' }}>
-            <label>Nombre</label>
+            <label>{t('create_user.form.name')}</label>
             <input
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="Nombre completo"
+              placeholder={t('create_user.form.name_placeholder')}
               style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginTop: '8px' }}
             />
           </div>
 
           {/* Rol */}
           <div className="form-group" style={{ marginTop: '16px' }}>
-            <label>Rol *</label>
+            <label>{t('create_user.form.role')}</label>
             <select
               value={formData.role}
               onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
               style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginTop: '8px' }}
             >
-              <option value="admin">Admin - Acceso completo</option>
-              <option value="socio">Socio - Con código de descuento</option>
-              <option value="empresario">Empresario - Gestiona gimnasios</option>
-              <option value="gym_member">Miembro de Gimnasio</option>
+              <option value="admin">{t('create_user.form.roles.admin')}</option>
+              <option value="socio">{t('create_user.form.roles.socio')}</option>
+              <option value="empresario">{t('create_user.form.roles.empresario')}</option>
+              <option value="gym_member">{t('create_user.form.roles.gym_member')}</option>
             </select>
           </div>
 
@@ -230,17 +228,17 @@ export default function CreateUser() {
           {formData.role === 'socio' && (
             <>
               <div className="form-group" style={{ marginTop: '16px' }}>
-                <label>Código de Descuento *</label>
+                <label>{t('create_user.form.discount_code')}</label>
                 <input
                   type="text"
                   value={formData.discountCode || ''}
                   onChange={(e) => setFormData({ ...formData, discountCode: e.target.value.toUpperCase() })}
-                  placeholder="CODIGO10"
+                  placeholder={t('create_user.form.discount_placeholder')}
                   style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginTop: '8px' }}
                 />
               </div>
               <div className="form-group" style={{ marginTop: '16px' }}>
-                <label>Descuento (%) *</label>
+                <label>{t('create_user.form.discount_pct')}</label>
                 <input
                   type="number"
                   value={formData.discountPercentage || ''}
@@ -252,7 +250,7 @@ export default function CreateUser() {
                 />
               </div>
               <div className="form-group" style={{ marginTop: '16px' }}>
-                <label>Comisión (%) *</label>
+                <label>{t('create_user.form.commission_pct')}</label>
                 <input
                   type="number"
                   value={formData.commissionPercentage || ''}
@@ -270,17 +268,17 @@ export default function CreateUser() {
           {formData.role === 'gym_member' && (
             <>
               <div className="form-group" style={{ marginTop: '16px' }}>
-                <label>ID del Gimnasio *</label>
+                <label>{t('create_user.form.gym_id')}</label>
                 <input
                   type="text"
                   value={formData.gymId || ''}
                   onChange={(e) => setFormData({ ...formData, gymId: e.target.value })}
-                  placeholder="UUID del gimnasio"
+                  placeholder={t('create_user.form.gym_id_placeholder')}
                   style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginTop: '8px' }}
                 />
               </div>
               <div className="form-group" style={{ marginTop: '16px' }}>
-                <label>Fecha de Expiración *</label>
+                <label>{t('create_user.form.exp_date')}</label>
                 <input
                   type="date"
                   value={formData.subscriptionEndDate || ''}
@@ -294,11 +292,11 @@ export default function CreateUser() {
           {/* Info box */}
           <div style={{ background: '#1a4d1a', padding: '12px', borderRadius: '6px', marginTop: '20px' }}>
             <p style={{ color: '#4caf50', fontSize: '14px', margin: 0, fontWeight: '600' }}>
-              ✅ Proceso automático
+              {t('create_user.form.info.title')}
             </p>
             <p style={{ color: '#e0e0e0', fontSize: '13px', margin: '8px 0 0 0' }}>
-              Si el usuario existe: Se actualiza inmediatamente.<br />
-              Si no existe: Se pre-crea y se activará al registrarse con el email.
+              {t('create_user.form.info.desc1')}<br />
+              {t('create_user.form.info.desc2')}
             </p>
           </div>
 
@@ -310,14 +308,14 @@ export default function CreateUser() {
               onClick={() => navigate('/users')}
               disabled={loading}
             >
-              Cancelar
+              {t('create_user.form.cancel')}
             </button>
             <button
               type="submit"
               className="btn-primary"
               disabled={loading}
             >
-              {loading ? 'Procesando...' : 'Crear Usuario'}
+              {loading ? t('create_user.form.creating') : t('create_user.form.submit')}
             </button>
           </div>
         </form>

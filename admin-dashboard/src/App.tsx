@@ -1,6 +1,6 @@
 import React from 'react';
 import { useUser, useAuth, SignedIn, SignedOut, SignIn } from '@clerk/clerk-react';
-import { supabase, setSupabaseAuthToken } from './services/supabase';
+import { supabase, setSupabaseTokenProvider } from './services/supabase';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Dashboard from './pages/Dashboard';
 import EmpresarioDashboard from './pages/EmpresarioDashboard';
@@ -19,8 +19,13 @@ import PartnerReferrals from './pages/PartnerReferrals';
 import PartnerPayments from './pages/PartnerPayments';
 import Empresarios from './pages/Empresarios';
 import EmpresarioUsers from './pages/EmpresarioUsers';
+import EmpresarioFoods from './pages/EmpresarioFoods';
+import EmpresarioDiets from './pages/EmpresarioDiets';
+import EmpresarioRoutines from './pages/EmpresarioRoutines';
+import EmpresarioRoutineBank from './pages/EmpresarioRoutineBank';
 import GymMemberDetail from './pages/GymMemberDetail';
 import DeleteAccount from './pages/DeleteAccount';
+import Configuraciones from './pages/Configuraciones';
 import Layout from './components/Layout';
 import { checkAdminRole } from './services/adminService';
 import { ViewAsProvider } from './contexts/ViewAsContext';
@@ -59,6 +64,11 @@ function App() {
               <Route path="create-user" element={<CreateUser />} />
               <Route path="partner-referrals" element={<PartnerReferrals />} />
               <Route path="empresario-users" element={<EmpresarioUsers />} />
+              <Route path="empresario-foods" element={<EmpresarioFoods />} />
+              <Route path="empresario-diets" element={<EmpresarioDiets />} />
+              <Route path="empresario-routines" element={<EmpresarioRoutines />} />
+              <Route path="empresario-routine-bank" element={<EmpresarioRoutineBank />} />
+              <Route path="settings" element={<Configuraciones />} />
             </Route>
           </Routes>
         </BrowserRouter>
@@ -200,18 +210,25 @@ interface AdminCheckProps {
 function AdminCheck({ user }: AdminCheckProps) {
   const [isAdmin, setIsAdmin] = React.useState<boolean | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const { getToken } = useAuth(); // Move hook to top level
+  const { getToken, signOut } = useAuth(); // Move hook to top level
 
   React.useEffect(() => {
     async function checkRole() {
       if (user?.id) {
         // INJECTAR TOKEN DE CLERK EN SUPABASE
         // Esto es CRÍTICO para que RLS funcione (auth.uid() no sea null)
-        // INJECTAR TOKEN DE CLERK EN SUPABASE (Header Bypass)
+        // INJECTAR TOKEN DE CLERK EN SUPABASE (Header Bypass Dinámico)
         try {
-          const token = await getToken({ template: 'supabase' });
-          // Usar nuestro helper personalizado que evita el error de UUID
-          await setSupabaseAuthToken(token);
+          // Ya no asignamos un token estático. En cambio, le decimos a nuestro interceptor
+          // CÓMO obtener un token fresco justo antes de cada petición.
+          setSupabaseTokenProvider(async () => {
+            try {
+              return await getToken({ template: 'supabase' });
+            } catch (err) {
+              logger.error('Error obteniendo token fresco de Clerk:', err);
+              return null;
+            }
+          });
         } catch (err) {
           logger.error('Error inyectando token:', err);
         }
@@ -283,12 +300,20 @@ function AdminCheck({ user }: AdminCheckProps) {
         <p style={{ color: '#666', fontSize: '0.9rem' }}>
           Contacta al administrador para solicitar acceso.
         </p>
-        <button
-          onClick={() => window.location.reload()}
-          style={{ padding: '0.5rem 1rem', background: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-        >
-          Reintentar
-        </button>
+        <div style={{ display: 'flex', gap: '1rem' }}>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ padding: '0.5rem 1rem', background: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          >
+            Reintentar
+          </button>
+          <button
+            onClick={() => signOut(() => { window.location.href = '/'; })}
+            style={{ padding: '0.5rem 1rem', background: '#dc3545', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+          >
+            Cerrar Sesión
+          </button>
+        </div>
       </div>
     );
   }

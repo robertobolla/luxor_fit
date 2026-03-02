@@ -3,6 +3,8 @@ import ReactDOM from 'react-dom/client';
 import { ClerkProvider } from '@clerk/clerk-react';
 import App from './App';
 import './index.css';
+import './i18n';
+import { SettingsProvider } from './contexts/SettingsContext';
 
 // Obtener la clave de Clerk desde las variables de entorno
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -14,9 +16,11 @@ if (!clerkPubKey) {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <ClerkProvider publishableKey={clerkPubKey || ''}>
-      <App />
-    </ClerkProvider>
+    <SettingsProvider>
+      <ClerkProvider publishableKey={clerkPubKey || ''}>
+        <App />
+      </ClerkProvider>
+    </SettingsProvider>
   </React.StrictMode>
 );
 

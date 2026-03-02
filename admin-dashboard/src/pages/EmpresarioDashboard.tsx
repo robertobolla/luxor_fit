@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { getEmpresarioDashboardStats } from '../services/adminService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { useTranslation } from 'react-i18next';
 import './EmpresarioDashboard.css';
 
 interface DashboardStats {
@@ -53,6 +54,7 @@ interface DashboardStats {
 const COLORS = ['#F7931E', '#FF5252', '#4CAF50', '#2196F3', '#9C27B0', '#FF9800'];
 
 export default function EmpresarioDashboard() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,7 +65,7 @@ export default function EmpresarioDashboard() {
 
   async function loadStats() {
     if (!user?.id) return;
-    
+
     setLoading(true);
     try {
       const data = await getEmpresarioDashboardStats(user.id);
@@ -75,10 +77,11 @@ export default function EmpresarioDashboard() {
     }
   }
 
+
   if (loading) {
     return (
       <div className="empresario-dashboard">
-        <div className="loading-message">Cargando estadísticas...</div>
+        <div className="loading-message">{t('empresario_dashboard.loading')}</div>
       </div>
     );
   }
@@ -86,7 +89,7 @@ export default function EmpresarioDashboard() {
   if (!stats) {
     return (
       <div className="empresario-dashboard">
-        <div className="error-message">No se pudieron cargar las estadísticas</div>
+        <div className="error-message">{t('empresario_dashboard.error')}</div>
       </div>
     );
   }
@@ -94,8 +97,8 @@ export default function EmpresarioDashboard() {
   return (
     <div className="empresario-dashboard">
       <header className="dashboard-header">
-        <h1>📊 Dashboard de Tu Gimnasio</h1>
-        <p className="subtitle">Estadísticas y métricas de tus miembros</p>
+        <h1>📊 {t('empresario_dashboard.title')}</h1>
+        <p className="subtitle">{t('empresario_dashboard.subtitle')}</p>
       </header>
 
       {/* Cards Principales */}
@@ -104,8 +107,8 @@ export default function EmpresarioDashboard() {
           <div className="card-icon">👥</div>
           <div className="card-content">
             <div className="card-value">{stats.member_stats.active_members}</div>
-            <div className="card-label">Miembros Activos</div>
-            <div className="card-sublabel">de {stats.member_stats.total_members} totales</div>
+            <div className="card-label">{t('empresario_dashboard.active_members')}</div>
+            <div className="card-sublabel">{t('empresario_dashboard.of_total', { total: stats.member_stats.total_members })}</div>
           </div>
         </div>
 
@@ -113,8 +116,8 @@ export default function EmpresarioDashboard() {
           <div className="card-icon">🏋️</div>
           <div className="card-content">
             <div className="card-value">{stats.workout_stats.total_workouts_month}</div>
-            <div className="card-label">Entrenamientos</div>
-            <div className="card-sublabel">Último mes</div>
+            <div className="card-label">{t('empresario_dashboard.workouts')}</div>
+            <div className="card-sublabel">{t('empresario_dashboard.last_month')}</div>
           </div>
         </div>
 
@@ -122,8 +125,8 @@ export default function EmpresarioDashboard() {
           <div className="card-icon">📈</div>
           <div className="card-content">
             <div className="card-value">{stats.member_stats.retention_rate}%</div>
-            <div className="card-label">Retención</div>
-            <div className="card-sublabel">Tasa de retención</div>
+            <div className="card-label">{t('empresario_dashboard.retention')}</div>
+            <div className="card-sublabel">{t('empresario_dashboard.retention_rate')}</div>
           </div>
         </div>
 
@@ -131,42 +134,42 @@ export default function EmpresarioDashboard() {
           <div className="card-icon">⚠️</div>
           <div className="card-content">
             <div className="card-value">{stats.member_stats.expiring_30d}</div>
-            <div className="card-label">Por Expirar</div>
-            <div className="card-sublabel">Próximos 30 días</div>
+            <div className="card-label">{t('empresario_dashboard.expiring')}</div>
+            <div className="card-sublabel">{t('empresario_dashboard.next_30d')}</div>
           </div>
         </div>
       </section>
 
       {/* Estadísticas de Miembros */}
       <section className="dashboard-section">
-        <h2>👥 Estadísticas de Miembros</h2>
+        <h2>👥 {t('empresario_dashboard.member_stats')}</h2>
         <div className="stats-grid">
           <div className="stat-box">
             <div className="stat-icon">🆕</div>
             <div className="stat-info">
               <div className="stat-value">{stats.member_stats.new_members_7d}</div>
-              <div className="stat-label">Nuevos (7 días)</div>
+              <div className="stat-label">{t('empresario_dashboard.new_7d')}</div>
             </div>
           </div>
           <div className="stat-box">
             <div className="stat-icon">📅</div>
             <div className="stat-info">
               <div className="stat-value">{stats.member_stats.new_members_30d}</div>
-              <div className="stat-label">Nuevos (30 días)</div>
+              <div className="stat-label">{t('empresario_dashboard.new_30d')}</div>
             </div>
           </div>
           <div className="stat-box alert">
             <div className="stat-icon">⏰</div>
             <div className="stat-info">
               <div className="stat-value">{stats.member_stats.expiring_7d}</div>
-              <div className="stat-label">Expiran en 7 días</div>
+              <div className="stat-label">{t('empresario_dashboard.expiring_7d')}</div>
             </div>
           </div>
           <div className="stat-box alert">
             <div className="stat-icon">😴</div>
             <div className="stat-info">
               <div className="stat-value">{stats.member_stats.inactive_training}</div>
-              <div className="stat-label">Sin entrenar &gt;30d</div>
+              <div className="stat-label">{t('empresario_dashboard.inactive_30d')}</div>
             </div>
           </div>
         </div>
@@ -174,12 +177,12 @@ export default function EmpresarioDashboard() {
 
       {/* Actividad de Entrenamientos */}
       <section className="dashboard-section">
-        <h2>🏋️ Actividad de Entrenamientos</h2>
-        
+        <h2>🏋️ {t('empresario_dashboard.workout_activity')}</h2>
+
         <div className="two-column-grid">
           {/* Gráfica de actividad por día */}
           <div className="chart-container">
-            <h3>Entrenamientos por Día de la Semana</h3>
+            <h3>{t('empresario_dashboard.workouts_by_day')}</h3>
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={stats.workout_stats.activity_by_day}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
@@ -193,19 +196,19 @@ export default function EmpresarioDashboard() {
                     color: '#fff'
                   }}
                 />
-                <Bar dataKey="workout_count" fill="#F7931E" name="Entrenamientos" />
+                <Bar dataKey="workout_count" fill="#F7931E" name={t('empresario_dashboard.workouts')} />
               </BarChart>
             </ResponsiveContainer>
           </div>
 
           {/* Top Miembros Activos */}
           <div className="table-container">
-            <h3>🏆 Top 5 Miembros Más Activos</h3>
+            <h3>🏆 {t('empresario_dashboard.top_active')}</h3>
             <table className="top-members-table">
               <thead>
                 <tr>
-                  <th>Miembro</th>
-                  <th>Entrenamientos</th>
+                  <th>{t('empresario_dashboard.member')}</th>
+                  <th>{t('empresario_dashboard.workouts')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -214,7 +217,7 @@ export default function EmpresarioDashboard() {
                     <td>
                       <div className="member-info">
                         <span className="member-rank">#{index + 1}</span>
-                        <span className="member-name">{member.name || member.email || 'Sin nombre'}</span>
+                        <span className="member-name">{member.name || member.email || t('empresario_dashboard.no_name')}</span>
                       </div>
                     </td>
                     <td className="workout-count">{member.workout_count}</td>
@@ -230,14 +233,14 @@ export default function EmpresarioDashboard() {
             <div className="stat-icon">📊</div>
             <div className="stat-info">
               <div className="stat-value">{stats.workout_stats.total_workouts_week}</div>
-              <div className="stat-label">Entrenamientos (semana)</div>
+              <div className="stat-label">{t('empresario_dashboard.workouts_week')}</div>
             </div>
           </div>
           <div className="stat-box">
             <div className="stat-icon">📈</div>
             <div className="stat-info">
               <div className="stat-value">{stats.workout_stats.avg_workouts_per_member}</div>
-              <div className="stat-label">Promedio por miembro</div>
+              <div className="stat-label">{t('empresario_dashboard.avg_workouts')}</div>
             </div>
           </div>
         </div>
@@ -245,34 +248,34 @@ export default function EmpresarioDashboard() {
 
       {/* Planes de Entrenamiento */}
       <section className="dashboard-section">
-        <h2>📋 Planes de Entrenamiento</h2>
+        <h2>📋 {t('empresario_dashboard.training_plans')}</h2>
         <div className="stats-grid">
           <div className="stat-box success">
             <div className="stat-icon">✅</div>
             <div className="stat-info">
               <div className="stat-value">{stats.plan_stats.members_with_plan}</div>
-              <div className="stat-label">Con plan activo</div>
+              <div className="stat-label">{t('empresario_dashboard.with_plan')}</div>
             </div>
           </div>
           <div className="stat-box alert">
             <div className="stat-icon">⚠️</div>
             <div className="stat-info">
               <div className="stat-value">{stats.plan_stats.members_without_plan}</div>
-              <div className="stat-label">Sin plan asignado</div>
+              <div className="stat-label">{t('empresario_dashboard.without_plan')}</div>
             </div>
           </div>
           <div className="stat-box info">
             <div className="stat-icon">📊</div>
             <div className="stat-info">
               <div className="stat-value">{stats.plan_stats.plan_coverage_percent}%</div>
-              <div className="stat-label">Cobertura de planes</div>
+              <div className="stat-label">{t('empresario_dashboard.plan_coverage')}</div>
             </div>
           </div>
           <div className="stat-box info">
             <div className="stat-icon">🎯</div>
             <div className="stat-info">
               <div className="stat-value">{stats.plan_stats.plan_adherence}%</div>
-              <div className="stat-label">Adherencia</div>
+              <div className="stat-label">{t('empresario_dashboard.adherence')}</div>
             </div>
           </div>
         </div>
@@ -280,12 +283,12 @@ export default function EmpresarioDashboard() {
 
       {/* Metas y Progreso */}
       <section className="dashboard-section">
-        <h2>🎯 Metas y Progreso</h2>
-        
+        <h2>🎯 {t('empresario_dashboard.goals_progress')}</h2>
+
         <div className="two-column-grid">
           {/* Distribución de Fitness Level */}
           <div className="chart-container">
-            <h3>Nivel de Fitness</h3>
+            <h3>{t('empresario_dashboard.fitness_level')}</h3>
             {stats.progress_stats.fitness_distribution && stats.progress_stats.fitness_distribution.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
@@ -314,13 +317,13 @@ export default function EmpresarioDashboard() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <div className="empty-chart">No hay datos de fitness disponibles</div>
+              <div className="empty-chart">{t('empresario_dashboard.no_fitness_data')}</div>
             )}
           </div>
 
           {/* Distribución de Objetivos */}
           <div className="chart-container">
-            <h3>Distribución de Objetivos</h3>
+            <h3>{t('empresario_dashboard.goals_distribution')}</h3>
             {stats.progress_stats.goals_distribution && stats.progress_stats.goals_distribution.length > 0 ? (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={stats.progress_stats.goals_distribution}>
@@ -339,7 +342,7 @@ export default function EmpresarioDashboard() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="empty-chart">No hay datos de objetivos disponibles</div>
+              <div className="empty-chart">{t('empresario_dashboard.no_goals_data')}</div>
             )}
           </div>
         </div>

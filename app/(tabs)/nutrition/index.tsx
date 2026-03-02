@@ -99,6 +99,7 @@ export default function NutritionHomeScreen() {
   const [pendingWeeklyRenewal, setPendingWeeklyRenewal] = useState(false);
   const [showPlanAdjustmentModal, setShowPlanAdjustmentModal] = useState(false);
   const [planAdjustmentData, setPlanAdjustmentData] = useState<any>(null);
+  const [showNoPlanModal, setShowNoPlanModal] = useState(false);
 
   // Estados para modal de renovación de planes IA
   const [showAIRenewalModal, setShowAIRenewalModal] = useState(false);
@@ -1409,17 +1410,8 @@ export default function NutritionHomeScreen() {
       console.error('Error checking active plan:', err);
     }
 
-    // Si no hay plan en el nuevo sistema, usar el viejo sistema
-    if (pendingWeeklyRenewal) {
-      setShowWeeklyRenewalModal(true);
-      return;
-    }
-
-    if (weekStart) {
-      router.push(`/(tabs)/nutrition/plan?weekStart=${weekStart}` as any);
-    } else {
-      router.push('/(tabs)/nutrition/plan' as any);
-    }
+    // No hay plan activo - mostrar modal con opciones
+    setShowNoPlanModal(true);
   };
 
   /**
@@ -1614,23 +1606,8 @@ export default function NutritionHomeScreen() {
     try {
       const today = new Date().toISOString().split('T')[0];
 
-      // Verificar si existe perfil nutricional
+      // Cargar perfil nutricional si existe (opcional, no bloquea la pantalla)
       const profile = await getNutritionProfile(user.id);
-      if (!profile) {
-        // Redirigir a settings para configurar
-        setLoading(false);
-        Alert.alert(
-          t('nutrition.configRequired'),
-          t('nutrition.configRequiredMessage'),
-          [
-            {
-              text: t('common.configure'),
-              onPress: () => router.push('/(tabs)/nutrition/settings' as any),
-            },
-          ]
-        );
-        return;
-      }
 
       // PRIMERO: Verificar si hay un plan activo en nutrition_plans
       const { data: activePlan, error: activePlanError } = await supabase
@@ -1722,44 +1699,7 @@ export default function NutritionHomeScreen() {
           console.error('Error loading target:', targetError);
         }
 
-        if (!targetData) {
-          // No hay target, inicializar (pero no bloquear la UI)
-          setLoading(false); // Quitar loading antes de inicializar para que no se quede cargando
-          await initializeWeek();
-          // Recargar datos después de inicializar
-          await loadTodayData();
-          return;
-        } else {
-          setTodayTarget(targetData as NutritionTarget);
-
-          // Verificar si existe plan de comidas para esta semana
-          const todayDate = new Date();
-          const dayOfWeek = todayDate.getDay();
-          const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-          const monday = new Date(todayDate);
-          monday.setDate(todayDate.getDate() + diff);
-          const mondayStr = monday.toISOString().split('T')[0];
-
-          const { data: planData, error: planError } = await supabase
-            .from('meal_plans')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('week_start', mondayStr)
-            .maybeSingle();
-
-          if (planError && planError.code !== 'PGRST116') {
-            console.error('Error loading meal plan:', planError);
-          }
-
-          if (!planData) {
-            // No hay plan, generarlo en segundo plano (no bloquear)
-            console.log('📋 No se encontró plan de comidas, generando...');
-            // Generar plan sin bloquear la UI
-            createOrUpdateMealPlan(user.id, mondayStr).catch((err) => {
-              console.error('Error generating meal plan:', err);
-            });
-          }
-        }
+        setTodayTarget((targetData as NutritionTarget) || null);
       }
 
       // Cargar logs del día
@@ -2272,6 +2212,52 @@ export default function NutritionHomeScreen() {
           nutritionGoal={aiPlanRenewalData.nutritionGoal}
         />
       )}
+
+      {/* Modal sin plan activo */}
+      <Modal
+        visible={showNoPlanModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowNoPlanModal(false)}
+      >
+        <View style={styles.noPlanOverlay}>
+          <View style={styles.noPlanModalContent}>
+            <Ionicons name="restaurant-outline" size={48} color="#FFD700" style={{ marginBottom: 16 }} />
+            <Text style={styles.noPlanTitle}>{t('nutrition.noPlanTitle')}</Text>
+            <Text style={styles.noPlanModalMessage}>{t('nutrition.noPlanMessage')}</Text>
+            <View style={styles.noPlanActions}>
+              <TouchableOpacity
+                style={styles.noPlanButton}
+                onPress={() => {
+                  setShowNoPlanModal(false);
+                  router.push('/(tabs)/nutrition/select-plan-type' as any);
+                }}
+              >
+                <Ionicons name="sparkles" size={20} color="#1A1A1A" />
+                <Text style={styles.noPlanButtonText}>{t('nutrition.generatePlanShortcut')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.noPlanButtonOutline}
+                onPress={() => {
+                  setShowNoPlanModal(false);
+                  router.push('/(tabs)/nutrition/plans-library' as any);
+                }}
+              >
+                <Ionicons name="library-outline" size={20} color="#FFD700" />
+                <Text style={styles.noPlanButtonOutlineText}>{t('nutrition.plansLibraryShortcut')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.noPlanCloseButton}
+              onPress={() => setShowNoPlanModal(false)}
+            >
+              <Text style={styles.noPlanCloseText}>{t('common.close')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal de ajuste de plan */}
       {planAdjustmentData && (
@@ -3655,6 +3641,78 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 20,
     backgroundColor: 'rgba(255, 179, 0, 0.1)',
+  },
+  noPlanOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  noPlanModalContent: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 24,
+    padding: 32,
+    width: '100%',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  noPlanTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 8,
+    lineHeight: 24,
+  },
+  noPlanModalMessage: {
+    fontSize: 15,
+    color: '#ddd',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  noPlanActions: {
+    width: '100%',
+    gap: 12,
+  },
+  noPlanButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#ffb300',
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  noPlanButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#000',
+  },
+  noPlanButtonOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#ffb300',
+    paddingVertical: 14,
+    borderRadius: 14,
+  },
+  noPlanButtonOutlineText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffb300',
+  },
+  noPlanCloseButton: {
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  noPlanCloseText: {
+    fontSize: 14,
+    color: '#888',
   },
 });
 

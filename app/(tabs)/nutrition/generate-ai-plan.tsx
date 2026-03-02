@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase, callRpcWithRetry } from '@/services/supabase';
 import { useUnitsStore, conversions, formatHeight } from '@/store/unitsStore';
 import { getNutritionProfile, upsertNutritionProfile } from '@/services/nutrition';
+import { getGymEmpresario } from '@/services/gymService';
 
 export default function GenerateAIPlanScreen() {
   const { user } = useUser();
@@ -248,14 +249,31 @@ export default function GenerateAIPlanScreen() {
     const remainingCalories = targetCalories - proteinCalories - (fatGrams * 9);
     const carbsGrams = Math.max(50, Math.round(remainingCalories / 4)); // Mínimo 50g para función cerebral
 
-    // Obtener alimentos del banco de datos
-    const { data: allFoods, error: foodsError } = await supabase
+    // Obtener alimentos del banco de datos (Globales + Gimnasio)
+    const gymInfo = await getGymEmpresario(user.id);
+    const empresarioId = gymInfo?.empresario_id;
+
+    let query = supabase
       .from('foods')
       .select('*')
       .eq('status', 'complete');
 
+    if (empresarioId) {
+      query = query.or(`empresario_id.is.null,empresario_id.eq.${empresarioId}`);
+    } else {
+      query = query.is('empresario_id', null);
+    }
+
+    let { data: allFoods, error: foodsError } = await query;
     if (foodsError) {
-      console.error('Error loading foods:', foodsError);
+      if (foodsError.code === '42703') {
+        const fallbackQuery = await supabase.from('foods').select('*').eq('status', 'complete');
+        allFoods = fallbackQuery.data;
+        foodsError = fallbackQuery.error;
+      }
+      if (foodsError) {
+        console.error('Error loading foods:', foodsError);
+      }
     }
 
     const foods = allFoods || [];
@@ -500,6 +518,7 @@ export default function GenerateAIPlanScreen() {
     });
 
     console.log('Sending plan to RPC:', { planName, weeksCount: weeks.length });
+    console.log('Weeks payload:', JSON.stringify(weeks, null, 2));
 
     // Llamar al RPC con retry logic
     const { data: rpcResult, error: rpcError } = await callRpcWithRetry('create_complete_nutrition_plan', {

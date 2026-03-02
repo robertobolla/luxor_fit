@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
 import { useUnitsStore, conversions } from '@/store/unitsStore';
+import { getGymEmpresario } from '@/services/gymService';
 
 interface Food {
   id: string;
@@ -89,7 +90,7 @@ export default function EditDayScreen() {
   const { user } = useUser();
   const params = useLocalSearchParams();
   const { weightUnit } = useUnitsStore();
-  
+
   const dayId = params.dayId as string;
   const dayName = params.dayName as string;
   const targetCalories = parseInt(params.targetCalories as string) || 2000;
@@ -257,12 +258,37 @@ export default function EditDayScreen() {
   const loadFoodsByType = async (foodType: string) => {
     setLoadingFoods(true);
     try {
-      const { data, error } = await (supabase as any)
+      if (!user?.id) return;
+
+      const gymInfo = await getGymEmpresario(user.id);
+      const empresarioId = gymInfo?.empresario_id;
+
+      let query = supabase
         .from('foods')
         .select('*')
         .eq('food_type', foodType)
-        .eq('status', 'complete')
-        .order('name_es', { ascending: true });
+        .eq('status', 'complete');
+
+      if (empresarioId) {
+        query = query.or(`empresario_id.is.null,empresario_id.eq.${empresarioId}`);
+      } else {
+        query = query.is('empresario_id', null);
+      }
+
+      let { data, error } = await query.order('name_es', { ascending: true });
+
+      // Fallback if the column does not exist (dev/staging environments)
+      if (error && error.code === '42703') {
+        const fallbackQuery = await supabase
+          .from('foods')
+          .select('*')
+          .eq('food_type', foodType)
+          .eq('status', 'complete')
+          .order('name_es', { ascending: true });
+
+        data = fallbackQuery.data;
+        error = fallbackQuery.error;
+      }
 
       if (error) throw error;
       setFoods(data || []);
@@ -293,7 +319,7 @@ export default function EditDayScreen() {
       const proteinPerUnit = food.protein_per_unit ?? food.protein_g ?? 0;
       const carbsPerUnit = food.carbs_per_unit ?? food.carbs_g ?? 0;
       const fatPerUnit = food.fat_per_unit ?? food.fat_g ?? 0;
-      
+
       return {
         calories: Math.round(caloriesPerUnit * qty),
         protein: Math.round(proteinPerUnit * qty * 10) / 10,
@@ -306,7 +332,7 @@ export default function EditDayScreen() {
       const proteinPer100g = food.protein_per_100g ?? food.protein_g ?? 0;
       const carbsPer100g = food.carbs_per_100g ?? food.carbs_g ?? 0;
       const fatPer100g = food.fat_per_100g ?? food.fat_g ?? 0;
-      
+
       const factor = qty / 100;
       return {
         calories: Math.round(caloriesPer100g * factor),
@@ -518,6 +544,9 @@ export default function EditDayScreen() {
               <View style={styles.foodInfo}>
                 <Text style={styles.foodName} numberOfLines={1}>
                   {getFoodName(mealFood.food)}
+                  {(mealFood.food as any).empresario_id && (
+                    <Text style={{ color: '#ffb300', fontSize: 10 }}> [🏢]</Text>
+                  )}
                 </Text>
                 <Text style={styles.foodQuantity}>
                   {mealFood.quantity}{' '}
@@ -567,345 +596,352 @@ export default function EditDayScreen() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>{dayName}</Text>
-          <Text style={styles.headerSubtitle}>{targetCalories} kcal</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator size="small" color="#000" />
-          ) : (
-            <Text style={styles.saveButtonText}>{t('common.save')}</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Macro progress */}
-        <View style={styles.macroProgressSection}>
-          <Text style={styles.sectionTitle}>{t('editDay.dailyProgress')}</Text>
-          {renderMacroProgress(
-            '🔥 ' + t('nutrition.calories'),
-            currentTotals.calories,
-            targetCalories,
-            '#ffb300',
-            ''
-          )}
-          {renderMacroProgress(
-            t('nutrition.protein'),
-            currentTotals.protein,
-            targetProtein,
-            '#4CAF50'
-          )}
-          {renderMacroProgress(
-            t('nutrition.carbs'),
-            currentTotals.carbs,
-            targetCarbs,
-            '#2196F3'
-          )}
-          {renderMacroProgress(
-            t('nutrition.fats'),
-            currentTotals.fat,
-            targetFat,
-            '#FF9800'
-          )}
-        </View>
-
-        {/* Meals */}
-        <View style={styles.mealsSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>{t('editDay.meals')}</Text>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+            <Ionicons name="arrow-back" size={24} color="#fff" />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>{dayName}</Text>
+            <Text style={styles.headerSubtitle}>{targetCalories} kcal</Text>
           </View>
-
-          {meals.map(renderMealCard)}
-
-          <TouchableOpacity style={styles.addMealButton} onPress={addMeal}>
-            <Ionicons name="add-circle" size={24} color="#ffb300" />
-            <Text style={styles.addMealButtonText}>{t('editDay.addMeal')}</Text>
+          <TouchableOpacity
+            style={styles.saveButton}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#000" />
+            ) : (
+              <Text style={styles.saveButtonText}>{t('common.save')}</Text>
+            )}
           </TouchableOpacity>
         </View>
-      </ScrollView>
 
-      {/* Food Type Selector Modal */}
-      <Modal
-        visible={showFoodTypeModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowFoodTypeModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.foodTypeModalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('editDay.selectFoodType')}</Text>
-              <TouchableOpacity onPress={() => setShowFoodTypeModal(false)}>
-                <Ionicons name="close" size={24} color="#888" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.foodTypeGrid}>
-              <View style={styles.foodTypeRow}>
-                {FOOD_TYPES.map((type, index) => (
-                  <TouchableOpacity
-                    key={type.key}
-                    style={styles.foodTypeItem}
-                    onPress={() => selectFoodType(type.key)}
-                  >
-                    <View style={[styles.foodTypeIcon, { backgroundColor: type.color + '20' }]}>
-                      <Text style={styles.foodTypeEmoji}>{type.icon}</Text>
-                    </View>
-                    <Text style={styles.foodTypeLabel}>{t(`foodTypes.${type.key}`)}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Food List Modal */}
-      <Modal
-        visible={showFoodListModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowFoodListModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.foodListModalContent}>
-            <View style={styles.modalHeader}>
-              <TouchableOpacity onPress={() => {
-                setShowFoodListModal(false);
-                setShowFoodTypeModal(true);
-              }}>
-                <Ionicons name="arrow-back" size={24} color="#fff" />
-              </TouchableOpacity>
-              <Text style={styles.modalTitle}>
-                {selectedFoodType && t(`foodTypes.${selectedFoodType}`)}
-              </Text>
-              <TouchableOpacity onPress={() => setShowFoodListModal(false)}>
-                <Ionicons name="close" size={24} color="#888" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color="#888" />
-              <TextInput
-                style={styles.searchInput}
-                value={foodSearchQuery}
-                onChangeText={setFoodSearchQuery}
-                placeholder={t('editDay.searchFood')}
-                placeholderTextColor="#666"
-              />
-            </View>
-
-            {loadingFoods ? (
-              <View style={styles.loadingFoods}>
-                <ActivityIndicator size="large" color="#ffb300" />
-              </View>
-            ) : (
-              <ScrollView style={styles.foodListScroll}>
-                {filteredFoods.map(food => (
-                  <TouchableOpacity
-                    key={food.id}
-                    style={styles.foodListItem}
-                    onPress={() => selectFood(food)}
-                  >
-                    {food.image_url ? (
-                      <Image
-                        source={{ uri: food.image_url }}
-                        style={styles.foodListImage}
-                      />
-                    ) : (
-                      <View style={styles.foodListImagePlaceholder}>
-                        <Ionicons name="restaurant" size={24} color="#666" />
-                      </View>
-                    )}
-                    <View style={styles.foodListInfo}>
-                      <Text style={styles.foodListName}>{getFoodName(food)}</Text>
-                      <Text style={styles.foodListMacros}>
-                        {food.quantity_type === 'units'
-                          ? `${food.calories_per_unit ?? food.calories ?? 0} kcal / ${t('editDay.unit')}`
-                          : `${food.calories_per_100g ?? food.calories ?? 0} kcal / 100g`}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#666" />
-                  </TouchableOpacity>
-                ))}
-                {filteredFoods.length === 0 && (
-                  <Text style={styles.noFoodsText}>{t('editDay.noFoodsFound')}</Text>
-                )}
-              </ScrollView>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Macro progress */}
+          <View style={styles.macroProgressSection}>
+            <Text style={styles.sectionTitle}>{t('editDay.dailyProgress')}</Text>
+            {renderMacroProgress(
+              '🔥 ' + t('nutrition.calories'),
+              currentTotals.calories,
+              targetCalories,
+              '#ffb300',
+              ''
+            )}
+            {renderMacroProgress(
+              t('nutrition.protein'),
+              currentTotals.protein,
+              targetProtein,
+              '#4CAF50'
+            )}
+            {renderMacroProgress(
+              t('nutrition.carbs'),
+              currentTotals.carbs,
+              targetCarbs,
+              '#2196F3'
+            )}
+            {renderMacroProgress(
+              t('nutrition.fats'),
+              currentTotals.fat,
+              targetFat,
+              '#FF9800'
             )}
           </View>
-        </View>
-      </Modal>
 
-      {/* Quantity Modal */}
-      <Modal
-        visible={showQuantityModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowQuantityModal(false)}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <KeyboardAvoidingView 
-            style={styles.quantityModalOverlay}
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          >
-            <TouchableWithoutFeedback>
-              <View style={styles.quantityModalContent}>
-                {selectedFood && (
-                  <>
-                    <View style={styles.quantityModalHeader}>
-                      {selectedFood.image_url ? (
-                        <Image
-                          source={{ uri: selectedFood.image_url }}
-                          style={styles.quantityFoodImage}
-                        />
-                      ) : (
-                        <View style={styles.quantityFoodImagePlaceholder}>
-                          <Ionicons name="restaurant" size={40} color="#666" />
-                        </View>
-                      )}
-                      <Text style={styles.quantityFoodName}>{getFoodName(selectedFood)}</Text>
-                    </View>
+          {/* Meals */}
+          <View style={styles.mealsSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{t('editDay.meals')}</Text>
+            </View>
 
-                    <View style={styles.quantityInputContainer}>
-                      <Text style={styles.quantityLabel}>{t('editDay.quantity')}</Text>
-                      <View style={styles.quantityInputRow}>
-                        <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() => {
-                            const current = parseFloat(quantity) || 0;
-                            const step = selectedFood.quantity_type === 'units' ? 1 : 25;
-                            if (current > step) setQuantity((current - step).toString());
-                          }}
-                        >
-                          <Ionicons name="remove" size={24} color="#fff" />
-                        </TouchableOpacity>
-                        <TextInput
-                          style={styles.quantityInput}
-                          value={quantity}
-                          onChangeText={setQuantity}
-                          keyboardType="numeric"
-                        />
-                        <Text style={styles.quantityUnit}>{getQuantityLabel(selectedFood)}</Text>
-                        <TouchableOpacity
-                          style={styles.quantityButton}
-                          onPress={() => {
-                            const current = parseFloat(quantity) || 0;
-                            const step = selectedFood.quantity_type === 'units' ? 1 : 25;
-                            setQuantity((current + step).toString());
-                          }}
-                        >
-                          <Ionicons name="add" size={24} color="#fff" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
+            {meals.map(renderMealCard)}
 
-                    {/* Calculated macros preview */}
-                    <View style={styles.calculatedMacros}>
-                      {(() => {
-                        const macros = calculateMacros(selectedFood, parseFloat(quantity) || 0);
-                        return (
-                          <>
-                            <View style={styles.calculatedMacroItem}>
-                              <Text style={styles.calculatedMacroValue}>{macros.calories}</Text>
-                              <Text style={styles.calculatedMacroLabel}>kcal</Text>
-                            </View>
-                            <View style={styles.calculatedMacroItem}>
-                              <Text style={[styles.calculatedMacroValue, { color: '#4CAF50' }]}>
-                                {macros.protein}g
-                              </Text>
-                              <Text style={styles.calculatedMacroLabel}>{t('nutrition.protein')}</Text>
-                            </View>
-                            <View style={styles.calculatedMacroItem}>
-                              <Text style={[styles.calculatedMacroValue, { color: '#2196F3' }]}>
-                                {macros.carbs}g
-                              </Text>
-                              <Text style={styles.calculatedMacroLabel}>{t('nutrition.carbs')}</Text>
-                            </View>
-                            <View style={styles.calculatedMacroItem}>
-                              <Text style={[styles.calculatedMacroValue, { color: '#FF9800' }]}>
-                                {macros.fat}g
-                              </Text>
-                              <Text style={styles.calculatedMacroLabel}>{t('nutrition.fats')}</Text>
-                            </View>
-                          </>
-                        );
-                      })()}
-                    </View>
+            <TouchableOpacity style={styles.addMealButton} onPress={addMeal}>
+              <Ionicons name="add-circle" size={24} color="#ffb300" />
+              <Text style={styles.addMealButtonText}>{t('editDay.addMeal')}</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
 
-                    <View style={styles.quantityModalActions}>
-                      <TouchableOpacity
-                        style={styles.quantityCancelButton}
-                        onPress={() => setShowQuantityModal(false)}
-                      >
-                        <Text style={styles.quantityCancelButtonText}>{t('common.cancel')}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.quantityAddButton}
-                        onPress={addFoodToMeal}
-                      >
-                        <Ionicons name="add" size={20} color="#000" />
-                        <Text style={styles.quantityAddButtonText}>{t('editDay.add')}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                )}
+        {/* Food Type Selector Modal */}
+        <Modal
+          visible={showFoodTypeModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowFoodTypeModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.foodTypeModalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{t('editDay.selectFoodType')}</Text>
+                <TouchableOpacity onPress={() => setShowFoodTypeModal(false)}>
+                  <Ionicons name="close" size={24} color="#888" />
+                </TouchableOpacity>
               </View>
-            </TouchableWithoutFeedback>
-          </KeyboardAvoidingView>
-        </TouchableWithoutFeedback>
-      </Modal>
 
-      {/* Meal Name Edit Modal */}
-      <Modal
-        visible={showMealNameModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowMealNameModal(false)}
-      >
-        <View style={styles.mealNameModalOverlay}>
-          <View style={styles.mealNameModalContent}>
-            <Text style={styles.mealNameModalTitle}>{t('editDay.editMealName')}</Text>
-            <TextInput
-              style={styles.mealNameInput}
-              value={mealNameInput}
-              onChangeText={setMealNameInput}
-              placeholder={t('editDay.mealNamePlaceholder')}
-              placeholderTextColor="#666"
-              autoFocus
-            />
-            <View style={styles.mealNameModalActions}>
-              <TouchableOpacity
-                style={styles.mealNameCancelButton}
-                onPress={() => setShowMealNameModal(false)}
-              >
-                <Text style={styles.mealNameCancelButtonText}>{t('common.cancel')}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.mealNameSaveButton}
-                onPress={saveMealName}
-              >
-                <Text style={styles.mealNameSaveButtonText}>{t('common.save')}</Text>
-              </TouchableOpacity>
+              <ScrollView style={styles.foodTypeGrid}>
+                <View style={styles.foodTypeRow}>
+                  {FOOD_TYPES.map((type, index) => (
+                    <TouchableOpacity
+                      key={type.key}
+                      style={styles.foodTypeItem}
+                      onPress={() => selectFoodType(type.key)}
+                    >
+                      <View style={[styles.foodTypeIcon, { backgroundColor: type.color + '20' }]}>
+                        <Text style={styles.foodTypeEmoji}>{type.icon}</Text>
+                      </View>
+                      <Text style={styles.foodTypeLabel}>{t(`foodTypes.${type.key}`)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
             </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
+
+        {/* Food List Modal */}
+        <Modal
+          visible={showFoodListModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowFoodListModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.foodListModalContent}>
+              <View style={styles.modalHeader}>
+                <TouchableOpacity onPress={() => {
+                  setShowFoodListModal(false);
+                  setShowFoodTypeModal(true);
+                }}>
+                  <Ionicons name="arrow-back" size={24} color="#fff" />
+                </TouchableOpacity>
+                <Text style={styles.modalTitle}>
+                  {selectedFoodType && t(`foodTypes.${selectedFoodType}`)}
+                </Text>
+                <TouchableOpacity onPress={() => setShowFoodListModal(false)}>
+                  <Ionicons name="close" size={24} color="#888" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.searchContainer}>
+                <Ionicons name="search" size={20} color="#888" />
+                <TextInput
+                  style={styles.searchInput}
+                  value={foodSearchQuery}
+                  onChangeText={setFoodSearchQuery}
+                  placeholder={t('editDay.searchFood')}
+                  placeholderTextColor="#666"
+                />
+              </View>
+
+              {loadingFoods ? (
+                <View style={styles.loadingFoods}>
+                  <ActivityIndicator size="large" color="#ffb300" />
+                </View>
+              ) : (
+                <ScrollView style={styles.foodListScroll}>
+                  {filteredFoods.map(food => (
+                    <TouchableOpacity
+                      key={food.id}
+                      style={styles.foodListItem}
+                      onPress={() => selectFood(food)}
+                    >
+                      {food.image_url ? (
+                        <Image
+                          source={{ uri: food.image_url }}
+                          style={styles.foodListImage}
+                        />
+                      ) : (
+                        <View style={styles.foodListImagePlaceholder}>
+                          <Ionicons name="restaurant" size={24} color="#666" />
+                        </View>
+                      )}
+                      <View style={styles.foodListInfo}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={styles.foodListName}>{getFoodName(food)}</Text>
+                          {(food as any).empresario_id && (
+                            <View style={{ backgroundColor: '#ffb30022', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4, marginLeft: 6 }}>
+                              <Text style={{ color: '#ffb300', fontSize: 9, fontWeight: 'bold' }}>GYM</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.foodListMacros}>
+                          {food.quantity_type === 'units'
+                            ? `${food.calories_per_unit ?? food.calories ?? 0} kcal / ${t('editDay.unit')}`
+                            : `${food.calories_per_100g ?? food.calories ?? 0} kcal / 100g`}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={20} color="#666" />
+                    </TouchableOpacity>
+                  ))}
+                  {filteredFoods.length === 0 && (
+                    <Text style={styles.noFoodsText}>{t('editDay.noFoodsFound')}</Text>
+                  )}
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Quantity Modal */}
+        <Modal
+          visible={showQuantityModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowQuantityModal(false)}
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <KeyboardAvoidingView
+              style={styles.quantityModalOverlay}
+              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            >
+              <TouchableWithoutFeedback>
+                <View style={styles.quantityModalContent}>
+                  {selectedFood && (
+                    <>
+                      <View style={styles.quantityModalHeader}>
+                        {selectedFood.image_url ? (
+                          <Image
+                            source={{ uri: selectedFood.image_url }}
+                            style={styles.quantityFoodImage}
+                          />
+                        ) : (
+                          <View style={styles.quantityFoodImagePlaceholder}>
+                            <Ionicons name="restaurant" size={40} color="#666" />
+                          </View>
+                        )}
+                        <Text style={styles.quantityFoodName}>{getFoodName(selectedFood)}</Text>
+                      </View>
+
+                      <View style={styles.quantityInputContainer}>
+                        <Text style={styles.quantityLabel}>{t('editDay.quantity')}</Text>
+                        <View style={styles.quantityInputRow}>
+                          <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => {
+                              const current = parseFloat(quantity) || 0;
+                              const step = selectedFood.quantity_type === 'units' ? 1 : 25;
+                              if (current > step) setQuantity((current - step).toString());
+                            }}
+                          >
+                            <Ionicons name="remove" size={24} color="#fff" />
+                          </TouchableOpacity>
+                          <TextInput
+                            style={styles.quantityInput}
+                            value={quantity}
+                            onChangeText={setQuantity}
+                            keyboardType="numeric"
+                          />
+                          <Text style={styles.quantityUnit}>{getQuantityLabel(selectedFood)}</Text>
+                          <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => {
+                              const current = parseFloat(quantity) || 0;
+                              const step = selectedFood.quantity_type === 'units' ? 1 : 25;
+                              setQuantity((current + step).toString());
+                            }}
+                          >
+                            <Ionicons name="add" size={24} color="#fff" />
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+
+                      {/* Calculated macros preview */}
+                      <View style={styles.calculatedMacros}>
+                        {(() => {
+                          const macros = calculateMacros(selectedFood, parseFloat(quantity) || 0);
+                          return (
+                            <>
+                              <View style={styles.calculatedMacroItem}>
+                                <Text style={styles.calculatedMacroValue}>{macros.calories}</Text>
+                                <Text style={styles.calculatedMacroLabel}>kcal</Text>
+                              </View>
+                              <View style={styles.calculatedMacroItem}>
+                                <Text style={[styles.calculatedMacroValue, { color: '#4CAF50' }]}>
+                                  {macros.protein}g
+                                </Text>
+                                <Text style={styles.calculatedMacroLabel}>{t('nutrition.protein')}</Text>
+                              </View>
+                              <View style={styles.calculatedMacroItem}>
+                                <Text style={[styles.calculatedMacroValue, { color: '#2196F3' }]}>
+                                  {macros.carbs}g
+                                </Text>
+                                <Text style={styles.calculatedMacroLabel}>{t('nutrition.carbs')}</Text>
+                              </View>
+                              <View style={styles.calculatedMacroItem}>
+                                <Text style={[styles.calculatedMacroValue, { color: '#FF9800' }]}>
+                                  {macros.fat}g
+                                </Text>
+                                <Text style={styles.calculatedMacroLabel}>{t('nutrition.fats')}</Text>
+                              </View>
+                            </>
+                          );
+                        })()}
+                      </View>
+
+                      <View style={styles.quantityModalActions}>
+                        <TouchableOpacity
+                          style={styles.quantityCancelButton}
+                          onPress={() => setShowQuantityModal(false)}
+                        >
+                          <Text style={styles.quantityCancelButtonText}>{t('common.cancel')}</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.quantityAddButton}
+                          onPress={addFoodToMeal}
+                        >
+                          <Ionicons name="add" size={20} color="#000" />
+                          <Text style={styles.quantityAddButtonText}>{t('editDay.add')}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </View>
+              </TouchableWithoutFeedback>
+            </KeyboardAvoidingView>
+          </TouchableWithoutFeedback>
+        </Modal>
+
+        {/* Meal Name Edit Modal */}
+        <Modal
+          visible={showMealNameModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowMealNameModal(false)}
+        >
+          <View style={styles.mealNameModalOverlay}>
+            <View style={styles.mealNameModalContent}>
+              <Text style={styles.mealNameModalTitle}>{t('editDay.editMealName')}</Text>
+              <TextInput
+                style={styles.mealNameInput}
+                value={mealNameInput}
+                onChangeText={setMealNameInput}
+                placeholder={t('editDay.mealNamePlaceholder')}
+                placeholderTextColor="#666"
+                autoFocus
+              />
+              <View style={styles.mealNameModalActions}>
+                <TouchableOpacity
+                  style={styles.mealNameCancelButton}
+                  onPress={() => setShowMealNameModal(false)}
+                >
+                  <Text style={styles.mealNameCancelButtonText}>{t('common.cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.mealNameSaveButton}
+                  onPress={saveMealName}
+                >
+                  <Text style={styles.mealNameSaveButtonText}>{t('common.save')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </>
   );

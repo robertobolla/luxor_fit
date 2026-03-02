@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../services/adminService';
+import { useTranslation } from 'react-i18next';
 
 interface ExerciseMetadataModalProps {
   exercise: {
@@ -220,7 +221,7 @@ const ZONE_NORMALIZATION: Record<string, string> = {
 const normalizeMuscleZones = (zoneList: string[]): string[] => {
   const normalized = new Set<string>();
   const allValidZones = Object.values(MUSCLE_ZONES).flat();
-  
+
   for (const zone of zoneList) {
     const lowerZone = zone.toLowerCase();
     // Si hay un mapeo, usarlo
@@ -237,7 +238,7 @@ const normalizeMuscleZones = (zoneList: string[]): string[] => {
 
 const EQUIPMENT = [
   'none', 'dumbbells', 'barbell', 'resistance_bands', 'pull_up_bar', 'bench',
-  'bench_dumbbells', 'bench_barbell', 'gym_access', 'kettlebell', 'cable_machine', 
+  'bench_dumbbells', 'bench_barbell', 'gym_access', 'kettlebell', 'cable_machine',
   'smith_machine', 'leg_press', 'medicine_ball', 'yoga_mat'
 ];
 
@@ -273,6 +274,7 @@ const GOAL_LABELS: Record<string, string> = {
 };
 
 export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false, onClose, onSave }: ExerciseMetadataModalProps) {
+  const { t } = useTranslation();
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -361,12 +363,12 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
       if (isNew) {
         // Crear nuevo ejercicio
         console.log('➕ Creando nuevo ejercicio:', exerciseData);
-        
+
         // Agregar campos adicionales para nuevo ejercicio
         exerciseData.name_variations = [canonicalName.trim().toLowerCase()];
         exerciseData.is_primary = true;
         exerciseData.priority = 1;
-        
+
         const { error: insertError } = await supabase
           .from('exercise_videos')
           .insert(exerciseData);
@@ -378,12 +380,12 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
           }
           throw insertError;
         }
-        
+
         console.log('✅ Ejercicio creado exitosamente');
       } else {
         // Actualizar ejercicio existente
         const updates = { ...exerciseData };
-        
+
         // Solo actualizar el nombre si cambió
         const normalizedCanonicalName = canonicalName.trim() || null;
         const originalCanonicalName = exercise.canonical_name || null;
@@ -392,7 +394,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
         }
 
         console.log('💾 Actualizando ejercicio:', exercise.id, updates);
-        
+
         const { error: updateError } = await supabase
           .from('exercise_videos')
           .update(updates)
@@ -402,13 +404,13 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
           console.error('❌ Error al guardar:', updateError);
           throw updateError;
         }
-        
+
         console.log('✅ Ejercicio actualizado');
       }
 
       // Esperar a que onSave complete la recarga de datos antes de cerrar
       await onSave();
-      
+
       console.log('✅ onSave completado, cerrando modal...');
       onClose();
     } catch (e: any) {
@@ -549,11 +551,11 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
         {/* Step 1: Categoría y Tipo de Ejercicio */}
         {step === 1 && (
           <div>
-            <h3 style={{ color: '#fff', marginBottom: 16 }}>Paso 1: Categoría y Tipo de Ejercicio</h3>
-            
+            <h3 style={{ color: '#fff', marginBottom: 16 }}>{t('exercise_metadata.step1')}</h3>
+
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
-                Categoría Principal *
+                {t('exercise_metadata.category')}
               </label>
               <select
                 value={category}
@@ -568,21 +570,21 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
                   fontSize: 14,
                 }}
               >
-                <option value="">Selecciona una categoría</option>
+                <option value="">{t('exercise_metadata.select_category')}</option>
                 {CATEGORIES.map(cat => (
                   <option key={cat.value} value={cat.value}>{cat.label}</option>
                 ))}
               </select>
               {category && (
                 <p style={{ color: '#888', fontSize: 12, marginTop: 4 }}>
-                  Tipo de movimiento: {CATEGORIES.find(c => c.value === category)?.movementType}
+                  {t('exercise_metadata.movement_type')} {CATEGORIES.find(c => c.value === category)?.movementType}
                 </p>
               )}
             </div>
 
             <div>
               <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
-                Tipo de Ejercicio *
+                {t('exercise_metadata.type')}
               </label>
               <div style={{ display: 'flex', gap: 12 }}>
                 {EXERCISE_TYPES.map(type => (
@@ -607,12 +609,12 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
                       onChange={(e) => setExerciseType(e.target.value)}
                       style={{ marginRight: 8 }}
                     />
-                    {type.label}
+                    {type.value === 'compound' ? t('exercise_metadata.type_compound') : t('exercise_metadata.type_isolation')}
                   </label>
                 ))}
               </div>
               <p style={{ color: '#888', fontSize: 12, marginTop: 8 }}>
-                💡 Si seleccionas 2 o más músculos en el siguiente paso, es recomendable marcar "Compuesto"
+                {t('exercise_metadata.type_tip')}
               </p>
             </div>
 
@@ -624,10 +626,10 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
                   onChange={(e) => setUsesTime(e.target.checked)}
                   style={{ marginRight: 8, width: 18, height: 18, cursor: 'pointer' }}
                 />
-                <span>Este ejercicio usa tiempo en lugar de repeticiones</span>
+                <span>{t('exercise_metadata.uses_time')}</span>
               </label>
               <p style={{ color: '#888', fontSize: 12, marginTop: 4, marginLeft: 26 }}>
-                💡 Marca esto para ejercicios como battle ropes, plancha, cardio, etc. que se miden por tiempo (ej: 30s, 1min) en lugar de repeticiones
+                {t('exercise_metadata.uses_time_tip')}
               </p>
             </div>
           </div>
@@ -636,11 +638,11 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
         {/* Step 2: Músculos y Zonas */}
         {step === 2 && (
           <div>
-            <h3 style={{ color: '#fff', marginBottom: 16 }}>Paso 2: Músculos y Zonas Musculares</h3>
-            
+            <h3 style={{ color: '#fff', marginBottom: 16 }}>{t('exercise_metadata.step2')}</h3>
+
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
-                Músculos Trabajados *
+                {t('exercise_metadata.muscles')}
               </label>
               <div style={{
                 display: 'grid',
@@ -680,7 +682,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
             {availableZones.length > 0 && (
               <div>
                 <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
-                  Zonas Musculares (opcional)
+                  {t('exercise_metadata.zones')}
                 </label>
                 <div style={{
                   display: 'grid',
@@ -723,11 +725,11 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
         {/* Step 3: Equipamiento */}
         {step === 3 && (
           <div>
-            <h3 style={{ color: '#fff', marginBottom: 16 }}>Paso 3: Equipamiento</h3>
-            
+            <h3 style={{ color: '#fff', marginBottom: 16 }}>{t('exercise_metadata.step3')}</h3>
+
             <div>
               <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
-                Equipamiento Necesario * (puedes seleccionar múltiples)
+                {t('exercise_metadata.equipment')}
               </label>
               <div style={{
                 display: 'grid',
@@ -769,11 +771,11 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
         {/* Step 4: Objetivos y Actividad */}
         {step === 4 && (
           <div>
-            <h3 style={{ color: '#fff', marginBottom: 16 }}>Paso 4: Objetivos y Actividad</h3>
-            
+            <h3 style={{ color: '#fff', marginBottom: 16 }}>{t('exercise_metadata.step4')}</h3>
+
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', color: '#ccc', marginBottom: 8 }}>
-                Objetivos *
+                {t('exercise_metadata.goals')}
               </label>
               <div style={{
                 display: 'grid',
@@ -826,7 +828,7 @@ export default function ExerciseMetadataModal({ exercise, isOpen, isNew = false,
           >
             ← Anterior
           </button>
-          
+
           {step < 4 ? (
             <button
               onClick={() => setStep(step + 1)}

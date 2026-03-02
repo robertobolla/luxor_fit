@@ -14,7 +14,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 // lleve el token de Clerk si está disponible.
 
 const originalFetch = window.fetch;
-let currentClerkToken: string | null = null;
+let tokenProvider: (() => Promise<string | null>) | null = null;
 
 // Sobrescribir fetch global
 window.fetch = async (...args) => {
@@ -29,41 +29,44 @@ window.fetch = async (...args) => {
     isSupabaseRequest = true;
   }
 
-  if (isSupabaseRequest && currentClerkToken) {
-    // console.log('⚡ Interceptando fetch a Supabase:', resource);
+  if (isSupabaseRequest && tokenProvider) {
+    try {
+      const freshToken = await tokenProvider();
+      if (freshToken) {
+        // Asegurar que config existe
+        if (!config) {
+          config = {};
+        }
 
-    // Asegurar que config existe
-    if (!config) {
-      config = {};
-    }
+        // Asegurar que headers existe
+        if (!config.headers) {
+          config.headers = {};
+        }
 
-    // Asegurar que headers existe
-    if (!config.headers) {
-      config.headers = {};
-    }
-
-    // Inyectar token
-    // Manejar los diferentes tipos de headers que fetch acepta
-    if (config.headers instanceof Headers) {
-      config.headers.set('Authorization', `Bearer ${currentClerkToken}`);
-      // Asegurar apikey también
-      if (!config.headers.has('apikey')) {
-        config.headers.set('apikey', supabaseAnonKey);
+        // Inyectar token
+        // Manejar los diferentes tipos de headers que fetch acepta
+        if (config.headers instanceof Headers) {
+          config.headers.set('Authorization', `Bearer ${freshToken}`);
+          // Asegurar apikey también
+          if (!config.headers.has('apikey')) {
+            config.headers.set('apikey', supabaseAnonKey);
+          }
+        } else if (Array.isArray(config.headers)) {
+          config.headers.push(['Authorization', `Bearer ${freshToken}`]);
+          // @ts-ignore
+        } else {
+          // @ts-ignore
+          config.headers['Authorization'] = `Bearer ${freshToken}`;
+          // @ts-ignore
+          if (!config.headers['apikey']) {
+            // @ts-ignore
+            config.headers['apikey'] = supabaseAnonKey;
+          }
+        }
       }
-    } else if (Array.isArray(config.headers)) {
-      config.headers.push(['Authorization', `Bearer ${currentClerkToken}`]);
-      // @ts-ignore - Array check es complejo, asumimos objeto es más común
-    } else {
-      // @ts-ignore
-      config.headers['Authorization'] = `Bearer ${currentClerkToken}`;
-      // @ts-ignore
-      if (!config.headers['apikey']) {
-        // @ts-ignore
-        config.headers['apikey'] = supabaseAnonKey;
-      }
+    } catch (e) {
+      console.error('Error fetching fresh token for Supabase request:', e);
     }
-
-    // console.log('💉 Token inyectado vía Monkey Patch!');
   }
 
   return originalFetch(resource, config);
@@ -72,8 +75,8 @@ window.fetch = async (...args) => {
 // Crear cliente normal - ya no necesitamos customFetch porque tenemos el parche global
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    autoRefreshToken: true,
-    persistSession: true,
+    autoRefreshToken: false,
+    persistSession: false,
     detectSessionInUrl: false,
   },
   global: {
@@ -102,26 +105,16 @@ export const handleSupabaseSuccess = (data: any) => {
   };
 };
 
-// Helper para inyectar token de Clerk manualmente (Bypass UUID check)
+// Configurar el proveedor dinámico que obtiene el token fresco de Clerk
+export const setSupabaseTokenProvider = (provider: () => Promise<string | null>) => {
+  tokenProvider = provider;
+};
+
+// (Deprecated) Mantener de backwards compatibility si en algún lado se llama directamente
 export const setSupabaseAuthToken = async (token: string | null) => {
-  // Guardar en variable local para el interceptor
-  currentClerkToken = token;
-
-  // Intentar los métodos estándar por compatibilidad interna de la librería
-  // (Aunque nuestro interceptor hará el trabajo real)
-  if (!token) {
-    // @ts-ignore
-    if (supabase.rest) supabase.rest.headers['Authorization'] = undefined;
-    // @ts-ignore
-    supabase.realtime.setAuth(null);
-    return;
+  // If explicitly called with a static string, we wrap it in a provider temporarily,
+  // but the main app will be refactored to use setSupabaseTokenProvider
+  if (token) {
+    tokenProvider = async () => token;
   }
-
-  // Inyectar en Realtime (este sí suele funcionar manual)
-  if (supabase.realtime) {
-    supabase.realtime.setAuth(token);
-  }
-
-  // YA NO llamamos a setSession porque falla con tokens de Clerk (no-UUID)
-  // y nuestro Monkey Patch ya se encarga de inyectar el token en las peticiones de datos.
 };

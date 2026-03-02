@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useUser, useAuth } from '@clerk/clerk-react';
 import { getEmpresarioUsers, removeUserFromEmpresario, getEmpresarios, createGymUser, deactivateUserSubscription, extendUserSubscription, getAllPaymentHistory, type GymMember, type Empresario } from '../services/adminService';
+import { useTranslation } from 'react-i18next';
 import './EmpresarioUsers.css';
 
 export default function EmpresarioUsers() {
+  const { t } = useTranslation();
   const { empresarioId } = useParams<{ empresarioId: string }>();
   const { user } = useUser();
   const { getToken } = useAuth();
@@ -51,6 +53,10 @@ export default function EmpresarioUsers() {
   const [paymentHistoryTotal, setPaymentHistoryTotal] = useState(0);
   const [paymentHistoryStartDate, setPaymentHistoryStartDate] = useState('');
   const [paymentHistoryEndDate, setPaymentHistoryEndDate] = useState('');
+
+  // Success Modal states
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successData, setSuccessData] = useState<{ email: string; name: string; expiry: string } | null>(null);
 
   useEffect(() => {
     loadData();
@@ -137,7 +143,12 @@ export default function EmpresarioUsers() {
         ? `hasta ${new Date(expiryDate).toLocaleDateString()}`
         : (selectedExpiryOption === '1month' ? '1 mes' : '1 año');
 
-      alert(`Usuario creado exitosamente. El usuario podrá iniciar sesión con Google OAuth directamente, o si elige email/contraseña, recibirá automáticamente un email para establecer su contraseña. Suscripción: ${expiryText}`);
+      setSuccessData({
+        email: emailToAdd.trim(),
+        name: `${nameToAdd.trim()} ${lastNameToAdd.trim()}`,
+        expiry: expiryText
+      });
+      setShowSuccessModal(true);
 
       setShowAddModal(false);
       setEmailToAdd('');
@@ -351,7 +362,7 @@ export default function EmpresarioUsers() {
   });
 
   if (loading) {
-    return <div className="page-loading">Cargando usuarios...</div>;
+    return <div className="page-loading">{t('users.loading')}</div>;
   }
 
   return (
@@ -359,34 +370,37 @@ export default function EmpresarioUsers() {
       <div className="page-header">
         {empresarioId && (
           <button className="btn-secondary" onClick={() => navigate('/empresarios')}>
-            ← Volver
+            ← {t('users.back')}
           </button>
         )}
         <h1>
-          {empresario?.gym_name || empresario?.name || 'Mis Usuarios'}
+          {empresario?.gym_name || empresario?.name || t('users.title')}
         </h1>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button className="btn-secondary" onClick={() => handleShowPaymentHistory()}>
-            Historial de Pagos
+            {t('users.payment_history')}
           </button>
           <button className="btn-primary" onClick={() => setShowAddModal(true)}>
-            + Agregar Usuario
+            + {t('users.add_user')}
           </button>
         </div>
       </div>
 
       {empresario && (
         <div className="empresario-info-card">
-          <p><strong>Email:</strong> {empresario.email}</p>
-          {empresario.monthly_fee && (
+          <p><strong>{t('users.email')}:</strong> {empresario.email}</p>
+          {(empresario.monthly_fee || empresario.annual_fee) && (
             <>
-              <p><strong>Tarifa por usuario:</strong> ${empresario.monthly_fee.toFixed(2)}/mes</p>
-              <p><strong>Usuarios activos:</strong> {users.filter(u => u.is_active).length}</p>
-              <p><strong>Costo mensual actual:</strong> <span style={{ color: '#F7931E', fontWeight: 'bold' }}>${(empresario.monthly_fee * users.filter(u => u.is_active).length).toFixed(2)}</span></p>
+              <p>
+                <strong>{t('users.plan_price')}:</strong> {' '}
+                ${(empresario.annual_fee || empresario.monthly_fee || 0).toFixed(2)}
+                {empresario.annual_fee ? '/año' : '/mes'}
+              </p>
+              <p><strong>{t('users.active_users')}:</strong> {users.filter(u => u.is_active).length}</p>
             </>
           )}
           {empresario.max_users && (
-            <p><strong>Límite:</strong> {empresario.max_users} usuarios</p>
+            <p><strong>{t('users.limit')}:</strong> {empresario.max_users} usuarios</p>
           )}
         </div>
       )}
@@ -396,7 +410,7 @@ export default function EmpresarioUsers() {
         <div style={{ flex: 1, minWidth: '300px' }}>
           <input
             type="text"
-            placeholder="Buscar por nombre, usuario o email..."
+            placeholder={t('users.search')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             style={{
@@ -424,7 +438,7 @@ export default function EmpresarioUsers() {
               cursor: 'pointer'
             }}
           >
-            Todos
+            {t('users.filter.all')}
           </button>
           <button
             className={`btn-filter ${statusFilter === 'active' ? 'active' : ''}`}
@@ -438,7 +452,7 @@ export default function EmpresarioUsers() {
               cursor: 'pointer'
             }}
           >
-            Activos
+            {t('users.filter.active')}
           </button>
           <button
             className={`btn-filter ${statusFilter === 'inactive' ? 'active' : ''}`}
@@ -452,7 +466,7 @@ export default function EmpresarioUsers() {
               cursor: 'pointer'
             }}
           >
-            Inactivos
+            {t('users.filter.inactive')}
           </button>
           <button
             className={`btn-filter ${statusFilter === 'expired' ? 'active' : ''}`}
@@ -466,7 +480,7 @@ export default function EmpresarioUsers() {
               cursor: 'pointer'
             }}
           >
-            Expirados
+            {t('users.filter.expired')}
           </button>
         </div>
       </div>
@@ -475,17 +489,17 @@ export default function EmpresarioUsers() {
         <table className="users-table">
           <thead>
             <tr>
-              <th>Nombre</th>
-              <th>Usuario</th>
-              <th>Email</th>
-              <th>Edad</th>
-              <th>Nivel</th>
-              <th>Fecha Ingreso</th>
-              <th>Suscripción</th>
-              <th>Plan Entrenamiento</th>
-              <th>Expiración</th>
-              <th>Estado</th>
-              <th>Acciones</th>
+              <th>{t('users.table.name')}</th>
+              <th>{t('users.table.username')}</th>
+              <th>{t('users.table.email')}</th>
+              <th>{t('users.table.age')}</th>
+              <th>{t('users.table.level')}</th>
+              <th>{t('users.table.joined')}</th>
+              <th>{t('users.table.subscription')}</th>
+              <th>{t('users.table.plan')}</th>
+              <th>{t('users.table.expiration')}</th>
+              <th>{t('users.table.status')}</th>
+              <th>{t('users.table.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -1016,6 +1030,51 @@ export default function EmpresarioUsers() {
                 {extending ? 'Guardando...' : 'Confirmar Extensión'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* Success Modal */}
+      {showSuccessModal && successData && (
+        <div className="modal-overlay" onClick={() => setShowSuccessModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '450px', textAlign: 'center', padding: '40px' }}>
+            <div style={{
+              width: '80px',
+              height: '80px',
+              background: 'rgba(76, 175, 80, 0.1)',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 24px',
+              border: '2px solid #4CAF50'
+            }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4CAF50" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+
+            <h2 style={{ color: '#fff', marginBottom: '12px', fontSize: '24px' }}>¡Usuario Creado!</h2>
+            <p style={{ color: '#ccc', marginBottom: '24px', fontSize: '16px', lineHeight: '1.5' }}>
+              El usuario ha sido registrado exitosamente en el sistema y asociado a tu gimnasio.
+            </p>
+
+            <div style={{ background: '#0a0a0a', padding: '20px', borderRadius: '12px', border: '1px solid #2a2a2a', marginBottom: '30px', textAlign: 'left' }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#888' }}>Detalles del registro:</p>
+              <p style={{ margin: '0 0 4px 0', color: '#fff', fontWeight: '600' }}>{successData.name}</p>
+              <p style={{ margin: '0 0 12px 0', color: '#F7931E', fontSize: '14px' }}>{successData.email}</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingTop: '12px', borderTop: '1px solid #1a1a1a' }}>
+                <span className="badge badge-success" style={{ margin: 0 }}>Activo</span>
+                <span style={{ color: '#888', fontSize: '13px' }}>Suscripción: {successData.expiry}</span>
+              </div>
+            </div>
+
+            <button
+              className="btn-primary"
+              onClick={() => setShowSuccessModal(false)}
+              style={{ width: '100%', padding: '14px', fontSize: '16px' }}
+            >
+              Entendido
+            </button>
           </div>
         </div>
       )}

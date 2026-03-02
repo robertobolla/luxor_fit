@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { supabase, getUserRole } from '../services/adminService';
 import ExerciseMetadataModal from '../components/ExerciseMetadataModal';
+import { useTranslation } from 'react-i18next';
 
 // Mapeos de traducción
 const EXERCISE_TYPE_LABELS: Record<string, string> = {
@@ -63,6 +64,7 @@ interface ExerciseVideoRow {
 const DEFAULT_PAGE_SIZE = 20;
 
 export default function Exercises() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -81,7 +83,7 @@ export default function Exercises() {
   const [videoExerciseName, setVideoExerciseName] = useState<string>('');
   const [uploadingExerciseId, setUploadingExerciseId] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<string>('');
-  
+
   const isAdmin = userRole === 'admin';
 
   useEffect(() => {
@@ -139,13 +141,13 @@ export default function Exercises() {
   const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !selectedExercise) return;
-    
+
     // Verificar que solo admins puedan subir videos
     if (!isAdmin) {
       setError('❌ Solo los administradores pueden subir videos');
       return;
     }
-    
+
     setSaving(true);
     setUploadingExerciseId(selectedExercise.id);
     setUploadProgress('Preparando archivo...');
@@ -159,7 +161,7 @@ export default function Exercises() {
         .replace(/[^\w-]/g, '-') // Reemplazar caracteres especiales con guiones
         .replace(/-+/g, '-') // Eliminar guiones múltiples
         .replace(/^-|-$/g, ''); // Eliminar guiones al inicio/final
-      
+
       // Sanitizar el nombre del archivo
       const safeFileName = file.name
         .toLowerCase()
@@ -168,13 +170,13 @@ export default function Exercises() {
         .replace(/[^\w.-]/g, '-') // Reemplazar caracteres especiales con guiones (mantener punto y guión)
         .replace(/-+/g, '-') // Eliminar guiones múltiples
         .replace(/^-|-$/g, ''); // Eliminar guiones al inicio/final
-      
+
       // Generar nombre de archivo seguro con timestamp
       const finalFileName = `${Date.now()}_${safeFileName}`;
       const path = `${safeExerciseName}/${finalFileName}`;
-      
+
       setUploadProgress('Subiendo video a servidor...');
-      
+
       const { error: upErr } = await supabase.storage.from('exercise-videos').upload(path, file, {
         cacheControl: '3600',
         upsert: false,
@@ -183,7 +185,7 @@ export default function Exercises() {
       if (upErr) throw upErr;
 
       setUploadProgress('Guardando información en base de datos...');
-      
+
       // Asegurar que name_variations incluya al menos el nombre normalizado (minúsculas)
       // para que la búsqueda funcione correctamente
       const normalizedName = selectedExercise.canonical_name.toLowerCase().trim();
@@ -231,9 +233,9 @@ export default function Exercises() {
           to { transform: rotate(360deg); }
         }
       `}</style>
-      <h1>Catálogo de Ejercicios</h1>
-      <p style={{ color: '#888' }}>Busca un ejercicio y sube un video asociado con un clic</p>
-      
+      <h1>{t('exercises.title')}</h1>
+      <p style={{ color: '#888' }}>{t('exercises.subtitle')}</p>
+
       {uploadingExerciseId && uploadProgress && (
         <div style={{
           backgroundColor: '#1a3a1a',
@@ -268,12 +270,12 @@ export default function Exercises() {
       <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <input
           type="text"
-          placeholder="Buscar ejercicio..."
+          placeholder={t('exercises.search')}
           value={search}
           onChange={(e) => { setPage(1); setSearch(e.target.value); }}
           style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #2a2a2a', background: '#0a0a0a', color: '#fff', width: 320 }}
         />
-        <button onClick={load} className="btn-secondary" disabled={loading}>Recargar</button>
+        <button onClick={load} className="btn-secondary" disabled={loading}>{t('exercises.reload')}</button>
         {error && <span style={{ color: '#ff6b6b' }}>❌ {error}</span>}
       </div>
 
@@ -310,7 +312,7 @@ export default function Exercises() {
               setIsCreatingNewExercise(true);
               setMetadataModalOpen(true);
             }}
-            style={{ 
+            style={{
               display: 'flex',
               alignItems: 'center',
               gap: 8,
@@ -332,15 +334,15 @@ export default function Exercises() {
             <thead>
               <tr style={{ textAlign: 'left', borderBottom: '1px solid #222' }}>
                 <th style={{ padding: 10, width: 60 }}>#</th>
-                <th style={{ padding: 10, minWidth: 150 }}>Ejercicio</th>
-                <th style={{ padding: 10, minWidth: 120 }}>Categoría</th>
-                <th style={{ padding: 10, minWidth: 150 }}>Músculos</th>
-                <th style={{ padding: 10, minWidth: 120 }}>Zonas</th>
-                <th style={{ padding: 10, minWidth: 100 }}>Tipo</th>
-                <th style={{ padding: 10, minWidth: 150 }}>Equipamiento</th>
-                <th style={{ padding: 10, minWidth: 120 }}>Objetivos</th>
-                <th style={{ padding: 10, minWidth: 100 }}>Estado</th>
-                <th style={{ padding: 10, width: 280 }}>Acciones</th>
+                <th style={{ padding: 10, minWidth: 150 }}>{t('exercises.table.exercise')}</th>
+                <th style={{ padding: 10, minWidth: 120 }}>{t('exercises.table.category')}</th>
+                <th style={{ padding: 10, minWidth: 150 }}>{t('exercises.table.muscles')}</th>
+                <th style={{ padding: 10, minWidth: 120 }}>{t('exercises.table.zones')}</th>
+                <th style={{ padding: 10, minWidth: 100 }}>{t('exercises.table.type')}</th>
+                <th style={{ padding: 10, minWidth: 150 }}>{t('exercises.table.equipment')}</th>
+                <th style={{ padding: 10, minWidth: 120 }}>{t('exercises.table.goals')}</th>
+                <th style={{ padding: 10, minWidth: 100 }}>{t('exercises.table.status')}</th>
+                <th style={{ padding: 10, width: 280 }}>{t('exercises.table.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -439,7 +441,7 @@ export default function Exercises() {
                             onClick={async () => {
                               try {
                                 let videoUrlToShow = null;
-                                
+
                                 // Si tiene storage_path y is_storage_video, obtener URL pública
                                 if (row.is_storage_video && row.storage_path) {
                                   const { data } = supabase.storage
@@ -449,7 +451,7 @@ export default function Exercises() {
                                 } else if (row.video_url) {
                                   videoUrlToShow = row.video_url;
                                 }
-                                
+
                                 if (videoUrlToShow) {
                                   setVideoUrl(videoUrlToShow);
                                   setVideoExerciseName(row.canonical_name);
@@ -494,8 +496,8 @@ export default function Exercises() {
                             disabled={saving || uploadingExerciseId === row.id}
                             className="btn-primary"
                             onClick={() => handlePickFile(row)}
-                            style={{ 
-                              fontSize: '0.85rem', 
+                            style={{
+                              fontSize: '0.85rem',
                               padding: '6px 12px',
                               opacity: uploadingExerciseId === row.id ? 0.7 : 1,
                               position: 'relative'
@@ -515,7 +517,7 @@ export default function Exercises() {
                                 Subiendo...
                               </span>
                             ) : (
-                              hasVideo ? 'Reemplazar video' : 'Subir video'
+                              hasVideo ? t('exercises.replace_video') : t('exercises.upload_video')
                             )}
                           </button>
                           <button
@@ -528,7 +530,7 @@ export default function Exercises() {
                             }}
                             style={{ fontSize: '0.85rem', padding: '6px 12px' }}
                           >
-                            {hasMetadata ? 'Editar info' : 'Agregar info'}
+                            {hasMetadata ? t('exercises.edit_info') : t('exercises.add_info')}
                           </button>
                           <button
                             disabled={saving}
@@ -543,40 +545,40 @@ export default function Exercises() {
                                   id: row.id,
                                   canonical_name: row.canonical_name
                                 });
-                                
+
                                 // Primero verificar que el ejercicio existe
                                 const { data: checkData, error: checkError } = await supabase
                                   .from('exercise_videos')
                                   .select('id, canonical_name')
                                   .eq('id', row.id)
                                   .maybeSingle();
-                                
+
                                 console.log('🔍 Verificación previa:', { checkData, checkError });
-                                
+
                                 if (checkError) {
                                   console.error('❌ Error verificando ejercicio:', checkError);
                                   throw new Error(`Error verificando ejercicio: ${checkError.message}`);
                                 }
-                                
+
                                 if (!checkData) {
                                   throw new Error('El ejercicio no existe en la base de datos');
                                 }
-                                
+
                                 // Intentar eliminar
                                 const { data, error, status, statusText } = await supabase
                                   .from('exercise_videos')
                                   .delete()
                                   .eq('id', row.id)
                                   .select();
-                                
-                                console.log('📊 Respuesta completa del delete:', { 
-                                  data, 
-                                  error, 
-                                  status, 
+
+                                console.log('📊 Respuesta completa del delete:', {
+                                  data,
+                                  error,
+                                  status,
                                   statusText,
-                                  dataLength: data?.length 
+                                  dataLength: data?.length
                                 });
-                                
+
                                 if (error) {
                                   console.error('❌ Error de Supabase:', {
                                     message: error.message,
@@ -586,13 +588,13 @@ export default function Exercises() {
                                   });
                                   throw error;
                                 }
-                                
+
                                 // Verificar si se eliminó algo
                                 if (!data || data.length === 0) {
                                   console.warn('⚠️ No se eliminó ningún registro. Verificando políticas RLS...');
                                   throw new Error('No se eliminó ningún registro. Verifica las políticas RLS en Supabase. Ejecuta VERIFICAR_POLITICAS_RLS_EXERCISE_VIDEOS_COMPLETO.sql');
                                 }
-                                
+
                                 console.log('✅ Ejercicio eliminado exitosamente:', data[0]);
                                 await load();
                                 alert('✅ Ejercicio eliminado correctamente');
@@ -636,7 +638,7 @@ export default function Exercises() {
       </div>
 
       <input ref={fileInputRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={handleFileChange} />
-      
+
       {exerciseForMetadata && (
         <ExerciseMetadataModal
           exercise={exerciseForMetadata}
@@ -676,7 +678,7 @@ export default function Exercises() {
           }}
         />
       )}
-      
+
       {/* Modal para ver video */}
       {videoModalOpen && videoUrl && (
         <div style={{

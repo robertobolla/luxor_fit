@@ -44,7 +44,7 @@ export default function CaloriesDetailScreen() {
     // Por ahora usamos datos simulados
     const data = generateMockData();
     setCaloriesData(data);
-    
+
     const total = data.reduce((sum, item) => sum + item.value, 0);
     setTotalCalories(total);
     setAverageCalories(total / (data.length || 1));
@@ -61,7 +61,7 @@ export default function CaloriesDetailScreen() {
           0, 0, 0, // 18:00 - 20:00
           80, 120, 0 // 21:00 - 23:00 (actividad nocturna)
         ];
-        
+
         return Array.from({ length: 24 }, (_, i) => {
           let label = '';
           // Mostrar cada 3 horas
@@ -71,13 +71,13 @@ export default function CaloriesDetailScreen() {
             else if (i === 12) label = '12:00';
             else label = `${i - 12}:00`;
           }
-          
-          return { 
-            label, 
-            value: hourlyData[i] || 0 
+
+          return {
+            label,
+            value: hourlyData[i] || 0
           };
         });
-      
+
       case 'week':
         // Datos por día de la semana
         const weekDays = t('common.weekDaysShort', {
@@ -87,7 +87,7 @@ export default function CaloriesDetailScreen() {
           label: day,
           value: Math.random() * 800,
         }));
-      
+
       case 'month':
         // Datos por día del mes
         const daysInMonth = new Date(
@@ -107,18 +107,18 @@ export default function CaloriesDetailScreen() {
             value: Math.random() * 1200,
           };
         });
-      
+
       case 'year':
         // Datos por mes del año
         const months = t('common.monthsShort', {
           returnObjects: true,
         }) as string[];
-        
+
         return months.map((month) => ({
           label: month,
           value: Math.random() * 50000,
         }));
-      
+
       default:
         return [];
     }
@@ -165,53 +165,53 @@ export default function CaloriesDetailScreen() {
   const formatPeriod = () => {
     const now = new Date();
     const isToday = currentDate.toDateString() === now.toDateString();
-    
+
     switch (viewMode) {
       case 'day':
         if (isToday) return 'Hoy';
         const yesterday = new Date(now);
         yesterday.setDate(now.getDate() - 1);
         if (currentDate.toDateString() === yesterday.toDateString()) return 'Ayer';
-        return currentDate.toLocaleDateString('es-ES', { 
-          weekday: 'long', 
-          day: 'numeric', 
-          month: 'short' 
+        return currentDate.toLocaleDateString('es-ES', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'short'
         });
-      
+
       case 'week':
         const currentDay = currentDate.getDay();
         const weekStart = new Date(currentDate);
         weekStart.setDate(currentDate.getDate() - currentDay);
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
-        
+
         const nowDay = now.getDay();
         const nowWeekStart = new Date(now);
         nowWeekStart.setDate(now.getDate() - nowDay);
-        
+
         if (weekStart.toDateString() === nowWeekStart.toDateString()) {
           return 'Esta semana';
         }
-        
+
         if (weekStart.getMonth() === weekEnd.getMonth()) {
           return `${weekStart.getDate()} - ${weekEnd.getDate()} ${weekStart.toLocaleDateString('es-ES', { month: 'short' })}`;
         } else {
           return `${weekStart.getDate()} ${weekStart.toLocaleDateString('es-ES', { month: 'short' })} - ${weekEnd.getDate()} ${weekEnd.toLocaleDateString('es-ES', { month: 'short' })}`;
         }
-      
+
       case 'month':
-        if (currentDate.getFullYear() === now.getFullYear() && 
-            currentDate.getMonth() === now.getMonth()) {
+        if (currentDate.getFullYear() === now.getFullYear() &&
+          currentDate.getMonth() === now.getMonth()) {
           return 'Este mes';
         }
         return currentDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-      
+
       case 'year':
         if (currentDate.getFullYear() === now.getFullYear()) {
           return 'Este año';
         }
         return currentDate.getFullYear().toString();
-      
+
       default:
         return '';
     }
@@ -219,31 +219,31 @@ export default function CaloriesDetailScreen() {
 
   const isCurrentPeriod = () => {
     const now = new Date();
-    
+
     switch (viewMode) {
       case 'day':
         return currentDate.toDateString() === now.toDateString();
-      
+
       case 'week':
         const nowDay = now.getDay();
         const nowWeekStart = new Date(now);
         nowWeekStart.setDate(now.getDate() - nowDay);
         nowWeekStart.setHours(0, 0, 0, 0);
-        
+
         const currentDay = currentDate.getDay();
         const currentWeekStart = new Date(currentDate);
         currentWeekStart.setDate(currentDate.getDate() - currentDay);
         currentWeekStart.setHours(0, 0, 0, 0);
-        
+
         return nowWeekStart.getTime() === currentWeekStart.getTime();
-      
+
       case 'month':
-        return currentDate.getFullYear() === now.getFullYear() && 
-               currentDate.getMonth() === now.getMonth();
-      
+        return currentDate.getFullYear() === now.getFullYear() &&
+          currentDate.getMonth() === now.getMonth();
+
       case 'year':
         return currentDate.getFullYear() === now.getFullYear();
-      
+
       default:
         return false;
     }
@@ -256,27 +256,27 @@ export default function CaloriesDetailScreen() {
   const getStatusText = () => {
     if (viewMode === 'day') {
       const remaining = goalCalories - totalCalories;
-  
+
       if (remaining > 0) {
         return t('nutrition.dailyGoalRemaining', {
           calories: remaining.toLocaleString(),
         });
       }
-  
+
       return t('nutrition.dailyGoalAchieved');
     }
-  
+
     return t('nutrition.totalCaloriesBurned', {
       calories: totalCalories.toLocaleString(),
     });
   };
-  
+
 
   const renderChart = () => {
     // Usar un valor máximo fijo para la escala del gráfico
     let maxValue = 200; // 200 kcal como máximo para el día
     let yAxisLabels = ['200', '100', '0'];
-    
+
     if (viewMode === 'week') {
       maxValue = 1000;
       yAxisLabels = ['1000', '500', '0'];
@@ -287,12 +287,12 @@ export default function CaloriesDetailScreen() {
       maxValue = 60000;
       yAxisLabels = ['60k', '30k', '0'];
     }
-    
+
     const chartHeight = 260;
-    
+
     let barWidth = 28;
     let barSpacing = 12;
-    
+
     if (viewMode === 'day') {
       barWidth = 20;
       barSpacing = 6;
@@ -303,13 +303,13 @@ export default function CaloriesDetailScreen() {
       barWidth = 20;
       barSpacing = 8;
     }
-    
+
     const now = new Date();
     const isToday = currentDate.toDateString() === now.toDateString();
     const currentHour = now.getHours();
     const currentMonth = now.getMonth();
     const currentDay = now.getDate();
-    
+
     return (
       <View style={styles.chartWrapper}>
         {/* Eje Y */}
@@ -320,21 +320,21 @@ export default function CaloriesDetailScreen() {
             </Text>
           ))}
         </View>
-        
+
         {/* Contenedor del gráfico */}
         <View style={styles.chartContainer}>
           {/* Contenido scrollable */}
-          <ScrollView 
-            horizontal 
+          <ScrollView
+            horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chartContent}
           >
             {/* Línea de objetivo */}
             <View style={styles.goalLine} />
-            
+
             {caloriesData.map((item, index) => {
               const barHeight = (item.value / maxValue) * chartHeight;
-              
+
               let isHighlighted = false;
               if (viewMode === 'day' && isToday) {
                 isHighlighted = index === currentHour;
@@ -343,12 +343,12 @@ export default function CaloriesDetailScreen() {
               } else if (viewMode === 'year' && isCurrentPeriod()) {
                 isHighlighted = index === currentMonth;
               }
-              
+
               return (
-                <View 
-                  key={index} 
+                <View
+                  key={index}
                   style={[
-                    styles.barContainer, 
+                    styles.barContainer,
                     { width: barWidth, marginRight: barSpacing }
                   ]}
                 >
@@ -396,7 +396,7 @@ export default function CaloriesDetailScreen() {
         </View>
       );
     }
-    
+
     if (viewMode === 'month') {
       return (
         <View style={styles.summarySection}>
@@ -416,7 +416,7 @@ export default function CaloriesDetailScreen() {
         </View>
       );
     }
-    
+
     if (viewMode === 'year') {
       return (
         <View style={styles.summarySection}>
@@ -436,7 +436,7 @@ export default function CaloriesDetailScreen() {
         </View>
       );
     }
-    
+
     return null;
   };
 
@@ -446,12 +446,12 @@ export default function CaloriesDetailScreen() {
       <View style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/dashboard' as any)}>
+          <TouchableOpacity onPress={() => router.push('/(tabs)/progress' as any)}>
             <Ionicons name="arrow-back" size={24} color="#ffffff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-  {t('nutrition.burnedEnergy')}
-</Text>
+            {t('nutrition.burnedEnergy')}
+          </Text>
           <TouchableOpacity>
             <Ionicons name="ellipsis-horizontal" size={24} color="#ffffff" />
           </TouchableOpacity>
@@ -464,7 +464,7 @@ export default function CaloriesDetailScreen() {
             onPress={() => setViewMode('day')}
           >
             <Text style={[styles.tabText, viewMode === 'day' && styles.tabTextActive]}>
-            {t('common.day')}
+              {t('common.day')}
 
             </Text>
           </TouchableOpacity>
@@ -473,7 +473,7 @@ export default function CaloriesDetailScreen() {
             onPress={() => setViewMode('week')}
           >
             <Text style={[styles.tabText, viewMode === 'week' && styles.tabTextActive]}>
-            {t('common.week')}
+              {t('common.week')}
 
             </Text>
           </TouchableOpacity>
@@ -482,7 +482,7 @@ export default function CaloriesDetailScreen() {
             onPress={() => setViewMode('month')}
           >
             <Text style={[styles.tabText, viewMode === 'month' && styles.tabTextActive]}>
-            {t('common.month')}
+              {t('common.month')}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -490,7 +490,7 @@ export default function CaloriesDetailScreen() {
             onPress={() => setViewMode('year')}
           >
             <Text style={[styles.tabText, viewMode === 'year' && styles.tabTextActive]}>
-            {t('common.year')}
+              {t('common.year')}
             </Text>
           </TouchableOpacity>
         </View>

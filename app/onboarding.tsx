@@ -515,10 +515,10 @@ export default function OnboardingScreen() {
         }
       }
 
-      // Éxito - redirigir al dashboard
+      // Éxito - redirigir al home
       // El onboarding básico solo recopila datos personales
       // Los datos del plan de entrenamiento se recopilan en otro flujo
-      router.replace('/(tabs)/dashboard');
+      router.replace('/(tabs)/home');
     } catch (error) {
       console.error('❌ Error al guardar:', error);
       Alert.alert(t('common.error'), t('onboarding.saveError'));

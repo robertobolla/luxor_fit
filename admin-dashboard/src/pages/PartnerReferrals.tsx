@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { supabase } from '../services/adminService';
+import { useTranslation } from 'react-i18next';
 import './PartnerReferrals.css';
 
 interface PartnerReferral {
@@ -37,6 +38,7 @@ interface NetworkStats {
 }
 
 export default function PartnerReferrals() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [activeTab, setActiveTab] = useState<'sales' | 'team'>('sales');
 
@@ -95,7 +97,7 @@ export default function PartnerReferrals() {
   if (loading) {
     return (
       <div className="partner-referrals-page">
-        <div className="loading">Cargando...</div>
+        <div className="loading">{t('partner_referrals.loading')}</div>
       </div>
     );
   }
@@ -104,14 +106,14 @@ export default function PartnerReferrals() {
     <div className="partner-referrals-page">
       <header className="page-header">
         <div>
-          <h1>Mis Referidos</h1>
+          <h1>{t('partner_referrals.title')}</h1>
           <p style={{ fontSize: '0.8rem', color: '#666', marginTop: '-5px', marginBottom: '10px' }}>
             ID: {user?.id}
           </p>
         </div>
         {partnerInfo?.discount_code && (
           <div className="partner-code-info">
-            <p><strong>Tu código:</strong> <code>{partnerInfo.discount_code}</code></p>
+            <p><strong>{t('partner_referrals.code_info')}</strong> <code>{partnerInfo.discount_code}</code></p>
           </div>
         )}
       </header>
@@ -120,23 +122,23 @@ export default function PartnerReferrals() {
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-value">{networkStats?.direct_referrals || 0}</div>
-          <div className="stat-label">Mis Ventas (Nivel 1)</div>
+          <div className="stat-label">{t('partner_referrals.stats.sales')}</div>
         </div>
         <div className="stat-card">
           <div className="stat-value">{networkStats?.indirect_referrals || 0}</div>
-          <div className="stat-label">Ventas de Equipo (Nivel 2)</div>
+          <div className="stat-label">{t('partner_referrals.stats.team_sales')}</div>
         </div>
         <div className="stat-card">
           <div className="stat-value">${(networkStats?.total_earnings || 0).toFixed(2)}</div>
-          <div className="stat-label">Ganancia Mensual Est.</div>
+          <div className="stat-label">{t('partner_referrals.stats.earnings')}</div>
 
           <div className="stats-breakdown-row">
             <div className="stats-breakdown-col">
-              <span className="breakdown-label"><span className="level-indicator level-1"></span>Directo</span>
+              <span className="breakdown-label"><span className="level-indicator level-1"></span>{t('partner_referrals.stats.direct')}</span>
               <span className="breakdown-val">${(networkStats?.earnings_direct || 0).toFixed(2)}</span>
             </div>
             <div className="stats-breakdown-col" style={{ textAlign: 'right' }}>
-              <span className="breakdown-label"><span className="level-indicator level-2"></span>Equipo</span>
+              <span className="breakdown-label"><span className="level-indicator level-2"></span>{t('partner_referrals.stats.team')}</span>
               <span className="breakdown-val">${(networkStats?.earnings_indirect || 0).toFixed(2)}</span>
             </div>
           </div>
@@ -149,13 +151,13 @@ export default function PartnerReferrals() {
           className={`tab-button ${activeTab === 'sales' ? 'active' : ''}`}
           onClick={() => setActiveTab('sales')}
         >
-          Mis Ventas
+          {t('partner_referrals.tabs.sales')}
         </button>
         <button
           className={`tab-button ${activeTab === 'team' ? 'active' : ''}`}
           onClick={() => setActiveTab('team')}
         >
-          Mi Equipo ({hierarchy.length})
+          {t('partner_referrals.tabs.team')} ({hierarchy.length})
         </button>
       </div>
 
@@ -164,21 +166,21 @@ export default function PartnerReferrals() {
 
         {activeTab === 'sales' && (
           <>
-            <h2>Usuarios que usaron tu código</h2>
+            <h2>{t('partner_referrals.sales_tab.title')}</h2>
             {referrals.length === 0 ? (
               <div className="empty-state">
-                <p>Aún no hay usuarios que hayan usado tu código de descuento.</p>
+                <p>{t('partner_referrals.sales_tab.empty')}</p>
               </div>
             ) : (
               <table className="referrals-table">
                 <thead>
                   <tr>
-                    <th>Usuario</th>
-                    <th>Email</th>
-                    <th>Tipo</th>
-                    <th>Descuento</th>
-                    <th>Estado</th>
-                    <th>Fecha</th>
+                    <th>{t('partner_referrals.sales_tab.table.user')}</th>
+                    <th>{t('partner_referrals.sales_tab.table.email')}</th>
+                    <th>{t('partner_referrals.sales_tab.table.type')}</th>
+                    <th>{t('partner_referrals.sales_tab.table.discount')}</th>
+                    <th>{t('partner_referrals.sales_tab.table.status')}</th>
+                    <th>{t('partner_referrals.sales_tab.table.date')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -188,7 +190,7 @@ export default function PartnerReferrals() {
                       <td>{referral.referred_user_email || 'Sin email'}</td>
                       <td>
                         <span className={`badge badge-${referral.is_free_access ? 'free' : 'paid'}`}>
-                          {referral.is_free_access ? 'Gratuito' : 'Pago'}
+                          {referral.is_free_access ? t('partner_referrals.sales_tab.free') : t('partner_referrals.sales_tab.paid')}
                         </span>
                       </td>
                       <td>
@@ -210,23 +212,23 @@ export default function PartnerReferrals() {
 
         {activeTab === 'team' && (
           <>
-            <h2>Mi Equipo de Socios</h2>
+            <h2>{t('partner_referrals.team_tab.title')}</h2>
             {hierarchy.length === 0 ? (
               <div className="empty-state">
-                <p>Aún no tienes socios registrados bajo tu referencia.</p>
+                <p>{t('partner_referrals.team_tab.empty')}</p>
                 <p style={{ fontSize: '12px', marginTop: '10px' }}>
-                  Invita a otros entrenadores o influencers para ganar comisiones de Nivel 2.
+                  {t('partner_referrals.team_tab.empty_desc')}
                 </p>
               </div>
             ) : (
               <table className="referrals-table">
                 <thead>
                   <tr>
-                    <th>Socio</th>
-                    <th>Email</th>
-                    <th>Se unió</th>
-                    <th>Sus Ventas</th>
-                    <th>Activos (Comisionables)</th>
+                    <th>{t('partner_referrals.team_tab.table.partner')}</th>
+                    <th>{t('partner_referrals.team_tab.table.email')}</th>
+                    <th>{t('partner_referrals.team_tab.table.joined')}</th>
+                    <th>{t('partner_referrals.team_tab.table.sales')}</th>
+                    <th>{t('partner_referrals.team_tab.table.active')}</th>
                   </tr>
                 </thead>
                 <tbody>

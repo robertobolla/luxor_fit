@@ -24,6 +24,12 @@ export function useSubscription() {
       return;
     }
 
+    console.log('📋 useSubscription: User details:', {
+      id: user.id,
+      email: user.emailAddresses?.[0]?.emailAddress,
+      primaryEmail: user.primaryEmailAddressId
+    });
+
     try {
       console.log('📋 useSubscription: Verificando suscripción para user:', user.id);
 
@@ -32,11 +38,10 @@ export function useSubscription() {
       console.log('📋 useSubscription: Resultado DB:', dbResult);
 
       // Si tiene acceso por admin/socio/gimnasio, usar ese estado
-      // TEMPORALMENTE DESACTIVADO PARA VER EL PAYWALL
       if (dbResult.isAdmin || dbResult.isPartnerFree || dbResult.isGymMember) {
         setIsActive(true);
         setStatus('active');
-        console.log('📋 useSubscription: Acceso por rol especial');
+        console.log('📋 useSubscription: Acceso por rol especial (Admin/Partner/Gym)');
         return;
       }
 

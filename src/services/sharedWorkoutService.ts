@@ -74,12 +74,12 @@ export async function shareWorkout(
     }
 
     // Crear registro de entrenamiento compartido
-    console.log('Creando shared_workout con:', { 
-      sender_id: senderId, 
-      receiver_id: receiverId, 
-      workout_plan_id: workoutPlanId 
+    console.log('Creando shared_workout con:', {
+      sender_id: senderId,
+      receiver_id: receiverId,
+      workout_plan_id: workoutPlanId
     });
-    
+
     const { data, error } = await supabase
       .from('shared_workouts')
       .insert({
@@ -97,7 +97,7 @@ export async function shareWorkout(
     }
 
     console.log('shared_workout creado:', data);
-    return { success: true, data };
+    return { success: true, data: data as SharedWorkout };
   } catch (error: any) {
     console.error('Error sharing workout:', error);
     return { success: false, error: error.message };
@@ -139,7 +139,7 @@ export async function acceptSharedWorkout(
     // Actualizar estado
     const { data: updated, error: updateError } = await supabase
       .from('shared_workouts')
-      .update({ 
+      .update({
         status: makeActive ? 'active' : 'accepted',
       })
       .eq('id', sharedWorkoutId)
@@ -162,7 +162,7 @@ export async function acceptSharedWorkout(
       return { success: false, error: 'Plan de entrenamiento no encontrado' };
     }
 
-    // SIEMPRE crear una copia del plan para el receptor
+    // SIEMPRE crear una copia del plan para el receptor, EXCEPTO si el plan ya es de él
     // Si se debe hacer activo, desactivar otros planes primero
     if (makeActive) {
       await supabase
@@ -172,20 +172,32 @@ export async function acceptSharedWorkout(
         .eq('is_active', true);
     }
 
-    // Crear copia del plan para el receptor
-    const { error: copyError } = await supabase
-      .from('workout_plans')
-      .insert({
-        user_id: receiverId,
-        plan_name: originalPlan.plan_name,
-        description: originalPlan.description || `Compartido por ${originalPlan.user_id}`,
-        plan_data: originalPlan.plan_data,
-        is_active: makeActive, // Solo activo si makeActive es true
-      });
+    let planId = originalPlan.id;
 
-    if (copyError) {
-      console.error('Error creating workout plan copy:', copyError);
-      return { success: false, error: 'No se pudo crear la copia del plan' };
+    if (originalPlan.user_id !== receiverId) {
+      // Crear copia del plan para el receptor
+      const { data: copyData, error: copyError } = await supabase
+        .from('workout_plans')
+        .insert({
+          user_id: receiverId,
+          plan_name: originalPlan.plan_name,
+          description: originalPlan.description || `Compartido por ${originalPlan.user_id}`,
+          plan_data: originalPlan.plan_data,
+          is_active: makeActive, // Solo activo si makeActive es true
+        }).select('id').single();
+
+      if (copyError) {
+        console.error('Error creating workout plan copy:', copyError);
+        return { success: false, error: 'No se pudo crear la copia del plan' };
+      }
+
+      planId = copyData.id;
+    } else if (makeActive) {
+      // El plan ya es del usuario (ej. asignado por empresario), solo lo activamos si así lo desea
+      await supabase
+        .from('workout_plans')
+        .update({ is_active: true })
+        .eq('id', originalPlan.id);
     }
 
     // Crear notificación de confirmación para el remitente
@@ -194,13 +206,13 @@ export async function acceptSharedWorkout(
       .from('user_profiles')
       .select('name, username')
       .eq('user_id', receiverId)
-        .single();
+      .single();
 
     const receiverName = receiverProfile?.name || receiverProfile?.username || 'Un usuario';
-        const messageText = makeActive 
+    const messageText = makeActive
       ? `${receiverName} ha aceptado tu entrenamiento y lo ha activado como su plan actual`
       : `${receiverName} ha aceptado tu entrenamiento`;
-        
+
     await supabase
       .from('user_notifications')
       .insert({
@@ -213,7 +225,7 @@ export async function acceptSharedWorkout(
         is_read: false,
       });
 
-    return { success: true, data: updated };
+    return { success: true, data: updated as SharedWorkout };
   } catch (error: any) {
     console.error('Error accepting shared workout:', error);
     return { success: false, error: error.message };
@@ -258,7 +270,7 @@ export async function rejectSharedWorkout(
       .from('user_profiles')
       .select('name, username')
       .eq('user_id', receiverId)
-        .single();
+      .single();
 
     const receiverName = receiverProfile?.name || receiverProfile?.username || 'Un usuario';
 
@@ -319,7 +331,7 @@ export async function getReceivedSharedWorkouts(userId: string): Promise<{
 
     // Obtener los perfiles de los remitentes
     const senderIds = [...new Set(sharedWorkouts.map(sw => sw.sender_id).filter(Boolean))] as string[];
-    
+
     const { data: senderProfiles } = await supabase
       .from('user_profiles')
       .select('user_id, username, name, profile_photo_url')
@@ -344,7 +356,7 @@ export async function getReceivedSharedWorkouts(userId: string): Promise<{
           profile_photo_url: senderProfile.profile_photo_url || undefined,
         } : undefined,
       };
-    });
+    }) as SharedWorkout[];
 
     return { success: true, data: enrichedData };
   } catch (error: any) {

@@ -180,7 +180,8 @@ export const paymentsService = {
     }
 
     try {
-      isGymMember = !!userId && (await checkGymMemberAccess(userId));
+      const email = user?.emailAddresses?.[0]?.emailAddress;
+      isGymMember = !!userId && (await checkGymMemberAccess(userId, email));
     } catch (e) {
       console.warn('⚠️ Error verificando gym member access:', e);
     }

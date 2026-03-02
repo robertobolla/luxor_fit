@@ -59,7 +59,7 @@ export function getWeekStart(date: Date = new Date()): string {
 export async function checkIfNeedsWeeklyCheckin(userId: string): Promise<CheckinStatus> {
   try {
     const currentWeekStart = getWeekStart();
-    
+
     // Obtener última medida del usuario
     const { data: lastMeasurement } = await supabase
       .from('body_measurements')
@@ -70,7 +70,27 @@ export async function checkIfNeedsWeeklyCheckin(userId: string): Promise<Checkin
       .maybeSingle();
 
     if (!lastMeasurement) {
-      // Primera vez - necesita check-in
+      // Verificar cuándo se creó el perfil del usuario
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('created_at')
+        .eq('user_id', userId)
+        .single();
+
+      if (profile && profile.created_at) {
+        const profileWeekStart = getWeekStart(new Date(profile.created_at));
+        // Si el perfil se creó esta semana, NO necesita check-in todavía
+        if (profileWeekStart === currentWeekStart) {
+          return {
+            needsCheckin: false,
+            lastCheckin: null,
+            weeksSinceLastCheckin: 0,
+            currentWeekStart,
+          };
+        }
+      }
+
+      // Primera vez y pasó más de una semana de la creación del perfil - necesita check-in
       return {
         needsCheckin: true,
         lastCheckin: null,
@@ -82,13 +102,13 @@ export async function checkIfNeedsWeeklyCheckin(userId: string): Promise<Checkin
     // Calcular semanas desde último check-in
     const lastCheckinDate = new Date(lastMeasurement.measured_at);
     const lastCheckinWeek = getWeekStart(lastCheckinDate);
-    
+
     // Si el último check-in fue esta semana, no necesita otro
     const needsCheckin = lastCheckinWeek !== currentWeekStart;
-    
+
     // Calcular semanas transcurridas
     const weeksDiff = Math.floor(
-      (new Date(currentWeekStart).getTime() - new Date(lastCheckinWeek).getTime()) / 
+      (new Date(currentWeekStart).getTime() - new Date(lastCheckinWeek).getTime()) /
       (7 * 24 * 60 * 60 * 1000)
     );
 
@@ -118,7 +138,7 @@ export async function saveBodyMeasurement(
 ): Promise<{ success: boolean; measurement?: BodyMeasurement; error?: string }> {
   try {
     console.log('💾 Guardando medida corporal...');
-    
+
     const newMeasurement: BodyMeasurement = {
       user_id: userId,
       measured_at: new Date().toISOString(),
@@ -140,7 +160,7 @@ export async function saveBodyMeasurement(
     // Actualizar también el perfil del usuario con el nuevo peso
     await supabase
       .from('user_profiles')
-      .update({ 
+      .update({
         weight: measurement.weight_kg,
         body_fat_percentage: measurement.body_fat_percentage,
         muscle_percentage: measurement.muscle_percentage,
@@ -194,7 +214,7 @@ export async function calculateWeeklyChanges(userId: string): Promise<WeeklyChan
   try {
     // Obtener las dos últimas medidas
     const measurements = await getBodyMeasurementHistory(userId, 2);
-    
+
     if (measurements.length < 2) {
       // No hay suficientes datos para comparar
       return null;
@@ -205,7 +225,7 @@ export async function calculateWeeklyChanges(userId: string): Promise<WeeklyChan
 
     return {
       weight_change_kg: latest.weight_kg - previous.weight_kg,
-      body_fat_change: 
+      body_fat_change:
         latest.body_fat_percentage && previous.body_fat_percentage
           ? latest.body_fat_percentage - previous.body_fat_percentage
           : null,
@@ -256,7 +276,7 @@ export async function performWeeklyCheckin(
     if (changes && changes.weeks_tracked >= 2) {
       console.log('📊 Aplicando ajuste de dieta basado en progreso...');
       const adjustmentResult = await applyWeeklyAdjustment(userId);
-      
+
       if (adjustmentResult.success && adjustmentResult.adjustment) {
         adjustment = adjustmentResult.adjustment;
         console.log('✅ Dieta ajustada:', {
@@ -288,11 +308,11 @@ export async function shouldShowCheckinReminder(): Promise<boolean> {
     // Verificar si ya se mostró el recordatorio esta semana
     const reminderShown = await AsyncStorage.getItem(CHECKIN_REMINDER_SHOWN_KEY);
     const currentWeek = getWeekStart();
-    
+
     if (reminderShown === currentWeek) {
       return false; // Ya se mostró esta semana
     }
-    
+
     return true;
   } catch (error) {
     return false;
@@ -349,21 +369,21 @@ export async function getProgressStats(userId: string): Promise<{
 } | null> {
   try {
     const measurements = await getBodyMeasurementHistory(userId, 52); // Último año
-    
+
     if (measurements.length < 2) {
       return null;
     }
 
     const latest = measurements[0];
     const oldest = measurements[measurements.length - 1];
-    
+
     const weeksBetween = Math.floor(
       (new Date(latest.measured_at).getTime() - new Date(oldest.measured_at).getTime()) /
       (7 * 24 * 60 * 60 * 1000)
     );
 
     const totalWeightChange = latest.weight_kg - oldest.weight_kg;
-    
+
     return {
       totalWeeks: weeksBetween,
       totalWeightChange,

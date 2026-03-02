@@ -16,6 +16,7 @@ import { router, useLocalSearchParams, Stack } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useUser } from '@clerk/clerk-expo';
 import { supabase } from '@/services/supabase';
+import AIWeeklyRenewalModal from '@/components/AIWeeklyRenewalModal';
 
 interface MealFood {
   id: string;
@@ -67,6 +68,14 @@ interface NutritionPlan {
   total_weeks: number;
   created_at: string;
   updated_at: string;
+  activated_at: string | null;
+  current_week_number: number | null;
+  renewal_completed: boolean | null;
+  last_renewal_date: string | null;
+  initial_weight_kg: number | null;
+  initial_body_fat: number | null;
+  initial_muscle_mass: number | null;
+  nutrition_goal: 'lose_fat' | 'maintain' | 'gain_muscle' | null;
   nutrition_plan_weeks: Week[];
 }
 
@@ -83,6 +92,8 @@ export default function PlanDetailScreen() {
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [activating, setActivating] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [planExpired, setPlanExpired] = useState(false);
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
 
   useEffect(() => {
     loadPlanDetail();
@@ -136,6 +147,23 @@ export default function PlanDetailScreen() {
         .single();
 
       if (error) throw error;
+
+      // Check if AI plan has expired
+      if (data && data.is_ai_generated && data.is_active && data.activated_at) {
+        const activatedAt = new Date(data.activated_at);
+        const now = new Date();
+        const daysSinceActivation = Math.floor((now.getTime() - activatedAt.getTime()) / (1000 * 60 * 60 * 24));
+        const totalDays = (data.total_weeks || 1) * 7;
+        const dayOfWeek = now.getDay();
+        const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const thisMonday = new Date(now);
+        thisMonday.setDate(now.getDate() + diff);
+        const thisMondayStr = thisMonday.toISOString().split('T')[0];
+        const alreadyRenewed = data.renewal_completed && data.last_renewal_date === thisMondayStr;
+        setPlanExpired(daysSinceActivation >= totalDays && !alreadyRenewed);
+      } else {
+        setPlanExpired(false);
+      }
 
       // Sort weeks and days
       if (data) {
@@ -256,13 +284,87 @@ export default function PlanDetailScreen() {
     );
   };
 
+  // --- AI Plan renewal handlers ---
+  const handleRepeatWeek = async () => {
+    if (!plan || !user?.id) return;
+    try {
+      const thisMondayStr = new Date().toISOString().split('T')[0];
+      await (supabase as any).from('nutrition_plans').update({ renewal_completed: true, last_renewal_date: thisMondayStr }).eq('id', plan.id);
+      setShowRenewalModal(false);
+      setPlanExpired(false);
+      Alert.alert('\u2705', t('nutrition.weekRepeatedSuccess') || 'Semana repetida correctamente');
+      loadPlanDetail();
+    } catch (err) {
+      console.error('Error repeating week:', err);
+      Alert.alert(t('common.error'), t('common.errorOccurred') || 'Ocurri\u00f3 un error');
+    }
+  };
+
+  const handleAdjustPlan = async (metrics: { weight: number; bodyFat?: number; muscleMass?: number }) => {
+    if (!plan || !user?.id) return;
+    try {
+      const weightChange = plan.initial_weight_kg ? metrics.weight - plan.initial_weight_kg : 0;
+      const cw = plan.initial_weight_kg || metrics.weight;
+      const pct = (weightChange / cw) * 100;
+      const goal = plan.nutrition_goal || 'maintain';
+      let adj = { cal: 1, carb: 1, fat: 1 };
+      if (goal === 'lose_fat') {
+        if (pct < -1) adj = { cal: 1.08, carb: 1.10, fat: 1.05 };
+        else if (pct >= -0.5 && pct <= 0) adj = { cal: 0.92, carb: 0.90, fat: 0.95 };
+        else if (pct > 0) adj = { cal: 0.88, carb: 0.85, fat: 0.90 };
+      } else if (goal === 'gain_muscle') {
+        if (pct > 1) adj = { cal: 0.95, carb: 0.95, fat: 0.90 };
+        else if (pct < 0.25) adj = { cal: 1.08, carb: 1.10, fat: 1.05 };
+      } else {
+        if (Math.abs(pct) > 1) adj = pct > 0 ? { cal: 0.95, carb: 0.95, fat: 0.95 } : { cal: 1.05, carb: 1.05, fat: 1.05 };
+      }
+
+      const weeks = plan.nutrition_plan_weeks || [];
+      const currentWeek = weeks.find(w => w.week_number === (plan.current_week_number || 1)) || weeks[weeks.length - 1];
+      if (!currentWeek) throw new Error('Current week not found');
+
+      const newWeekNumber = (plan.total_weeks || 1) + 1;
+      const { data: newWeek, error: weekError } = await (supabase as any).from('nutrition_plan_weeks').insert({ plan_id: plan.id, week_number: newWeekNumber }).select('id').single();
+      if (weekError || !newWeek) throw weekError;
+
+      for (const day of currentWeek.nutrition_plan_days || []) {
+        await (supabase as any).from('nutrition_plan_days').insert({
+          week_id: newWeek.id, day_number: day.day_number, day_name: day.day_name,
+          target_calories: Math.round(day.target_calories * adj.cal),
+          target_protein: day.target_protein,
+          target_carbs: Math.round(day.target_carbs * adj.carb),
+          target_fat: Math.round(day.target_fat * adj.fat),
+        });
+      }
+
+      const thisMondayStr = new Date().toISOString().split('T')[0];
+      await (supabase as any).from('nutrition_plans').update({
+        total_weeks: newWeekNumber, current_week_number: newWeekNumber,
+        renewal_completed: true, last_renewal_date: thisMondayStr,
+        initial_weight_kg: metrics.weight, initial_body_fat: metrics.bodyFat || null, initial_muscle_mass: metrics.muscleMass || null,
+      }).eq('id', plan.id);
+
+      await (supabase as any).from('user_profiles').update({
+        weight: metrics.weight, body_fat_percentage: metrics.bodyFat || null, muscle_percentage: metrics.muscleMass || null,
+      }).eq('user_id', user.id);
+
+      setShowRenewalModal(false);
+      setPlanExpired(false);
+      Alert.alert('\u2705', t('nutrition.planAdjustedSuccess') || 'Plan ajustado para la pr\u00f3xima semana');
+      loadPlanDetail();
+    } catch (err) {
+      console.error('Error adjusting plan:', err);
+      Alert.alert(t('common.error'), t('common.errorOccurred') || 'Ocurri\u00f3 un error');
+    }
+  };
+
   const getFoodName = (food: { name_es: string; name_en: string }) => {
     return i18n.language === 'es' ? food.name_es : food.name_en;
   };
 
   const calculateDayTotals = (day: Day) => {
     let calories = 0, protein = 0, carbs = 0, fat = 0;
-    
+
     day.nutrition_plan_meals?.forEach(meal => {
       meal.nutrition_plan_meal_foods?.forEach(food => {
         calories += food.calculated_calories || 0;
@@ -445,166 +547,199 @@ export default function PlanDetailScreen() {
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle} numberOfLines={1}>{plan.plan_name}</Text>
-          {plan.is_active && (
-            <View style={styles.activeBadge}>
-              <Ionicons name="checkmark-circle" size={12} color="#ffb300" />
-              <Text style={styles.activeBadgeText}>{t('planDetail.active')}</Text>
-            </View>
-          )}
-        </View>
-        <TouchableOpacity
-          style={styles.optionsButton}
-          onPress={() => setShowOptionsModal(true)}
-        >
-          <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Plan Info */}
-        <View style={styles.planInfoCard}>
-          {plan.description && (
-            <Text style={styles.planDescription}>{plan.description}</Text>
-          )}
-          <View style={styles.planStats}>
-            <View style={styles.planStat}>
-              <Text style={styles.planStatValue}>{plan.total_weeks}</Text>
-              <Text style={styles.planStatLabel}>{t('planDetail.weeks')}</Text>
-            </View>
-            {plan.is_ai_generated && (
-              <View style={styles.aiBadge}>
-                <Ionicons name="sparkles" size={14} color="#ffb300" />
-                <Text style={styles.aiBadgeText}>{t('planDetail.aiGenerated')}</Text>
+            {plan.is_active && (
+              <View style={styles.activeBadge}>
+                <Ionicons name="checkmark-circle" size={12} color="#ffb300" />
+                <Text style={styles.activeBadgeText}>{t('planDetail.active')}</Text>
               </View>
             )}
           </View>
+          <TouchableOpacity
+            style={styles.optionsButton}
+            onPress={() => setShowOptionsModal(true)}
+          >
+            <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
+          </TouchableOpacity>
         </View>
 
-        {/* Weeks */}
-        {plan.nutrition_plan_weeks?.map(renderWeek)}
-      </ScrollView>
-
-      {/* Bottom Actions */}
-      <View style={styles.bottomActions}>
-        <TouchableOpacity
-          style={styles.editButton}
-          onPress={() => router.push(`/(tabs)/nutrition/edit-plan?id=${plan.id}` as any)}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          <Ionicons name="create-outline" size={20} color="#ffb300" />
-          <Text style={styles.editButtonText}>{t('planDetail.edit')}</Text>
-        </TouchableOpacity>
-
-        {!plan.is_active && (
-          <TouchableOpacity
-            style={styles.activateButton}
-            onPress={handleActivatePlan}
-            disabled={activating}
-          >
-            {activating ? (
-              <ActivityIndicator size="small" color="#000" />
-            ) : (
-              <>
-                <Ionicons name="flash" size={20} color="#000" />
-                <Text style={styles.activateButtonText}>{t('planDetail.activate')}</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Options Modal */}
-      <Modal
-        visible={showOptionsModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowOptionsModal(false)}
-      >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowOptionsModal(false)}
-        >
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{t('planDetail.options')}</Text>
-              <TouchableOpacity onPress={() => setShowOptionsModal(false)}>
-                <Ionicons name="close" size={24} color="#888" />
+          {/* Banner de plan expirado */}
+          {planExpired && plan.is_ai_generated && (
+            <View style={styles.expiredBanner}>
+              <Ionicons name="alert-circle" size={24} color="#ffb300" />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.expiredBannerTitle}>{t('nutrition.planExpiredTitle')}</Text>
+                <Text style={styles.expiredBannerText}>{t('nutrition.planExpiredMessage')}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.expiredBannerButton}
+                onPress={() => setShowRenewalModal(true)}
+              >
+                <Ionicons name="sparkles" size={16} color="#000" />
+                <Text style={styles.expiredBannerButtonText}>{t('nutrition.planExpiredAdjustBtn')}</Text>
               </TouchableOpacity>
             </View>
+          )}
 
+          {/* Plan Info */}
+          <View style={styles.planInfoCard}>
+            {plan.description && (
+              <Text style={styles.planDescription}>{plan.description}</Text>
+            )}
+            <View style={styles.planStats}>
+              <View style={styles.planStat}>
+                <Text style={styles.planStatValue}>{plan.total_weeks}</Text>
+                <Text style={styles.planStatLabel}>{t('planDetail.weeks')}</Text>
+              </View>
+              {plan.is_ai_generated && (
+                <View style={styles.aiBadge}>
+                  <Ionicons name="sparkles" size={14} color="#ffb300" />
+                  <Text style={styles.aiBadgeText}>{t('planDetail.aiGenerated')}</Text>
+                </View>
+              )}
+            </View>
+          </View>
+
+          {/* Weeks */}
+          {plan.nutrition_plan_weeks?.map(renderWeek)}
+        </ScrollView>
+
+        {/* Bottom Actions */}
+        <View style={styles.bottomActions}>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() => router.push(`/(tabs)/nutrition/edit-plan?id=${plan.id}` as any)}
+          >
+            <Ionicons name="create-outline" size={20} color="#ffb300" />
+            <Text style={styles.editButtonText}>{t('planDetail.edit')}</Text>
+          </TouchableOpacity>
+
+          {!plan.is_active && (
             <TouchableOpacity
-              style={styles.modalOption}
-              onPress={() => {
-                setShowOptionsModal(false);
-                router.push(`/(tabs)/nutrition/edit-plan?id=${plan.id}` as any);
-              }}
+              style={styles.activateButton}
+              onPress={handleActivatePlan}
+              disabled={activating}
             >
-              <Ionicons name="create-outline" size={22} color="#fff" />
-              <Text style={styles.modalOptionText}>{t('planDetail.edit')}</Text>
+              {activating ? (
+                <ActivityIndicator size="small" color="#000" />
+              ) : (
+                <>
+                  <Ionicons name="flash" size={20} color="#000" />
+                  <Text style={styles.activateButtonText}>{t('planDetail.activate')}</Text>
+                </>
+              )}
             </TouchableOpacity>
+          )}
+        </View>
 
-            <TouchableOpacity
-              style={styles.modalOption}
-              onPress={() => {
-                // TODO: Implement duplicate
-                setShowOptionsModal(false);
-              }}
-            >
-              <Ionicons name="copy-outline" size={22} color="#fff" />
-              <Text style={styles.modalOptionText}>{t('planDetail.duplicate')}</Text>
-            </TouchableOpacity>
+        {/* Options Modal */}
+        <Modal
+          visible={showOptionsModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowOptionsModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShowOptionsModal(false)}
+          >
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{t('planDetail.options')}</Text>
+                <TouchableOpacity onPress={() => setShowOptionsModal(false)}>
+                  <Ionicons name="close" size={24} color="#888" />
+                </TouchableOpacity>
+              </View>
 
-            <TouchableOpacity
-              style={styles.modalOption}
-              onPress={() => {
-                // TODO: Navigate to AI adaptation
-                setShowOptionsModal(false);
-              }}
-            >
-              <Ionicons name="sparkles" size={22} color="#ffb300" />
-              <Text style={[styles.modalOptionText, { color: '#ffb300' }]}>
-                {t('planDetail.adaptWithAI')}
-              </Text>
-            </TouchableOpacity>
-
-            {!plan.is_active && (
               <TouchableOpacity
                 style={styles.modalOption}
-                onPress={handleActivatePlan}
-                disabled={activating}
+                onPress={() => {
+                  setShowOptionsModal(false);
+                  router.push(`/(tabs)/nutrition/edit-plan?id=${plan.id}` as any);
+                }}
               >
-                {activating ? (
-                  <ActivityIndicator size="small" color="#ffb300" />
-                ) : (
-                  <Ionicons name="checkmark-circle-outline" size={22} color="#ffb300" />
-                )}
+                <Ionicons name="create-outline" size={22} color="#fff" />
+                <Text style={styles.modalOptionText}>{t('planDetail.edit')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={() => {
+                  // TODO: Implement duplicate
+                  setShowOptionsModal(false);
+                }}
+              >
+                <Ionicons name="copy-outline" size={22} color="#fff" />
+                <Text style={styles.modalOptionText}>{t('planDetail.duplicate')}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={() => {
+                  // TODO: Navigate to AI adaptation
+                  setShowOptionsModal(false);
+                }}
+              >
+                <Ionicons name="sparkles" size={22} color="#ffb300" />
                 <Text style={[styles.modalOptionText, { color: '#ffb300' }]}>
-                  {t('planDetail.activate')}
+                  {t('planDetail.adaptWithAI')}
                 </Text>
               </TouchableOpacity>
-            )}
 
-            <TouchableOpacity
-              style={styles.modalOption}
-              onPress={handleDeletePlan}
-              disabled={deleting}
-            >
-              {deleting ? (
-                <ActivityIndicator size="small" color="#f44336" />
-              ) : (
-                <Ionicons name="trash-outline" size={22} color="#f44336" />
+              {!plan.is_active && (
+                <TouchableOpacity
+                  style={styles.modalOption}
+                  onPress={handleActivatePlan}
+                  disabled={activating}
+                >
+                  {activating ? (
+                    <ActivityIndicator size="small" color="#ffb300" />
+                  ) : (
+                    <Ionicons name="checkmark-circle-outline" size={22} color="#ffb300" />
+                  )}
+                  <Text style={[styles.modalOptionText, { color: '#ffb300' }]}>
+                    {t('planDetail.activate')}
+                  </Text>
+                </TouchableOpacity>
               )}
-              <Text style={[styles.modalOptionText, { color: '#f44336' }]}>
-                {t('planDetail.delete')}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+
+              <TouchableOpacity
+                style={styles.modalOption}
+                onPress={handleDeletePlan}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator size="small" color="#f44336" />
+                ) : (
+                  <Ionicons name="trash-outline" size={22} color="#f44336" />
+                )}
+                <Text style={[styles.modalOptionText, { color: '#f44336' }]}>
+                  {t('planDetail.delete')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* Modal de renovaci\u00f3n de plan IA */}
+        {plan && plan.is_ai_generated && (
+          <AIWeeklyRenewalModal
+            visible={showRenewalModal}
+            onClose={() => setShowRenewalModal(false)}
+            onRepeatWeek={handleRepeatWeek}
+            onAdjustPlan={handleAdjustPlan}
+            userId={user?.id || ''}
+            planId={plan.id}
+            activatedAt={plan.activated_at}
+            initialWeight={plan.initial_weight_kg}
+            nutritionGoal={plan.nutrition_goal}
+          />
+        )}
       </SafeAreaView>
     </>
   );
@@ -986,5 +1121,41 @@ const styles = StyleSheet.create({
   modalOptionText: {
     fontSize: 16,
     color: '#fff',
+  },
+  expiredBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 179, 0, 0.12)',
+    borderWidth: 1,
+    borderColor: '#ffb300',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+  },
+  expiredBannerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#ffb300',
+    marginBottom: 4,
+  },
+  expiredBannerText: {
+    fontSize: 13,
+    color: '#aaa',
+    lineHeight: 18,
+  },
+  expiredBannerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffb300',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 4,
+    marginLeft: 8,
+  },
+  expiredBannerButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#000',
   },
 });

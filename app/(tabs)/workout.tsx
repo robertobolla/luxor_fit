@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/services/supabase';
+import { checkGymRoutinesEnabled } from '../../src/services/gymService';
 import { useWorkoutStore } from '../../src/store/workoutStore';
 import { LoadingOverlay } from '@/components/LoadingOverlay';
 import { useLoadingState } from '@/hooks/useLoadingState';
@@ -46,6 +47,7 @@ export default function WorkoutScreen() {
   const [showInvitationsModal, setShowInvitationsModal] = useState(false);
   const [isRespondingInvitation, setIsRespondingInvitation] = useState(false);
   const [showExpirationModal, setShowExpirationModal] = useState(false);
+  const [showGymRoutinesButton, setShowGymRoutinesButton] = useState(false);
   const [expiredPlan, setExpiredPlan] = useState<any | null>(null);
 
   // Tutorial states
@@ -65,7 +67,22 @@ export default function WorkoutScreen() {
     loadSessions();
     loadWorkoutPlans();
     loadTrainerInvitations();
+    checkGymRoutines();
   }, [user]);
+
+  const checkGymRoutines = async () => {
+    if (!user?.id) {
+      setShowGymRoutinesButton(false);
+      return;
+    }
+    try {
+      const enabled = await checkGymRoutinesEnabled(user.id);
+      setShowGymRoutinesButton(enabled);
+    } catch (err) {
+      console.error('Error checking gym routines:', err);
+      setShowGymRoutinesButton(false);
+    }
+  };
 
   // Mostrar tooltips cuando corresponde
   const tutorialShownRef = React.useRef(false);
@@ -382,18 +399,20 @@ export default function WorkoutScreen() {
             <Ionicons name="help-circle-outline" size={28} color="#ffb300" />
           </TouchableOpacity>
           <View style={styles.buttonsRow}>
-            {/* Botón Rutinas del Gym */}
-            <TouchableOpacity
-              style={styles.gymTemplatesButton}
-              onPress={() => router.push('/gym-templates' as any)}
-            >
-              <Ionicons name="business" size={18} color="#ffb300" />
-              <Text style={styles.gymTemplatesButtonText}>{t('templates.gymTemplates')}</Text>
-            </TouchableOpacity>
+            {/* Botón Rutinas del Gym - solo visible si pertenece a un gym con rutinas habilitadas */}
+            {showGymRoutinesButton && (
+              <TouchableOpacity
+                style={styles.gymTemplatesButton}
+                onPress={() => router.push('/gym-templates' as any)}
+              >
+                <Ionicons name="business" size={18} color="#ffb300" />
+                <Text style={styles.gymTemplatesButtonText}>{t('templates.gymTemplates')}</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Botón Modo Entrenador */}
             <TouchableOpacity
-              style={styles.trainerModeButton}
+              style={[styles.trainerModeButton, !showGymRoutinesButton && { flex: 1 }]}
               onPress={() => router.push('/trainer-mode' as any)}
             >
               <Ionicons name="people" size={18} color="#ffffff" />

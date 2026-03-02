@@ -30,6 +30,7 @@ export type Database = {
           gym_contact_email: string | null
           gym_name: string | null
           gym_phone: string | null
+          gym_routines_enabled: boolean | null
           id: string
           is_active: boolean | null
           last_payment_date: string | null
@@ -60,6 +61,7 @@ export type Database = {
           gym_contact_email?: string | null
           gym_name?: string | null
           gym_phone?: string | null
+          gym_routines_enabled?: boolean | null
           id?: string
           is_active?: boolean | null
           last_payment_date?: string | null
@@ -90,6 +92,7 @@ export type Database = {
           gym_contact_email?: string | null
           gym_name?: string | null
           gym_phone?: string | null
+          gym_routines_enabled?: boolean | null
           id?: string
           is_active?: boolean | null
           last_payment_date?: string | null
@@ -1981,6 +1984,36 @@ export type Database = {
           },
         ]
       }
+      partners: {
+        Row: { id: string; name: string; contact_email: string | null; contact_phone: string | null; business_type: string; reference_code: string; commission_percentage: number; is_active: boolean; created_at: string; };
+        Insert: Partial<{ id: string; name: string; contact_email: string | null; contact_phone: string | null; business_type: string; reference_code: string; commission_percentage: number; is_active: boolean; created_at: string; }>;
+        Update: Partial<{ id: string; name: string; contact_email: string | null; contact_phone: string | null; business_type: string; reference_code: string; commission_percentage: number; is_active: boolean; created_at: string; }>;
+        Relationships: [];
+      }
+      partner_offer_campaigns: {
+        Row: { id: string; partner_id: string; offer_reference_name: string; offer_type: string; discount_description: string | null; codes_generated: number; codes_redeemed: number; valid_from: string; valid_until: string | null; is_active: boolean; created_at: string; };
+        Insert: Partial<{ id: string; partner_id: string; offer_reference_name: string; offer_type: string; discount_description: string | null; codes_generated: number; codes_redeemed: number; valid_from: string; valid_until: string | null; is_active: boolean; created_at: string; }>;
+        Update: Partial<{ id: string; partner_id: string; offer_reference_name: string; offer_type: string; discount_description: string | null; codes_generated: number; codes_redeemed: number; valid_from: string; valid_until: string | null; is_active: boolean; created_at: string; }>;
+        Relationships: [];
+      }
+      offer_code_redemptions: {
+        Row: { id: string; user_id: string; partner_id: string | null; campaign_id: string | null; offer_code: string | null; offer_reference_name: string | null; transaction_id: string | null; product_id: string | null; price_paid: number | null; currency: string; redeemed_at: string; };
+        Insert: Partial<{ id: string; user_id: string; partner_id: string | null; campaign_id: string | null; offer_code: string | null; offer_reference_name: string | null; transaction_id: string | null; product_id: string | null; price_paid: number | null; currency: string; redeemed_at: string; }>;
+        Update: Partial<{ id: string; user_id: string; partner_id: string | null; campaign_id: string | null; offer_code: string | null; offer_reference_name: string | null; transaction_id: string | null; product_id: string | null; price_paid: number | null; currency: string; redeemed_at: string; }>;
+        Relationships: [];
+      }
+      partner_monthly_stats: {
+        Row: { year: number; month: number; codes_redeemed: number; total_revenue: number; commission_earned: number; };
+        Insert: Partial<{ year: number; month: number; codes_redeemed: number; total_revenue: number; commission_earned: number; }>;
+        Update: Partial<{ year: number; month: number; codes_redeemed: number; total_revenue: number; commission_earned: number; }>;
+        Relationships: [];
+      }
+      partner_redemptions: {
+        Row: { id: string; user_id: string; access_type: string; is_active: boolean };
+        Insert: Partial<{ id: string; user_id: string; access_type: string; is_active: boolean }>;
+        Update: Partial<{ id: string; user_id: string; access_type: string; is_active: boolean }>;
+        Relationships: [];
+      }
     }
     Views: {
       empresario_stats: {
@@ -2236,6 +2269,18 @@ export type Database = {
       }
     }
     Functions: {
+      get_partner_stats: {
+        Args: { p_partner_id: string };
+        Returns: { total_codes_generated: number; total_codes_redeemed: number; conversion_rate: number; total_revenue: number; active_campaigns: number }[];
+      }
+      increment_redemption_count: {
+        Args: { p_campaign_id: string; p_partner_id: string };
+        Returns: undefined;
+      }
+      get_trainer_students_secure: {
+        Args: { p_trainer_id: string };
+        Returns: { success: boolean; data: any[] };
+      }
       activate_workout_plan: {
         Args: { p_plan_id: string; p_user_id: string }
         Returns: undefined

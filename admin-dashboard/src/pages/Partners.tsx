@@ -3,6 +3,7 @@ import { supabase } from '../services/adminService';
 import { useToastContext } from '../contexts/ToastContext';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 import { logger } from '../utils/logger';
+import { useTranslation } from 'react-i18next';
 import './Partners.css';
 
 interface Partner {
@@ -46,6 +47,7 @@ interface PartnerReferrals {
 }
 
 export default function Partners() {
+  const { t } = useTranslation();
   const toast = useToastContext();
   const { handleApiError } = useErrorHandler();
   const [partners, setPartners] = useState<Partner[]>([]);
@@ -439,7 +441,7 @@ export default function Partners() {
   if (loading) {
     return (
       <div className="partners-page">
-        <div className="loading">Cargando socios...</div>
+        <div className="loading">{t('partners.loading')}</div>
       </div>
     );
   }
@@ -448,11 +450,11 @@ export default function Partners() {
     <div className="partners-page">
       <header className="page-header">
         <div>
-          <h1>Gestión de Socios</h1>
-          <p className="subtitle">Administra socios y sus códigos de descuento</p>
+          <h1>{t('partners.title')}</h1>
+          <p className="subtitle">{t('partners.subtitle')}</p>
         </div>
         <button className="btn-primary" onClick={() => setShowAddModal(true)}>
-          + Agregar Socio
+          + {t('partners.add_partner')}
         </button>
       </header>
 
@@ -460,24 +462,24 @@ export default function Partners() {
         <table className="partners-table">
           <thead>
             <tr>
-              <th>Nombre</th>
-              <th>Email</th>
-              <th>Código Mensual</th>
-              <th>Código Anual</th>
-              <th>Referido Por</th>
-              <th>Descuento</th>
-              <th>Comisión</th>
-              <th>Activos</th>
-              <th>Ganancias</th>
-              <th>Estado</th>
-              <th>Acciones</th>
+              <th>{t('partners.table.name')}</th>
+              <th>{t('partners.table.email')}</th>
+              <th>{t('partners.table.code_monthly')}</th>
+              <th>{t('partners.table.code_annual')}</th>
+              <th>{t('partners.table.referred_by')}</th>
+              <th>{t('partners.table.discount')}</th>
+              <th>{t('partners.table.commission')}</th>
+              <th>{t('partners.table.active')}</th>
+              <th>{t('partners.table.earnings')}</th>
+              <th>{t('partners.table.status')}</th>
+              <th>{t('partners.table.actions')}</th>
             </tr>
           </thead>
           <tbody>
             {partners.length === 0 ? (
               <tr>
                 <td colSpan={10} className="empty-state">
-                  No hay socios registrados. Agrega el primero.
+                  {t('partners.empty_state')}
                 </td>
               </tr>
             ) : (
@@ -517,7 +519,7 @@ export default function Partners() {
                         </span>
                       </div>
                     ) : (
-                      <span className="badge badge-inactive" style={{ fontSize: '12px' }}>Sin comisión</span>
+                      <span className="badge badge-inactive" style={{ fontSize: '12px' }}>{t('partners.badges.no_commission')}</span>
                     )}
                   </td>
                   <td>
@@ -536,7 +538,7 @@ export default function Partners() {
                   </td>
                   <td>
                     <span className={`badge ${partner.is_active ? 'badge-active' : 'badge-inactive'}`}>
-                      {partner.is_active ? 'Activo' : 'Inactivo'}
+                      {partner.is_active ? t('partners.badges.active') : t('partners.badges.inactive')}
                     </span>
                   </td>
                   <td>
@@ -605,16 +607,16 @@ export default function Partners() {
           resetFormData();
         }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h2>{showEditModal ? 'Editar Socio' : 'Agregar Nuevo Socio'}</h2>
+            <h2>{showEditModal ? t('partners.edit_partner') : t('partners.add_new_partner')}</h2>
 
             <div className="form-group">
-              <label>Socio Padre (Quien lo invitó)</label>
+              <label>{t('partners.form.parent_partner')}</label>
               <select
                 value={formData.referred_by || ''}
                 onChange={(e) => setFormData({ ...formData, referred_by: e.target.value || null })}
                 style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff' }}
               >
-                <option value="">-- Ninguno (Directo) --</option>
+                <option value="">{t('partners.form.parent_partner_none')}</option>
                 {partners
                   .filter(p => !partnerToEdit || p.id !== partnerToEdit.id) // No mostrarse a sí mismo
                   .map(p => (
@@ -624,12 +626,12 @@ export default function Partners() {
                   ))}
               </select>
               <p style={{ color: '#888', fontSize: '12px', marginTop: '4px' }}>
-                Si seleccionas un padre, este recibirá comisiones de Nivel 2 por las ventas de este nuevo socio.
+                {t('partners.form.parent_partner_desc')}
               </p>
             </div>
 
             <div className="form-group">
-              <label>Email *</label>
+              <label>{t('partners.form.email')}</label>
               <input
                 type="email"
                 value={formData.email}
@@ -639,16 +641,16 @@ export default function Partners() {
               />
             </div>
             <div className="form-group">
-              <label>Nombre</label>
+              <label>{t('partners.form.name')}</label>
               <input
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Nombre del socio"
+                placeholder=""
               />
             </div>
             <div className="form-group">
-              <label>Código de Descuento *</label>
+              <label>{t('partners.form.discount_code')}</label>
               <div className="code-input-group">
                 <input
                   type="text"
@@ -665,13 +667,13 @@ export default function Partners() {
                   onClick={generateRandomCode}
                   title="Generar código aleatorio"
                 >
-                  🎲 Generar
+                  🎲 {t('partners.form.generate_random')}
                 </button>
               </div>
             </div>
 
             <div className="form-group">
-              <label>Código Anual (Opcional)</label>
+              <label>{t('partners.form.discount_code_secondary')}</label>
               <input
                 type="text"
                 value={formData.discount_code_secondary}
@@ -684,21 +686,21 @@ export default function Partners() {
             {/* Información del descuento fijo */}
             <div className="form-info" style={{ background: '#1a3a1a', padding: '12px', borderRadius: '6px', marginBottom: '16px', border: '1px solid #2d5a2d' }}>
               <p style={{ color: '#4CAF50', fontSize: '14px', margin: 0, fontWeight: '600' }}>
-                💰 Precio para referidos (fijo - compatible con Apple):
+                💰 {t('partners.form.price_info_title')}
               </p>
               <div style={{ display: 'flex', gap: '20px', marginTop: '8px' }}>
                 <div>
                   <span style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>$9.99/mes</span>
-                  <span style={{ color: '#888', fontSize: '12px', marginLeft: '6px' }}>(normal: $12.99)</span>
+                  <span style={{ color: '#888', fontSize: '12px', marginLeft: '6px' }}>({t('partners.form.normal')}: $12.99)</span>
                 </div>
                 <div>
                   <span style={{ color: '#fff', fontSize: '16px', fontWeight: 'bold' }}>$89.99/año</span>
-                  <span style={{ color: '#888', fontSize: '12px', marginLeft: '6px' }}>(normal: $107)</span>
+                  <span style={{ color: '#888', fontSize: '12px', marginLeft: '6px' }}>({t('partners.form.normal')}: $107)</span>
                 </div>
               </div>
             </div>
             <div className="form-group">
-              <label>Fecha de Expiración del Código</label>
+              <label>{t('partners.form.expiration_date')}</label>
               <input
                 type="date"
                 value={formData.code_expires_at}
@@ -707,14 +709,14 @@ export default function Partners() {
                 style={{ width: '100%' }}
               />
               <p style={{ color: '#888', fontSize: '12px', marginTop: '4px' }}>
-                Fecha límite para usar el código. Después de esta fecha el código ya no funcionará. Dejar vacío si el código <strong>nunca expira</strong>.
+                {t('partners.form.expiration_desc')}
               </p>
             </div>
             <div className="form-group">
-              <label>Comisión por Suscripción Activa *</label>
+              <label>{t('partners.form.commission')}</label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 150px', gap: '8px', alignItems: 'end' }}>
                 <div>
-                  <label style={{ fontSize: '10px', color: '#888' }}>Nivel 1 (Mensual)</label>
+                  <label style={{ fontSize: '10px', color: '#888' }}>{t('partners.form.level_1_monthly')}</label>
                   <input
                     type="number"
                     min="0"
@@ -726,7 +728,7 @@ export default function Partners() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '10px', color: '#888' }}>Nivel 1 (Anual)</label>
+                  <label style={{ fontSize: '10px', color: '#888' }}>{t('partners.form.level_1_annual')}</label>
                   <input
                     type="number"
                     min="0"
@@ -738,7 +740,7 @@ export default function Partners() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '10px', color: '#888' }}>Nivel 2 (Mensual)</label>
+                  <label style={{ fontSize: '10px', color: '#888' }}>{t('partners.form.level_2_monthly')}</label>
                   <input
                     type="number"
                     min="0"
@@ -750,7 +752,7 @@ export default function Partners() {
                   />
                 </div>
                 <div>
-                  <label style={{ fontSize: '10px', color: '#888' }}>Nivel 2 (Anual)</label>
+                  <label style={{ fontSize: '10px', color: '#888' }}>{t('partners.form.level_2_annual')}</label>
                   <input
                     type="number"
                     min="0"
@@ -773,25 +775,25 @@ export default function Partners() {
                   }}
                   style={{ padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', width: '100%' }}
                 >
-                  <option value="fixed">Fijo ($)</option>
-                  <option value="percentage">Porcentaje (%)</option>
+                  <option value="fixed">{t('partners.form.commission_type_fixed')}</option>
+                  <option value="percentage">{t('partners.form.commission_type_percentage')}</option>
                 </select>
               </div>
               <p style={{ color: '#888', fontSize: '12px', marginTop: '6px' }}>
                 {formData.commission_type === 'fixed' ? (
                   <>
-                    <strong>Monto fijo:</strong> Se paga este monto por cada usuario con suscripción activa.
+                    {t('partners.form.commission_desc_fixed')}
                   </>
                 ) : (
                   <>
-                    <strong>Porcentaje:</strong> Se paga este porcentaje del precio mensual por cada suscripción activa.
+                    {t('partners.form.commission_desc_percentage')}
                   </>
                 )}
               </p>
             </div>
             <div className="form-info" style={{ background: '#1a1a1a', padding: '12px', borderRadius: '6px', marginTop: '8px' }}>
               <p style={{ color: '#ccc', fontSize: '13px', margin: 0 }}>
-                ℹ️ <strong>Los socios tienen acceso gratuito automático</strong> a la app. Cuando un usuario usa el código del socio, paga el <strong>precio con descuento</strong> ($9.99/mes o $89.99/año) a través de Apple. El socio gana comisión por cada suscripción activa.
+                ℹ️ {t('partners.form.free_access_info')}
               </p>
             </div>
             <div className="modal-actions">
@@ -800,10 +802,14 @@ export default function Partners() {
                 setShowEditModal(false);
                 resetFormData();
               }}>
-                Cancelar
+                {t('partners.form.cancel')}
               </button>
-              <button className="btn-primary" onClick={showEditModal ? handleUpdatePartner : handleAddPartner}>
-                {showEditModal ? 'Guardar Cambios' : 'Agregar y Enviar Invitación'}
+              <button
+                className="btn-primary"
+                onClick={showEditModal ? handleUpdatePartner : handleAddPartner}
+                disabled={updating}
+              >
+                {updating ? '...' : showEditModal ? t('partners.form.save') : t('partners.form.add')}
               </button>
             </div>
           </div>

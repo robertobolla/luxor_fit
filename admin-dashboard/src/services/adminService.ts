@@ -72,6 +72,7 @@ export interface StudentStats {
     description: string;
     plan_data: any;
     created_at: string;
+    duration_weeks?: number;
   };
   recent_workouts: Array<{
     id: string;
@@ -147,9 +148,9 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
   try {
     logger.debug('Verificando rol para user_id:', userId);
 
-    // Bypass de emergencia absoluto para Roberto
-    if (userEmail === 'robertobolla9@gmail.com') {
-      logger.debug('Bypass de emergencia ABSOLUTO para Roberto activado');
+    // Bypass de emergencia absoluto
+    if (userEmail === 'robertobolla9@gmail.com' || userEmail === 'robertobolla9@icloud.com' || userEmail === 'segao1999@gmail.com') {
+      logger.debug('Bypass de emergencia ABSOLUTO activado');
       return true;
     }
 
@@ -172,9 +173,9 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
 
     // Si no encuentra por user_id pero tenemos email, buscar por email
     if (!data && userEmail) {
-      // Failsafe para Roberto
-      if (userEmail === 'robertobolla9@gmail.com') {
-        logger.debug('Bypass de emergencia para Roberto activado');
+      // Failsafe absoluto
+      if (userEmail === 'robertobolla9@gmail.com' || userEmail === 'robertobolla9@icloud.com' || userEmail === 'segao1999@gmail.com') {
+        logger.debug('Bypass de emergencia activado');
         return true;
       }
 
@@ -300,6 +301,12 @@ export async function checkAdminRole(userId: string, userEmail?: string): Promis
 export async function getUserRole(userId: string, userEmail?: string): Promise<'admin' | 'socio' | 'empresario' | 'user'> {
   try {
     logger.debug('getUserRole - userId:', userId, 'email:', userEmail);
+
+    // Bypass de emergencia absoluto para Roberto
+    if (userEmail === 'robertobolla9@gmail.com' || userEmail === 'robertobolla9@icloud.com' || userEmail === 'segao1999@gmail.com') {
+      logger.debug('Bypass de emergencia ABSOLUTO activado en getUserRole, retornando admin');
+      return 'admin';
+    }
 
     // Obtener roles por user_id
     const { data: rolesByUserId, error } = await supabase

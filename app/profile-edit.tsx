@@ -29,11 +29,11 @@ export default function ProfileEditScreen() {
   const { weightUnit, heightUnit } = useUnitsStore();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  
+
   // Etiquetas de unidades
   const weightUnitLabel = weightUnit === 'kg' ? 'kg' : 'lb';
   const heightUnitLabel = heightUnit === 'cm' ? 'cm' : 'ft/in';
-  
+
   // Estados del formulario
   const [username, setUsername] = useState('');
   const [weight, setWeight] = useState('');
@@ -45,7 +45,7 @@ export default function ProfileEditScreen() {
   const [usernameError, setUsernameError] = useState('');
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showNutritionConfirm, setShowNutritionConfirm] = useState(false);
-  
+
   // Datos originales para detectar cambios (en unidades métricas)
   const [originalData, setOriginalData] = useState<{
     username?: string;
@@ -53,7 +53,7 @@ export default function ProfileEditScreen() {
     height?: number; // en cm
     age?: number;
   } | null>(null);
-  
+
   // Datos originales en unidades del usuario (para comparación)
   const [originalWeightInUserUnit, setOriginalWeightInUserUnit] = useState<string>('');
 
@@ -128,10 +128,10 @@ export default function ProfileEditScreen() {
 
   const hasChanges = () => {
     if (!originalData) return false;
-    
+
     // Comparar peso en la unidad del usuario
     const weightChanged = weight !== originalWeightInUserUnit;
-    
+
     // Comparar altura
     let heightChanged = false;
     if (heightUnit === 'ft') {
@@ -141,7 +141,7 @@ export default function ProfileEditScreen() {
     } else {
       heightChanged = height !== (originalData.height?.toString() || '');
     }
-    
+
     return (
       username !== (originalData.username || '') ||
       weightChanged ||
@@ -152,10 +152,10 @@ export default function ProfileEditScreen() {
 
   const hasNutritionImpact = () => {
     if (!originalData) return false;
-    
+
     // Comparar peso en la unidad del usuario
     const weightChanged = weight !== originalWeightInUserUnit;
-    
+
     // Comparar altura
     let heightChanged = false;
     if (heightUnit === 'ft') {
@@ -165,7 +165,7 @@ export default function ProfileEditScreen() {
     } else {
       heightChanged = height !== (originalData.height?.toString() || '');
     }
-    
+
     // Cualquier cambio en el perfil puede afectar nutrición
     // Incluyendo edad (afecta BMR), peso, altura
     return (
@@ -181,21 +181,21 @@ export default function ProfileEditScreen() {
     // Validar username solo si cambió y no está vacío
     const trimmedUsername = username.trim();
     const originalUsername = originalData?.username || '';
-    
+
     if (trimmedUsername !== originalUsername) {
       // Si el username cambió, validar
       if (!trimmedUsername || trimmedUsername.length === 0) {
         Alert.alert(t('common.error'), t('profileEdit.usernameRequired'));
         return;
       }
-      
+
       const usernameValidation = validateUsernameFormat(trimmedUsername);
       if (!usernameValidation.isValid) {
         Alert.alert(t('common.error'), usernameValidation.error || t('profileEdit.invalidUsername'));
         setUsernameError(usernameValidation.error || '');
         return;
       }
-      
+
       // Verificar que el username no esté en uso
       try {
         const { data: existingUsername, error: checkError } = await supabase
@@ -204,13 +204,13 @@ export default function ProfileEditScreen() {
           .eq('username', trimmedUsername.toLowerCase())
           .neq('user_id', user.id)
           .maybeSingle();
-        
+
         if (checkError) {
           console.error('Error verificando username:', checkError);
           Alert.alert(t('common.error'), t('profileEdit.usernameCheckError'));
           return;
         }
-        
+
         if (existingUsername) {
           Alert.alert(t('common.error'), t('profileEdit.usernameAlreadyTaken'));
           setUsernameError(t('profileEdit.usernameAlreadyTaken'));
@@ -226,7 +226,7 @@ export default function ProfileEditScreen() {
     // Convertir peso a kg si el usuario usa libras
     const weightNum = parseFloat(weight);
     const weightInKg = getWeightFromUserUnit(weightNum, weightUnit);
-    
+
     // Convertir altura a cm si el usuario usa pies/pulgadas
     let heightInCm: number;
     if (heightUnit === 'ft') {
@@ -236,7 +236,7 @@ export default function ProfileEditScreen() {
     } else {
       heightInCm = parseFloat(height);
     }
-    
+
     const ageNum = parseInt(age);
 
     // Validaciones (en unidades métricas)
@@ -264,7 +264,7 @@ export default function ProfileEditScreen() {
     if (hasNutritionImpact()) {
       // Verificar si tiene perfil de nutrición
       const nutritionProfile = await getNutritionProfile(user.id);
-      
+
       if (nutritionProfile) {
         Alert.alert(
           t('profileEdit.updateNutritionPlan'),
@@ -307,11 +307,11 @@ export default function ProfileEditScreen() {
         age: ageNum,
         updated_at: new Date().toISOString(),
       };
-      
+
       // Solo actualizar username si cambió y no está vacío
       const trimmedUsername = username.trim().toLowerCase();
       const originalUsername = (originalData?.username || '').trim().toLowerCase();
-      
+
       if (trimmedUsername !== originalUsername && trimmedUsername.length > 0) {
         updateData.username = trimmedUsername;
       } else if (trimmedUsername !== originalUsername && trimmedUsername.length === 0 && originalUsername.length > 0) {
@@ -320,7 +320,7 @@ export default function ProfileEditScreen() {
         setIsSaving(false);
         return;
       }
-      
+
       const { error } = await supabase
         .from('user_profiles')
         .update(updateData)
@@ -332,7 +332,7 @@ export default function ProfileEditScreen() {
       }
 
       Alert.alert(t('profileEdit.saved'), t('profileEdit.savedMessage'));
-      router.push('/(tabs)/dashboard' as any);
+      router.push('/(tabs)/home' as any);
     } catch (err: any) {
       console.error('Error saving profile:', err);
       const errorMessage = err.message || t('profileEdit.saveError');
@@ -354,11 +354,11 @@ export default function ProfileEditScreen() {
         age: ageNum,
         updated_at: new Date().toISOString(),
       };
-      
+
       // Solo actualizar username si cambió y no está vacío
       const trimmedUsername = username.trim().toLowerCase();
       const originalUsername = (originalData?.username || '').trim().toLowerCase();
-      
+
       if (trimmedUsername !== originalUsername && trimmedUsername.length > 0) {
         updateData.username = trimmedUsername;
       } else if (trimmedUsername !== originalUsername && trimmedUsername.length === 0 && originalUsername.length > 0) {
@@ -367,7 +367,7 @@ export default function ProfileEditScreen() {
         setIsSaving(false);
         return;
       }
-      
+
       const { error } = await supabase
         .from('user_profiles')
         .update(updateData)
@@ -390,19 +390,19 @@ export default function ProfileEditScreen() {
         const date = new Date(monday);
         date.setDate(monday.getDate() + i);
         const dateStr = date.toISOString().split('T')[0];
-        
+
         await supabase
           .from('nutrition_targets')
           .delete()
           .eq('user_id', user.id)
           .eq('date', dateStr);
-        
+
         await computeAndSaveTargets(user.id, dateStr);
       }
 
       // 3. Regenerar plan de comidas
       const mondayStr = monday.toISOString().split('T')[0];
-      
+
       await supabase
         .from('meal_plans')
         .delete()
@@ -412,7 +412,7 @@ export default function ProfileEditScreen() {
       await createOrUpdateMealPlan(user.id, mondayStr);
 
       Alert.alert(t('profileEdit.allDone'), t('profileEdit.profileAndNutritionUpdated'));
-      router.push('/(tabs)/dashboard' as any);
+      router.push('/(tabs)/home' as any);
     } catch (err: any) {
       console.error('Error saving and adapting:', err);
       const errorMessage = err.message || t('profileEdit.updateError');
@@ -436,14 +436,14 @@ export default function ProfileEditScreen() {
       <StatusBar barStyle="light-content" />
       {/* Header - Fuera del ScrollView para que siempre sea accesible */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => {
             if (hasChanges()) {
               setShowExitConfirm(true);
             } else {
-              router.push('/(tabs)/dashboard' as any);
+              router.push('/(tabs)/home' as any);
             }
-          }} 
+          }}
           style={styles.backButton}
           hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
           activeOpacity={0.7}
@@ -458,7 +458,7 @@ export default function ProfileEditScreen() {
         {/* Datos Básicos */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('profileEdit.basicData')}</Text>
-          
+
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>{t('profileEdit.usernameLabel')}</Text>
             <Text style={{ color: '#666', fontSize: 12, marginBottom: 8 }}>
@@ -473,14 +473,14 @@ export default function ProfileEditScreen() {
                   const lowerText = text.toLowerCase().trim();
                   setUsername(lowerText);
                   setUsernameError('');
-                  
+
                   if (lowerText.length > 0) {
                     const validation = validateUsernameFormat(lowerText);
                     if (!validation.isValid) {
                       setUsernameError(validation.error || '');
                       return;
                     }
-                    
+
                     // Verificar disponibilidad
                     setCheckingUsername(true);
                     try {
@@ -490,7 +490,7 @@ export default function ProfileEditScreen() {
                         .eq('username', lowerText)
                         .neq('user_id', user?.id || '')
                         .maybeSingle();
-                      
+
                       if (data) {
                         setUsernameError(t('profileEdit.usernameAlreadyTaken'));
                       }
@@ -517,7 +517,7 @@ export default function ProfileEditScreen() {
               <Text style={{ color: '#4CAF50', fontSize: 12, marginTop: 4 }}>{t('profileEdit.usernameAvailable')}</Text>
             )}
           </View>
-          
+
           <View style={styles.inputRow}>
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>{t('profileEdit.weightLabel')} ({weightUnitLabel})</Text>

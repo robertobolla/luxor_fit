@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { getUserRole, addAdmin, searchUsers, type UserProfile, supabase } from '../services/adminService';
 import { useViewAs } from '../contexts/ViewAsContext';
+import { useTranslation } from 'react-i18next';
 import './AdminTools.css';
 
 export default function AdminTools() {
+  const { t } = useTranslation();
   const { user } = useUser();
   const [userRole, setUserRole] = useState<'admin' | 'socio' | 'empresario' | 'user' | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,7 +19,7 @@ export default function AdminTools() {
   const [adminEmail, setAdminEmail] = useState('');
   const [addingAdmin, setAddingAdmin] = useState(false);
   const [addMode, setAddMode] = useState<'direct' | 'search'>('direct'); // 'direct' o 'search'
-  
+
   // Estados para Vista de Rol
   const [showRoleViewModal, setShowRoleViewModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState<'admin' | 'socio' | 'empresario' | 'user'>('user');
@@ -43,7 +45,7 @@ export default function AdminTools() {
 
   async function handleSearchUsers() {
     if (!searchQuery.trim()) return;
-    
+
     try {
       setSearching(true);
       const results = await searchUsers(searchQuery);
@@ -75,26 +77,26 @@ export default function AdminTools() {
         alert('El email es requerido');
         return;
       }
-      
+
       email = adminEmail.trim();
-      
+
       try {
         setAddingAdmin(true);
-        
+
         // Buscar el usuario por email
         const results = await searchUsers(email);
         const foundUser = results.find(u => u.email?.toLowerCase() === email.toLowerCase());
-        
+
         if (!foundUser) {
           alert('❌ No se encontró ningún usuario con ese email.\n\nEl usuario debe registrarse en la app primero antes de ser promovido a administrador.');
           setAddingAdmin(false);
           return;
         }
-        
+
         // Usar el user_id REAL de Clerk del usuario encontrado
         userId = foundUser.user_id;
         name = adminName.trim() || foundUser.name || email.split('@')[0];
-        
+
       } catch (error: any) {
         console.error('Error buscando usuario:', error);
         alert('Error al buscar usuario. Intenta nuevamente.');
@@ -107,7 +109,7 @@ export default function AdminTools() {
         alert('Debes seleccionar un usuario');
         return;
       }
-      
+
       userId = selectedUser.user_id;
       email = adminEmail || selectedUser.email || '';
       name = adminName || selectedUser.name || '';
@@ -120,7 +122,7 @@ export default function AdminTools() {
         name: name || undefined,
         created_by: user.id,
       });
-      
+
       alert(`✅ Usuario promovido a administrador exitosamente.\n\nCuando ${name || email} cierre y vuelva a abrir la app, tendrá acceso completo sin necesidad de pagar.`);
       setShowAddAdminModal(false);
       setSearchQuery('');
@@ -140,7 +142,7 @@ export default function AdminTools() {
   if (loading) {
     return (
       <div className="settings-page">
-        <div className="page-loading">Cargando...</div>
+        <div className="page-loading">{t('admin_tools.loading')}</div>
       </div>
     );
   }
@@ -151,7 +153,7 @@ export default function AdminTools() {
   async function loadUsersByRole(role: 'admin' | 'socio' | 'empresario' | 'user') {
     try {
       setLoadingRoleUsers(true);
-      
+
       if (role === 'user') {
         // Obtener usuarios normales (sin rol especial)
         const { data: allUsers } = await supabase
@@ -159,14 +161,14 @@ export default function AdminTools() {
           .select('user_id, name, email, created_at, updated_at')
           .order('created_at', { ascending: false })
           .limit(100);
-        
+
         // Obtener todos los user_ids con roles especiales
         const { data: specialRoles } = await supabase
           .from('admin_roles')
           .select('user_id');
-        
+
         const specialUserIds = new Set((specialRoles || []).map(r => r.user_id));
-        
+
         // Filtrar usuarios que NO tienen rol especial
         const regularUsers = (allUsers || [])
           .filter(u => !specialUserIds.has(u.user_id))
@@ -183,7 +185,7 @@ export default function AdminTools() {
             equipment: [],
             role_type: 'user' as const,
           }));
-        
+
         setRoleUsers(regularUsers);
       } else {
         // Obtener usuarios con rol especial (activos e inactivos)
@@ -192,7 +194,7 @@ export default function AdminTools() {
           .select('user_id, name, email, role_type, created_at, is_active')
           .eq('role_type', role)
           .order('created_at', { ascending: false });
-        
+
         const users = (data || []).map(u => ({
           id: u.user_id,
           user_id: u.user_id,
@@ -211,7 +213,7 @@ export default function AdminTools() {
           role_type: role,
           is_active: u.is_active,
         }));
-        
+
         setRoleUsers(users);
       }
     } catch (error) {
@@ -256,8 +258,8 @@ export default function AdminTools() {
   return (
     <div className="settings-page">
       <header className="page-header">
-        <h1>Admin Tools</h1>
-        <p className="subtitle">Herramientas de administración del sistema</p>
+        <h1>{t('admin_tools.title')}</h1>
+        <p className="subtitle">{t('admin_tools.subtitle')}</p>
       </header>
 
       {/* Indicador de Vista de Rol */}
@@ -274,10 +276,10 @@ export default function AdminTools() {
         }}>
           <div>
             <p style={{ margin: 0, fontWeight: '600', color: '#000', fontSize: '14px' }}>
-              👁️ Viendo como: <strong>{viewAsUser.name || viewAsUser.email}</strong>
+              {t('admin_tools.role_view.viewing_as')}: <strong>{viewAsUser.name || viewAsUser.email}</strong>
             </p>
             <p style={{ margin: '4px 0 0 0', color: '#000', fontSize: '12px', opacity: 0.8 }}>
-              Rol: {viewAsUser.role_type} • {viewAsUser.email}
+              {t('admin_tools.role_view.role')}: {viewAsUser.role_type} • {viewAsUser.email}
             </p>
           </div>
           <button
@@ -293,7 +295,7 @@ export default function AdminTools() {
               fontSize: '14px',
             }}
           >
-            🔙 Volver a Admin
+            🔙 {t('admin_tools.role_view.back')}
           </button>
         </div>
       )}
@@ -304,44 +306,44 @@ export default function AdminTools() {
             {/* Vista de Rol */}
             <div className="settings-section">
               <div className="section-header">
-                <h2>👁️ Vista de Rol</h2>
-                <button 
+                <h2>{t('admin_tools.role_view.title')}</h2>
+                <button
                   className="btn-primary"
                   onClick={() => {
                     setShowRoleViewModal(true);
                     loadUsersByRole(selectedRole);
                   }}
                 >
-                  Cambiar Vista
+                  {t('admin_tools.role_view.change')}
                 </button>
               </div>
-              
+
               <p style={{ color: '#999', marginTop: '12px' }}>
-                Simula la vista del dashboard como si fueras otro usuario. Útil para pruebas y debugging.
+                {t('admin_tools.role_view.desc')}
               </p>
             </div>
 
             {/* Administradores */}
             <div className="settings-section" style={{ marginTop: '32px' }}>
               <div className="section-header">
-                <h2>Administradores</h2>
-                <button 
+                <h2>{t('admin_tools.admins.title')}</h2>
+                <button
                   className="btn-primary"
                   onClick={() => setShowAddAdminModal(true)}
                 >
-                  + Agregar Administrador
+                  {t('admin_tools.admins.add')}
                 </button>
               </div>
-              
+
               <p style={{ color: '#999', marginTop: '12px' }}>
-                Solo los administradores pueden agregar nuevos administradores al sistema.
+                {t('admin_tools.admins.desc')}
               </p>
             </div>
           </>
         ) : (
           <div className="info-card">
-            <h2>Acceso Restringido</h2>
-            <p>Esta sección solo está disponible para administradores.</p>
+            <h2>{t('admin_tools.restricted')}</h2>
+            <p>{t('admin_tools.restricted_desc')}</p>
           </div>
         )}
       </div>
@@ -350,14 +352,14 @@ export default function AdminTools() {
       {showRoleViewModal && isAdmin && (
         <div className="modal-overlay" onClick={() => setShowRoleViewModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '700px', maxHeight: '80vh' }}>
-            <h2>👁️ Vista de Rol</h2>
+            <h2>{t('admin_tools.role_view.title')}</h2>
             <p style={{ color: '#999', marginBottom: '20px' }}>
-              Selecciona un rol y usuario para ver el dashboard desde su perspectiva
+              {t('admin_tools.role_view.select_title')}
             </p>
 
             {/* Selector de Rol */}
             <div className="form-group">
-              <label>Seleccionar Rol</label>
+              <label>{t('admin_tools.role_view.select_role')}</label>
               <select
                 value={selectedRole}
                 onChange={(e) => {
@@ -386,12 +388,12 @@ export default function AdminTools() {
 
             {/* Buscador */}
             <div className="form-group" style={{ marginTop: '16px' }}>
-              <label>Buscar Usuario</label>
+              <label>{t('admin_tools.role_view.search_user')}</label>
               <input
                 type="text"
                 value={roleSearchQuery}
                 onChange={(e) => setRoleSearchQuery(e.target.value)}
-                placeholder="Nombre o email..."
+                placeholder={t('admin_tools.role_view.search_placeholder')}
                 style={{
                   width: '100%',
                   padding: '10px',
@@ -407,16 +409,16 @@ export default function AdminTools() {
             {/* Lista de Usuarios */}
             <div style={{ marginTop: '20px' }}>
               <h3 style={{ color: '#fff', marginBottom: '12px', fontSize: '14px' }}>
-                Usuarios con rol "{selectedRole}" ({filteredRoleUsers.length})
+                {t('admin_tools.role_view.users_with_role')} "{selectedRole}" ({filteredRoleUsers.length})
               </h3>
-              
+
               {loadingRoleUsers ? (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
-                  Cargando usuarios...
+                  {t('admin_tools.role_view.loading_users')}
                 </div>
               ) : filteredRoleUsers.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
-                  No se encontraron usuarios con este rol
+                  {t('admin_tools.role_view.no_users')}
                 </div>
               ) : (
                 <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
@@ -446,8 +448,8 @@ export default function AdminTools() {
                         <div style={{ flex: 1 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                             <strong style={{ color: '#fff' }}>
-                            {roleUser.name || 'Sin nombre'}
-                          </strong>
+                              {roleUser.name || t('admin_tools.role_view.no_name')}
+                            </strong>
                             {(roleUser as any).is_active === false && (
                               <span style={{
                                 background: 'rgba(244, 67, 54, 0.2)',
@@ -457,12 +459,12 @@ export default function AdminTools() {
                                 fontSize: '11px',
                                 fontWeight: '600',
                               }}>
-                                Inactivo
+                                {t('admin_tools.role_view.inactive')}
                               </span>
                             )}
                           </div>
                           <p style={{ color: '#999', fontSize: '13px', margin: 0 }}>
-                            {roleUser.email || 'Sin email'}
+                            {roleUser.email || t('admin_tools.role_view.no_email')}
                           </p>
                         </div>
                         <span style={{
@@ -483,14 +485,14 @@ export default function AdminTools() {
             </div>
 
             <div className="modal-actions" style={{ marginTop: '20px' }}>
-              <button 
-                className="btn-secondary" 
+              <button
+                className="btn-secondary"
                 onClick={() => {
                   setShowRoleViewModal(false);
                   setRoleSearchQuery('');
                 }}
               >
-                Cerrar
+                {t('admin_tools.role_view.close')}
               </button>
             </div>
           </div>
@@ -510,7 +512,7 @@ export default function AdminTools() {
         }}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px' }}>
             <h2>Agregar Administrador</h2>
-            
+
             {/* Selector de modo */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', borderBottom: '1px solid #2a2a2a', paddingBottom: '12px' }}>
               <button
@@ -531,7 +533,7 @@ export default function AdminTools() {
                   fontWeight: addMode === 'direct' ? '600' : '400',
                 }}
               >
-                Por Email
+                {t('admin_tools.admins.by_email')}
               </button>
               <button
                 type="button"
@@ -550,49 +552,49 @@ export default function AdminTools() {
                   fontWeight: addMode === 'search' ? '600' : '400',
                 }}
               >
-                Buscar Usuario
+                {t('admin_tools.admins.search_user')}
               </button>
             </div>
 
             {addMode === 'direct' ? (
               <>
                 <div className="form-group">
-                  <label>Email *</label>
+                  <label>{t('admin_tools.admins.email_label')}</label>
                   <input
                     type="email"
                     value={adminEmail}
                     onChange={(e) => setAdminEmail(e.target.value)}
-                    placeholder="email@ejemplo.com"
+                    placeholder={t('admin_tools.admins.email_placeholder')}
                     style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginTop: '8px' }}
                   />
                   <p style={{ color: '#999', fontSize: '12px', marginTop: '4px', marginBottom: 0 }}>
-                    Ingresa el email del usuario registrado. El sistema verificará que existe antes de promoverlo.
+                    {t('admin_tools.admins.email_help')}
                   </p>
                 </div>
 
                 <div className="form-group" style={{ marginTop: '16px' }}>
-                  <label>Nombre (opcional)</label>
+                  <label>{t('admin_tools.admins.name_label')}</label>
                   <input
                     type="text"
                     value={adminName}
                     onChange={(e) => setAdminName(e.target.value)}
-                    placeholder="Nombre del administrador"
+                    placeholder={t('admin_tools.admins.name_placeholder')}
                     style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginTop: '8px' }}
                   />
                 </div>
 
                 <div style={{ background: '#1a4d1a', padding: '12px', borderRadius: '6px', marginTop: '20px' }}>
                   <p style={{ color: '#4caf50', fontSize: '14px', margin: '0 0 8px 0', fontWeight: '600' }}>
-                    ✅ El usuario debe estar registrado en la app
+                    {t('admin_tools.admins.registered_notice_title')}
                   </p>
                   <p style={{ color: '#e0e0e0', fontSize: '13px', margin: 0 }}>
-                    Se verificará que el usuario existe antes de promoverlo a administrador. Tendrá acceso inmediato al cerrar y volver a abrir la app.
+                    {t('admin_tools.admins.registered_notice_desc')}
                   </p>
                 </div>
 
                 <div className="modal-actions">
-                  <button 
-                    className="btn-secondary" 
+                  <button
+                    className="btn-secondary"
                     onClick={() => {
                       setShowAddAdminModal(false);
                       setAdminName('');
@@ -603,8 +605,8 @@ export default function AdminTools() {
                   >
                     Cancelar
                   </button>
-                  <button 
-                    className="btn-primary" 
+                  <button
+                    className="btn-primary"
                     onClick={handleAddAdmin}
                     disabled={addingAdmin || !adminEmail.trim()}
                   >
@@ -615,14 +617,14 @@ export default function AdminTools() {
             ) : addMode === 'search' && !selectedUser ? (
               <>
                 <div className="form-group">
-                  <label>Buscar Usuario por Email o Nombre</label>
+                  <label>{t('admin_tools.admins.search_label')}</label>
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleSearchUsers()}
-                      placeholder="Email o nombre del usuario"
+                      placeholder={t('admin_tools.role_view.search_placeholder')}
                       style={{ flex: 1, padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff' }}
                     />
                     <button
@@ -630,14 +632,14 @@ export default function AdminTools() {
                       onClick={handleSearchUsers}
                       disabled={searching || !searchQuery.trim()}
                     >
-                      {searching ? 'Buscando...' : 'Buscar'}
+                      {searching ? t('admin_tools.admins.searching') : t('admin_tools.admins.search_btn')}
                     </button>
                   </div>
                 </div>
 
                 {searchResults.length > 0 && (
                   <div className="search-results" style={{ marginTop: '20px', maxHeight: '300px', overflowY: 'auto' }}>
-                    <h3 style={{ color: '#fff', marginBottom: '12px', fontSize: '14px' }}>Resultados:</h3>
+                    <h3 style={{ color: '#fff', marginBottom: '12px', fontSize: '14px' }}>{t('admin_tools.admins.results')}</h3>
                     {searchResults.map((result) => (
                       <div
                         key={result.user_id}
@@ -647,13 +649,13 @@ export default function AdminTools() {
                       >
                         <div>
                           <strong style={{ color: '#fff', display: 'block', marginBottom: '4px' }}>
-                            {result.name || 'Sin nombre'}
+                            {result.name || t('admin_tools.role_view.no_name')}
                           </strong>
                           <p style={{ color: '#999', fontSize: '14px', margin: 0 }}>
-                            {result.email || 'Sin email'}
+                            {result.email || t('admin_tools.role_view.no_email')}
                           </p>
                           {result.role_type && (
-                            <span className="badge" style={{ 
+                            <span className="badge" style={{
                               background: result.role_type === 'admin' ? 'rgba(244, 67, 54, 0.2)' : 'rgba(76, 175, 80, 0.2)',
                               color: result.role_type === 'admin' ? '#f44336' : '#4CAF50',
                               fontSize: '12px',
@@ -673,16 +675,16 @@ export default function AdminTools() {
 
                 {searchQuery && searchResults.length === 0 && !searching && (
                   <div style={{ marginTop: '20px', padding: '20px', textAlign: 'center', color: '#999' }}>
-                    No se encontraron usuarios. Asegúrate de que el usuario exista en el sistema.
+                    {t('admin_tools.admins.no_results')}
                   </div>
                 )}
               </>
             ) : addMode === 'search' && selectedUser ? (
               <>
                 <div style={{ background: '#0a0a0a', padding: '16px', borderRadius: '6px', border: '1px solid #2a2a2a', marginBottom: '20px' }}>
-                  <p style={{ color: '#ccc', marginBottom: '8px' }}>Usuario seleccionado:</p>
-                  <p style={{ color: '#fff', fontWeight: '600', margin: 0 }}>{selectedUser.name || 'Sin nombre'}</p>
-                  <p style={{ color: '#999', fontSize: '14px', margin: '4px 0 0 0' }}>{selectedUser.email || 'Sin email'}</p>
+                  <p style={{ color: '#ccc', marginBottom: '8px' }}>{t('admin_tools.admins.selected')}</p>
+                  <p style={{ color: '#fff', fontWeight: '600', margin: 0 }}>{selectedUser.name || t('admin_tools.role_view.no_name')}</p>
+                  <p style={{ color: '#999', fontSize: '14px', margin: '4px 0 0 0' }}>{selectedUser.email || t('admin_tools.role_view.no_email')}</p>
                   <button
                     className="btn-link"
                     onClick={() => {
@@ -692,23 +694,23 @@ export default function AdminTools() {
                     }}
                     style={{ marginTop: '8px', fontSize: '12px' }}
                   >
-                    Cambiar usuario
+                    {t('admin_tools.admins.change_user')}
                   </button>
                 </div>
 
                 <div className="form-group">
-                  <label>Nombre (opcional)</label>
+                  <label>{t('admin_tools.admins.name_label')}</label>
                   <input
                     type="text"
                     value={adminName}
                     onChange={(e) => setAdminName(e.target.value)}
-                    placeholder="Nombre del administrador"
+                    placeholder={t('admin_tools.admins.name_placeholder')}
                     style={{ width: '100%', padding: '10px', background: '#0a0a0a', border: '1px solid #2a2a2a', borderRadius: '6px', color: '#fff', marginTop: '8px' }}
                   />
                 </div>
 
                 <div className="form-group">
-                  <label>Email</label>
+                  <label>{t('admin_tools.admins.email_label')}</label>
                   <input
                     type="email"
                     value={adminEmail}
@@ -720,13 +722,13 @@ export default function AdminTools() {
 
                 <div style={{ background: '#1a1a1a', padding: '12px', borderRadius: '6px', marginTop: '20px' }}>
                   <p style={{ color: '#FF9800', fontSize: '14px', margin: 0 }}>
-                    ⚠️ El usuario tendrá acceso completo al dashboard como administrador.
+                    {t('admin_tools.admins.warning')}
                   </p>
                 </div>
 
                 <div className="modal-actions">
-                  <button 
-                    className="btn-secondary" 
+                  <button
+                    className="btn-secondary"
                     onClick={() => {
                       setShowAddAdminModal(false);
                       setSearchQuery('');
@@ -739,8 +741,8 @@ export default function AdminTools() {
                   >
                     Cancelar
                   </button>
-                  <button 
-                    className="btn-primary" 
+                  <button
+                    className="btn-primary"
                     onClick={handleAddAdmin}
                     disabled={addingAdmin || !adminEmail.trim()}
                   >
