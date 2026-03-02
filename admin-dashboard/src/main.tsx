@@ -17,7 +17,11 @@ if (!clerkPubKey) {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <SettingsProvider>
-      <ClerkProvider publishableKey={clerkPubKey || ''}>
+      <ClerkProvider
+        publishableKey={clerkPubKey || ''}
+        afterSignInUrl="/"
+        afterSignUpUrl="/"
+      >
         <App />
       </ClerkProvider>
     </SettingsProvider>
