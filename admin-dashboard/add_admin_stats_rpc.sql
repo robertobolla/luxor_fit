@@ -1,7 +1,7 @@
 -- Deploy missing RPC and Views for Admin Dashboard Statistics
 
 -- 1. Create the user_stats view if it doesn't exist
--- 1. Create the user_stats view if it doesn't exist
+DROP VIEW IF EXISTS user_stats CASCADE;
 CREATE OR REPLACE VIEW user_stats AS
 SELECT 
     up.user_id,

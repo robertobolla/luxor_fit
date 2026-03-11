@@ -114,16 +114,38 @@ const getStatValue = (statId: StatType, data: CardioStickerData, calculated: Ret
 };
 
 // Estilo 1: Glassmorphism Mini
-const StickerGlassmorphism: React.FC<{ data: CardioStickerData }> = ({ data }) => (
-    <View style={stylesGlass.container}>
-        <Text style={stylesGlass.brand}>LUXOR FITNESS</Text>
-        <View style={stylesGlass.routeIcon}>
-            <RoutePathSVG routePoints={data.routePoints} width={24} height={24} strokeWidth={2} />
+const StickerGlassmorphism: React.FC<{ data: CardioStickerData; selectedStats: StatType[] }> = ({ data, selectedStats }) => {
+    const { t } = useTranslation();
+    const calculated = calculateStats(data);
+    const stats = selectedStats.slice(0, 4);
+
+    // Si hay stats, la primera es la principal (grande)
+    const mainStat = stats.length > 0 ? stats[0] : 'distance';
+    const mainValue = getStatValue(mainStat, data, calculated);
+
+    // Las demás van abajo separadas por punto
+    const secondaryStats = stats.slice(1).map(statId => {
+        const val = getStatValue(statId, data, calculated);
+        return `${val.value}${val.unit}`;
+    });
+
+    return (
+        <View style={stylesGlass.container}>
+            <Text style={stylesGlass.brand}>LUXOR FITNESS</Text>
+            <View style={stylesGlass.routeIcon}>
+                <RoutePathSVG routePoints={data.routePoints} width={24} height={24} strokeWidth={2} />
+            </View>
+            <Text style={stylesGlass.mainStat}>
+                {mainValue.value} <Text style={stylesGlass.mainUnit}>{mainValue.unit}</Text>
+            </Text>
+            {secondaryStats.length > 0 && (
+                <Text style={stylesGlass.stats}>
+                    {secondaryStats.join(' • ')}
+                </Text>
+            )}
         </View>
-        <Text style={stylesGlass.distance}>{data.distance.toFixed(1)} km</Text>
-        <Text style={stylesGlass.stats}>{data.duration} • +{data.elevation}m</Text>
-    </View>
-);
+    );
+};
 
 const stylesGlass = StyleSheet.create({
     container: {
@@ -132,11 +154,13 @@ const stylesGlass = StyleSheet.create({
         padding: 12,
         alignItems: 'center',
         minWidth: 100,
+        maxWidth: 160,
     },
     brand: { fontSize: 8, color: '#FFD54A', fontWeight: '600', letterSpacing: 1, marginBottom: 4 },
     routeIcon: { marginVertical: 4 },
-    distance: { fontSize: 18, color: '#fff', fontWeight: 'bold' },
-    stats: { fontSize: 10, color: '#999' },
+    mainStat: { fontSize: 18, color: '#fff', fontWeight: 'bold', textAlign: 'center' },
+    mainUnit: { fontSize: 12, fontWeight: 'normal' },
+    stats: { fontSize: 10, color: '#999', marginTop: 4, textAlign: 'center' },
 });
 
 // Estilo 2: Barra Horizontal con estadísticas configurables
@@ -155,23 +179,11 @@ const StickerHorizontal: React.FC<{ data: CardioStickerData; selectedStats: Stat
                 </View>
             </View>
             <View style={stylesHoriz.content}>
-                <View style={stylesHoriz.statsColumn}>
-                    {stats.slice(0, 2).map((statId) => {
+                <View style={stylesHoriz.statsGrid}>
+                    {stats.map((statId) => {
                         const { value, unit } = getStatValue(statId, data, calculated);
                         return (
-                            <View key={statId} style={stylesHoriz.statItem}>
-                                <Text style={stylesHoriz.statValue}>{value}</Text>
-                                <Text style={stylesHoriz.statUnit}>{unit}</Text>
-                                <Text style={stylesHoriz.statLabel}>{t(`share.stats.${statId}`)}</Text>
-                            </View>
-                        );
-                    })}
-                </View>
-                <View style={stylesHoriz.statsColumn}>
-                    {stats.slice(2, 4).map((statId) => {
-                        const { value, unit } = getStatValue(statId, data, calculated);
-                        return (
-                            <View key={statId} style={stylesHoriz.statItem}>
+                            <View key={statId} style={[stylesHoriz.statItem, stats.length <= 2 && { minWidth: 70 }]}>
                                 <Text style={stylesHoriz.statValue}>{value}</Text>
                                 <Text style={stylesHoriz.statUnit}>{unit}</Text>
                                 <Text style={stylesHoriz.statLabel}>{t(`share.stats.${statId}`)}</Text>
@@ -181,7 +193,7 @@ const StickerHorizontal: React.FC<{ data: CardioStickerData; selectedStats: Stat
                 </View>
                 <View style={stylesHoriz.mapColumn}>
                     <View style={stylesHoriz.routeBox}>
-                        <RoutePathSVG routePoints={data.routePoints} width={60} height={60} strokeWidth={2} />
+                        <RoutePathSVG routePoints={data.routePoints} width={50} height={50} strokeWidth={2} />
                     </View>
                 </View>
             </View>
@@ -194,7 +206,7 @@ const stylesHoriz = StyleSheet.create({
         backgroundColor: 'rgba(26, 26, 26, 0.95)',
         borderRadius: 16,
         padding: 14,
-        minWidth: 300,
+        alignSelf: 'flex-start',
         borderWidth: 1,
         borderColor: 'rgba(255, 213, 74, 0.3)',
     },
@@ -203,6 +215,7 @@ const stylesHoriz = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         marginBottom: 10,
+        gap: 20,
     },
     brand: { fontSize: 10, color: '#FFD54A', fontWeight: '700', letterSpacing: 1 },
     activityBadge: {
@@ -217,17 +230,23 @@ const stylesHoriz = StyleSheet.create({
     activityLabel: { fontSize: 11, color: '#0a0a0a', fontWeight: '600' },
     content: {
         flexDirection: 'row',
-        gap: 8,
+        gap: 12,
+        alignItems: 'center',
     },
-    statsColumn: {
-        flex: 1,
+    statsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
         gap: 8,
+        maxWidth: 180, // Limita el ancho para que salten a la siguiente línea
+        justifyContent: 'flex-start',
     },
     statItem: {
         backgroundColor: 'rgba(0,0,0,0.3)',
         borderRadius: 8,
         padding: 8,
         alignItems: 'center',
+        minWidth: 65,
+        flexGrow: 1,
     },
     statValue: { fontSize: 16, color: '#fff', fontWeight: 'bold' },
     statUnit: { fontSize: 10, color: '#FFD54A', marginTop: 1 },
@@ -244,25 +263,47 @@ const stylesHoriz = StyleSheet.create({
 });
 
 // Estilo 3: Tarjeta Vertical
-const StickerVertical: React.FC<{ data: CardioStickerData }> = ({ data }) => (
-    <View style={stylesVert.container}>
-        <View style={stylesVert.header}>
-            <Ionicons name={getActivityIcon(data.activityType)} size={16} color="#FFD54A" />
-            <Text style={stylesVert.label}>{getActivityLabel(data.activityType)}</Text>
-            <Text style={stylesVert.brand}>LUXOR</Text>
+const StickerVertical: React.FC<{ data: CardioStickerData; selectedStats: StatType[] }> = ({ data, selectedStats }) => {
+    const calculated = calculateStats(data);
+    const stats = selectedStats.slice(0, 4);
+
+    const mainStat = stats.length > 0 ? stats[0] : 'distance';
+    const mainValue = getStatValue(mainStat, data, calculated);
+    const secondaryStats = stats.slice(1);
+
+    return (
+        <View style={stylesVert.container}>
+            <View style={stylesVert.header}>
+                <Ionicons name={getActivityIcon(data.activityType)} size={16} color="#FFD54A" />
+                <Text style={stylesVert.label}>{getActivityLabel(data.activityType)}</Text>
+                <Text style={stylesVert.brand}>LUXOR</Text>
+            </View>
+            <View style={stylesVert.mapBox}>
+                <RoutePathSVG routePoints={data.routePoints} width={90} height={70} strokeWidth={2.5} />
+            </View>
+            <Text style={stylesVert.mainStat}>
+                {mainValue.value} <Text style={stylesVert.mainUnit}>{mainValue.unit}</Text>
+            </Text>
+            {secondaryStats.length > 0 && (
+                <View style={stylesVert.row}>
+                    {secondaryStats.map((statId, index) => {
+                        const val = getStatValue(statId, data, calculated);
+                        const iconName = AVAILABLE_STATS.find(s => s.id === statId)?.icon || 'fitness';
+                        return (
+                            <React.Fragment key={statId}>
+                                {index > 0 && <View style={stylesVert.divider} />}
+                                <View style={stylesVert.smallStat}>
+                                    <Ionicons name={iconName as any} size={14} color="#999" />
+                                    <Text style={stylesVert.stat}>{val.value}{val.unit}</Text>
+                                </View>
+                            </React.Fragment>
+                        );
+                    })}
+                </View>
+            )}
         </View>
-        <View style={stylesVert.mapBox}>
-            <RoutePathSVG routePoints={data.routePoints} width={90} height={70} strokeWidth={2.5} />
-        </View>
-        <Text style={stylesVert.distance}>{data.distance.toFixed(1)} km</Text>
-        <View style={stylesVert.row}>
-            <Ionicons name="time" size={14} color="#999" />
-            <Text style={stylesVert.stat}>{data.duration}</Text>
-            <Ionicons name="trending-up" size={14} color="#999" style={{ marginLeft: 10 }} />
-            <Text style={stylesVert.stat}>+{data.elevation}m</Text>
-        </View>
-    </View>
-);
+    );
+};
 
 const stylesVert = StyleSheet.create({
     container: {
@@ -271,6 +312,7 @@ const stylesVert = StyleSheet.create({
         padding: 14,
         alignItems: 'center',
         minWidth: 120,
+        maxWidth: 180,
         borderWidth: 1,
         borderColor: 'rgba(255, 213, 74, 0.3)',
     },
@@ -278,27 +320,45 @@ const stylesVert = StyleSheet.create({
     label: { fontSize: 14, color: '#FFD54A', fontWeight: '600', flex: 1 },
     brand: { fontSize: 8, color: '#FFD54A', fontWeight: '600' },
     mapBox: { backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 10, padding: 8, marginBottom: 10 },
-    distance: { fontSize: 24, color: '#fff', fontWeight: 'bold', marginBottom: 6 },
-    row: { flexDirection: 'row', alignItems: 'center' },
-    stat: { fontSize: 12, color: '#fff', marginLeft: 4 },
+    mainStat: { fontSize: 24, color: '#fff', fontWeight: 'bold', marginBottom: 6, textAlign: 'center' },
+    mainUnit: { fontSize: 14, fontWeight: 'normal' },
+    row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
+    smallStat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    stat: { fontSize: 12, color: '#fff' },
+    divider: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#666' },
 });
 
 // Estilo 4: Minimalista (transparente)
-const StickerMinimal: React.FC<{ data: CardioStickerData }> = ({ data }) => (
-    <View style={stylesMin.container}>
-        <RoutePathSVG routePoints={data.routePoints} width={70} height={70} strokeWidth={2.5} />
-        <View style={stylesMin.stats}>
-            <View style={stylesMin.activityRow}>
-                <Ionicons name={getActivityIcon(data.activityType)} size={14} color="#FFD54A" />
-                <Text style={stylesMin.activityLabel}>{getActivityLabel(data.activityType)}</Text>
+const StickerMinimal: React.FC<{ data: CardioStickerData; selectedStats: StatType[] }> = ({ data, selectedStats }) => {
+    const { t } = useTranslation();
+    const calculated = calculateStats(data);
+    const stats = selectedStats.slice(0, 4);
+
+    return (
+        <View style={stylesMin.container}>
+            <RoutePathSVG routePoints={data.routePoints} width={70} height={70} strokeWidth={2.5} />
+            <View style={stylesMin.stats}>
+                <View style={stylesMin.activityRow}>
+                    <Ionicons name={getActivityIcon(data.activityType)} size={14} color="#FFD54A" />
+                    <Text style={stylesMin.activityLabel}>{getActivityLabel(data.activityType)}</Text>
+                </View>
+                {stats.map((statId, index) => {
+                    const val = getStatValue(statId, data, calculated);
+                    const label = t(`share.stats.${statId}`);
+                    return (
+                        <View key={statId} style={stylesMin.statBlock}>
+                            <Text style={stylesMin.statTitle}>{label}</Text>
+                            <Text style={[stylesMin.statValue, index === 0 && { fontSize: 22, fontWeight: 'bold' }]}>
+                                {val.value} <Text style={stylesMin.statUnit}>{val.unit}</Text>
+                            </Text>
+                        </View>
+                    );
+                })}
             </View>
-            <Text style={stylesMin.distance}>{data.distance.toFixed(1)} km</Text>
-            <Text style={stylesMin.time}>{data.duration}</Text>
-            <Text style={stylesMin.elevation}>+{data.elevation}m</Text>
+            <Text style={stylesMin.brand}>LUXOR FITNESS</Text>
         </View>
-        <Text style={stylesMin.brand}>LUXOR FITNESS</Text>
-    </View>
-);
+    );
+};
 
 const stylesMin = StyleSheet.create({
     container: {
@@ -308,23 +368,25 @@ const stylesMin = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 16,
+        paddingBottom: 24, // Espacio para la marca
     },
-    stats: { alignItems: 'flex-start' },
-    activityRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 },
-    activityLabel: { fontSize: 12, color: '#FFD54A', fontWeight: '600' },
-    distance: { fontSize: 22, color: '#fff', fontWeight: 'bold' },
-    time: { fontSize: 14, color: '#fff' },
-    elevation: { fontSize: 14, color: '#fff' },
-    brand: { position: 'absolute', bottom: 6, left: 0, right: 0, textAlign: 'center', fontSize: 8, color: '#FFD54A', fontWeight: '600' },
+    stats: { alignItems: 'flex-start', gap: 6 },
+    activityRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 2 },
+    activityLabel: { fontSize: 12, color: '#FFD54A', fontWeight: '600', textTransform: 'uppercase' },
+    statBlock: { marginBottom: 2 },
+    statTitle: { fontSize: 10, color: '#FFD54A', textTransform: 'uppercase', marginBottom: 1 },
+    statValue: { fontSize: 16, color: '#fff' },
+    statUnit: { fontSize: 12, fontWeight: 'normal', color: '#ccc' },
+    brand: { position: 'absolute', bottom: 6, left: 0, right: 0, textAlign: 'center', fontSize: 8, color: '#FFD54A', fontWeight: '600', letterSpacing: 1 },
 });
 
 const CardioShareSticker: React.FC<CardioShareStickerProps> = ({ style, data, selectedStats = ['distance', 'time', 'pace', 'calories'] }) => {
     switch (style) {
-        case 'glassmorphism': return <StickerGlassmorphism data={data} />;
+        case 'glassmorphism': return <StickerGlassmorphism data={data} selectedStats={selectedStats} />;
         case 'horizontal': return <StickerHorizontal data={data} selectedStats={selectedStats} />;
-        case 'vertical': return <StickerVertical data={data} />;
-        case 'minimal': return <StickerMinimal data={data} />;
-        default: return <StickerGlassmorphism data={data} />;
+        case 'vertical': return <StickerVertical data={data} selectedStats={selectedStats} />;
+        case 'minimal': return <StickerMinimal data={data} selectedStats={selectedStats} />;
+        default: return <StickerGlassmorphism data={data} selectedStats={selectedStats} />;
     }
 };
 

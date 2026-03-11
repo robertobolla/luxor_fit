@@ -200,12 +200,12 @@ export default function ShareCardioScreen() {
                 ? await ImagePicker.launchCameraAsync({
                     mediaTypes: 'images',
                     allowsEditing: false,
-                    quality: 0.9,
+                    quality: 1, // Calidad máxima
                 })
                 : await ImagePicker.launchImageLibraryAsync({
                     mediaTypes: 'images',
                     allowsEditing: false,
-                    quality: 0.9,
+                    quality: 1, // Calidad máxima
                 });
 
             if (!result.canceled && result.assets[0]) {
@@ -222,11 +222,13 @@ export default function ShareCardioScreen() {
         setIsCapturing(true);
 
         try {
+            // PIXEL_RATIO de 3 para garantizar al menos 1080px de ancho para Instagram
+            const PIXEL_RATIO = 3;
             const uri = await captureRef(captureViewRef, {
                 format: 'png',
                 quality: 1,
-                width: CAPTURE_WIDTH,
-                height: CAPTURE_HEIGHT,
+                width: CAPTURE_WIDTH * PIXEL_RATIO,
+                height: CAPTURE_HEIGHT * PIXEL_RATIO,
             });
 
             const isAvailable = await Sharing.isAvailableAsync();

@@ -159,7 +159,7 @@ export default function ShareWorkoutScreen() {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: false,
-            quality: 0.8,
+            quality: 1, // Calidad máxima para el fondo
         });
 
         if (!result.canceled) {
@@ -172,11 +172,13 @@ export default function ShareWorkoutScreen() {
             setIsCapturing(true);
             await new Promise(resolve => setTimeout(resolve, 100));
 
+            // Multiplicador x3 para exportar fotos a alta resolución para Instagram
+            const PIXEL_RATIO = 3;
             const uri = await captureRef(captureViewRef, {
                 format: 'png',
-                quality: 0.9,
-                width: CAPTURE_WIDTH,
-                height: CAPTURE_HEIGHT,
+                quality: 1,
+                width: CAPTURE_WIDTH * PIXEL_RATIO,
+                height: CAPTURE_HEIGHT * PIXEL_RATIO,
             });
 
             setIsCapturing(false);

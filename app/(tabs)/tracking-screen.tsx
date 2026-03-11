@@ -16,6 +16,7 @@ import * as TaskManager from 'expo-task-manager';
 import { DeviceEventEmitter, Platform } from 'react-native';
 import { useUser } from '@clerk/clerk-expo';
 import { saveExercise } from '@/services/exerciseService';
+import { supabase } from '../../src/services/supabase';
 import { useTranslation } from 'react-i18next';
 import { useUnitsStore, conversions } from '../../src/store/unitsStore';
 
@@ -72,6 +73,7 @@ export default function TrackingScreen() {
   const [currentLocation, setCurrentLocation] = useState<Location.LocationObject | null>(null);
   const [savedStats, setSavedStats] = useState<{ time: string; distance: number; speed: number } | null>(null);
   const [savedExerciseId, setSavedExerciseId] = useState<string | null>(null);
+  const [userWeightKg, setUserWeightKg] = useState(70); // Peso del usuario (default 70 kg)
 
   // Referencias
   const locationSubscription = useRef<Location.LocationSubscription | null>(null);
@@ -83,6 +85,8 @@ export default function TrackingScreen() {
   const gpsStabilized = useRef(false); // Indica si el GPS ya está estable
   const isStopped = useRef(false); // Para evitar actualizaciones después de detener
   const isSavingRef = useRef(false); // Para evitar doble-clicks
+  // BUGFIX: usar ref para isPaused para evitar stale closure en setInterval
+  const isPausedRef = useRef(false);
   const elevationGain = useRef(0); // Desnivel positivo acumulado
   const elevationLoss = useRef(0); // Desnivel negativo acumulado
   const lastAltitude = useRef<number | null>(null); // Última altitud registrada
@@ -91,6 +95,20 @@ export default function TrackingScreen() {
   const startTimeRef = useRef<number | null>(null);
   const pausedTimeRef = useRef<number>(0); // Tiempo acumulado antes de la última pausa
   const lastPauseTimeRef = useRef<number | null>(null);
+
+  // Valores MET (Metabolic Equivalent of Task) por tipo de actividad
+  // Fórmula: calorías = MET × peso_kg × duración_horas
+  const getMETForActivity = (type: string): number => {
+    const metValues: { [key: string]: number } = {
+      'running': 11.0,   // Correr a ritmo moderado (~9-11 km/h)
+      'cycling': 7.5,    // Ciclismo a ritmo moderado (~16-19 km/h)
+      'walking': 3.5,    // Caminar a ritmo normal
+      'hiking': 6.0,     // Senderismo con desnivel
+      'swimming': 7.0,   // Natación moderada
+      'other': 5.0,      // Actividad genérica
+    };
+    return metValues[type?.toLowerCase()] ?? 6.0;
+  };
 
   // Función para resetear y comenzar tracking
   const resetAndStartTracking = useCallback(() => {
@@ -137,6 +155,27 @@ export default function TrackingScreen() {
       };
     }, [resetAndStartTracking])
   );
+
+  // Cargar peso del usuario para cálculo preciso de calorías
+  useEffect(() => {
+    const loadUserWeight = async () => {
+      if (!user?.id) return;
+      try {
+        const { data } = await supabase
+          .from('user_profiles')
+          .select('weight')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        if (data?.weight && Number.isFinite(Number(data.weight)) && Number(data.weight) > 0) {
+          setUserWeightKg(Number(data.weight));
+          console.log(`⚖️ Peso del usuario cargado: ${data.weight} kg`);
+        }
+      } catch (e) {
+        console.log('⚠️ No se pudo cargar el peso, usando 70 kg por defecto');
+      }
+    };
+    loadUserWeight();
+  }, [user?.id]);
 
   // Constantes para filtrado de GPS
   const MIN_ACCURACY_METERS = 20; // Precisión mínima aceptable
@@ -308,7 +347,10 @@ export default function TrackingScreen() {
       // Iniciar timer visual
       if (!timerInterval.current) {
         timerInterval.current = setInterval(() => {
-          if (isStopped.current || isPaused) return;
+          // BUGFIX: usar isPausedRef.current (ref) en vez de isPaused (state)
+          // El state captura el valor inicial en el closure y nunca se actualiza.
+          // La ref siempre refleja el valor actual.
+          if (isStopped.current || isPausedRef.current) return;
 
           if (startTimeRef.current) {
             const now = Date.now();
@@ -396,11 +438,10 @@ export default function TrackingScreen() {
     if (!isPaused) {
       // PAUSAR
       setIsPaused(true);
+      isPausedRef.current = true; // BUGFIX: sincronizar ref para que el interval se detenga
       lastPauseTimeRef.current = Date.now();
 
       // Detener actualizaciones de ubicación para ahorrar batería
-      // aunque si se quiere "hot resume" rápido, se podría dejar corriendo
-      // pero para evitar que el task siga emitiendo y gastando, lo paramos.
       Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME).then(started => {
         if (started) Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);
       });
@@ -409,6 +450,7 @@ export default function TrackingScreen() {
     } else {
       // REANUDAR
       setIsPaused(false);
+      isPausedRef.current = false; // BUGFIX: sincronizar ref al reanudar
       if (lastPauseTimeRef.current) {
         const pauseDuration = Date.now() - lastPauseTimeRef.current;
         pausedTimeRef.current += pauseDuration;
@@ -471,11 +513,19 @@ export default function TrackingScreen() {
     const currentTrackingTime = trackingTime;
     const currentDistance = distance;
     const avgSpeed = currentTrackingTime > 0 ? currentDistance / (currentTrackingTime / 3600) || 0 : 0;
+    const durationMinutes = Math.ceil(currentTrackingTime / 60);
     const stats = {
       time: formatTime(currentTrackingTime),
       distance: currentDistance,
       speed: avgSpeed,
     };
+
+    // Calcular calorías estimadas usando valores MET según tipo de actividad
+    // Fórmula estándar: calorías = MET × peso_kg × duración_horas
+    const met = getMETForActivity(activityType);
+    const durationHours = durationMinutes / 60;
+    const estimatedCalories = Math.round(met * userWeightKg * durationHours);
+    console.log(`🔥 Calorías estimadas: MET ${met} × ${userWeightKg}kg × ${durationHours.toFixed(2)}h = ${estimatedCalories} kcal (${activityType})`);
 
     let saveSuccess = false;
     let exerciseId: string | null = null;
@@ -488,16 +538,44 @@ export default function TrackingScreen() {
           activity_type: activityType,
           activity_name: activityName,
           date: today,
-          duration_minutes: Math.ceil(currentTrackingTime / 60),
+          duration_minutes: durationMinutes,
           distance_km: currentDistance,
           has_gps: true,
           average_speed_kmh: avgSpeed,
+          calories: estimatedCalories,
           route_points: routePoints,
           elevation_gain: Math.round(elevationGain.current),
           elevation_loss: Math.round(elevationLoss.current),
         });
         saveSuccess = result.success;
         exerciseId = result.exerciseId || null;
+
+        // Guardar también en Apple Health / Google Fit con el tipo de actividad correcto
+        if (saveSuccess) {
+          try {
+            const { saveWorkoutToAppleHealth, saveWorkoutToGoogleFit } = await import('../../src/services/healthService');
+            const { Platform } = require('react-native');
+
+            if (Platform.OS === 'ios') {
+              await saveWorkoutToAppleHealth(
+                durationMinutes,
+                estimatedCalories,
+                currentDistance > 0 ? currentDistance : undefined,
+                activityType  // Tipo real: 'cycling', 'running', 'walking', 'hiking'
+              );
+            } else if (Platform.OS === 'android') {
+              await saveWorkoutToGoogleFit(
+                durationMinutes,
+                estimatedCalories,
+                currentDistance > 0 ? currentDistance : undefined,
+                activityType  // Tipo real: 'cycling', 'running', 'walking', 'hiking'
+              );
+            }
+          } catch (healthError) {
+            console.error('⚠️ Error guardando en app de salud (no crítico):', healthError);
+            // No fallar el guardado principal si hay error con la app de salud
+          }
+        }
       } catch (error) {
         console.error('Error guardando:', error);
       }

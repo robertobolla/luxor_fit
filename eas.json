@@ -33,7 +33,7 @@
             "env": {
                 "EXPO_PUBLIC_SUPABASE_URL": "https://fseyophzvhafjywyufsa.supabase.co",
                 "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZzZXlvcGh6dmhhZmp5d3l1ZnNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA3ODkxNzAsImV4cCI6MjA4NjE0OTE3MH0.M55lP4XsP8bi05X95SIhGzO8YmeJonjEgspgp49JVmk",
-                "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsuYWRtaW4ubHV4b3JmaXRuZXNzYXBwLmNvbSQ",
+                "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubHV4b3JmaXRuZXNzYXBwLmNvbSQ",
                 "EXPO_PUBLIC_REVENUECAT_API_KEY_IOS": "appl_IsFQDMWCpkgBihKmDTCwFHudDwS",
                 "EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID": "goog_uNlePDyOgUDLnlyvZbskxHliOpb"
             },

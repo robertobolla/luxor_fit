@@ -97,7 +97,7 @@ export default function ShareNutritionScreen() {
         const result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsEditing: false,
-            quality: 0.8,
+            quality: 1,
         });
 
         if (!result.canceled) {
@@ -110,11 +110,12 @@ export default function ShareNutritionScreen() {
             setIsCapturing(true);
             await new Promise(resolve => setTimeout(resolve, 100));
 
+            const PIXEL_RATIO = 3;
             const uri = await captureRef(captureViewRef, {
                 format: 'png',
-                quality: 0.9,
-                width: CAPTURE_WIDTH,
-                height: CAPTURE_HEIGHT,
+                quality: 1,
+                width: CAPTURE_WIDTH * PIXEL_RATIO,
+                height: CAPTURE_HEIGHT * PIXEL_RATIO,
             });
 
             setIsCapturing(false);
