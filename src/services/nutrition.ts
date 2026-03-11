@@ -2388,3 +2388,38 @@ export function getNextWeekStart(): Date {
   return nextWeekStart;
 }
 
+// ============================================================================
+// HISTORIAL DE HIDRATACIÓN
+// ============================================================================
+
+export interface HydrationLog {
+  user_id: string;
+  date: string;
+  water_ml: number;
+}
+
+export async function getHydrationHistory(
+  userId: string,
+  startDate: string,
+  endDate: string
+): Promise<HydrationLog[]> {
+  try {
+    const { data, error } = await supabase
+      .from('hydration_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .order('date', { ascending: true });
+
+    if (error) {
+      console.error('Error getting hydration history:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (err) {
+    console.error('Error in getHydrationHistory:', err);
+    return [];
+  }
+}

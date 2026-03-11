@@ -2158,7 +2158,11 @@ export default function NutritionHomeScreen() {
         {/* Hidratación */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('nutritionIndex.hydration')}</Text>
-          <View style={styles.waterCard}>
+          <TouchableOpacity
+            style={styles.waterCard}
+            onPress={() => router.push('/(tabs)/nutrition/hydration-detail' as any)}
+            activeOpacity={0.8}
+          >
             <Ionicons name="water" size={40} color="#ffb300" />
             <Text style={styles.waterText}>
               {todayWater} / {targetWater} ml
@@ -2170,7 +2174,7 @@ export default function NutritionHomeScreen() {
               <Ionicons name="add-circle" size={28} color="#ffb300" />
               <Text style={styles.addWaterText}>{t('nutritionIndex.addWater')}</Text>
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         </View>
 
         <View style={{ height: 50 }} />
