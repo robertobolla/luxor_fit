@@ -70,6 +70,56 @@ export default function WorkoutScreen() {
     checkGymRoutines();
   }, [user]);
 
+  const deactivateCurrentPlans = async () => {
+    if (!user) return;
+    try {
+      const activePlans = workoutPlans.filter(p => p.is_active);
+      if (activePlans.length === 0) return;
+
+      const planIds = activePlans.map(p => p.id);
+      console.log('Desactivando planes anteriores:', planIds);
+
+      await supabase
+        .from('workout_plans')
+        .update({ is_active: false })
+        .in('id', planIds);
+    } catch (err) {
+      console.error('Error desactivando planes:', err);
+    }
+  };
+
+  const repeatPlan = async (plan: any) => {
+    if (!user) return;
+    try {
+      setLoadingPlans(true);
+
+      // Desactivar el plan activo actual si existe
+      await deactivateCurrentPlans();
+
+      // Reactivar este plan incrementando el contador de repeticiones y reiniciando activated_at
+      const { error } = await supabase
+        .from('workout_plans')
+        .update({
+          is_active: true,
+          activated_at: new Date().toISOString(),
+          times_repeated: (plan.times_repeated || 0) + 1
+        })
+        .eq('id', plan.id);
+
+      if (error) {
+        throw error;
+      }
+
+      Alert.alert(t('common.success'), t('Plan repetido y activado correctamente.'));
+      await loadWorkoutPlans();
+    } catch (err) {
+      console.error('Error repitiendo plan:', err);
+      Alert.alert(t('common.error'), t('Error al intentar repetir el plan.'));
+    } finally {
+      setLoadingPlans(false);
+    }
+  };
+
   const checkGymRoutines = async () => {
     if (!user?.id) {
       setShowGymRoutinesButton(false);
@@ -193,7 +243,30 @@ export default function WorkoutScreen() {
     // Ejemplo: Plan de 1 semana → se muestra modal al inicio de la semana 2 (weeksPassed >= 1)
     if (weeksPassed >= durationWeeks) {
       console.log(`📅 Plan "${activePlan.plan_name}" ha finalizado (${weeksPassed} semanas de ${durationWeeks})`);
-      console.log(`   ⚠️ Mostrando modal de finalización...`);
+      console.log(`   ⚠️ Marcando como inactivo en la base de datos...`);
+
+      // Actualizar en base de datos
+      const updatePlanToInactive = async () => {
+        try {
+          const { error } = await supabase
+            .from('workout_plans')
+            .update({ is_active: false })
+            .eq('id', activePlan.id);
+
+          if (error) {
+            console.error('Error al desactivar el plan finalizado:', error);
+          } else {
+            console.log('✅ Plan desactivado con éxito');
+            // Refrescar lista visualmente de inmediato para mostrar el badge inactivo
+            setWorkoutPlans(prev => prev.map(p => p.id === activePlan.id ? { ...p, is_active: false } : p));
+          }
+        } catch (e) {
+          console.error('Error catch en desactivar plan', e);
+        }
+      };
+
+      updatePlanToInactive();
+
       setExpiredPlan(activePlan);
       setShowExpirationModal(true);
     }
@@ -464,6 +537,11 @@ export default function WorkoutScreen() {
                           <Text style={styles.activeBadgeText}>{t('workout.activePlan')}</Text>
                         </View>
                       )}
+                      {!plan.is_active && plan.activated_at && !isPartialPlan && (
+                        <View style={styles.finishedBadge}>
+                          <Text style={styles.finishedBadgeText}>{t('Plan Finalizado')}</Text>
+                        </View>
+                      )}
                       {isPartialPlan && (
                         <View style={styles.draftBadge}>
                           <Ionicons name="create-outline" size={10} color="#1a1a1a" />
@@ -501,8 +579,8 @@ export default function WorkoutScreen() {
                     )}
                     {plan.times_repeated > 0 && (
                       <View style={styles.stat}>
-                        <Ionicons name="refresh" size={16} color="#4CAF50" />
-                        <Text style={[styles.statText, { color: '#4CAF50' }]}>
+                        <Ionicons name="refresh" size={16} color="#ffb300" />
+                        <Text style={styles.statText}>
                           {plan.times_repeated} {plan.times_repeated === 1 ? 'repetición' : 'repeticiones'}
                         </Text>
                       </View>
@@ -510,6 +588,15 @@ export default function WorkoutScreen() {
                   </View>
 
                   <View style={styles.planActions}>
+                    {!plan.is_active && plan.activated_at && !isPartialPlan && (
+                      <TouchableOpacity
+                        style={styles.repeatPlanButton}
+                        onPress={() => repeatPlan(plan)}
+                      >
+                        <Ionicons name="refresh" size={16} color="#ffffff" />
+                        <Text style={styles.repeatPlanButtonText}>{t('Repetir Plan')}</Text>
+                      </TouchableOpacity>
+                    )}
                     {isPartialPlan && (
                       <TouchableOpacity
                         style={styles.continueEditButton}
@@ -1072,12 +1159,12 @@ const styles = StyleSheet.create({
   stat: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 20,
+    minWidth: '45%', // Hace que actúen como columnas
   },
   statText: {
     color: '#ffffff',
     fontSize: 12,
-    marginLeft: 4,
+    marginLeft: 6,
   },
   workoutActions: {
     flexDirection: 'row',
@@ -1215,6 +1302,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  finishedBadge: {
+    backgroundColor: '#333333',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#555555',
+  },
+  finishedBadgeText: {
+    color: '#bbbbbb',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   draftBadge: {
     backgroundColor: '#ff9800',
     paddingHorizontal: 8,
@@ -1256,10 +1356,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: 16,
     flexWrap: 'wrap',
+    gap: 12,
   },
   planActions: {
     marginBottom: 12,
     gap: 8,
+  },
+  repeatPlanButton: {
+    backgroundColor: '#333333',
+    borderWidth: 1,
+    borderColor: '#ffb300',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  repeatPlanButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 6,
   },
   continueEditButton: {
     backgroundColor: '#ff9800',
