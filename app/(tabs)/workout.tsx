@@ -28,6 +28,7 @@ import {
 import { useTutorial } from '@/contexts/TutorialContext';
 import { HelpModal } from '@/components/HelpModal';
 import { TutorialTooltip } from '@/components/TutorialTooltip';
+import { EmptyWorkouts } from '@/components/EmptyStates';
 
 export default function WorkoutScreen() {
   const { t } = useTranslation();
@@ -716,19 +717,7 @@ export default function WorkoutScreen() {
 
         {/* Empty State - Solo si no hay planes ni entrenamientos */}
         {workoutPlans.length === 0 && workouts.length === 0 && !isLoadingPlans && (
-          <View style={styles.emptyState}>
-            <Ionicons name="fitness-outline" size={64} color="#666" />
-            <Text style={styles.emptyTitle}>{t('workout.noWorkouts')}</Text>
-            <Text style={styles.emptyDescription}>
-              {t('workout.noWorkoutsDesc')}
-            </Text>
-            <TouchableOpacity
-              style={styles.createButton}
-              onPress={() => setShowSelectionModal(true)}
-            >
-              <Text style={styles.createButtonText}>{t('workout.createWorkoutPlan')}</Text>
-            </TouchableOpacity>
-          </View>
+          <EmptyWorkouts onGeneratePlan={() => setShowSelectionModal(true)} />
         )}
 
         {sessions.length > 0 && (
@@ -1212,35 +1201,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 4,
   },
-  emptyState: {
-    alignItems: 'center',
-    padding: 40,
-    marginTop: 60,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyDescription: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 24,
-  },
-  createButton: {
-    backgroundColor: '#ffb300',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  createButtonText: {
-    color: '#1a1a1a',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+
   loadingContainer: {
     padding: 40,
     alignItems: 'center',

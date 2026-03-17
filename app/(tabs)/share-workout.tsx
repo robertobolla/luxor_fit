@@ -24,6 +24,8 @@ import Animated, { useSharedValue, useAnimatedStyle, runOnJS } from 'react-nativ
 import { useTranslation } from 'react-i18next';
 import { supabase } from '@/services/supabase';
 import WorkoutShareSticker, { WorkoutStickerData, StickerStyle } from '../../src/components/share/WorkoutShareSticker';
+import { ShareMediaPicker } from '../../src/components/share/ShareMediaPicker';
+import { Video, ResizeMode } from 'expo-av';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -44,11 +46,13 @@ export default function ShareWorkoutScreen() {
     const dayDataSource = params.dayDataSource as string;
 
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
     const [selectedStyle, setSelectedStyle] = useState<StickerStyle>('routine');
     const [isCapturing, setIsCapturing] = useState(false);
     const [planData, setPlanData] = useState<WorkoutStickerData | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [showSettings, setShowSettings] = useState(false);
+    const [showMediaPicker, setShowMediaPicker] = useState(true);
 
     // Settings State
     const [showPlanName, setShowPlanName] = useState(true);
@@ -155,16 +159,15 @@ export default function ShareWorkoutScreen() {
         loadData();
     }, [planId, dayDataSource]);
 
-    const pickImage = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: false,
-            quality: 1, // Calidad máxima para el fondo
-        });
-
-        if (!result.canceled) {
-            setSelectedImage(result.assets[0].uri);
+    const handleMediaSelect = (uri: string, type: 'image' | 'video') => {
+        if (type === 'video') {
+            setSelectedVideo(uri);
+            setSelectedImage(null);
+        } else {
+            setSelectedImage(uri);
+            setSelectedVideo(null);
         }
+        setShowMediaPicker(false);
     };
 
     const handleShare = async () => {
@@ -235,10 +238,16 @@ export default function ShareWorkoutScreen() {
             <View style={styles.container}>
                 <StatusBar barStyle="light-content" hidden={isCapturing} />
 
+                <ShareMediaPicker
+                    visible={showMediaPicker}
+                    onClose={handleGoBack}
+                    onSelect={handleMediaSelect}
+                />
+
                 {/* Header Overlay */}
                 {!isCapturing && (
                     <View style={styles.headerOverlay}>
-                        <TouchableOpacity onPress={handleGoBack} style={styles.headerButton}>
+                        <TouchableOpacity onPress={() => setShowMediaPicker(true)} style={styles.headerButton}>
                             <Ionicons name="arrow-back" size={24} color="#fff" />
                         </TouchableOpacity>
 
@@ -254,9 +263,17 @@ export default function ShareWorkoutScreen() {
                     </View>
                 )}
 
-                {/* Capture Area */}
                 <View ref={captureViewRef} style={[styles.captureArea, { width: CAPTURE_WIDTH, height: CAPTURE_HEIGHT }]}>
-                    {selectedImage ? (
+                    {selectedVideo ? (
+                        <Video
+                            source={{ uri: selectedVideo }}
+                            style={styles.backgroundImage}
+                            resizeMode={ResizeMode.COVER}
+                            shouldPlay
+                            isLooping
+                            isMuted
+                        />
+                    ) : selectedImage ? (
                         <Image source={{ uri: selectedImage }} style={styles.backgroundImage} resizeMode="cover" />
                     ) : (
                         <View style={styles.defaultBackground} />
@@ -312,7 +329,7 @@ export default function ShareWorkoutScreen() {
                         <View style={styles.bottomRow}>
                             <TouchableOpacity
                                 style={styles.changePhotoButton}
-                                onPress={() => pickImage()}
+                                onPress={() => setShowMediaPicker(true)}
                             >
                                 <Ionicons name="images-outline" size={24} color="#fff" />
                             </TouchableOpacity>

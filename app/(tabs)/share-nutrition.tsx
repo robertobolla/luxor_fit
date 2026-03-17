@@ -21,6 +21,8 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import Animated, { useSharedValue, useAnimatedStyle, runOnJS } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
 import NutritionShareSticker, { NutritionStickerData, NutritionStickerStyle } from '../../src/components/share/NutritionShareSticker';
+import { ShareMediaPicker } from '../../src/components/share/ShareMediaPicker';
+import { Video, ResizeMode } from 'expo-av';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -40,12 +42,14 @@ export default function ShareNutritionScreen() {
     const rawData = params.data as string;
 
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
     const [selectedStyle, setSelectedStyle] = useState<NutritionStickerStyle>('summary');
     const [isCapturing, setIsCapturing] = useState(false);
     const [nutritionData, setNutritionData] = useState<NutritionStickerData | null>(null);
     const [showTargets, setShowTargets] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
+    const [showMediaPicker, setShowMediaPicker] = useState(true);
 
     const captureViewRef = useRef<View>(null);
 
@@ -93,16 +97,15 @@ export default function ShareNutritionScreen() {
 
     // ... existing pickImage and handleShare ... 
 
-    const pickImage = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: false,
-            quality: 1,
-        });
-
-        if (!result.canceled) {
-            setSelectedImage(result.assets[0].uri);
+    const handleMediaSelect = (uri: string, type: 'image' | 'video') => {
+        if (type === 'video') {
+            setSelectedVideo(uri);
+            setSelectedImage(null);
+        } else {
+            setSelectedImage(uri);
+            setSelectedVideo(null);
         }
+        setShowMediaPicker(false);
     };
 
     const handleShare = async () => {
@@ -180,29 +183,43 @@ export default function ShareNutritionScreen() {
     return (
         <GestureHandlerRootView style={{ flex: 1 }}>
             <View style={styles.container}>
-                <StatusBar barStyle="light-content" hidden={isCapturing} />
+                <StatusBar hidden />
 
-                {/* Header */}
-                <View style={[styles.header, { top: Platform.OS === 'ios' ? 50 : 20 }]}>
-                    <TouchableOpacity onPress={handleGoBack} style={styles.iconButton}>
-                        <Ionicons name="arrow-back" size={24} color="#FFF" />
-                    </TouchableOpacity>
-                    <View style={styles.headerTitleContainer}>
-                        <Text style={styles.headerTitle}>{t('share.title', 'Compartir')}</Text>
+                <ShareMediaPicker
+                    visible={showMediaPicker}
+                    onClose={handleGoBack}
+                    onSelect={handleMediaSelect}
+                />
+
+                {/* Header Overlay */}
+                {!isCapturing && (
+                    <View style={styles.editHeader}>
+                        <TouchableOpacity onPress={() => setShowMediaPicker(true)} style={styles.iconButton}>
+                            <Ionicons name="arrow-back" size={24} color="#fff" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.iconButton}>
+                            <Ionicons name="options" size={24} color="#fff" />
+                        </TouchableOpacity>
                     </View>
-                    <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.iconButton}>
-                        <Ionicons name="settings-outline" size={24} color="#FFF" />
-                    </TouchableOpacity>
-                </View>
+                )}
 
                 {/* Capture Area */}
                 <View
                     ref={captureViewRef}
                     collapsable={false}
-                    style={[styles.captureContainer, { width: CAPTURE_WIDTH, height: CAPTURE_HEIGHT }]}
+                    style={styles.captureView}
                 >
-                    {/* Background Image */}
-                    {selectedImage ? (
+                    {/* Background Media */}
+                    {selectedVideo ? (
+                        <Video
+                            source={{ uri: selectedVideo }}
+                            style={styles.backgroundImage}
+                            resizeMode={ResizeMode.COVER}
+                            shouldPlay
+                            isLooping
+                            isMuted
+                        />
+                    ) : selectedImage ? (
                         <Image source={{ uri: selectedImage }} style={styles.backgroundImage} resizeMode="cover" />
                     ) : (
                         <View style={styles.defaultBackground} />
@@ -226,39 +243,68 @@ export default function ShareNutritionScreen() {
                     </GestureDetector>
                 </View>
 
-                <View style={styles.controls}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.styleSelector}>
-                        {availableStyles.map((style) => (
-                            <TouchableOpacity
-                                key={style.id}
-                                style={[
-                                    styles.styleOption,
-                                    selectedStyle === style.id && styles.styleOptionSelected
-                                ]}
-                                onPress={() => setSelectedStyle(style.id)}
+                {/* Controls */}
+                {!isCapturing && (
+                    <View style={styles.controls}>
+                        <View style={styles.styleSelectorContainer}>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.styleSelectorContent}
                             >
-                                <Text style={[
-                                    styles.styleOptionText,
-                                    selectedStyle === style.id && styles.styleOptionTextSelected
-                                ]}>
-                                    {t(style.labelKey, style.id === 'weekly' ? 'Semanal' : (style.id === 'summary' ? 'Resumen' : 'Simple'))}
-                                </Text>
+                                {availableStyles.map((style) => (
+                                    <TouchableOpacity
+                                        key={style.id}
+                                        style={[
+                                            styles.styleButton,
+                                            selectedStyle === style.id && styles.styleButtonActive
+                                        ]}
+                                        onPress={() => setSelectedStyle(style.id)}
+                                    >
+                                        <Text style={[
+                                            styles.styleButtonText,
+                                            selectedStyle === style.id && styles.styleButtonTextActive
+                                        ]}>
+                                            {t(style.labelKey, style.id === 'weekly' ? 'Semanal' : (style.id === 'summary' ? 'Resumen' : 'Simple'))}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                        </View>
+
+                        <View style={styles.bottomRow}>
+                            <TouchableOpacity
+                                style={styles.changePhotoButton}
+                                onPress={() => setShowMediaPicker(true)}
+                            >
+                                <Ionicons name="images-outline" size={24} color="#fff" />
                             </TouchableOpacity>
-                        ))}
-                    </ScrollView>
 
-                    <View style={styles.actionButtons}>
-                        <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-                            <Ionicons name="image-outline" size={24} color="#FFF" />
-                            <Text style={styles.buttonText}>{t('share.changeBackground', 'Fondo')}</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-                            <Text style={styles.shareButtonText}>{t('share.action', 'Compartir')}</Text>
-                            <Ionicons name="share-social" size={20} color="#000" />
-                        </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.shareButton}
+                                onPress={handleShare}
+                                disabled={isCapturing}
+                            >
+                                {isCapturing ? (
+                                    <ActivityIndicator color="#0a0a0a" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="share-outline" size={20} color="#0a0a0a" />
+                                        <Text style={styles.shareButtonText}>{t('share.action', 'Compartir')}</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </View>
+                )}
+
+                {/* Drag Hint */}
+                {!isCapturing && (
+                    <View style={styles.dragHint}>
+                        <Ionicons name="move" size={14} color="#666" />
+                        <Text style={styles.dragHintText}>{t('share.dragHint', 'Arrastra y pellizca el sticker')}</Text>
+                    </View>
+                )}
 
                 {/* Settings Modal */}
                 {showSettings && (
@@ -267,7 +313,7 @@ export default function ShareNutritionScreen() {
                             <View style={styles.settingsHeader}>
                                 <Text style={styles.settingsTitle}>{t('share.settings.title', 'Ajustes')}</Text>
                                 <TouchableOpacity onPress={() => setShowSettings(false)}>
-                                    <Ionicons name="close" size={24} color="#FFF" />
+                                    <Ionicons name="close" size={24} color="#fff" />
                                 </TouchableOpacity>
                             </View>
 
@@ -291,11 +337,11 @@ export default function ShareNutritionScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000',
+        backgroundColor: '#0a0a0a',
     },
     loadingContainer: {
         flex: 1,
-        backgroundColor: '#000',
+        backgroundColor: '#0a0a0a',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -303,126 +349,133 @@ const styles = StyleSheet.create({
         color: '#FFF',
         marginTop: 10,
     },
-    header: {
+    editHeader: {
         position: 'absolute',
+        top: 50,
         left: 0,
         right: 0,
-        zIndex: 50,
+        zIndex: 20,
         flexDirection: 'row',
         justifyContent: 'space-between',
-        alignItems: 'center',
         paddingHorizontal: 20,
     },
     iconButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
+        width: 44,
+        height: 44,
+        borderRadius: 22,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
     },
-    headerTitleContainer: {
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-    },
-    headerTitle: {
-        color: '#FFF',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    captureContainer: {
-        backgroundColor: '#111',
+    captureView: {
+        width: CAPTURE_WIDTH,
+        height: CAPTURE_HEIGHT,
+        backgroundColor: '#000',
+        alignSelf: 'center',
         overflow: 'hidden',
         justifyContent: 'center',
         alignItems: 'center',
     },
     backgroundImage: {
-        width: '100%',
-        height: '100%',
-        position: 'absolute',
+        ...StyleSheet.absoluteFillObject,
     },
     defaultBackground: {
-        width: '100%',
-        height: '100%',
-        backgroundColor: '#1a1a1a', // Dark grey default
-        position: 'absolute',
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: '#1a1a1a',
     },
     stickerWrapper: {
         alignItems: 'center',
         justifyContent: 'center',
+        zIndex: 5,
     },
     controls: {
         position: 'absolute',
-        bottom: 0,
+        bottom: 30,
         left: 0,
         right: 0,
-        backgroundColor: 'rgba(0,0,0,0.85)',
-        paddingTop: 20,
-        paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+        gap: 20,
         paddingHorizontal: 20,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-    },
-    styleSelector: {
-        flexDirection: 'row',
-        marginBottom: 20,
-        gap: 12,
-    },
-    styleOption: {
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 20,
-        backgroundColor: '#333',
-        borderWidth: 1,
-        borderColor: '#444',
-    },
-    styleOptionSelected: {
-        backgroundColor: '#ffb300',
-        borderColor: '#ffb300',
-    },
-    styleOptionText: {
-        color: '#ccc',
-        fontSize: 14,
-        fontWeight: '600',
-    },
-    styleOptionTextSelected: {
-        color: '#000',
-    },
-    actionButtons: {
-        flexDirection: 'row',
-        gap: 16,
-    },
-    imageButton: {
-        flex: 1,
-        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#333',
-        paddingVertical: 16,
-        borderRadius: 16,
-        gap: 8,
+        paddingBottom: 10,
     },
-    buttonText: {
-        color: '#FFF',
-        fontSize: 16,
-        fontWeight: '600',
+    styleSelectorContainer: {
+        width: '100%',
+        height: 50,
+    },
+    styleSelectorContent: {
+        gap: 12,
+        paddingHorizontal: 4,
+        alignItems: 'center',
+    },
+    styleButton: {
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        backgroundColor: 'rgba(30, 30, 30, 0.8)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)',
+        height: 36,
+        justifyContent: 'center',
+    },
+    styleButtonActive: {
+        backgroundColor: 'rgba(255, 213, 74, 0.2)',
+        borderColor: '#FFD54A',
+    },
+    styleButtonText: {
+        fontSize: 13,
+        fontWeight: '500',
+        color: '#ffffff',
+    },
+    styleButtonTextActive: {
+        color: '#FFD54A',
+        fontWeight: '700',
+    },
+    bottomRow: {
+        flexDirection: 'row',
+        width: '100%',
+        gap: 16,
+        alignItems: 'center',
+    },
+    changePhotoButton: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(30, 30, 30, 0.8)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
     },
     shareButton: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: '#ffb300', // Primary Gold
-        paddingVertical: 16,
-        borderRadius: 16,
+        paddingVertical: 14,
+        borderRadius: 25,
         gap: 8,
+        backgroundColor: '#FFD54A',
     },
     shareButtonText: {
-        color: '#000',
+        fontWeight: '700',
         fontSize: 16,
-        fontWeight: 'bold',
+        color: '#0a0a0a',
+    },
+    dragHint: {
+        position: 'absolute',
+        bottom: 150,
+        alignSelf: 'center',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
+    },
+    dragHintText: {
+        fontSize: 12,
+        color: '#666',
     },
     // Settings Modal
     modalOverlay: {
@@ -431,14 +484,14 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.7)',
+        backgroundColor: 'rgba(0,0,0,0.8)',
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 100,
     },
     settingsModal: {
         backgroundColor: '#1a1a1a',
-        borderRadius: 20,
+        borderRadius: 24,
         padding: 24,
         width: '80%',
         maxWidth: 340,
@@ -452,7 +505,7 @@ const styles = StyleSheet.create({
         marginBottom: 20,
     },
     settingsTitle: {
-        color: '#FFF',
+        color: '#fff',
         fontSize: 18,
         fontWeight: 'bold',
     },
@@ -476,7 +529,7 @@ const styles = StyleSheet.create({
         padding: 2,
     },
     toggleActive: {
-        backgroundColor: '#ffb300',
+        backgroundColor: '#FFD54A',
     },
     toggleCircle: {
         width: 26,

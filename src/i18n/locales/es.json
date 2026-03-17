@@ -894,23 +894,16 @@
       "today": "Hoy",
       "yesterday": "Ayer",
       "thisWeek": "Esta semana",
-      "sampleDateWeek": "Mié, 15 Oct",
-      "sampleMonthTitle": "Octubre",
-      "sampleRange1": "5 - 11 Oct",
-      "sampleRange2": "28 Sep - 4 Oct",
-      "sampleYearTitle": "2025",
-      "sampleMonth1": "Octubre",
-      "sampleMonth2": "Septiembre",
-      "sampleMonth3": "Agosto"
+      "days": "Días"
     },
     "weekDays": [
-      "D",
       "L",
       "M",
       "M",
       "J",
       "V",
-      "S"
+      "S",
+      "D"
     ],
     "months": {
       "short": [

@@ -135,21 +135,20 @@
 
 ---
 
-### 8. **Deep Linking Mejorado**
-**Impacto:** 🟡 Medio - Mejor navegación desde notificaciones  
-**Esfuerzo:** 🟡 Medio (2-3 horas)
+### 9. **Mejoras de Compartir en Redes (Aesthetica y Video)**
+**Impacto:** 🔴 Alto - Mayor visibilidad y marca  
+**Esfuerzo:** 🟡 Medio-Alto (4-6 horas)
 
-**Mejoras sugeridas:**
-- Deep links para notificaciones (abrir entrenamiento específico, plan, etc.)
-- Deep links para compartir planes de entrenamiento
-- Deep links para métricas específicas
-- Manejo de parámetros en URLs
+**Detalles:**
+- **Soporte de Video:** Permitir subir videos para los stickers de compartir, no solo fotos estáticas.
+- **Estandarización UI:** Llevar la estética de los botones de compartir y selección de fotos del módulo de "Running" (entrenamientos trackeados) a los módulos de Nutrición y Entrenamiento.
+- **Pantalla de Selección de Fuente:** Implementar la pantalla previa que permite elegir entre "Cámara" o "Galería" en Nutrición y Entrenamiento (actualmente solo existe en Running).
 
 ---
 
 ## 🟢 **BAJA PRIORIDAD** (Nice to have)
 
-### 9. **Offline Support Mejorado**
+### 10. **Offline Support Mejorado**
 **Impacto:** 🔴 Alto - Mejor experiencia sin conexión  
 **Esfuerzo:** 🔴 Alto (4-6 horas)
 

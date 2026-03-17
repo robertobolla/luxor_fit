@@ -123,8 +123,8 @@ export default function ProgressScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig | null>(null);
-  const { isLoading: isCheckingOnboarding, setLoading: setIsCheckingOnboarding, executeAsync } =
-    useLoadingState(true);
+  const onboardingState = useLoadingState(true);
+  const dataLoadingState = useLoadingState(false);
 
   // Tutorial states
   const {
@@ -171,23 +171,23 @@ export default function ProgressScreen() {
 
   // Mostrar tooltips la primera vez
   useEffect(() => {
-    if (shouldShowTooltip('METRICS') && user?.id && !isCheckingOnboarding) {
+    if (shouldShowTooltip('METRICS') && user?.id && !onboardingState.isLoading) {
       const timer = setTimeout(() => {
         setShowMetricsTooltips(true);
       }, 800);
       return () => clearTimeout(timer);
     }
-  }, [shouldShowTooltip, user, isCheckingOnboarding]);
+  }, [shouldShowTooltip, user, onboardingState.isLoading]);
 
   // Verificar si el usuario completó el onboarding
   useEffect(() => {
     const checkOnboarding = async () => {
       if (!user) {
-        setIsCheckingOnboarding(false);
+        onboardingState.setLoading(false);
         return;
       }
 
-      await executeAsync(async () => {
+      await onboardingState.executeAsync(async () => {
         const { data, error } = await sb
           .from('user_profiles')
           .select('id, name, username')
@@ -205,16 +205,14 @@ export default function ProgressScreen() {
           router.replace('/onboarding');
         }
       }, { showError: false });
-
-      setIsCheckingOnboarding(false);
     };
 
     checkOnboarding();
-  }, [user, executeAsync, setIsCheckingOnboarding]);
+  }, [user, onboardingState.executeAsync]);
 
   // Cargar configuración del dashboard
   useEffect(() => {
-    if (isCheckingOnboarding) return;
+    if (onboardingState.isLoading) return;
 
     const loadConfig = async () => {
       const config = await loadDashboardConfig();
@@ -222,7 +220,7 @@ export default function ProgressScreen() {
       setDashboardConfig(config);
     };
     loadConfig();
-  }, [showCustomizationModal, isCheckingOnboarding]);
+  }, [showCustomizationModal, onboardingState.isLoading]);
 
   // Bandera para controlar si ya se intentó solicitar permisos en esta sesión
   const [permissionsChecked, setPermissionsChecked] = useState(false);
@@ -230,14 +228,14 @@ export default function ProgressScreen() {
   // Solicitar permisos al cargar por primera vez (solo una vez por sesión)
   // NOTA: Solo mostramos alert si realmente no hay datos disponibles
   useEffect(() => {
-    if (isCheckingOnboarding || permissionsChecked) return;
+    if (onboardingState.isLoading || permissionsChecked) return;
 
     const initializeHealthData = async () => {
       // Primero intentar obtener datos de salud directamente
       // Si hay datos, los permisos funcionan (no importa lo que diga hasHealthPermissions)
       try {
         const healthData = await getHealthDataForDate(new Date());
-        
+
         const hasAnyData =
           healthData &&
           ((healthData as any).steps > 0 ||
@@ -256,7 +254,7 @@ export default function ProgressScreen() {
         // 1. No hay permisos
         // 2. Es temprano y el usuario no ha caminado/dormido
         // 3. El usuario no usa Apple Health/Google Fit
-        
+
         // Verificar si el usuario ya descartó el alert anteriormente
         const dismissedHealthAlert = await AsyncStorage.getItem('health_permissions_dismissed');
         if (dismissedHealthAlert === 'true') {
@@ -267,11 +265,11 @@ export default function ProgressScreen() {
 
         // Solo solicitar permisos si no hay datos
         const alreadyHasPermissions = await hasHealthPermissions();
-        
+
         if (!alreadyHasPermissions) {
           // Solicitar permisos silenciosamente
           await requestHealthPermissions();
-          
+
           // Después de solicitar, verificar una vez más si hay datos
           const recheckData = await getHealthDataForDate(new Date());
           const hasDataAfterRequest =
@@ -298,8 +296,8 @@ export default function ProgressScreen() {
             t('progress.healthPermissions.title'),
             t('progress.healthPermissions.message') + '\n\n' + platformMessage,
             [
-              { 
-                text: t('common.later'), 
+              {
+                text: t('common.later'),
                 style: 'cancel',
                 onPress: async () => {
                   await AsyncStorage.setItem('health_permissions_dismissed', 'true');
@@ -327,29 +325,34 @@ export default function ProgressScreen() {
     };
 
     initializeHealthData();
-  }, [isCheckingOnboarding, permissionsChecked, t]);
+  }, [onboardingState.isLoading, permissionsChecked, t]);
 
   // Cargar datos de salud cuando cambia la fecha
   useEffect(() => {
-    if (isCheckingOnboarding) return;
-    loadHealthData();
-    loadProgressData();
-  }, [selectedDate, isCheckingOnboarding]);
+    if (onboardingState.isLoading) return;
+    loadHealthDataAndProgress();
+  }, [selectedDate, onboardingState.isLoading]);
 
   // Cargar datos de progreso
   useEffect(() => {
-    if (isCheckingOnboarding || !user?.id) return;
+    if (onboardingState.isLoading || !user?.id) return;
     loadProgressData();
-  }, [isCheckingOnboarding, user, comparisonPeriod]);
+  }, [onboardingState.isLoading, user, comparisonPeriod]);
 
   // Recargar datos cuando la pantalla recibe foco
   useFocusEffect(
     useCallback(() => {
-      if (!isCheckingOnboarding && user?.id) {
+      if (!onboardingState.isLoading && user?.id) {
         loadHealthData();
       }
-    }, [isCheckingOnboarding, user])
+    }, [onboardingState.isLoading, user])
   );
+
+  const loadHealthDataAndProgress = async (silent = false) => {
+    if (!silent) dataLoadingState.setLoading(true);
+    await Promise.all([loadHealthData(), loadProgressData()]);
+    if (!silent) dataLoadingState.setLoading(false);
+  };
 
   const loadHealthData = async () => {
     try {
@@ -442,7 +445,7 @@ export default function ProgressScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadHealthData(), loadProgressData()]);
+    await loadHealthDataAndProgress(true);
     setRefreshing(false);
   };
 
@@ -487,7 +490,7 @@ export default function ProgressScreen() {
 
   const handleSaveCustomization = async (config: DashboardConfig) => {
     setDashboardConfig(config);
-    await loadHealthData();
+    await loadHealthDataAndProgress(true);
   };
 
   const getPriorityMetrics = (): MetricTypeExtended[] => {
@@ -586,7 +589,7 @@ export default function ProgressScreen() {
   // Días de la semana traducidos (Lunes a Domingo)
   const weekDays = t('common.weekDaysShort', { returnObjects: true }) as string[];
 
-  if (isCheckingOnboarding) {
+  if (onboardingState.isLoading) {
     return (
       <View style={styles.container}>
         <LoadingOverlay visible={true} message={t('progress.verifyingProfile')} fullScreen />
@@ -596,6 +599,7 @@ export default function ProgressScreen() {
 
   return (
     <View style={styles.container}>
+      <LoadingOverlay visible={dataLoadingState.isLoading} message={t('common.loading')} />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={goToPreviousDay}>
@@ -834,8 +838,8 @@ export default function ProgressScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.cardTitle}>{t('dashboard.weight')}</Text>
                 <Text style={styles.cardValue}>
-                  {stats.weight 
-                    ? `${(weightUnit === 'lb' ? conversions.kgToLb(stats.weight) : stats.weight).toFixed(1)} ${weightUnit === 'lb' ? 'lb' : 'kg'}` 
+                  {stats.weight
+                    ? `${(weightUnit === 'lb' ? conversions.kgToLb(stats.weight) : stats.weight).toFixed(1)} ${weightUnit === 'lb' ? 'lb' : 'kg'}`
                     : t('progress.noData')}
                 </Text>
                 <Text style={styles.cardSubtitle}>{formatDate(selectedDate)}</Text>

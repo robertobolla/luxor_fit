@@ -97,7 +97,8 @@ export default function DashboardScreen() {
   const [showCustomizationModal, setShowCustomizationModal] = useState(false);
 
   const [dashboardConfig, setDashboardConfig] = useState<DashboardConfig | null>(null);
-  const { isLoading: isCheckingOnboarding, setLoading: setIsCheckingOnboarding, executeAsync } = useLoadingState(true);
+  const onboardingState = useLoadingState(true);
+  const dataLoadingState = useLoadingState(false);
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
 
@@ -129,11 +130,11 @@ export default function DashboardScreen() {
   useEffect(() => {
     const checkOnboarding = async () => {
       if (!user) {
-        setIsCheckingOnboarding(false);
+        onboardingState.setLoading(false);
         return;
       }
 
-      await executeAsync(async () => {
+      await onboardingState.executeAsync(async () => {
         const { data, error } = await supabase
           .from('user_profiles')
           .select('id, name, username')
@@ -162,7 +163,7 @@ export default function DashboardScreen() {
 
   // Cargar configuración del dashboard
   useEffect(() => {
-    if (isCheckingOnboarding) return; // Esperar a verificar onboarding
+    if (onboardingState.isLoading) return; // Esperar a verificar onboarding
 
     const loadConfig = async () => {
       const config = await loadDashboardConfig();
@@ -170,14 +171,14 @@ export default function DashboardScreen() {
       setDashboardConfig(config);
     };
     loadConfig();
-  }, [showCustomizationModal, isCheckingOnboarding]); // Recargar cuando se cierre el modal
+  }, [showCustomizationModal, onboardingState.isLoading]); // Recargar cuando se cierre el modal
 
   // Bandera para controlar si ya se intentó solicitar permisos en esta sesión
   const [permissionsChecked, setPermissionsChecked] = useState(false);
 
   // Solicitar permisos al cargar por primera vez (solo una vez por sesión)
   useEffect(() => {
-    if (isCheckingOnboarding || permissionsChecked) return; // Esperar a verificar onboarding y solo verificar una vez
+    if (onboardingState.isLoading || permissionsChecked) return; // Esperar a verificar onboarding y solo verificar una vez
 
     const initializeHealthData = async () => {
       // Primero verificar si ya tiene permisos
@@ -233,26 +234,27 @@ export default function DashboardScreen() {
     };
 
     initializeHealthData();
-  }, [isCheckingOnboarding, permissionsChecked]);
+  }, [onboardingState.isLoading, permissionsChecked]);
 
   // Cargar datos de salud cuando cambia la fecha
   useEffect(() => {
-    if (isCheckingOnboarding) return; // Esperar a verificar onboarding
+    if (onboardingState.isLoading) return; // Esperar a verificar onboarding
     loadHealthData();
-  }, [selectedDate, isCheckingOnboarding]);
+  }, [selectedDate, onboardingState.isLoading]);
 
   // Recargar datos cuando la pantalla recibe foco
   useFocusEffect(
     useCallback(() => {
-      if (!isCheckingOnboarding && user?.id) {
+      if (!onboardingState.isLoading && user?.id) {
         loadHealthData();
       }
-    }, [isCheckingOnboarding, user])
+    }, [onboardingState.isLoading, user])
   );
 
 
 
-  const loadHealthData = async () => {
+  const loadHealthData = async (silent = false) => {
+    if (!silent) dataLoadingState.setLoading(true);
     try {
       if (!user?.id) return;
 
@@ -328,6 +330,8 @@ export default function DashboardScreen() {
     } catch (error) {
       console.error('Error cargando datos de salud:', error);
       setHealthDataSource('none');
+    } finally {
+      if (!silent) dataLoadingState.setLoading(false);
     }
   };
 
@@ -347,7 +351,7 @@ export default function DashboardScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadHealthData();
+    await loadHealthData(true);
     setRefreshing(false);
   };
 
@@ -393,7 +397,7 @@ export default function DashboardScreen() {
   const handleSaveCustomization = async (config: DashboardConfig) => {
     setDashboardConfig(config);
     // Recargar datos si es necesario
-    await loadHealthData();
+    await loadHealthData(true);
   };
 
   // Obtener las métricas prioritarias para mostrar en los círculos
@@ -508,7 +512,7 @@ export default function DashboardScreen() {
   const completedDays = [false, false, false, false, false, true, false]; // Ejemplo
 
   // Mostrar loading mientras se verifica el onboarding
-  if (isCheckingOnboarding) {
+  if (onboardingState.isLoading) {
     return (
       <View style={styles.container}>
         <LoadingOverlay visible={true} message={t('commonUI.verifyingProfile')} fullScreen />
@@ -518,6 +522,7 @@ export default function DashboardScreen() {
 
   return (
     <View style={styles.container}>
+      <LoadingOverlay visible={dataLoadingState.isLoading} message={t('common.loading')} />
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={goToPreviousDay}>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,14 @@ import {
   TouchableOpacity,
   ScrollView,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
-import { router, Stack } from 'expo-router';
+import { router, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
+import { getHealthDataForDate } from '@/services/healthService';
+import { getHealthDataFromSupabase } from '@/services/healthSyncService';
 
 const { width } = Dimensions.get('window');
 
@@ -32,73 +35,259 @@ export default function StepsDetailScreen() {
   const [totalSteps, setTotalSteps] = useState(0);
   const [averageSteps, setAverageSteps] = useState(0);
   const [goalSteps] = useState(10000);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Cargar datos de pasos según el modo de vista
   useEffect(() => {
     loadStepsData();
   }, [viewMode, currentDate]);
 
-  const loadStepsData = () => {
-    // Aquí integraremos con el servicio de salud más adelante
-    // Por ahora usamos datos simulados
-    const data = generateMockData();
-    setStepsData(data);
+  // Recargar al volver a la pantalla
+  useFocusEffect(
+    useCallback(() => {
+      loadStepsData();
+    }, [viewMode, currentDate])
+  );
 
-    const total = data.reduce((sum, item) => sum + item.value, 0);
-    setTotalSteps(total);
-    setAverageSteps(Math.round(total / (data.length || 1)));
+  // ── Helpers para obtener rangos de fechas ────────────────────────────────
+
+  const getWeekRange = (date: Date) => {
+    const d = new Date(date);
+    const day = d.getDay(); // 0=Dom, 1=Lun...
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    return { start: monday, end: sunday };
   };
 
-  const generateMockData = (): StepData[] => {
-    switch (viewMode) {
-      case 'day':
-        // Datos por hora del día - solo mostrar algunas etiquetas clave
-        return Array.from({ length: 24 }, (_, i) => {
-          let label = '';
-          // Solo mostrar 0:00, 3:00, 6:00, 9:00, 12:00, 15:00, 18:00, 21:00
-          if (i % 3 === 0) {
-            label = `${i}:00`;
-          }
-          return {
-            label,
-            value: Math.floor(Math.random() * 1000),
-          };
-        });
+  const getMonthRange = (date: Date) => {
+    const start = new Date(date.getFullYear(), date.getMonth(), 1);
+    const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+    return { start, end };
+  };
 
-      case 'week':
-        // Datos por día de la semana
-        // Ojo: tus labels eran ES (D L M M J V S). Los dejamos como estaban.
-        // Si querés, después los hacemos dependientes del locale.
-        const weekDays = t('stepsDetail.weekDays', { returnObjects: true }) as string[];
-        return weekDays.map((day, i) => ({
-          label: day,
-          value: i === 5 ? 187 : Math.floor(Math.random() * 5000), // Viernes tiene datos reales
-        }));
+  const getYearRange = (date: Date) => {
+    const start = new Date(date.getFullYear(), 0, 1);
+    const end = new Date(date.getFullYear(), 11, 31, 23, 59, 59, 999);
+    return { start, end };
+  };
 
-      case 'month':
-        // Datos por día del mes
-        const daysInMonth = new Date(
-          currentDate.getFullYear(),
-          currentDate.getMonth() + 1,
-          0
-        ).getDate();
-        return Array.from({ length: daysInMonth }, (_, i) => ({
-          label: `${i + 1}`,
-          value: Math.floor(Math.random() * 8000),
-        }));
+  const dateToStr = (d: Date) => d.toISOString().split('T')[0];
 
-      case 'year':
-        // Datos por mes del año (tus labels eran ES: E F M A M J J A S O N D)
-        const months = t('stepsDetail.months.short', { returnObjects: true }) as string[];
-        return months.map((month) => ({
-          label: month,
-          value: Math.floor(Math.random() * 150000),
-        }));
+  // ── Load steps data ──────────────────────────────────────────────────────
 
-      default:
-        return [];
+  const loadStepsData = async () => {
+    if (!user?.id) return;
+    setIsLoading(true);
+
+    try {
+      switch (viewMode) {
+        case 'day':
+          await loadDayData();
+          break;
+        case 'week':
+          await loadWeekData();
+          break;
+        case 'month':
+          await loadMonthData();
+          break;
+        case 'year':
+          await loadYearData();
+          break;
+      }
+    } catch (error) {
+      console.error('Error loading steps data:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
+
+  // ── Day: call getHealthDataForDate (same source as dashboard) ────────────
+
+  const loadDayData = async () => {
+    const healthData = await getHealthDataForDate(currentDate);
+    const daySteps = Math.round(healthData.steps || 0);
+
+    // Para la vista de día, mostramos una sola barra con el total del día
+    // (no tenemos datos por hora desde la API)
+    const now = new Date();
+    const currentHour = currentDate.toDateString() === now.toDateString()
+      ? now.getHours()
+      : 23;
+
+    const data: StepData[] = Array.from({ length: 24 }, (_, i) => {
+      let label = '';
+      if (i % 3 === 0) {
+        label = `${i}:00`;
+      }
+      // Distribute steps roughly: show them up to the current hour
+      // Since we only have a daily total, we approximate by placing the total
+      // in a single bar at the current hour, or spread evenly
+      return {
+        label,
+        value: 0,
+      };
+    });
+
+    // Place the total steps at the current hour for visual reference
+    if (daySteps > 0 && currentHour >= 0 && currentHour < 24) {
+      data[currentHour] = {
+        ...data[currentHour],
+        value: daySteps,
+      };
+    }
+
+    setStepsData(data);
+    setTotalSteps(daySteps);
+    setAverageSteps(daySteps);
+  };
+
+  // ── Week: fetch 7 days from Supabase ─────────────────────────────────────
+
+  const loadWeekData = async () => {
+    if (!user?.id) return;
+
+    const { start, end } = getWeekRange(currentDate);
+    const startStr = dateToStr(start);
+    const endStr = dateToStr(end);
+
+    const result = await getHealthDataFromSupabase(user.id, startStr, endStr);
+    const weekDays = t('stepsDetail.weekDays', { returnObjects: true }) as string[];
+
+    // Build a map date -> steps
+    const stepsMap: Record<string, number> = {};
+    if (result.success && result.data) {
+      result.data.forEach((row: any) => {
+        stepsMap[row.date] = row.steps || 0;
+      });
+    }
+
+    // Also fetch today's steps live (in case not yet synced)
+    const today = new Date();
+    const todayStr = dateToStr(today);
+    if (todayStr >= startStr && todayStr <= endStr) {
+      const liveData = await getHealthDataForDate(today);
+      stepsMap[todayStr] = Math.round(liveData.steps || 0);
+    }
+
+    const data: StepData[] = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      const dStr = dateToStr(d);
+      data.push({
+        label: weekDays[i] || `D${i + 1}`,
+        value: stepsMap[dStr] || 0,
+        date: d,
+      });
+    }
+
+    const total = data.reduce((sum, item) => sum + item.value, 0);
+    const daysWithData = data.filter(d => d.value > 0).length || 1;
+    setStepsData(data);
+    setTotalSteps(total);
+    setAverageSteps(Math.round(total / daysWithData));
+  };
+
+  // ── Month: fetch all days in month from Supabase ─────────────────────────
+
+  const loadMonthData = async () => {
+    if (!user?.id) return;
+
+    const { start, end } = getMonthRange(currentDate);
+    const startStr = dateToStr(start);
+    const endStr = dateToStr(end);
+
+    const result = await getHealthDataFromSupabase(user.id, startStr, endStr);
+
+    const stepsMap: Record<string, number> = {};
+    if (result.success && result.data) {
+      result.data.forEach((row: any) => {
+        stepsMap[row.date] = row.steps || 0;
+      });
+    }
+
+    // Today live
+    const today = new Date();
+    const todayStr = dateToStr(today);
+    if (todayStr >= startStr && todayStr <= endStr) {
+      const liveData = await getHealthDataForDate(today);
+      stepsMap[todayStr] = Math.round(liveData.steps || 0);
+    }
+
+    const daysInMonth = end.getDate();
+    const data: StepData[] = [];
+    for (let i = 1; i <= daysInMonth; i++) {
+      const d = new Date(start.getFullYear(), start.getMonth(), i);
+      const dStr = dateToStr(d);
+      data.push({
+        label: `${i}`,
+        value: stepsMap[dStr] || 0,
+        date: d,
+      });
+    }
+
+    const total = data.reduce((sum, item) => sum + item.value, 0);
+    const daysWithData = data.filter(d => d.value > 0).length || 1;
+    setStepsData(data);
+    setTotalSteps(total);
+    setAverageSteps(Math.round(total / daysWithData));
+  };
+
+  // ── Year: aggregate per month from Supabase ──────────────────────────────
+
+  const loadYearData = async () => {
+    if (!user?.id) return;
+
+    const { start, end } = getYearRange(currentDate);
+    const startStr = dateToStr(start);
+    const endStr = dateToStr(end);
+
+    const result = await getHealthDataFromSupabase(user.id, startStr, endStr);
+
+    // Aggregate per month
+    const monthTotals = Array(12).fill(0);
+    const monthDays = Array(12).fill(0);
+    if (result.success && result.data) {
+      result.data.forEach((row: any) => {
+        const d = new Date(row.date);
+        const m = d.getMonth();
+        monthTotals[m] += row.steps || 0;
+        monthDays[m] += 1;
+      });
+    }
+
+    // Today live
+    const today = new Date();
+    if (today.getFullYear() === currentDate.getFullYear()) {
+      const todayStr = dateToStr(today);
+      const liveData = await getHealthDataForDate(today);
+      const todayMonth = today.getMonth();
+      // Remove any existing entry for today and add live data
+      monthTotals[todayMonth] = monthTotals[todayMonth] + Math.round(liveData.steps || 0);
+      if (monthDays[todayMonth] === 0) monthDays[todayMonth] = 1;
+    }
+
+    const months = t('stepsDetail.months.short', { returnObjects: true }) as string[];
+    const data: StepData[] = months.map((month, i) => ({
+      label: month,
+      value: monthTotals[i],
+    }));
+
+    const total = monthTotals.reduce((sum, v) => sum + v, 0);
+    const totalDays = monthDays.reduce((sum, v) => sum + v, 0) || 1;
+    setStepsData(data);
+    setTotalSteps(total);
+    setAverageSteps(Math.round(total / totalDays));
+  };
+
+  // ── Navigation ───────────────────────────────────────────────────────────
 
   const goToPreviousPeriod = () => {
     const newDate = new Date(currentDate);
@@ -150,7 +339,6 @@ export default function StepsDetailScreen() {
         yesterday.setDate(now.getDate() - 1);
         if (currentDate.toDateString() === yesterday.toDateString()) return t('stepsDetail.period.yesterday');
 
-        // Mantengo tu formato original pero con locale configurable
         return currentDate.toLocaleDateString(t('common.locale'), {
           weekday: 'long',
           day: 'numeric',
@@ -159,24 +347,17 @@ export default function StepsDetailScreen() {
       }
 
       case 'week': {
-        const currentDay = currentDate.getDay();
-        const weekStart = new Date(currentDate);
-        weekStart.setDate(currentDate.getDate() - currentDay);
-        const weekEnd = new Date(weekStart);
-        weekEnd.setDate(weekStart.getDate() + 6);
+        const { start, end } = getWeekRange(currentDate);
+        const { start: nowWeekStart } = getWeekRange(now);
 
-        const nowDay = now.getDay();
-        const nowWeekStart = new Date(now);
-        nowWeekStart.setDate(now.getDate() - nowDay);
-
-        if (weekStart.toDateString() === nowWeekStart.toDateString()) {
+        if (start.toDateString() === nowWeekStart.toDateString()) {
           return t('stepsDetail.period.thisWeek');
         }
 
-        if (weekStart.getMonth() === weekEnd.getMonth()) {
-          return `${weekStart.getDate()} - ${weekEnd.getDate()} ${weekStart.toLocaleDateString(t('common.locale'), { month: 'short' })}`;
+        if (start.getMonth() === end.getMonth()) {
+          return `${start.getDate()} – ${end.getDate()} ${start.toLocaleDateString(t('common.locale'), { month: 'short' })}`;
         } else {
-          return `${weekStart.getDate()} ${weekStart.toLocaleDateString(t('common.locale'), { month: 'short' })} - ${weekEnd.getDate()} ${weekEnd.toLocaleDateString(t('common.locale'), { month: 'short' })}`;
+          return `${start.getDate()} ${start.toLocaleDateString(t('common.locale'), { month: 'short' })} – ${end.getDate()} ${end.toLocaleDateString(t('common.locale'), { month: 'short' })}`;
         }
       }
 
@@ -210,17 +391,9 @@ export default function StepsDetailScreen() {
         return currentDate.toDateString() === now.toDateString();
 
       case 'week': {
-        const nowDay = now.getDay();
-        const nowWeekStart = new Date(now);
-        nowWeekStart.setDate(now.getDate() - nowDay);
-        nowWeekStart.setHours(0, 0, 0, 0);
-
-        const currentDay = currentDate.getDay();
-        const currentWeekStart = new Date(currentDate);
-        currentWeekStart.setDate(currentDate.getDate() - currentDay);
-        currentWeekStart.setHours(0, 0, 0, 0);
-
-        return nowWeekStart.getTime() === currentWeekStart.getTime();
+        const { start } = getWeekRange(currentDate);
+        const { start: nowWeekStart } = getWeekRange(now);
+        return start.toDateString() === nowWeekStart.toDateString();
       }
 
       case 'month':
@@ -236,15 +409,13 @@ export default function StepsDetailScreen() {
   };
 
   const getUnitLabel = () => {
-    // En tu código había un typo en year: "paso al día"
-    // Lo pasamos a t() para corregir por idioma.
     switch (viewMode) {
       case 'day':
+        return t('stepsDetail.unit.steps');
       case 'week':
       case 'month':
-        return t('stepsDetail.unit.avgStepsPerDay');
       case 'year':
-        return t('stepsDetail.unit.avgStepsPerDay'); // mismo texto
+        return t('stepsDetail.unit.avgStepsPerDay');
       default:
         return t('stepsDetail.unit.steps');
     }
@@ -265,6 +436,8 @@ export default function StepsDetailScreen() {
       total: totalSteps.toLocaleString(locale),
     });
   };
+
+  // ── Chart ────────────────────────────────────────────────────────────────
 
   const renderChart = () => {
     const maxValue = Math.max(...stepsData.map(d => d.value), goalSteps);
@@ -290,11 +463,14 @@ export default function StepsDetailScreen() {
     const totalWidth = stepsData.length * (barWidth + barSpacing) + 40;
     const shouldScroll = totalWidth > width - 40;
 
+    // Determine today's index to highlight
+    const todayStr = dateToStr(new Date());
+
     return (
       <View style={styles.chartWrapper}>
         <View style={styles.yAxisLabels}>
-          <Text style={styles.yAxisLabel}>{(maxValue / 1000).toFixed(0)}k</Text>
-          <Text style={styles.yAxisLabel}>{(maxValue / 2000).toFixed(0)}k</Text>
+          <Text style={styles.yAxisLabel}>{maxValue > 1000 ? `${(maxValue / 1000).toFixed(0)}k` : maxValue}</Text>
+          <Text style={styles.yAxisLabel}>{maxValue > 1000 ? `${(maxValue / 2000).toFixed(0)}k` : Math.round(maxValue / 2)}</Text>
           <Text style={styles.yAxisLabel}>0</Text>
         </View>
 
@@ -315,10 +491,13 @@ export default function StepsDetailScreen() {
             ]}
           >
             {stepsData.map((item, index) => {
-              const barHeight = (item.value / maxValue) * chartHeight;
-              const isToday = viewMode === 'week' && index === 5; // Viernes
-              const isCurrentMonth = viewMode === 'year' && index === 9; // Octubre
-              const isCurrentHour = viewMode === 'day' && index === 8; // 8:00 destacado
+              const barHeight = maxValue > 0 ? (item.value / maxValue) * chartHeight : 0;
+
+              // Highlight logic
+              const isHighlighted =
+                (viewMode === 'week' && item.date && dateToStr(item.date) === todayStr) ||
+                (viewMode === 'year' && index === new Date().getMonth() && isCurrentPeriod()) ||
+                (viewMode === 'day' && item.value > 0);
 
               return (
                 <View
@@ -334,7 +513,7 @@ export default function StepsDetailScreen() {
                   <View style={[
                     styles.bar,
                     { height: Math.max(barHeight, 3) },
-                    (isToday || isCurrentMonth || isCurrentHour) && styles.barHighlighted
+                    isHighlighted && styles.barHighlighted
                   ]} />
                   <View style={styles.labelContainer}>
                     {item.label && (
@@ -355,78 +534,99 @@ export default function StepsDetailScreen() {
     );
   };
 
+  // ── Summary ──────────────────────────────────────────────────────────────
+
   const renderPeriodSummary = () => {
+    if (viewMode === 'day') return null;
+
+    // Build summary rows from actual data
+    const locale = t('common.locale');
+
     if (viewMode === 'week') {
+      const weekDays = t('stepsDetail.weekDays', { returnObjects: true }) as string[];
+      const summaryItems = stepsData
+        .slice()
+        .reverse()
+        .filter(d => d.value > 0)
+        .slice(0, 5);
+
+      if (summaryItems.length === 0) return null;
+
       return (
         <View style={styles.summarySection}>
           <Text style={styles.summaryTitle}>{t('stepsDetail.summary.thisWeekTitle')}</Text>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.today')}</Text>
-            <Text style={styles.summaryValue}>187</Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.yesterday')}</Text>
-            <Text style={styles.summaryValue}>0</Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleDateWeek')}</Text>
-            <Text style={styles.summaryValue}>0</Text>
-          </View>
+          {summaryItems.map((item, i) => (
+            <View key={i} style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>
+                {item.date
+                  ? item.date.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'short' })
+                  : item.label}
+              </Text>
+              <Text style={styles.summaryValue}>{item.value.toLocaleString(locale)}</Text>
+            </View>
+          ))}
         </View>
       );
     }
 
     if (viewMode === 'month') {
+      // Show weekly totals for the month
+      const weeksData: { label: string; value: number }[] = [];
+      let weekTotal = 0;
+      let weekStart = 1;
+      stepsData.forEach((d, i) => {
+        weekTotal += d.value;
+        if ((i + 1) % 7 === 0 || i === stepsData.length - 1) {
+          weeksData.push({
+            label: `${weekStart} – ${i + 1}`,
+            value: weekTotal,
+          });
+          weekTotal = 0;
+          weekStart = i + 2;
+        }
+      });
+
+      const nonZero = weeksData.filter(w => w.value > 0);
+      if (nonZero.length === 0) return null;
+
       return (
         <View style={styles.summarySection}>
-          <Text style={styles.summaryTitle}>{t('stepsDetail.summary.sampleMonthTitle')}</Text>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.thisWeek')}</Text>
-            <Text style={styles.summaryValue}>31</Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleRange1')}</Text>
-            <Text style={styles.summaryValue}>0</Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleRange2')}</Text>
-            <Text style={styles.summaryValue}>0</Text>
-          </View>
+          <Text style={styles.summaryTitle}>
+            {currentDate.toLocaleDateString(locale, { month: 'long' })}
+          </Text>
+          {weeksData.map((week, i) => (
+            <View key={i} style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>{t('stepsDetail.summary.days')} {week.label}</Text>
+              <Text style={styles.summaryValue}>{week.value.toLocaleString(locale)}</Text>
+            </View>
+          ))}
         </View>
       );
     }
 
     if (viewMode === 'year') {
+      const nonZero = stepsData.filter(d => d.value > 0);
+      if (nonZero.length === 0) return null;
+
       return (
         <View style={styles.summarySection}>
-          <Text style={styles.summaryTitle}>{t('stepsDetail.summary.sampleYearTitle')}</Text>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleMonth1')}</Text>
-            <Text style={styles.summaryValue}>11</Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleMonth2')}</Text>
-            <Text style={styles.summaryValue}>0</Text>
-          </View>
-
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>{t('stepsDetail.summary.sampleMonth3')}</Text>
-            <Text style={styles.summaryValue}>0</Text>
-          </View>
+          <Text style={styles.summaryTitle}>{currentDate.getFullYear()}</Text>
+          {stepsData
+            .filter(d => d.value > 0)
+            .map((month, i) => (
+              <View key={i} style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>{month.label}</Text>
+                <Text style={styles.summaryValue}>{month.value.toLocaleString(locale)}</Text>
+              </View>
+            ))}
         </View>
       );
     }
 
     return null;
   };
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
     <>
@@ -502,18 +702,24 @@ export default function StepsDetailScreen() {
 
           {/* Main stat */}
           <View style={styles.statsCard}>
-            <Text style={styles.statsNumber}>
-              {averageSteps.toLocaleString(t('common.locale'))}
-            </Text>
-            <Text style={styles.statsLabel}>{getUnitLabel()}</Text>
-            <Text style={styles.statsSubtext}>{getStatusText()}</Text>
+            {isLoading ? (
+              <ActivityIndicator size="large" color="#ffb300" />
+            ) : (
+              <>
+                <Text style={styles.statsNumber}>
+                  {(viewMode === 'day' ? totalSteps : averageSteps).toLocaleString(t('common.locale'))}
+                </Text>
+                <Text style={styles.statsLabel}>{getUnitLabel()}</Text>
+                <Text style={styles.statsSubtext}>{getStatusText()}</Text>
+              </>
+            )}
           </View>
 
           {/* Chart */}
-          {renderChart()}
+          {!isLoading && renderChart()}
 
           {/* Summary */}
-          {renderPeriodSummary()}
+          {!isLoading && renderPeriodSummary()}
 
           <View style={{ height: 100 }} />
         </ScrollView>
@@ -589,6 +795,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 24,
     alignItems: 'center',
+    minHeight: 120,
+    justifyContent: 'center',
   },
   statsNumber: {
     fontSize: 56,

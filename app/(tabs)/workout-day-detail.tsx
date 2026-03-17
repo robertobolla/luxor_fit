@@ -23,6 +23,7 @@ import { ExerciseSetTracker } from '../../src/components/ExerciseSetTracker';
 import { smartNotificationService } from '../../src/services/smartNotifications';
 import { getExerciseVideoUrl } from '../../src/services/exerciseVideoService';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
+import { useLoadingState } from '../../src/hooks/useLoadingState';
 import { useRetry } from '../../src/hooks/useRetry';
 import Svg, { Circle } from 'react-native-svg';
 import { Audio } from 'expo-av';
@@ -198,6 +199,7 @@ export default function WorkoutDayDetailScreen() {
   const [duration, setDuration] = useState('');
   const [difficulty, setDifficulty] = useState(3);
   const [notes, setNotes] = useState('');
+  const loadingState = useLoadingState(false);
 
   // Estados para las series de ejercicios
   const [exerciseSets, setExerciseSets] = useState<{ [exerciseName: string]: any[] }>({});
@@ -468,21 +470,28 @@ export default function WorkoutDayDetailScreen() {
   const handleSaveCompletion = async () => {
     if (!user?.id || !planId || !dayName || !dayData) return;
 
-    const result = await saveCompletionWithRetry.executeWithRetry();
+    loadingState.setLoading(true);
+    try {
+      const result = await saveCompletionWithRetry.executeWithRetry();
 
-    if (result) {
-      setIsCompleted(true);
-      setShowCompletionModal(false);
-      // Resetear campos
-      setDuration('');
-      setDifficulty(3);
-      setNotes('');
-      showAlert(
-        '¡Felicitaciones!',
-        'Entrenamiento completado. ¡Sigue así!',
-        [{ text: 'Entendido', style: 'default' }],
-        { icon: 'trophy', iconColor: '#ffb300' }
-      );
+      if (result) {
+        setIsCompleted(true);
+        setShowCompletionModal(false);
+        // Resetear campos
+        setDuration('');
+        setDifficulty(3);
+        setNotes('');
+        showAlert(
+          '¡Felicitaciones!',
+          'Entrenamiento completado. ¡Sigue así!',
+          [{ text: 'Entendido', style: 'default' }],
+          { icon: 'trophy', iconColor: '#ffb300' }
+        );
+      }
+    } catch (error) {
+      console.error('Error in handleSaveCompletion:', error);
+    } finally {
+      loadingState.setLoading(false);
     }
   };
 
@@ -670,7 +679,8 @@ export default function WorkoutDayDetailScreen() {
   const generalTips = getTipsForFocus(dayData.focus);
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
+      <LoadingOverlay visible={loadingState.isLoading} message={t('commonUI.savingWorkout')} />
       <Stack.Screen options={{ headerShown: false }} />
       <ScrollView style={styles.container} keyboardShouldPersistTaps="handled">
         {/* Header */}
@@ -1355,7 +1365,7 @@ export default function WorkoutDayDetailScreen() {
           </View>
         </View>
       </Modal>
-    </>
+    </View>
   );
 }
 

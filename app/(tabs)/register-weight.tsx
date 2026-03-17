@@ -17,6 +17,9 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/services/supabase';
 import { useCustomAlert } from '../../src/components/CustomAlert';
 import { useUnitsStore, getWeightFromUserUnit } from '../../src/store/unitsStore';
+import { LoadingOverlay } from '../../src/components/LoadingOverlay';
+import { useLoadingState } from '../../src/hooks/useLoadingState';
+import { useRetry } from '../../src/hooks/useRetry';
 
 export default function RegisterWeightScreen() {
   const { user } = useUser();
@@ -41,10 +44,10 @@ export default function RegisterWeightScreen() {
   const [bodyFat, setBodyFat] = useState('');
   const [muscle, setMuscle] = useState('');
   const [notes, setNotes] = useState('');
-  const [saving, setSaving] = useState(false);
+  const loadingState = useLoadingState(false);
 
-  const performSave = async (bodyMetric: any, isUpdate: boolean) => {
-    try {
+  const saveWeightWithRetry = useRetry(
+    async (bodyMetric: any, isUpdate: boolean) => {
       let metricsError;
 
       if (isUpdate) {
@@ -63,11 +66,8 @@ export default function RegisterWeightScreen() {
       }
 
       if (metricsError) {
-        console.error('❌ Error saving measurement:', metricsError);
         throw metricsError;
       }
-
-      console.log('✅ Measurement saved in history');
 
       // 2. Update current weight in the user profile (always in kg)
       const { error: profileError } = await sb
@@ -80,27 +80,33 @@ export default function RegisterWeightScreen() {
 
       if (profileError) {
         console.error('⚠️ Error updating profile:', profileError);
-        // Don't throw here so the whole save doesn't fail
-      } else {
-        console.log('✅ Weight updated in profile');
       }
 
-      showAlert(
-        t('registerWeight.savedTitle'),
-        t('registerWeight.savedMessage'),
-        [{ text: t('common.ok'), onPress: () => router.push('/(tabs)/nutrition' as any) }],
-        { icon: 'checkmark-circle', iconColor: '#4CAF50' }
-      );
-    } catch (error: any) {
-      console.error('Error saving weight:', error);
-      showAlert(
-        t('common.error'),
-        error?.message || t('registerWeight.saveError'),
-        [{ text: t('common.ok') }],
-        { icon: 'alert-circle', iconColor: '#F44336' }
-      );
+      return true;
+    },
+    {
+      maxRetries: 2,
+      retryDelay: 2000,
+      showAlert: true,
+    }
+  );
+
+  const performSave = async (bodyMetric: any, isUpdate: boolean) => {
+    loadingState.setLoading(true);
+    try {
+      const success = await saveWeightWithRetry.executeWithRetry(bodyMetric, isUpdate);
+      if (success) {
+        showAlert(
+          t('registerWeight.savedTitle'),
+          t('registerWeight.savedMessage'),
+          [{ text: t('common.ok'), onPress: () => router.push('/(tabs)/nutrition' as any) }],
+          { icon: 'checkmark-circle', iconColor: '#4CAF50' }
+        );
+      }
+    } catch (error) {
+      console.error('Error in performSave:', error);
     } finally {
-      setSaving(false);
+      loadingState.setLoading(false);
     }
   };
 
@@ -116,11 +122,11 @@ export default function RegisterWeightScreen() {
     }
 
     try {
-      setSaving(true);
+      loadingState.setLoading(true);
 
       // Convertir peso a kg si el usuario usa libras
       const weightInKg = getWeightFromUserUnit(parseFloat(weight), weightUnit);
-      
+
       const bodyMetric = {
         user_id: user.id,
         date,
@@ -142,7 +148,7 @@ export default function RegisterWeightScreen() {
 
       // If it exists, confirm before overwriting
       if (existingMetric) {
-        setSaving(false); // Stop loading while waiting for confirmation
+        loadingState.setLoading(false); // Stop loading while waiting for confirmation
 
         showAlert(
           t('registerWeight.existingRecordTitle'),
@@ -167,7 +173,7 @@ export default function RegisterWeightScreen() {
               text: t('common.update'),
               style: 'default',
               onPress: async () => {
-                setSaving(true);
+                loadingState.setLoading(true);
                 await performSave(bodyMetric, true);
               },
             },
@@ -187,13 +193,14 @@ export default function RegisterWeightScreen() {
         [{ text: t('common.ok') }],
         { icon: 'alert-circle', iconColor: '#F44336' }
       );
-      setSaving(false);
+      loadingState.setLoading(false);
     }
   }, [user, date, weight, bodyFat, muscle, notes, showAlert, t]);
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      <LoadingOverlay visible={loadingState.isLoading} message={t('commonUI.savingWeight')} />
 
       {/* Header */}
       <View style={styles.header}>
@@ -324,11 +331,11 @@ export default function RegisterWeightScreen() {
 
         {/* Save button */}
         <TouchableOpacity
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+          style={[styles.saveButton, loadingState.isLoading && styles.saveButtonDisabled]}
           onPress={handleSave}
-          disabled={saving}
+          disabled={loadingState.isLoading}
         >
-          {saving ? (
+          {loadingState.isLoading ? (
             <ActivityIndicator color="#1a1a1a" />
           ) : (
             <Text style={styles.saveButtonText}>{t('registerWeight.save')}</Text>

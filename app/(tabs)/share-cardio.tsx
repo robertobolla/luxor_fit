@@ -19,7 +19,9 @@ import { captureRef } from 'react-native-view-shot';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle } from 'react-native-reanimated';
 import { useTranslation } from 'react-i18next';
+import { Video, ResizeMode } from 'expo-av';
 import CardioShareSticker, { CardioStickerData, StickerStyle, StatType, AVAILABLE_STATS } from '../../src/components/share/CardioShareSticker';
+import { ShareMediaPicker } from '../../src/components/share/ShareMediaPicker';
 import { supabase } from '@/services/supabase';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -185,35 +187,26 @@ export default function ShareCardioScreen() {
         ],
     }));
 
-    const pickImage = async (useCamera: boolean) => {
-        try {
-            const permission = useCamera
-                ? await ImagePicker.requestCameraPermissionsAsync()
-                : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+    const [showMediaPicker, setShowMediaPicker] = useState(!params.imageUri);
 
-            if (!permission.granted) {
-                Alert.alert(t('common.error'), t('common.permissionsRequired'));
-                return;
-            }
-
-            const result = useCamera
-                ? await ImagePicker.launchCameraAsync({
-                    mediaTypes: 'images',
-                    allowsEditing: false,
-                    quality: 1, // Calidad máxima
-                })
-                : await ImagePicker.launchImageLibraryAsync({
-                    mediaTypes: 'images',
-                    allowsEditing: false,
-                    quality: 1, // Calidad máxima
-                });
-
-            if (!result.canceled && result.assets[0]) {
-                setSelectedImage(result.assets[0].uri);
-            }
-        } catch (error) {
-            console.error('Error picking image:', error);
+    // Initial check for params
+    useEffect(() => {
+        if (params.imageUri) {
+            setSelectedImage(params.imageUri as string);
+            setShowMediaPicker(false);
         }
+    }, [params.imageUri]);
+
+    const handleMediaSelect = (uri: string, type: 'image' | 'video') => {
+        if (type === 'video') {
+            setSelectedVideo(uri);
+            setSelectedImage(null);
+        } else {
+            setSelectedImage(uri);
+            setSelectedVideo(null);
+        }
+        setShowMediaPicker(false);
     };
 
     const handleShare = async () => {
@@ -262,45 +255,19 @@ export default function ShareCardioScreen() {
         }
     };
 
-    if (!selectedImage) {
-        return (
-            <View style={styles.container}>
-                <StatusBar barStyle="light-content" />
-
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={handleGoBack} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={24} color="#fff" />
-                    </TouchableOpacity>
-                    <Text style={styles.title}>{t('share.title')}</Text>
-                    <View style={styles.placeholder} />
-                </View>
-
-                <View style={styles.imagePickerContainer}>
-                    <Text style={styles.pickTitle}>{t('share.selectPhoto')}</Text>
-                    <Text style={styles.pickSubtitle}>{t('share.dragHint')}</Text>
-
-                    <View style={styles.pickButtons}>
-                        <TouchableOpacity style={styles.pickButton} onPress={() => pickImage(false)}>
-                            <Ionicons name="images" size={40} color="#FFD54A" />
-                            <Text style={styles.pickButtonText}>{t('share.gallery')}</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.pickButton} onPress={() => pickImage(true)}>
-                            <Ionicons name="camera" size={40} color="#FFD54A" />
-                            <Text style={styles.pickButtonText}>{t('share.camera')}</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </View>
-        );
-    }
-
     return (
         <GestureHandlerRootView style={styles.container}>
+            <ShareMediaPicker
+                visible={showMediaPicker}
+                onClose={handleGoBack}
+                onSelect={handleMediaSelect}
+            />
+
+
             <StatusBar hidden />
 
             <View style={styles.editHeader}>
-                <TouchableOpacity onPress={() => setSelectedImage(null)} style={styles.iconButton}>
+                <TouchableOpacity onPress={() => setShowMediaPicker(true)} style={styles.iconButton}>
                     <Ionicons name="arrow-back" size={24} color="#fff" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setShowStatsModal(true)} style={styles.configButton}>
@@ -314,11 +281,24 @@ export default function ShareCardioScreen() {
                 collapsable={false}
             >
                 <GestureDetector gesture={bgComposedGesture}>
-                    <Animated.Image
-                        source={{ uri: selectedImage }}
-                        style={[styles.backgroundImage, animatedBgStyle]}
-                        resizeMode="cover"
-                    />
+                    <Animated.View style={styles.backgroundContainer}>
+                        {selectedVideo ? (
+                            <Video
+                                source={{ uri: selectedVideo }}
+                                style={[styles.backgroundImage, animatedBgStyle]}
+                                resizeMode={ResizeMode.COVER}
+                                shouldPlay
+                                isLooping
+                                isMuted
+                            />
+                        ) : selectedImage ? (
+                            <Animated.Image
+                                source={{ uri: selectedImage }}
+                                style={[styles.backgroundImage, animatedBgStyle]}
+                                resizeMode="cover"
+                            />
+                        ) : null}
+                    </Animated.View>
                 </GestureDetector>
 
                 {exerciseData && (
@@ -364,7 +344,7 @@ export default function ShareCardioScreen() {
                 <View style={styles.bottomRow}>
                     <TouchableOpacity
                         style={styles.changePhotoButton}
-                        onPress={() => pickImage(false)}
+                        onPress={() => setShowMediaPicker(true)}
                     >
                         <Ionicons name="images-outline" size={24} color="#fff" />
                     </TouchableOpacity>
@@ -541,6 +521,12 @@ const styles = StyleSheet.create({
         backgroundColor: '#000',
         alignSelf: 'center',
         overflow: 'hidden',
+    },
+    backgroundContainer: {
+        width: '100%',
+        height: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     backgroundImage: {
         width: CAPTURE_WIDTH,

@@ -48,7 +48,7 @@ export default function ProfileScreen() {
   const { signOut } = useAuth();
   const { weightUnit, heightUnit } = useUnitsStore();
   const [profile, setProfile] = useState<ProfileRow | null>(null);
-  const { isLoading: loading, setLoading, executeAsync } = useLoadingState(true);
+  const dataLoadingState = useLoadingState(true);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [showPhotoViewer, setShowPhotoViewer] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -57,7 +57,7 @@ export default function ProfileScreen() {
   const loadProfile = async () => {
     if (!user?.id) return;
 
-    await executeAsync(
+    await dataLoadingState.executeAsync(
       async () => {
         const { data, error } = await supabase
           .from('user_profiles')
@@ -181,8 +181,8 @@ export default function ProfileScreen() {
           .select('profile_photo_url')
           .eq('user_id', user.id)
           .maybeSingle()) as {
-          data: { profile_photo_url: string | null } | null;
-        };
+            data: { profile_photo_url: string | null } | null;
+          };
 
         console.log('📸 Perfil actualizado, nueva URL:', updatedProfile?.profile_photo_url);
 
@@ -193,7 +193,7 @@ export default function ProfileScreen() {
               : ({ profile_photo_url: updatedProfile.profile_photo_url } as ProfileRow)
           );
         }
-        
+
 
         Alert.alert(t('profileScreen.photoUpdated'), t('profileScreen.photoUpdateSuccess'));
       } else {
@@ -323,7 +323,7 @@ export default function ProfileScreen() {
   };
 
   // Mostrar loading
-  if (loading) {
+  if (dataLoadingState.isLoading && !profile) {
     return (
       <View style={styles.container}>
         <LoadingOverlay visible={true} message={t('common.loading')} fullScreen />
@@ -332,7 +332,8 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
+      <LoadingOverlay visible={dataLoadingState.isLoading && !!profile} message={t('common.loading')} />
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.avatarContainer}
@@ -397,10 +398,10 @@ export default function ProfileScreen() {
                   {profile.gender === 'male'
                     ? t('profile.male')
                     : profile.gender === 'female'
-                    ? t('profile.female')
-                    : profile.gender === 'other'
-                    ? t('profile.other')
-                    : '-'}
+                      ? t('profile.female')
+                      : profile.gender === 'other'
+                        ? t('profile.other')
+                        : '-'}
                 </Text>
               </View>
               <View style={styles.infoRow}>
@@ -546,7 +547,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 

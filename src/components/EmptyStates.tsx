@@ -20,21 +20,27 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   style
 }) => (
   <View style={[styles.container, style]}>
-    <View style={styles.iconContainer}>
-      <Ionicons name={icon as any} size={64} color="#666" />
+    {/* Decorative background glow */}
+    <View style={styles.glowOuter}>
+      <View style={styles.glowInner}>
+        <Ionicons name={icon as any} size={48} color="#FFD54A" />
+      </View>
     </View>
+
     <Text style={styles.title}>{title}</Text>
     <Text style={styles.subtitle}>{subtitle}</Text>
+
     {actionText && onAction && (
-      <TouchableOpacity style={styles.actionButton} onPress={onAction}>
+      <TouchableOpacity style={styles.actionButton} onPress={onAction} activeOpacity={0.8}>
+        <Ionicons name="add-circle" size={20} color="#0a0a0a" />
         <Text style={styles.actionButtonText}>{actionText}</Text>
-        <Ionicons name="arrow-forward" size={16} color="#ffb300" />
       </TouchableOpacity>
     )}
   </View>
 );
 
-// Estados vacíos específicos para diferentes pantallas
+// ── Specific empty states ──────────────────────────────────────────────────
+
 export const EmptyWorkouts: React.FC<{ onGeneratePlan?: () => void }> = ({ onGeneratePlan }) => (
   <EmptyState
     icon="fitness-outline"
@@ -111,6 +117,8 @@ export const EmptyError: React.FC<{ onRetry?: () => void }> = ({ onRetry }) => (
   />
 );
 
+// ── Styles ─────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -119,36 +127,64 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     paddingVertical: 60,
   },
-  iconContainer: {
-    marginBottom: 24,
-    opacity: 0.6,
+  // Outer glow ring
+  glowOuter: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255, 213, 74, 0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 28,
+    // Subtle border to imitate glow
+    borderWidth: 1,
+    borderColor: 'rgba(255, 213, 74, 0.15)',
+  },
+  // Inner circle with icon
+  glowInner: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 213, 74, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 213, 74, 0.25)',
   },
   title: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
     color: '#ffffff',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 10,
+    letterSpacing: 0.3,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#cccccc',
+    fontSize: 15,
+    color: '#999999',
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 32,
+    maxWidth: 280,
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffb300',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 24,
+    backgroundColor: '#FFD54A',
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 25,
+    gap: 8,
+    // Subtle shadow
+    shadowColor: '#FFD54A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
   },
   actionButtonText: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#ffffff',
-    marginRight: 8,
+    fontWeight: '700',
+    color: '#0a0a0a',
   },
 });
