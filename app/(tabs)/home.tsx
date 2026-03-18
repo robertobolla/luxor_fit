@@ -8,11 +8,13 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   StatusBar,
   ActivityIndicator,
   Platform,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
@@ -32,6 +34,14 @@ import { useTutorial } from '@/contexts/TutorialContext';
 import { AppTour } from '@/components/AppTour';
 import { HelpModal } from '@/components/HelpModal';
 import { TutorialTooltip } from '@/components/TutorialTooltip';
+import {
+  Challenge,
+  UserChallenge,
+  getAvailableChallenges,
+  getUserChallenges,
+  updateChallengeProgress,
+} from '../../src/services/challengeService';
+import { useSubscription } from '../../src/hooks/useSubscription';
 type ProfileNameRow = {
   name: string | null;
 };
@@ -57,16 +67,24 @@ type NutritionPlanRow = {
 };
 
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const CHALLENGE_CARD_WIDTH = SCREEN_WIDTH - 80;
+
 export default function HomeScreen() {
   const { t } = useTranslation();
   const { user } = useUser();
   const insets = useSafeAreaInsets();
+  const { isActive: subIsActive, expirationDate: subExpiration } = useSubscription();
   const [isLoading, setIsLoading] = useState(true);
   const [todayWorkout, setTodayWorkout] = useState<any>(null);
   const [todayNutrition, setTodayNutrition] = useState<any>(null);
   const [activeNutritionPlan, setActiveNutritionPlan] = useState<NutritionPlanRow | null>(null);
   const [userName, setUserName] = useState('');
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
+  const [challengeItems, setChallengeItems] = useState<(UserChallenge | Challenge)[]>([]);
+  // Only paid subscribers (with RevenueCat expiration) get day rewards
+  // Admin, partner, and gym users do NOT have expirationDate
+  const isPaidSubscriber = subIsActive && !!subExpiration;
 
   // Tutorial states
   const {
@@ -256,6 +274,21 @@ export default function HomeScreen() {
       // Cargar contador de chats sin leer
       const unreadCount = await getTotalUnreadChatsCount(user.id);
       setUnreadChatsCount(unreadCount);
+
+      // Cargar retos
+      try {
+        await updateChallengeProgress(user.id);
+        const [availableChallenges, userChals] = await Promise.all([
+          getAvailableChallenges(),
+          getUserChallenges(user.id, 'active'),
+        ]);
+        // Show active user challenges first, then available ones
+        const acceptedIds = userChals.map(uc => uc.challenge_id);
+        const notAccepted = availableChallenges.filter(c => !acceptedIds.includes(c.id));
+        setChallengeItems([...userChals, ...notAccepted]);
+      } catch (challengeError) {
+        console.warn('⚠️ Error loading challenges:', challengeError);
+      }
     } catch (err: any) {
       console.error('Error loading home data:', err);
 
@@ -549,6 +582,104 @@ export default function HomeScreen() {
           <Ionicons name="chevron-forward" size={24} color="#888888" />
         </TouchableOpacity>
 
+        {/* Challenges Carousel */}
+        {challengeItems.length > 0 && (
+          <View style={styles.challengesSection}>
+            <Text style={styles.challengesSectionTitle}>🏆 {t('challenges.sectionTitle')}</Text>
+            <FlatList
+              data={challengeItems}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={CHALLENGE_CARD_WIDTH + 12}
+              decelerationRate="fast"
+              contentContainerStyle={{ paddingRight: 20 }}
+              keyExtractor={(item: any) => item.id}
+              renderItem={({ item }: { item: any }) => {
+                // Determine if it's a UserChallenge (has challenge_id) or a Challenge
+                const isUserChallenge = 'challenge_id' in item;
+                const challenge: Challenge = isUserChallenge ? item.challenge : item;
+                if (!challenge) return null;
+
+                const progress = isUserChallenge
+                  ? Math.min((item.current_value / item.target_value) * 100, 100)
+                  : 0;
+                const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+                const dynamicTarget = challenge.metric_type === 'total_steps'
+                  ? daysInMonth * 10000
+                  : challenge.target_value;
+
+                const formatNum = (n: number) => {
+                  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+                  if (n >= 1000) return `${(n / 1000).toFixed(0)}K`;
+                  return n.toString();
+                };
+
+                return (
+                  <TouchableOpacity
+                    style={styles.challengeCard}
+                    onPress={() => router.push('/(tabs)/challenges' as any)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.challengeCardHeader}>
+                      <Text style={styles.challengeCardIcon}>{challenge.icon}</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.challengeCardTitle} numberOfLines={1}>
+                          {t(challenge.title_key, { defaultValue: challenge.title_key })}
+                        </Text>
+                        {isUserChallenge && (
+                          <Text style={styles.challengeCardProgress}>
+                            {formatNum(item.current_value)} / {formatNum(item.target_value)}
+                          </Text>
+                        )}
+                        {!isUserChallenge && (
+                          <Text style={styles.challengeCardDesc}>
+                            {t(challenge.description_key, {
+                              target: formatNum(dynamicTarget),
+                              defaultValue: challenge.description_key,
+                            })}
+                          </Text>
+                        )}
+                      </View>
+                    </View>
+
+                    {isUserChallenge && (
+                      <View style={styles.challengeProgressBarContainer}>
+                        <View style={styles.challengeProgressBar}>
+                          <View style={[styles.challengeProgressFill, { width: `${progress}%` }]} />
+                        </View>
+                        <Text style={styles.challengeProgressPct}>{Math.round(progress)}%</Text>
+                      </View>
+                    )}
+
+                    <View style={styles.challengeRewardsPreview}>
+                      <View style={styles.challengeRewardSmall}>
+                        <Ionicons name="star" size={12} color="#ffb300" />
+                        <Text style={styles.challengeRewardSmallText}>+{challenge.reward_xp} XP</Text>
+                      </View>
+                      <View style={styles.challengeRewardSmall}>
+                        <Text style={styles.challengeRewardSmallText}>🏅</Text>
+                      </View>
+                      {isPaidSubscriber && challenge.reward_days > 0 && (
+                        <View style={[styles.challengeRewardSmall, { backgroundColor: '#1b3a1b' }]}>
+                          <Ionicons name="calendar" size={12} color="#4CAF50" />
+                          <Text style={[styles.challengeRewardSmallText, { color: '#4CAF50' }]}>+{challenge.reward_days}d</Text>
+                        </View>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+            <TouchableOpacity
+              style={styles.viewAllButton}
+              onPress={() => router.push('/(tabs)/challenges' as any)}
+            >
+              <Text style={styles.viewAllText}>{t('challenges.viewAll')}</Text>
+              <Ionicons name="chevron-forward" size={18} color="#ffb300" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={{ height: 30 }} />
       </ScrollView>
 
@@ -752,6 +883,110 @@ const styles = StyleSheet.create({
   helpButton: {
     padding: 4,
     marginLeft: 12,
+  },
+  challengesSection: {
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  challengesSectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#ffffff',
+    marginBottom: 15,
+  },
+  challengeCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 16,
+    padding: 16,
+    width: CHALLENGE_CARD_WIDTH,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#333',
+  },
+  challengeCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  challengeCardIcon: {
+    fontSize: 24,
+    marginRight: 12,
+    backgroundColor: '#2a2a2a',
+    padding: 8,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  challengeCardTitle: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#ffffff',
+  },
+  challengeCardProgress: {
+    fontSize: 12,
+    color: '#ffb300',
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  challengeCardDesc: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
+  challengeProgressBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  challengeProgressBar: {
+    flex: 1,
+    height: 6,
+    backgroundColor: '#333',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  challengeProgressFill: {
+    height: '100%',
+    backgroundColor: '#ffb300',
+  },
+  challengeProgressPct: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#ffb300',
+    width: 35,
+  },
+  challengeRewardsPreview: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  challengeRewardSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2a2a2a',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    gap: 4,
+  },
+  challengeRewardSmallText: {
+    fontSize: 10,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  viewAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 15,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  viewAllText: {
+    color: '#ffb300',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

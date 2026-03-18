@@ -113,7 +113,8 @@
     "noDataYet": "Sin datos aún",
     "loadingData": "Cargando datos...",
     "share": "Compartir",
-    "notes": "Notas"
+    "notes": "Notas",
+    "of": "de"
   },
   "invitations": {
     "loading": "Cargando invitaciones...",
@@ -740,6 +741,11 @@
     "planActivated": "¡Plan Activado!",
     "planActivatedMessage": "Tu nuevo plan nutricional está activo.",
     "activationError": "No se pudo activar el plan. Intenta nuevamente.",
+    "repeatPlan": "Repetir Plan",
+    "adaptPlan": "Adaptar Plan",
+    "repeatPlanQuestion": "¿Deseas repetir este plan nutricional una semana más?",
+    "planRepeatedSuccess": "¡Plan repetido exitosamente!",
+    "repeatError": "No se pudo repetir el plan.",
     "week": "Semana",
     "meal": "Comida",
     "createNewPlanQuestion": "¿Deseas crear un nuevo plan de comidas con la nueva configuración?",
@@ -2356,6 +2362,7 @@
     "shoppingList": "Lista de Compras",
     "registerMeasurement": "Registrar Medición",
     "generatePlan": "Generar Plan Nutricional",
+    "planFinished": "Plan Finalizado",
     "welcome": "🥗 Bienvenido a Nutrición",
     "adherenceTitle": "Adherencia",
     "noWeeksYet": "Aún no tienes histórico de semanas",
@@ -2824,5 +2831,26 @@
     "deleteCategory": "Eliminar categoría",
     "systemCategory": "Categoría del sistema",
     "trainerMode": "Modo Entrenador"
+  },
+  "challenges": {
+    "title": "Retos",
+    "sectionTitle": "Retos",
+    "active": "Activos",
+    "available": "Disponibles",
+    "completed": "Completados",
+    "accept": "Aceptar Reto",
+    "progress": "{{current}} de {{target}}",
+    "rewardXP": "+{{xp}} XP",
+    "rewardDays": "+{{days}} días de suscripción",
+    "rewardBadge": "¡Medalla obtenida!",
+    "viewAll": "Ver todos los retos",
+    "monthlySteps": "Reto de Pasos Mensual",
+    "monthlyStepsDesc": "Alcanza {{target}} pasos totales este mes",
+    "challengeAccepted": "¡Reto aceptado!",
+    "challengeCompleted": "¡Reto completado! 🎉",
+    "daysRemaining": "{{days}} días restantes",
+    "days": "días",
+    "noChallenges": "No hay retos activos",
+    "exploreChallenges": "¡Explora retos y gana recompensas!"
   }
 }

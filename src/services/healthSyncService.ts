@@ -104,3 +104,32 @@ export async function getHealthDataFromSupabase(
   }
 }
 
+/**
+ * Sincroniza un rango de fechas de datos de salud a Supabase
+ */
+export async function syncHealthRangeToSupabase(
+  userId: string,
+  startDate: Date,
+  endDate: Date
+): Promise<{ success: boolean; synced: number; error?: string }> {
+  try {
+    const { getHealthDataForRange } = require('./healthService');
+    const rangeData = await getHealthDataForRange(startDate, endDate);
+    
+    const dataArray = Object.entries(rangeData)
+      .filter(([_, data]: [string, any]) => data.steps > 0 || data.distance > 0 || data.calories > 0)
+      .map(([date, healthData]) => ({
+        date,
+        healthData
+      }));
+
+    if (dataArray.length === 0) {
+      return { success: true, synced: 0 };
+    }
+
+    return await syncHealthDataBatch(userId, dataArray);
+  } catch (error: any) {
+    console.error('Error syncing health range:', error);
+    return { success: false, synced: 0, error: error.message };
+  }
+}
