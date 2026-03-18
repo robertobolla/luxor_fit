@@ -1374,3 +1374,27 @@ export function resetPermissionsCache(): void {
   console.log('🔄 Cache de permisos reiniciado');
 }
 
+/**
+ * Obtiene datos de salud para un rango de fechas (útil para sincronización histórica)
+ */
+export async function getHealthDataForRange(startDate: Date, endDate: Date): Promise<Record<string, HealthData>> {
+  const results: Record<string, HealthData> = {};
+  
+  // Clonar fechas para no modificar las originales
+  const current = new Date(startDate);
+  current.setHours(0, 0, 0, 0);
+  const end = new Date(endDate);
+  end.setHours(23, 59, 59, 999);
+
+  // Iterar por cada día en el rango
+  // NOTA: Para iOS/Android podríamos optimizar pidiendo el rango completo en una sola llamada
+  // pero para mantener consistencia con getHealthDataForDate y manejar Expo Pedometer fallback,
+  // lo hacemos día por día por ahora.
+  while (current <= end) {
+    const dateStr = current.toISOString().split('T')[0];
+    results[dateStr] = await getHealthDataForDate(new Date(current));
+    current.setDate(current.getDate() + 1);
+  }
+
+  return results;
+}

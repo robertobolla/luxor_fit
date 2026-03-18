@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useUser } from '@clerk/clerk-expo';
 import { useTranslation } from 'react-i18next';
 import { getHealthDataForDate } from '@/services/healthService';
-import { getHealthDataFromSupabase } from '@/services/healthSyncService';
+import { getHealthDataFromSupabase, syncHealthRangeToSupabase } from '@/services/healthSyncService';
 
 const { width } = Dimensions.get('window');
 
@@ -168,6 +168,11 @@ export default function StepsDetailScreen() {
       });
     }
 
+    // Trigger background sync for this week to fill gaps or update today
+    syncHealthRangeToSupabase(user.id, start, end).catch(err => {
+      console.warn('Background week sync failed:', err);
+    });
+
     // Also fetch today's steps live (in case not yet synced)
     const today = new Date();
     const todayStr = dateToStr(today);
@@ -212,6 +217,11 @@ export default function StepsDetailScreen() {
         stepsMap[row.date] = row.steps || 0;
       });
     }
+
+    // Trigger background sync for this month
+    syncHealthRangeToSupabase(user.id, start, end).catch(err => {
+      console.warn('Background month sync failed:', err);
+    });
 
     // Today live
     const today = new Date();
@@ -269,10 +279,22 @@ export default function StepsDetailScreen() {
       const todayStr = dateToStr(today);
       const liveData = await getHealthDataForDate(today);
       const todayMonth = today.getMonth();
-      // Remove any existing entry for today and add live data
-      monthTotals[todayMonth] = monthTotals[todayMonth] + Math.round(liveData.steps || 0);
+      
+      // Update month totals: replace any synced value for TODAY with LIVE data 
+      // instead of adding to ensure no double counting. 
+      // NOTE: result.data already has today's synced value if synced recently.
+      const todaySyncedVal = (result.data || []).find((r: any) => r.date === todayStr)?.steps || 0;
+      monthTotals[todayMonth] = monthTotals[todayMonth] - todaySyncedVal + Math.round(liveData.steps || 0);
+      
       if (monthDays[todayMonth] === 0) monthDays[todayMonth] = 1;
     }
+
+    // Trigger background sync for the year in parts (e.g. current month) to avoid heavy load
+    const syncStart = new Date(currentDate.getFullYear(), 0, 1);
+    const syncEnd = new Date(currentDate.getFullYear(), 11, 31);
+    syncHealthRangeToSupabase(user.id, syncStart, syncEnd).catch(err => {
+      console.warn('Background year sync failed:', err);
+    });
 
     const months = t('stepsDetail.months.short', { returnObjects: true }) as string[];
     const data: StepData[] = months.map((month, i) => ({
@@ -422,18 +444,17 @@ export default function StepsDetailScreen() {
   };
 
   const getStatusText = () => {
-    const locale = t('common.locale');
     if (viewMode === 'day') {
       const remaining = goalSteps - totalSteps;
       if (remaining > 0) {
         return t('stepsDetail.status.remaining', {
-          remaining: remaining.toLocaleString(locale),
+          count: remaining,
         });
       }
       return t('stepsDetail.status.achieved');
     }
     return t('stepsDetail.status.totalSoFar', {
-      total: totalSteps.toLocaleString(locale),
+      count: totalSteps,
     });
   };
 

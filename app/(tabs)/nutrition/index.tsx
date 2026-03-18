@@ -109,6 +109,8 @@ export default function NutritionHomeScreen() {
     initialWeight: number | null;
     nutritionGoal: 'lose_fat' | 'maintain' | 'gain_muscle' | null;
   } | null>(null);
+  const [activePlan, setActivePlan] = useState<any | null>(null);
+  const [isPlanExpired, setIsPlanExpired] = useState(false);
 
   // Tutorial states
   const {
@@ -161,6 +163,12 @@ export default function NutritionHomeScreen() {
         .from('nutrition_plans')
         .select(`
           id,
+          plan_name,
+          is_ai_generated,
+          activated_at,
+          total_weeks,
+          initial_weight_kg,
+          nutrition_goal,
           nutrition_plan_weeks (
             id,
             week_number,
@@ -190,6 +198,8 @@ export default function NutritionHomeScreen() {
         .maybeSingle();
 
       if (activePlan && !activePlanError) {
+        setActivePlan(activePlan);
+        checkPlanExpiration(activePlan);
         // Usar selectedDate para calcular el día de la semana
         const targetDate = new Date(selectedDate + 'T12:00:00');
         const dayOfWeek = targetDate.getDay();
@@ -293,6 +303,35 @@ export default function NutritionHomeScreen() {
       }
     } catch (err) {
       console.error('Error loading today data:', err);
+    }
+  };
+
+  const getMondayOfWeek = (date: Date): Date => {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+  };
+
+  const checkPlanExpiration = (plan: any) => {
+    if (!plan || !plan.activated_at) {
+      setIsPlanExpired(false);
+      return;
+    }
+
+    const durationWeeks = plan.total_weeks || 1;
+    const activatedDate = new Date(plan.activated_at);
+    const now = new Date();
+
+    const activatedMonday = getMondayOfWeek(activatedDate);
+    const currentMonday = getMondayOfWeek(now);
+
+    const weeksPassed = Math.floor((currentMonday.getTime() - activatedMonday.getTime()) / (7 * 24 * 60 * 60 * 1000));
+
+    if (weeksPassed >= durationWeeks) {
+      setIsPlanExpired(true);
+    } else {
+      setIsPlanExpired(false);
     }
   };
 
@@ -1370,48 +1409,91 @@ export default function NutritionHomeScreen() {
   const handleNavigateToPlan = async (weekStart?: string) => {
     if (!user?.id) return;
 
-    try {
-      // Verificar si hay un plan de IA activo que necesite renovación
-      const { data: activePlan, error } = await supabase
-        .from('nutrition_plans')
-        .select('id, is_ai_generated, activated_at, initial_weight_kg, nutrition_goal, renewal_completed, last_renewal_date, current_week_number, total_weeks')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (!error && activePlan?.id) {
-        // Si es un plan de IA, verificar si necesita renovación
+    if (activePlan?.id) {
+      // Si el plan está expirado, forzar renovación si es IA, o repetir si es manual
+      if (isPlanExpired) {
         if (activePlan.is_ai_generated) {
-          const needsRenewal = await checkIfAIPlanNeedsRenewal(activePlan);
+          const validGoals = ['lose_fat', 'maintain', 'gain_muscle'] as const;
+          const nutritionGoal = validGoals.includes(activePlan.nutrition_goal as any)
+            ? (activePlan.nutrition_goal as 'lose_fat' | 'maintain' | 'gain_muscle')
+            : null;
 
-          if (needsRenewal) {
-            // Mostrar modal de renovación en lugar de navegar
-            const validGoals = ['lose_fat', 'maintain', 'gain_muscle'] as const;
-            const nutritionGoal = validGoals.includes(activePlan.nutrition_goal as any)
-              ? (activePlan.nutrition_goal as 'lose_fat' | 'maintain' | 'gain_muscle')
-              : null;
-
-            setAIPlanRenewalData({
-              planId: activePlan.id,
-              activatedAt: activePlan.activated_at,
-              initialWeight: activePlan.initial_weight_kg,
-              nutritionGoal: nutritionGoal,
-            });
-            setShowAIRenewalModal(true);
-            return;
-          }
+          setAIPlanRenewalData({
+            planId: activePlan.id,
+            activatedAt: activePlan.activated_at,
+            initialWeight: activePlan.initial_weight_kg,
+            nutritionGoal: nutritionGoal,
+          });
+          setShowAIRenewalModal(true);
+        } else {
+          // Si no es IA, simplemente repetir o mostrar opciones
+          Alert.alert(
+            t('common.planFinished'),
+            t('nutrition.repeatPlanQuestion'),
+            [
+              { text: t('common.cancel'), style: 'cancel' },
+              { text: t('nutrition.repeatPlan'), onPress: () => handleRepeatExistingPlan(activePlan) }
+            ]
+          );
         }
-
-        // Hay un plan activo y no necesita renovación, navegar a plan-detail
-        router.push(`/(tabs)/nutrition/plan-detail?id=${activePlan.id}` as any);
         return;
       }
-    } catch (err) {
-      console.error('Error checking active plan:', err);
+
+      // Si no está expirado pero es de IA, verificar si necesita renovación (cambio de semana)
+      if (activePlan.is_ai_generated) {
+        const needsRenewal = await checkIfAIPlanNeedsRenewal(activePlan);
+
+        if (needsRenewal) {
+          // Mostrar modal de renovación en lugar de navegar
+          const validGoals = ['lose_fat', 'maintain', 'gain_muscle'] as const;
+          const nutritionGoal = validGoals.includes(activePlan.nutrition_goal as any)
+            ? (activePlan.nutrition_goal as 'lose_fat' | 'maintain' | 'gain_muscle')
+            : null;
+
+          setAIPlanRenewalData({
+            planId: activePlan.id,
+            activatedAt: activePlan.activated_at,
+            initialWeight: activePlan.initial_weight_kg,
+            nutritionGoal: nutritionGoal,
+          });
+          setShowAIRenewalModal(true);
+          return;
+        }
+      }
+
+      // Hay un plan activo y no necesita renovación/expiración, navegar a plan-detail
+      router.push(`/(tabs)/nutrition/plan-detail?id=${activePlan.id}` as any);
+      return;
     }
 
     // No hay plan activo - mostrar modal con opciones
     setShowNoPlanModal(true);
+  };
+
+  const handleRepeatExistingPlan = async (plan: any) => {
+    if (!user?.id || !plan) return;
+
+    setIsInitializing(true);
+    try {
+      const today = new Date();
+      await supabase
+        .from('nutrition_plans')
+        .update({
+          activated_at: today.toISOString(),
+          is_active: true,
+          renewal_completed: false,
+          last_renewal_date: null
+        })
+        .eq('id', plan.id);
+
+      showMessage('success', t('common.success'), t('nutrition.planRepeatedSuccess'));
+      await loadActivePlanTargets();
+    } catch (err) {
+      console.error('Error repeating plan:', err);
+      showMessage('error', t('common.error'), t('nutrition.repeatError'));
+    } finally {
+      setIsInitializing(false);
+    }
   };
 
   /**
@@ -1955,13 +2037,61 @@ export default function NutritionHomeScreen() {
         {/* Acciones rápidas */}
         <View style={styles.section}>
           <View style={styles.actionsGrid}>
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => handleNavigateToPlan()}
-            >
-              <Ionicons name="restaurant" size={32} color="#ffb300" />
-              <Text style={styles.actionText}>{t('nutritionIndex.viewPlan')}</Text>
-            </TouchableOpacity>
+            <View style={[styles.planBadgeContainer, { width: isPlanExpired ? '100%' : '48%' }]}>
+              {isPlanExpired && (
+                <View style={styles.finishedBadgeSmall}>
+                  <Text style={styles.finishedBadgeTextSmall}>{t('nutritionIndex.planFinished')}</Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={[
+                  styles.actionCard,
+                  isPlanExpired && styles.actionCardWide,
+                  isPlanExpired && styles.actionCardExpired
+                ]}
+                onPress={() => handleNavigateToPlan()}
+              >
+                <Ionicons 
+                  name="restaurant" 
+                  size={32} 
+                  color={isPlanExpired ? "#666" : "#ffb300"} 
+                />
+                <Text style={[
+                  styles.actionText,
+                  isPlanExpired && styles.actionTextExpired
+                ]}>
+                  {t('nutritionIndex.viewPlan')}
+                </Text>
+
+                {isPlanExpired && activePlan && (
+                  <View style={styles.expiredPlanActions}>
+                    <TouchableOpacity
+                      style={styles.repeatButtonPlan}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleRepeatExistingPlan(activePlan);
+                      }}
+                    >
+                      <Ionicons name="refresh" size={18} color="#ffb300" />
+                      <Text style={styles.repeatButtonPlanText}>{t('nutrition.repeatPlan')}</Text>
+                    </TouchableOpacity>
+                    
+                    {activePlan.is_ai_generated && (
+                      <TouchableOpacity
+                        style={styles.adaptButtonPlan}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          handleNavigateToPlan();
+                        }}
+                      >
+                        <Ionicons name="sparkles" size={18} color="#000" />
+                        <Text style={styles.adaptButtonPlanText}>{t('nutrition.adaptPlan')}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity
               style={styles.actionCard}
@@ -2976,6 +3106,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ffb300',
     position: 'relative',
+    overflow: 'hidden',
+  },
+  actionCardExpired: {
+    borderColor: '#333',
+    backgroundColor: '#111',
   },
   actionCardWide: {
     minWidth: '100%',
@@ -2987,6 +3122,73 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     marginTop: 8,
     textAlign: 'center',
+  },
+  actionTextExpired: {
+    color: '#888',
+  },
+  planBadgeContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  finishedBadgeSmall: {
+    position: 'absolute',
+    top: -12,
+    right: -20,
+    backgroundColor: '#333',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#555',
+    zIndex: 1,
+  },
+  finishedBadgeTextSmall: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+  },
+  expiredPlanActions: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a2a',
+  },
+  repeatButtonPlan: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#222',
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#ffb300',
+    gap: 6,
+  },
+  repeatButtonPlanText: {
+    color: '#ffb300',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  adaptButtonPlan: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffb300',
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 6,
+  },
+  adaptButtonPlanText: {
+    color: '#000',
+    fontSize: 14,
+    fontWeight: '700',
   },
   actionSubtext: {
     fontSize: 11,

@@ -2,8 +2,8 @@
   "expo": {
     "name": "Luxor Fitness",
     "slug": "fitmind",
-    "version": "1.1.6",
-    "runtimeVersion": "1.1.6",
+    "version": "1.1.8",
+    "runtimeVersion": "1.1.8",
     "updates": {
       "url": "https://u.expo.dev/39f4fe90-c5cc-4c8a-baeb-7424da1c4f10"
     },
@@ -18,7 +18,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.luxorfitness.app",
-      "buildNumber": "94",
+      "buildNumber": "95",
       "icon": "./assets/icon.png",
       "requireFullScreen": true,
       "infoPlist": {
@@ -35,7 +35,15 @@
         "NSLocationUsageDescription": "Luxor Fitness necesita acceso a tu ubicación para rastrear tus actividades físicas con GPS.",
         "NSCameraUsageDescription": "Luxor Fitness necesita acceso a tu cámara para tomar fotos de progreso y documentar tus cambios físicos.",
         "NSPhotoLibraryUsageDescription": "Luxor Fitness necesita acceso a tu galería para guardar y seleccionar fotos de progreso.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationQueriesSchemes": [
+          "instagram-stories",
+          "facebook-stories",
+          "facebook",
+          "instagram",
+          "twitter",
+          "whatsapp"
+        ]
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
@@ -49,7 +57,7 @@
         "backgroundColor": "#0a0a0a"
       },
       "package": "com.luxorfitness.app",
-      "versionCode": 94,
+      "versionCode": 95,
       "permissions": [
         "ACTIVITY_RECOGNITION",
         "android.permission.ACTIVITY_RECOGNITION",

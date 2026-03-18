@@ -63,6 +63,7 @@ export default function ShareWorkoutScreen() {
     const [showRest, setShowRest] = useState(false);
 
     const captureViewRef = useRef<View>(null);
+    const stickerRef = useRef<View>(null);
 
     // Gestos para el sticker
     const translateX = useSharedValue(0);
@@ -175,8 +176,34 @@ export default function ShareWorkoutScreen() {
             setIsCapturing(true);
             await new Promise(resolve => setTimeout(resolve, 100));
 
-            // Multiplicador x3 para exportar fotos a alta resolución para Instagram
             const PIXEL_RATIO = 3;
+
+            // Opción Pro: Si hay video, compartimos nativamente a Instagram Stories
+            if (selectedVideo && Platform.OS !== 'web') {
+                try {
+                    // Capturamos SOLO el sticker con transparencia
+                    const stickerUri = await captureRef(stickerRef, {
+                        format: 'png',
+                        quality: 1,
+                        result: 'data-uri', // Importante para Share
+                    });
+
+                    const { SocialShareService } = await import('../../src/services/socialShareService');
+                    
+                    await SocialShareService.shareToInstagramStories({
+                        backgroundVideoUri: selectedVideo,
+                        stickerImageUri: stickerUri,
+                    });
+                    
+                    setIsCapturing(false);
+                    return;
+                } catch (socialError) {
+                    console.error('Error sharing pro:', socialError);
+                    // Fallback a expo-sharing si falla el modo pro
+                }
+            }
+
+            // Fallback o modo imagen estándar
             const uri = await captureRef(captureViewRef, {
                 format: 'png',
                 quality: 1,
@@ -192,7 +219,7 @@ export default function ShareWorkoutScreen() {
         } catch (error) {
             console.error('Error sharing:', error);
             setIsCapturing(false);
-            Alert.alert('Error', 'No se pudo generar la imagen para compartir.');
+            Alert.alert('Error', 'No se pudo generar el contenido para compartir.');
         }
     };
 
@@ -240,14 +267,20 @@ export default function ShareWorkoutScreen() {
 
                 <ShareMediaPicker
                     visible={showMediaPicker}
-                    onClose={handleGoBack}
+                    onClose={() => {
+                        if (selectedImage || selectedVideo) {
+                            setShowMediaPicker(false);
+                        } else {
+                            handleGoBack();
+                        }
+                    }}
                     onSelect={handleMediaSelect}
                 />
 
                 {/* Header Overlay */}
                 {!isCapturing && (
                     <View style={styles.headerOverlay}>
-                        <TouchableOpacity onPress={() => setShowMediaPicker(true)} style={styles.headerButton}>
+                        <TouchableOpacity onPress={handleGoBack} style={styles.headerButton}>
                             <Ionicons name="arrow-back" size={24} color="#fff" />
                         </TouchableOpacity>
 
@@ -280,7 +313,7 @@ export default function ShareWorkoutScreen() {
                     )}
 
                     <GestureDetector gesture={composedGesture}>
-                        <Animated.View style={[styles.stickerContainer, animatedStyle]}>
+                        <Animated.View ref={stickerRef} style={[styles.stickerContainer, animatedStyle]}>
                             <WorkoutShareSticker
                                 style={selectedStyle}
                                 data={planData}

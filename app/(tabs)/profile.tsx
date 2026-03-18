@@ -304,6 +304,11 @@ export default function ProfileScreen() {
       onPress: () => router.push('/notification-settings'),
     },
     {
+      title: t('challenges.title'),
+      icon: 'trophy-outline',
+      onPress: () => router.push('/challenges'),
+    },
+    {
       title: t('common.help'),
       icon: 'help-circle-outline',
       onPress: () => router.push('/help'),
@@ -334,6 +339,10 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <LoadingOverlay visible={dataLoadingState.isLoading && !!profile} message={t('common.loading')} />
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={true}
+      >
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.avatarContainer}
@@ -447,6 +456,7 @@ export default function ProfileScreen() {
         <Text style={styles.footerText}>Luxor Fitness v{appVersion}</Text>
         <Text style={styles.footerText}>{t('profileScreen.madeWithLove')}</Text>
       </View>
+      </ScrollView>
 
       {/* Modal para opciones de foto */}
       <Modal
@@ -555,6 +565,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#1a1a1a',
+  },
+  scrollContent: {
+    paddingBottom: 40,
   },
   centerContent: {
     justifyContent: 'center',

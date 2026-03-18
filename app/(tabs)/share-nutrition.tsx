@@ -52,6 +52,7 @@ export default function ShareNutritionScreen() {
     const [showMediaPicker, setShowMediaPicker] = useState(true);
 
     const captureViewRef = useRef<View>(null);
+    const stickerRef = useRef<View>(null);
 
     // ... gestures ...
     const translateX = useSharedValue(0);
@@ -114,6 +115,33 @@ export default function ShareNutritionScreen() {
             await new Promise(resolve => setTimeout(resolve, 100));
 
             const PIXEL_RATIO = 3;
+
+            // Opción Pro: Si hay video, compartimos nativamente a Instagram Stories
+            if (selectedVideo && Platform.OS !== 'web') {
+                try {
+                    // Capturamos SOLO el sticker con transparencia
+                    const stickerUri = await captureRef(stickerRef, {
+                        format: 'png',
+                        quality: 1,
+                        result: 'data-uri', // Importante para Share
+                    });
+
+                    const { SocialShareService } = await import('../../src/services/socialShareService');
+                    
+                    await SocialShareService.shareToInstagramStories({
+                        backgroundVideoUri: selectedVideo,
+                        stickerImageUri: stickerUri,
+                    });
+                    
+                    setIsCapturing(false);
+                    return;
+                } catch (socialError) {
+                    console.error('Error sharing pro:', socialError);
+                    // Fallback a expo-sharing si falla el modo pro
+                }
+            }
+
+            // Fallback o modo imagen estándar
             const uri = await captureRef(captureViewRef, {
                 format: 'png',
                 quality: 1,
@@ -129,7 +157,7 @@ export default function ShareNutritionScreen() {
         } catch (error) {
             console.error('Error sharing:', error);
             setIsCapturing(false);
-            Alert.alert('Error', 'No se pudo generar la imagen para compartir.');
+            Alert.alert('Error', 'No se pudo generar el contenido para compartir.');
         }
     };
 
@@ -187,14 +215,20 @@ export default function ShareNutritionScreen() {
 
                 <ShareMediaPicker
                     visible={showMediaPicker}
-                    onClose={handleGoBack}
+                    onClose={() => {
+                        if (selectedImage || selectedVideo) {
+                            setShowMediaPicker(false);
+                        } else {
+                            handleGoBack();
+                        }
+                    }}
                     onSelect={handleMediaSelect}
                 />
 
                 {/* Header Overlay */}
                 {!isCapturing && (
                     <View style={styles.editHeader}>
-                        <TouchableOpacity onPress={() => setShowMediaPicker(true)} style={styles.iconButton}>
+                        <TouchableOpacity onPress={handleGoBack} style={styles.iconButton}>
                             <Ionicons name="arrow-back" size={24} color="#fff" />
                         </TouchableOpacity>
                         <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.iconButton}>
@@ -228,6 +262,7 @@ export default function ShareNutritionScreen() {
                     {/* Draggable Sticker */}
                     <GestureDetector gesture={composed}>
                         <Animated.View
+                            ref={stickerRef}
                             style={[
                                 styles.stickerWrapper,
                                 animatedStyle

@@ -10,6 +10,8 @@ import {
     Alert,
     Modal,
     ScrollView,
+    Switch,
+    Platform,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,6 +51,7 @@ export default function ShareCardioScreen() {
     const [selectedStats, setSelectedStats] = useState<StatType[]>(['distance', 'time', 'pace', 'calories']);
 
     const captureViewRef = useRef<View>(null);
+    const stickerRef = useRef<View>(null);
 
     // Posición y escala del sticker
     const translateX = useSharedValue(20);
@@ -209,14 +212,54 @@ export default function ShareCardioScreen() {
         setShowMediaPicker(false);
     };
 
+    const toggleStat = (statId: StatType) => {
+        if (selectedStats.includes(statId)) {
+            if (selectedStats.length > 1) {
+                setSelectedStats(selectedStats.filter(s => s !== statId));
+            }
+        } else {
+            if (selectedStats.length < 4) {
+                setSelectedStats([...selectedStats, statId]);
+            } else {
+                Alert.alert(t('share.maxStats'));
+            }
+        }
+    };
+
     const handleShare = async () => {
         if (!captureViewRef.current) return;
 
         setIsCapturing(true);
 
         try {
-            // PIXEL_RATIO de 3 para garantizar al menos 1080px de ancho para Instagram
             const PIXEL_RATIO = 3;
+
+            // Opción Pro: Si hay video, compartimos nativamente a Instagram Stories
+            if (selectedVideo && Platform.OS !== 'web') {
+                try {
+                    // Capturamos SOLO el sticker con transparencia
+                    const stickerUri = await captureRef(stickerRef, {
+                        format: 'png',
+                        quality: 1,
+                        result: 'data-uri', // Importante para Share
+                    });
+
+                    const { SocialShareService } = await import('../../src/services/socialShareService');
+                    
+                    await SocialShareService.shareToInstagramStories({
+                        backgroundVideoUri: selectedVideo,
+                        stickerImageUri: stickerUri,
+                    });
+                    
+                    setIsCapturing(false);
+                    return;
+                } catch (socialError) {
+                    console.error('Error sharing pro:', socialError);
+                    // Fallback a expo-sharing si falla el modo pro
+                }
+            }
+
+            // Fallback o modo imagen estándar
             const uri = await captureRef(captureViewRef, {
                 format: 'png',
                 quality: 1,
@@ -241,25 +284,17 @@ export default function ShareCardioScreen() {
         }
     };
 
-    const toggleStat = (statId: StatType) => {
-        if (selectedStats.includes(statId)) {
-            if (selectedStats.length > 1) {
-                setSelectedStats(selectedStats.filter(s => s !== statId));
-            }
-        } else {
-            if (selectedStats.length < 4) {
-                setSelectedStats([...selectedStats, statId]);
-            } else {
-                Alert.alert(t('share.maxStats'));
-            }
-        }
-    };
-
     return (
         <GestureHandlerRootView style={styles.container}>
             <ShareMediaPicker
                 visible={showMediaPicker}
-                onClose={handleGoBack}
+                onClose={() => {
+                    if (selectedImage || selectedVideo) {
+                        setShowMediaPicker(false);
+                    } else {
+                        handleGoBack();
+                    }
+                }}
                 onSelect={handleMediaSelect}
             />
 
@@ -267,7 +302,7 @@ export default function ShareCardioScreen() {
             <StatusBar hidden />
 
             <View style={styles.editHeader}>
-                <TouchableOpacity onPress={() => setShowMediaPicker(true)} style={styles.iconButton}>
+                <TouchableOpacity onPress={handleGoBack} style={styles.iconButton}>
                     <Ionicons name="arrow-back" size={24} color="#fff" />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setShowStatsModal(true)} style={styles.configButton}>
@@ -304,7 +339,7 @@ export default function ShareCardioScreen() {
                 {exerciseData && (
                     <Animated.View style={[styles.stickerContainer, animatedStickerStyle]}>
                         <GestureDetector gesture={stickerComposedGesture}>
-                            <Animated.View>
+                            <Animated.View ref={stickerRef}>
                                 <CardioShareSticker
                                     style={selectedStyle}
                                     data={exerciseData}
